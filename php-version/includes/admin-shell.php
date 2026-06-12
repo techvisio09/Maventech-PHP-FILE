@@ -31,7 +31,7 @@ $navItems = [
     'templates'   => ['icon' => 'bi-file-earmark-richtext','label'=> 'Email Templates',   'href' => 'admin.php?tab=templates'],
     'api'         => ['icon' => 'bi-plug',               'label' => 'API Management',     'href' => 'admin.php?tab=api'],
     'regions'     => ['icon' => 'bi-globe',              'label' => 'Regions',            'href' => 'admin.php?tab=regions'],
-    'settings'    => ['icon' => 'bi-gear',               'label' => 'Settings',           'href' => 'admin.php?tab=settings'],
+    'settings'    => ['icon' => 'bi-gear',               'label' => 'Settings',           'href' => 'admin.php?tab=settings', 'hidden' => true],
 ];
 $adminActive = $adminActive ?? '';
 $pageTitle   = $pageTitle ?? 'Admin Panel';
@@ -119,6 +119,15 @@ $admin       = $admin ?? current_admin();
 [data-bs-theme="dark"] .text-primary { color:#93c5fd !important; }
 [data-bs-theme="dark"] .text-danger { color:#fca5a5 !important; }
 [data-bs-theme="dark"] .text-warning { color:#fcd34d !important; }
+/* Compact card sizing — modern dashboard density */
+.card-e { padding: 16px; border-radius: 12px; box-shadow: 0 1px 3px rgba(15,23,42,0.06), 0 1px 2px rgba(15,23,42,0.04); }
+.card-e.p-4 { padding: 18px !important; }
+.card-e .card-head { padding: 12px 16px; }
+.kpi-tile { padding: 14px; }
+.kpi-tile .kpi-value { font-size: 22px; line-height: 1.2; }
+.kpi-tile .kpi-label { font-size: 11px; letter-spacing: .5px; }
+[data-bs-theme="dark"] .card-e { box-shadow: 0 1px 3px rgba(0,0,0,0.25), 0 1px 2px rgba(0,0,0,0.18); }
+
 /* Ensure content stays inside boxes — alignment + overflow safety */
 .card-e { overflow:hidden; }
 .card-e .card-body-p { overflow-x:auto; }
@@ -191,18 +200,18 @@ $admin       = $admin ?? current_admin();
 
 body { background: var(--bg); color: var(--text); font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; font-size: 14px; position:relative; }
 
-/* Microsoft-style watermark — very subtle 4-square logo pattern.
-   Uses a data:URI SVG repeated as background; opacity baked into the SVG
-   via fill colors so content stays fully readable. */
+/* Microsoft Office app icons watermark — Word, Excel, PowerPoint, Outlook,
+   OneNote, Teams, Visio arranged in a clean repeating pattern at very low
+   opacity so content stays fully readable. */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220' viewBox='0 0 220 220'><g opacity='0.05'><rect x='40' y='40' width='28' height='28' fill='%23F25022'/><rect x='72' y='40' width='28' height='28' fill='%2300A4EF'/><rect x='40' y='72' width='28' height='28' fill='%237FBA00'/><rect x='72' y='72' width='28' height='28' fill='%23FFB900'/><text x='108' y='62' font-family='Segoe UI,Arial' font-size='13' font-weight='600' fill='%23999'>Microsoft</text><rect x='150' y='150' width='22' height='22' fill='%23185ABD'/><rect x='150' y='176' width='22' height='22' fill='%23107C41'/><rect x='176' y='150' width='22' height='22' fill='%23D24726'/><rect x='176' y='176' width='22' height='22' fill='%237B83EB'/></g></svg>");
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='360' viewBox='0 0 360 360'><g opacity='0.07'><g transform='translate(30 30)'><rect width='44' height='44' rx='8' fill='%23185ABD'/><text x='22' y='29' font-family='Segoe UI,Arial' font-size='18' font-weight='800' fill='white' text-anchor='middle'>W</text></g><g transform='translate(110 30)'><rect width='44' height='44' rx='8' fill='%23107C41'/><text x='22' y='29' font-family='Segoe UI,Arial' font-size='18' font-weight='800' fill='white' text-anchor='middle'>X</text></g><g transform='translate(190 30)'><rect width='44' height='44' rx='8' fill='%23D24726'/><text x='22' y='29' font-family='Segoe UI,Arial' font-size='15' font-weight='800' fill='white' text-anchor='middle'>PPT</text></g><g transform='translate(270 30)'><rect width='44' height='44' rx='8' fill='%230072C6'/><text x='22' y='29' font-family='Segoe UI,Arial' font-size='18' font-weight='800' fill='white' text-anchor='middle'>O</text></g><g transform='translate(30 160)'><rect width='44' height='44' rx='8' fill='%237719AA'/><text x='22' y='29' font-family='Segoe UI,Arial' font-size='17' font-weight='800' fill='white' text-anchor='middle'>ON</text></g><g transform='translate(110 160)'><rect width='44' height='44' rx='8' fill='%234B53BC'/><text x='22' y='29' font-family='Segoe UI,Arial' font-size='15' font-weight='800' fill='white' text-anchor='middle'>TM</text></g><g transform='translate(190 160)'><rect width='44' height='44' rx='8' fill='%233955A3'/><text x='22' y='29' font-family='Segoe UI,Arial' font-size='15' font-weight='800' fill='white' text-anchor='middle'>VI</text></g><g transform='translate(270 160)'><rect width='44' height='44' rx='8' fill='%2331752F'/><text x='22' y='29' font-family='Segoe UI,Arial' font-size='15' font-weight='800' fill='white' text-anchor='middle'>PR</text></g><g transform='translate(70 270)'><rect width='44' height='44' rx='8' fill='%23F25022'/><text x='22' y='29' font-family='Segoe UI,Arial' font-size='13' font-weight='700' fill='white' text-anchor='middle'>365</text></g><g transform='translate(170 270)'><rect width='44' height='44' rx='8' fill='%2300A4EF'/><text x='22' y='29' font-family='Segoe UI,Arial' font-size='14' font-weight='800' fill='white' text-anchor='middle'>MS</text></g><g transform='translate(270 270)'><rect width='44' height='44' rx='8' fill='%23FFB900'/><text x='22' y='29' font-family='Segoe UI,Arial' font-size='15' font-weight='800' fill='%23633b00' text-anchor='middle'>WIN</text></g></g></svg>");
   background-repeat: repeat;
-  background-size: 220px 220px;
+  background-size: 360px 360px;
   background-position: 0 0;
   opacity: 1;
 }
@@ -544,8 +553,8 @@ hr { border-color: var(--border); opacity:.5; }
         <?php endforeach; ?>
       </div>
     </div>
-    <a class="adm-iconbtn" href="?theme=<?= $adminMode==='dark'?'light':'dark' ?>" title="Toggle theme" data-testid="theme-toggle">
-      <i class="bi <?= $adminMode==='dark'?'bi-sun':'bi-moon-stars' ?>"></i>
+    <a class="adm-iconbtn" href="#" title="Toggle theme" data-testid="theme-toggle" onclick="toggleAdmTheme(event)">
+      <i id="admThemeIcon" class="bi <?= $adminMode==='dark'?'bi-sun':'bi-moon-stars' ?>"></i>
     </a>
     <div class="adm-dropdown" id="ddUser">
       <button class="adm-iconbtn" onclick="document.getElementById('ddUser').classList.toggle('open')" data-testid="user-menu">
@@ -597,7 +606,7 @@ hr { border-color: var(--border); opacity:.5; }
       </a>
     <?php endforeach; ?>
     <div class="side-section">System</div>
-    <?php foreach (['api','regions','settings'] as $k): $i = $navItems[$k]; ?>
+    <?php foreach (['api','regions'] as $k): $i = $navItems[$k]; ?>
       <a class="item <?= $adminActive===$k?'active':'' ?>" href="<?= esc($i['href']) ?>" data-testid="adm-nav-<?= $k ?>">
         <i class="bi <?= esc($i['icon']) ?>"></i><?= esc($i['label']) ?>
       </a>

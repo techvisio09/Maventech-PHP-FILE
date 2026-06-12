@@ -1984,11 +1984,18 @@ elseif ($tab === 'api'):
   $txPp   = (int)$pdo->query("SELECT COUNT(*) FROM transaction_logs WHERE gateway='paypal'")->fetchColumn();
 ?>
   <h5 class="fw-bold mb-1">API Management</h5>
-  <p class="text-muted small mb-3">Configure payment gateway credentials and view live status. Changes apply instantly without code changes — credentials are stored in the <code>settings</code> table.</p>
+  <p class="text-muted small mb-3">Configure payment gateway credentials and view live status. Changes apply instantly — credentials live in the <code>settings</code> table.</p>
+
+  <!-- Card / PayPal tab switcher -->
+  <?php $apiTab = $_GET['gw'] ?? 'card'; ?>
+  <ul class="nav nav-pills mb-3" role="tablist" data-testid="api-tab-switcher">
+    <li class="nav-item"><a class="nav-link <?= $apiTab==='card'?'active':'' ?>" href="?tab=api&gw=card" data-testid="api-tab-card"><i class="bi bi-credit-card-2-front me-1"></i> Card Payment API <span class="badge bg-light text-dark ms-1"><?= $txCard ?></span></a></li>
+    <li class="nav-item"><a class="nav-link <?= $apiTab==='paypal'?'active':'' ?>" href="?tab=api&gw=paypal" data-testid="api-tab-paypal"><i class="bi bi-paypal me-1"></i> PayPal API <span class="badge bg-light text-dark ms-1"><?= $txPp ?></span></a></li>
+  </ul>
 
   <div class="row g-3">
-    <div class="col-lg-6">
-      <div class="card-e p-4 h-100" data-testid="api-card-gateway">
+    <div class="col-lg-12" <?= $apiTab!=='card' ? 'style="display:none;"' : '' ?>>
+      <div class="card-e p-4" data-testid="api-card-gateway">
         <div class="d-flex justify-content-between align-items-start mb-3">
           <div>
             <h6 class="fw-bold mb-1"><i class="bi bi-credit-card-2-front text-primary me-1"></i> Card Payment API</h6>
@@ -2030,8 +2037,8 @@ elseif ($tab === 'api'):
       </div>
     </div>
 
-    <div class="col-lg-6">
-      <div class="card-e p-4 h-100" data-testid="api-paypal-gateway">
+    <div class="col-lg-12" <?= $apiTab!=='paypal' ? 'style="display:none;"' : '' ?>>
+      <div class="card-e p-4" data-testid="api-paypal-gateway">
         <div class="d-flex justify-content-between align-items-start mb-3">
           <div>
             <h6 class="fw-bold mb-1"><i class="bi bi-paypal me-1" style="color:#003087;"></i> PayPal API</h6>
