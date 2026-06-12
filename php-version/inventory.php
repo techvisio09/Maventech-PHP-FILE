@@ -141,10 +141,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+$adminActive = 'inventory';
 include __DIR__ . '/includes/header.php';
+include __DIR__ . '/includes/admin-sidebar.php';
 ?>
 
-<div class="container py-4" data-testid="inventory-page">
+<div data-testid="inventory-page">
 
   <?php
   // ============================================================
@@ -754,4 +756,5 @@ include __DIR__ . '/includes/header.php';
 .breadcrumb-item a { text-decoration: none; }
 </style>
 
+<?php include __DIR__ . '/includes/admin-sidebar-end.php'; ?>
 <?php include __DIR__ . '/includes/footer.php'; ?>

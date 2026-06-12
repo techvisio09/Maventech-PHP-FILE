@@ -1,77 +1,129 @@
 <?php
-// Order fulfillment + transactional email.
-// With RESEND_API_KEY set, emails send via the Resend HTTP API (cURL).
-// Without it, emails are stored in `email_outbox` as "queued" (see admin.php > Emails).
+// Order fulfillment + transactional email with tracking + editable template.
 require_once __DIR__ . '/functions.php';
+require_once __DIR__ . '/settings.php';
 
-function build_order_email_html(array $order, array $items, array $assignments): string
-{
-    $first = esc($order['first_name'] ?: 'there');
-    $itemsHtml = '';
-    foreach ($assignments as $a) {
-        $img = $a['image'] ? '<img src="' . esc($a['image']) . '" width="84" height="84" alt="" style="display:block;border-radius:8px;background:#f8fafc;object-fit:contain;">' : '';
-        $keyBlock = $a['key']
-            ? '<div style="margin-top:12px;border:2px dashed #1d4ed8;border-radius:10px;background:#dbeafe;padding:14px 16px;text-align:center;">
-                 <div style="font-size:11px;color:#64748b;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;">Your Product Key</div>
-                 <div style="font-family:Courier New,monospace;font-size:18px;font-weight:bold;color:#1d4ed8;letter-spacing:2px;">' . esc($a['key']) . '</div></div>'
-            : '<div style="margin-top:12px;border:1px solid #fcd34d;border-radius:10px;background:#fffbeb;padding:12px 16px;">
-                 <div style="font-size:13px;color:#92400e;"><strong>Your product key is being prepared</strong> and will arrive in a separate email within 30 minutes.</div></div>';
-        $itemsHtml .= '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:12px;margin-bottom:14px;"><tr><td style="padding:16px;">
-            <table role="presentation" width="100%"><tr>
-              <td width="96" valign="top">' . $img . '</td>
-              <td valign="top" style="padding-left:8px;">
-                <div style="font-size:15px;font-weight:bold;color:#0f172a;line-height:1.35;">' . esc($a['name']) . '</div>
-                <div style="font-size:12px;color:#64748b;margin-top:4px;">Genuine lifetime license &middot; 1 device</div>
-              </td></tr></table>' . $keyBlock . '</td></tr></table>';
-    }
-    $proHtml = $order['pro_assist']
-        ? '<div style="border:1px solid #c7d2fe;background:#eef2ff;border-radius:10px;padding:12px 16px;margin-bottom:14px;font-size:13px;color:#3730a3;"><strong>ProAssist Premium Installation included</strong> — our team will contact you within the same business day to remotely install your software.</div>'
-        : '';
-    $total = number_format((float)$order['total'], 2);
-    $year = date('Y');
-
-    return '<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f1f5f9;font-family:Segoe UI,Arial,sans-serif;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:28px 12px;"><tr><td align="center">
-<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(15,23,42,.08);">
-  <tr><td style="background:#1b2240;padding:24px 32px;">
-    <table role="presentation" width="100%"><tr>
-      <td><div style="font-size:18px;font-weight:800;color:#fff;letter-spacing:.5px;">Maventech <span style="color:#67e8f9;">Software</span></div>
-      <div style="font-size:10px;color:#94a3b8;letter-spacing:2px;">AUTHORIZED MICROSOFT RESELLER</div></td>
-      <td align="right"><div style="display:inline-block;background:#2563eb;color:#fff;font-size:11px;font-weight:bold;border-radius:999px;padding:6px 14px;">&#10003; ORDER CONFIRMED</div></td>
-    </tr></table></td></tr>
-  <tr><td style="padding:32px;">
-    <h1 style="margin:0 0 6px;font-size:22px;color:#0f172a;">Thank you for your purchase, ' . $first . '!</h1>
-    <p style="margin:0 0 20px;font-size:14px;color:#475569;line-height:1.6;">Your payment was successful and your genuine Microsoft license is ready. Below you\'ll find your product key(s) and simple activation steps.</p>
-    <table role="presentation" width="100%" style="background:#f8fafc;border-radius:12px;margin-bottom:22px;"><tr>
-      <td style="padding:14px 18px;font-size:13px;color:#475569;">Order Number<br><strong style="color:#0f172a;font-size:15px;">#' . esc($order['order_number']) . '</strong></td>
-      <td style="padding:14px 18px;font-size:13px;color:#475569;">Order Total<br><strong style="color:#0f172a;font-size:15px;">$' . $total . ' USD</strong></td>
-      <td style="padding:14px 18px;font-size:13px;color:#475569;">Delivered To<br><strong style="color:#0f172a;font-size:14px;">' . esc($order['email']) . '</strong></td>
-    </tr></table>' . $proHtml . $itemsHtml . '
-    <h2 style="font-size:15px;color:#0f172a;margin:24px 0 10px;">How to activate</h2>
-    <ol style="margin:0;padding-left:20px;font-size:13px;color:#475569;line-height:2;">
-      <li>Download the official installer from <a href="https://setup.office.com" style="color:#1d4ed8;">setup.office.com</a> (or the link for your product).</li>
-      <li>Sign in (or create a free Microsoft account) and enter your product key when prompted.</li>
-      <li>Follow the on-screen steps — your license activates instantly.</li>
-    </ol>
-    <div style="margin-top:22px;border-top:1px solid #e2e8f0;padding-top:16px;font-size:12px;color:#64748b;line-height:1.7;">
-      <strong style="color:#0f172a;">Billing note:</strong> this charge will appear as <strong>' . SITE_LEGAL . '</strong> on your card statement.
-    </div></td></tr>
-  <tr><td style="background:#f8fafc;padding:22px 32px;border-top:1px solid #e2e8f0;">
-    <div style="font-size:13px;font-weight:bold;color:#0f172a;margin-bottom:6px;">Need help installing?</div>
-    <div style="font-size:12px;color:#64748b;line-height:1.8;">
-      &#2563eb; <a href="tel:' . SITE_PHONE . '" style="color:#1d4ed8;text-decoration:none;">' . SITE_PHONE . '</a> (' . SITE_HOURS . ')<br>
-      &#9993;&#65039; <a href="mailto:' . SITE_EMAIL . '" style="color:#1d4ed8;text-decoration:none;">' . SITE_EMAIL . '</a> &middot; Free installation &amp; activation assistance included
+/** Default "light" template w/ Microsoft icon watermark. Used when admin
+ *  hasn't customised it via the Email Template editor.                    */
+function default_email_template(): string {
+    return '<!doctype html><html><body style="margin:0;padding:0;background:#fbfcfd;font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#1f2937;">
+<div style="position:relative;max-width:640px;margin:0 auto;background:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 6px 28px rgba(15,23,42,.06);">
+  <!-- Watermark Microsoft icon -->
+  <div style="position:absolute;top:80px;right:-40px;opacity:.05;pointer-events:none;">
+    <svg width="320" height="320" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <rect x="2"  y="2"  width="9" height="9" fill="#F35325"/>
+      <rect x="13" y="2"  width="9" height="9" fill="#81BC06"/>
+      <rect x="2"  y="13" width="9" height="9" fill="#05A6F0"/>
+      <rect x="13" y="13" width="9" height="9" fill="#FFBA08"/>
+    </svg>
+  </div>
+  <div style="background:#ffffff;padding:26px 32px;border-bottom:1px solid #f1f3f5;display:flex;align-items:center;justify-content:space-between;">
+    <div>
+      <div style="font-size:20px;font-weight:800;color:#0f172a;letter-spacing:.3px;">{{company_name}}</div>
+      <div style="font-size:10px;color:#94a3b8;letter-spacing:1.8px;font-weight:600;">AUTHORIZED MICROSOFT RESELLER</div>
     </div>
-    <div style="margin-top:14px;font-size:11px;color:#94a3b8;">&copy; ' . $year . ' ' . SITE_LEGAL . '. All rights reserved.</div>
-  </td></tr>
-</table></td></tr></table></body></html>';
+    <span style="font-size:11px;color:#10b981;font-weight:700;background:#d1fae5;padding:6px 12px;border-radius:999px;">&#10003; ORDER CONFIRMED</span>
+  </div>
+
+  <div style="padding:30px 32px;position:relative;">
+    <h1 style="margin:0 0 6px;font-size:22px;color:#0f172a;font-weight:700;">Thank you for your purchase, {{customer_name}}!</h1>
+    <p style="margin:0 0 22px;font-size:14px;color:#475569;line-height:1.6;">Your payment was received and your genuine license key is ready to use.</p>
+
+    <table width="100%" style="border-collapse:separate;border-spacing:0;background:#f8fafc;border-radius:12px;margin-bottom:22px;font-size:13px;color:#475569;">
+      <tr>
+        <td style="padding:14px 18px;">Order #<br><strong style="color:#0f172a;font-size:15px;">{{order_number}}</strong></td>
+        <td style="padding:14px 18px;">Amount Paid<br><strong style="color:#0f172a;font-size:15px;">${{amount}}</strong></td>
+        <td style="padding:14px 18px;">Delivered to<br><strong style="color:#0f172a;font-size:13px;">{{customer_email}}</strong></td>
+      </tr>
+    </table>
+
+    {{products_block}}
+
+    <h2 style="font-size:15px;color:#0f172a;margin:24px 0 10px;">Installation Guide</h2>
+    <div style="font-size:13px;color:#475569;line-height:1.8;background:#f8fafc;border-radius:10px;padding:14px 18px;">{{installation_guide}}</div>
+
+    <div style="margin-top:22px;border-top:1px solid #f1f3f5;padding-top:16px;font-size:12px;color:#64748b;line-height:1.7;">
+      <strong style="color:#0f172a;">Billing note:</strong> this charge appears as <strong>{{statement_name}}</strong> on your card statement.
+    </div>
+  </div>
+
+  <div style="background:#f8fafc;padding:20px 32px;border-top:1px solid #f1f3f5;font-size:12px;color:#64748b;">
+    <strong style="color:#0f172a;">Need help?</strong> <a href="mailto:{{support_email}}" style="color:#3b82f6;text-decoration:none;">{{support_email}}</a> &middot; {{support_phone}}<br>
+    <span style="font-size:11px;color:#94a3b8;">&copy; {{year}} {{company_name}}. All rights reserved.</span>
+  </div>
+</div>
+{{tracking_pixel}}
+</body></html>';
 }
 
-function send_email(string $to, string $subject, string $html, ?int $orderId = null): void
-{
-    if (RESEND_API_KEY === '') {
-        $stmt = db()->prepare('INSERT INTO email_outbox (recipient, subject, html, status, note, order_id) VALUES (?, ?, ?, "queued", "RESEND_API_KEY not configured — stored for later delivery", ?)');
-        $stmt->execute([$to, $subject, $html, $orderId]);
+function render_products_block(array $assignments): string {
+    $rows = '';
+    foreach ($assignments as $a) {
+        $img = $a['image']
+            ? '<img src="' . esc($a['image']) . '" width="68" height="68" alt="" style="border-radius:8px;background:#f8fafc;object-fit:contain;">'
+            : '<div style="width:68px;height:68px;background:#f1f5f9;border-radius:8px;display:inline-block;"></div>';
+        $key = $a['key']
+            ? '<div style="margin-top:10px;border:2px dashed #3b82f6;border-radius:10px;background:#eff6ff;padding:12px 14px;text-align:center;">
+                 <div style="font-size:10px;color:#64748b;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px;font-weight:600;">License Key</div>
+                 <div style="font-family:\'Courier New\',monospace;font-size:17px;font-weight:bold;color:#1d4ed8;letter-spacing:1.8px;">' . esc($a['key']) . '</div></div>'
+            : '<div style="margin-top:10px;background:#fef3c7;color:#92400e;padding:10px 14px;border-radius:8px;font-size:13px;">Key being prepared — you\'ll receive it within 30 minutes.</div>';
+        $rows .= '<table width="100%" style="border:1px solid #eef0f3;border-radius:12px;margin-bottom:14px;background:#fff;"><tr><td style="padding:14px;">
+            <table width="100%"><tr><td width="80" valign="top">' . $img . '</td>
+            <td valign="top" style="padding-left:10px;">
+              <div style="font-size:15px;font-weight:bold;color:#0f172a;">' . esc($a['name']) . '</div>
+              <div style="font-size:12px;color:#94a3b8;margin-top:2px;">' . esc($a['description'] ?? 'Genuine lifetime license') . '</div>
+            </td></tr></table>' . $key . '</td></tr></table>';
+    }
+    return $rows;
+}
+
+function build_order_email_html(array $order, array $items, array $assignments, string $trackingToken): string {
+    $tplHtml = setting_get('email_template_html', '');
+    if (trim($tplHtml) === '') $tplHtml = default_email_template();
+
+    $stmtName = $order['card_statement_name'] ?: statement_name_for($order['payment_method']);
+    // Build installation guide aggregated across products
+    $guides = [];
+    foreach ($assignments as $a) {
+        if (!empty($a['installation_guide'])) $guides[] = '<strong>' . esc($a['name']) . ':</strong> ' . nl2br(esc($a['installation_guide']));
+    }
+    $guideHtml = $guides
+        ? implode('<br><br>', $guides)
+        : '1. Visit setup.office.com (or the official download link for your product)<br>2. Sign in with a Microsoft Account<br>3. Enter the license key shown above and follow the prompts.';
+
+    $base = rtrim(site_url(), '/');
+    $pixel = '<img src="' . $base . '/track-open.php?t=' . urlencode($trackingToken) . '" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0;">';
+
+    $replacements = [
+        '{{company_name}}'       => esc(defined('SITE_BRAND') ? SITE_BRAND : 'Maventech Software'),
+        '{{customer_name}}'      => esc(($order['first_name'] ?? '') ?: 'there'),
+        '{{customer_email}}'     => esc($order['email'] ?? ''),
+        '{{order_number}}'       => esc($order['order_number'] ?? ''),
+        '{{amount}}'             => number_format((float)($order['total'] ?? 0), 2),
+        '{{statement_name}}'     => esc($stmtName),
+        '{{support_email}}'      => esc(defined('SITE_EMAIL') ? SITE_EMAIL : ''),
+        '{{support_phone}}'      => esc(defined('SITE_PHONE') ? SITE_PHONE : ''),
+        '{{year}}'               => date('Y'),
+        '{{installation_guide}}' => $guideHtml,
+        '{{products_block}}'     => render_products_block($assignments),
+        '{{tracking_pixel}}'     => $pixel,
+    ];
+    return strtr($tplHtml, $replacements);
+}
+
+function send_email(string $to, string $subject, string $html, ?int $orderId = null): void {
+    $pdo  = db();
+    $tok  = bin2hex(random_bytes(16));
+    // Embed pixel at the very end too (in case template lacks {{tracking_pixel}})
+    if (strpos($html, 'track-open.php') === false) {
+        $base = rtrim(site_url(), '/');
+        $html .= '<img src="' . $base . '/track-open.php?t=' . urlencode($tok) . '" width="1" height="1" alt="">';
+    }
+
+    $apiKey = defined('RESEND_API_KEY') ? RESEND_API_KEY : '';
+    if ($apiKey === '') {
+        $pdo->prepare('INSERT INTO email_outbox (recipient, subject, html, status, note, order_id, tracking_token) VALUES (?,?,?,"queued","RESEND_API_KEY not configured",?,?)')
+            ->execute([$to, $subject, $html, $orderId, $tok]);
         return;
     }
     $ch = curl_init('https://api.resend.com/emails');
@@ -79,44 +131,72 @@ function send_email(string $to, string $subject, string $html, ?int $orderId = n
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_POST => true,
         CURLOPT_POSTFIELDS => json_encode(['from' => SENDER_EMAIL, 'to' => [$to], 'subject' => $subject, 'html' => $html]),
-        CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Authorization: Bearer ' . RESEND_API_KEY],
+        CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Authorization: Bearer ' . $apiKey],
         CURLOPT_TIMEOUT => 20,
     ]);
     $res = curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
     $ok = $res !== false && $code >= 200 && $code < 300;
-    $stmt = db()->prepare('INSERT INTO email_outbox (recipient, subject, html, status, note, order_id) VALUES (?, ?, ?, ?, ?, ?)');
-    $stmt->execute([$to, $subject, $html, $ok ? 'sent' : 'failed', $ok ? null : ('HTTP ' . $code), $orderId]);
+    $providerId = null;
+    if ($ok) { $d = json_decode($res, true); $providerId = $d['id'] ?? null; }
+
+    $pdo->prepare('INSERT INTO email_outbox (recipient, subject, html, status, note, order_id, tracking_token, provider_id, delivered_at)
+        VALUES (?,?,?,?,?,?,?,?, ?)')
+        ->execute([
+            $to, $subject, $html,
+            $ok ? 'sent' : 'failed',
+            $ok ? null : ('HTTP ' . $code),
+            $orderId, $tok, $providerId,
+            $ok ? date('Y-m-d H:i:s') : null,
+        ]);
 }
 
-function fulfill_order(int $orderId): void
-{
+function fulfill_order(int $orderId): void {
     $pdo = db();
     $stmt = $pdo->prepare('SELECT * FROM orders WHERE id = ?');
     $stmt->execute([$orderId]);
     $order = $stmt->fetch();
     if (!$order || $order['fulfilled']) return;
 
-    $itemsStmt = $pdo->prepare('SELECT oi.*, p.image FROM order_items oi LEFT JOIN products p ON p.slug = oi.product_slug WHERE oi.order_id = ?');
+    // Persist card statement name based on payment method
+    if (empty($order['card_statement_name'])) {
+        $stmtName = statement_name_for($order['payment_method']);
+        $pdo->prepare('UPDATE orders SET card_statement_name=? WHERE id=?')->execute([$stmtName, $orderId]);
+        $order['card_statement_name'] = $stmtName;
+    }
+
+    $itemsStmt = $pdo->prepare('SELECT oi.*, p.image, p.description, p.apps AS installation_guide FROM order_items oi LEFT JOIN products p ON p.slug = oi.product_slug WHERE oi.order_id = ?');
     $itemsStmt->execute([$orderId]);
     $items = $itemsStmt->fetchAll();
 
     $assignments = [];
     $keyStmt = $pdo->prepare('SELECT id, license_key FROM license_keys WHERE product_slug = ? AND status = "available" LIMIT 1');
-    $assignStmt = $pdo->prepare('UPDATE license_keys SET status = "assigned", order_id = ?, assigned_at = NOW() WHERE id = ?');
+    $assignStmt = $pdo->prepare('UPDATE license_keys SET status = "sold", order_id = ?, assigned_at = NOW() WHERE id = ?');
     foreach ($items as $item) {
         if ($item['product_slug'] === 'proassist-premium') continue;
         for ($i = 0; $i < (int)$item['qty']; $i++) {
             $keyStmt->execute([$item['product_slug']]);
             $keyRow = $keyStmt->fetch();
-            if ($keyRow) {
-                $assignStmt->execute([$orderId, $keyRow['id']]);
-            }
-            $assignments[] = ['name' => $item['name'], 'image' => $item['image'], 'key' => $keyRow['license_key'] ?? null];
+            if ($keyRow) $assignStmt->execute([$orderId, $keyRow['id']]);
+            $assignments[] = [
+                'name' => $item['name'],
+                'image' => $item['image'],
+                'description' => $item['description'] ?? '',
+                'installation_guide' => $item['installation_guide'] ?? '',
+                'key' => $keyRow['license_key'] ?? null,
+            ];
         }
     }
     $pdo->prepare('UPDATE orders SET fulfilled = 1 WHERE id = ?')->execute([$orderId]);
-    $html = build_order_email_html($order, $items, $assignments);
-    send_email($order['email'], 'Your Microsoft product key — Order #' . $order['order_number'], $html, $orderId);
+
+    $tok = bin2hex(random_bytes(16));
+    $html = build_order_email_html($order, $items, $assignments, $tok);
+
+    $subjectTpl = setting_get('email_template_subject', 'Your Microsoft product key — Order #{{order_number}}');
+    $subject = strtr($subjectTpl, [
+        '{{order_number}}' => $order['order_number'],
+        '{{customer_name}}'=> ($order['first_name'] ?? ''),
+    ]);
+    send_email($order['email'], $subject, $html, $orderId);
 }

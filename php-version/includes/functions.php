@@ -1,6 +1,7 @@
 <?php
 // Shared helpers: session, currency, cart, products, rendering
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/settings.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
