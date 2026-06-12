@@ -456,6 +456,7 @@ elseif ($tab === 'products'):
     'pmax'    => $_GET['pmax'] ?? '',
     'stock'   => $_GET['stock'] ?? '',
     'region'  => $_GET['p_region'] ?? '',
+    'sort'    => $_GET['sort'] ?? 'newest',
   ];
   $where = ['1=1']; $args = [];
   if ($f['q'])      { $where[] = '(p.name LIKE ? OR p.sku LIKE ?)'; $args[]="%{$f['q']}%"; $args[]="%{$f['q']}%"; }
@@ -470,10 +471,21 @@ elseif ($tab === 'products'):
   if ($f['pmax']!=='')   { $where[] = 'p.price <= ?'; $args[] = (float)$f['pmax'] / $rate; }
   if ($f['region']) { $where[] = 'p.region = ?'; $args[] = $f['region']; }
 
+  // ---- Sort
+  $orderBy = match ($f['sort']) {
+    'oldest'      => 'p.id ASC',
+    'price_asc'   => 'p.price ASC',
+    'price_desc'  => 'p.price DESC',
+    'name_asc'    => 'p.name ASC',
+    'name_desc'   => 'p.name DESC',
+    'best_sellers'=> 'sold_keys DESC, p.id DESC',
+    default       => 'p.is_active DESC, p.id DESC',
+  };
+
   $sql = "SELECT p.*,
     (SELECT COUNT(*) FROM license_keys lk WHERE lk.product_slug=p.slug AND lk.status='available') AS avail_keys,
     (SELECT COUNT(*) FROM license_keys lk WHERE lk.product_slug=p.slug AND lk.status='sold')      AS sold_keys
-    FROM products p WHERE " . implode(' AND ', $where) . " ORDER BY p.is_active DESC, p.name LIMIT 500";
+    FROM products p WHERE " . implode(' AND ', $where) . " ORDER BY $orderBy LIMIT 500";
   $st = $pdo->prepare($sql); $st->execute($args);
   $products = $st->fetchAll();
   if ($f['stock']==='in')    $products = array_filter($products, fn($p) => $p['avail_keys'] > 0);
@@ -485,6 +497,10 @@ elseif ($tab === 'products'):
   $oss    = $pdo->query('SELECT DISTINCT platform FROM products ORDER BY platform')->fetchAll(PDO::FETCH_COLUMN);
   $cats   = $pdo->query('SELECT DISTINCT category FROM products ORDER BY category')->fetchAll(PDO::FETCH_COLUMN);
   $brands = $pdo->query('SELECT DISTINCT brand FROM products WHERE brand IS NOT NULL ORDER BY brand')->fetchAll(PDO::FETCH_COLUMN);
+  $sortLabels = [
+    'newest'=>'Newest','oldest'=>'Oldest','price_asc'=>'Price: Low → High','price_desc'=>'Price: High → Low',
+    'name_asc'=>'Name: A → Z','name_desc'=>'Name: Z → A','best_sellers'=>'Best Sellers',
+  ];
 
   $editSlug = $_GET['edit'] ?? ($_GET['add'] ?? '');
   $isAdd = ($_GET['add'] ?? '') !== '';
@@ -494,92 +510,166 @@ elseif ($tab === 'products'):
   } elseif ($isAdd) {
     $editing = ['slug'=>'','name'=>'','sku'=>'','brand'=>'Microsoft','year'=>date('Y'),'platform'=>'Windows','category'=>($cats[0]??''),'license_type'=>'lifetime','price'=>'','original_price'=>'','badge'=>'','description'=>'','image'=>'','is_active'=>1,'rating'=>4.5,'reviews'=>0];
   }
-?>
 
-  <!-- Header -->
+  // Helper to build pill URLs preserving other query params
+  $qsBuild = function (array $overrides) {
+    $base = ['tab'=>'products'];
+    $cur = array_intersect_key($_GET, array_flip(['q','year','os','cat','brand','status','pmin','pmax','stock','p_region','sort']));
+    $merged = array_merge($base, $cur, $overrides);
+    // strip empty values
+    foreach ($merged as $k=>$v) if ($v === '' || $v === null) unset($merged[$k]);
+    return '?' . http_build_query($merged);
+  };
+  $hasAdvanced = ($f['cat'] || $f['brand'] || $f['status']!=='' || $f['stock'] || $f['region'] || $f['pmin']!=='' || $f['pmax']!=='');
+?>
+<style>
+.pill-toggle { display:inline-flex; align-items:center; gap:6px; padding:6px 14px; border-radius:999px; font-size:13px; font-weight:500; background:var(--bg); color:var(--text); border:1px solid var(--border); text-decoration:none; transition:all .15s ease; cursor:pointer; }
+.pill-toggle:hover { background:var(--blue-soft); color:var(--brand-dk); border-color:transparent; }
+.pill-toggle.active { background:linear-gradient(135deg,#3b82f6,#1d4ed8); color:#fff; border-color:transparent; box-shadow:0 2px 8px rgba(59,130,246,.25); }
+.pill-toggle.active:hover { color:#fff; filter:brightness(1.05); }
+.pill-row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.pill-row .pill-label { font-size:11px; color:var(--text-muted, #94a3b8); text-transform:uppercase; letter-spacing:1px; font-weight:600; margin-right:4px; min-width:64px; }
+.search-pill { display:flex; align-items:center; gap:8px; padding:8px 14px; background:var(--bg); border:1px solid var(--border); border-radius:999px; transition:border-color .15s; }
+.search-pill:focus-within { border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,.1); }
+.search-pill input { border:none; background:transparent; outline:none; flex:1; color:var(--text); font-size:13px; }
+.sort-select { padding:8px 32px 8px 14px; border-radius:999px; border:1px solid var(--border); background:var(--bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 16 16'%3E%3Cpath fill='%2394a3b8' d='M3.5 5.5L8 10l4.5-4.5z'/%3E%3C/svg%3E") no-repeat right 12px center; font-size:13px; font-weight:500; color:var(--text); appearance:none; cursor:pointer; }
+.advanced-toggle { font-size:12px; color:var(--text-muted, #94a3b8); cursor:pointer; user-select:none; }
+.advanced-toggle:hover { color:#3b82f6; }
+.advanced-panel { animation: slideDown .25s ease-out; }
+@keyframes slideDown { from { opacity:0; transform:translateY(-4px);} to { opacity:1; transform:translateY(0);} }
+</style>
+
+  <!-- HEADER: title + count + add -->
   <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
     <div>
-      <h5 class="fw-bold mb-0">Product Management <span class="text-muted fs-6">(<?= count($products) ?> shown)</span></h5>
-      <small class="text-muted">Filter, edit, add, duplicate, enable/disable products with full pricing + badge control.</small>
+      <h5 class="fw-bold mb-0" data-testid="products-title">All Products</h5>
+      <small class="text-muted" data-testid="products-count"><strong><?= count($products) ?></strong> products available</small>
     </div>
     <a href="?tab=products&add=1" class="btn-add-glow" data-testid="add-product-glow" title="Add new product"><i class="bi bi-plus-lg"></i></a>
   </div>
 
-  <!-- ELEGANT FILTER BAR -->
-  <form class="card-e mb-3" method="get" data-testid="product-filters">
-    <input type="hidden" name="tab" value="products">
-    <div class="p-3" style="border-bottom:1px solid var(--border);">
-      <div class="d-flex align-items-center gap-2">
-        <i class="bi bi-search text-muted"></i>
-        <input class="form-control border-0 shadow-none p-1 bg-transparent" style="color:var(--text);font-size:14px;" name="q" value="<?= esc($f['q']) ?>" placeholder="Search by product name or SKU…">
-        <button class="btn btn-soft-blue btn-sm"><i class="bi bi-funnel me-1"></i>Apply</button>
-        <a href="?tab=products" class="btn btn-soft-gray btn-sm" title="Clear all filters"><i class="bi bi-x-lg"></i></a>
+  <!-- REDESIGNED FILTER BAR -->
+  <div class="card-e p-3 mb-3" data-testid="product-filters">
+
+    <!-- Row 1: Search + Sort + More filters toggle -->
+    <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+      <form method="get" class="flex-grow-1" style="min-width:220px;max-width:480px;">
+        <input type="hidden" name="tab" value="products">
+        <?php foreach (['year','os','cat','brand','status','pmin','pmax','stock','p_region','sort'] as $kp): if (!empty($_GET[$kp])): ?>
+          <input type="hidden" name="<?= esc($kp) ?>" value="<?= esc($_GET[$kp]) ?>">
+        <?php endif; endforeach; ?>
+        <label class="search-pill">
+          <i class="bi bi-search text-muted"></i>
+          <input name="q" value="<?= esc($f['q']) ?>" placeholder="Search products by name or SKU…" data-testid="search-input">
+          <?php if ($f['q']): ?><a href="<?= esc($qsBuild(['q'=>''])) ?>" class="text-muted text-decoration-none" title="Clear search"><i class="bi bi-x-circle"></i></a><?php endif; ?>
+        </label>
+      </form>
+
+      <div class="d-flex gap-2 align-items-center ms-auto">
+        <span class="advanced-toggle" onclick="document.getElementById('advFilters').classList.toggle('d-none');" data-testid="toggle-advanced">
+          <i class="bi bi-sliders"></i> More filters <?php if ($hasAdvanced): ?><span class="badge bg-primary ms-1" style="font-size:9px;">on</span><?php endif; ?>
+        </span>
+        <form method="get" class="d-inline">
+          <input type="hidden" name="tab" value="products">
+          <?php foreach (['q','year','os','cat','brand','status','pmin','pmax','stock','p_region'] as $kp): if (!empty($_GET[$kp])): ?>
+            <input type="hidden" name="<?= esc($kp) ?>" value="<?= esc($_GET[$kp]) ?>">
+          <?php endif; endforeach; ?>
+          <select class="sort-select" name="sort" onchange="this.form.submit()" data-testid="sort-select">
+            <?php foreach ($sortLabels as $k=>$lbl): ?>
+              <option value="<?= $k ?>" <?= $f['sort']===$k?'selected':'' ?>><?= esc($lbl) ?></option>
+            <?php endforeach; ?>
+          </select>
+        </form>
       </div>
     </div>
-    <div class="p-3">
-      <div class="row g-2">
-        <div class="col-6 col-md-3 col-lg">
-          <label class="small text-muted mb-1"><i class="bi bi-calendar3 me-1"></i>Year</label>
-          <select class="form-select form-select-sm" name="year"><option value="">All years</option><?php foreach($years as $y): ?><option value="<?= $y ?>" <?= $f['year']==$y?'selected':'' ?>><?= $y ?></option><?php endforeach; ?></select>
-        </div>
-        <div class="col-6 col-md-3 col-lg">
-          <label class="small text-muted mb-1"><i class="bi bi-display me-1"></i>OS</label>
-          <select class="form-select form-select-sm" name="os"><option value="">All OS</option><?php foreach($oss as $o): ?><option value="<?= esc($o) ?>" <?= $f['os']===$o?'selected':'' ?>><?= esc($o) ?></option><?php endforeach; ?></select>
-        </div>
-        <div class="col-6 col-md-3 col-lg">
+
+    <!-- Row 2: Platform pills -->
+    <div class="pill-row mb-2" data-testid="platform-pills">
+      <span class="pill-label">Platform</span>
+      <a href="<?= esc($qsBuild(['os'=>''])) ?>" class="pill-toggle <?= $f['os']===''?'active':'' ?>" data-testid="platform-all">All</a>
+      <?php foreach ($oss as $o): ?>
+        <a href="<?= esc($qsBuild(['os'=>$o])) ?>" class="pill-toggle <?= $f['os']===$o?'active':'' ?>" data-testid="platform-<?= esc($o) ?>">
+          <i class="bi bi-<?= $o==='Mac'?'apple':($o==='Windows'?'windows':'pc-display') ?>"></i> <?= esc($o) ?>
+        </a>
+      <?php endforeach; ?>
+    </div>
+
+    <!-- Row 3: Version (Year) pills -->
+    <?php if ($years): ?>
+    <div class="pill-row mb-2" data-testid="version-pills">
+      <span class="pill-label">Version</span>
+      <a href="<?= esc($qsBuild(['year'=>''])) ?>" class="pill-toggle <?= $f['year']===''?'active':'' ?>" data-testid="version-all">All</a>
+      <?php foreach ($years as $y): ?>
+        <a href="<?= esc($qsBuild(['year'=>$y])) ?>" class="pill-toggle <?= (string)$f['year']===(string)$y?'active':'' ?>" data-testid="version-<?= (int)$y ?>"><?= (int)$y ?></a>
+      <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
+
+    <!-- Advanced filters (hidden by default unless any is set) -->
+    <div id="advFilters" class="advanced-panel pt-3 mt-2 <?= $hasAdvanced ? '' : 'd-none' ?>" style="border-top:1px dashed var(--border);">
+      <form method="get" class="row g-2 align-items-end">
+        <input type="hidden" name="tab" value="products">
+        <?php if ($f['q']): ?><input type="hidden" name="q" value="<?= esc($f['q']) ?>"><?php endif; ?>
+        <?php if ($f['os']): ?><input type="hidden" name="os" value="<?= esc($f['os']) ?>"><?php endif; ?>
+        <?php if ($f['year']!==''): ?><input type="hidden" name="year" value="<?= esc($f['year']) ?>"><?php endif; ?>
+        <?php if ($f['sort']!=='newest'): ?><input type="hidden" name="sort" value="<?= esc($f['sort']) ?>"><?php endif; ?>
+        <div class="col-6 col-md-3 col-lg-2">
           <label class="small text-muted mb-1"><i class="bi bi-tag me-1"></i>Category</label>
           <select class="form-select form-select-sm" name="cat"><option value="">All categories</option><?php foreach($cats as $c): ?><option value="<?= esc($c) ?>" <?= $f['cat']===$c?'selected':'' ?>><?= esc($c) ?></option><?php endforeach; ?></select>
         </div>
-        <div class="col-6 col-md-3 col-lg">
+        <div class="col-6 col-md-3 col-lg-2">
           <label class="small text-muted mb-1"><i class="bi bi-bookmark-star me-1"></i>Brand</label>
           <select class="form-select form-select-sm" name="brand"><option value="">All brands</option><?php foreach($brands as $b): ?><option value="<?= esc($b) ?>" <?= $f['brand']===$b?'selected':'' ?>><?= esc($b) ?></option><?php endforeach; ?></select>
         </div>
-        <div class="col-6 col-md-3 col-lg">
+        <div class="col-6 col-md-3 col-lg-2">
           <label class="small text-muted mb-1"><i class="bi bi-toggle-on me-1"></i>Status</label>
           <select class="form-select form-select-sm" name="status"><option value="">All status</option><option value="1" <?= $f['status']==='1'?'selected':'' ?>>Active</option><option value="0" <?= $f['status']==='0'?'selected':'' ?>>Inactive</option></select>
         </div>
-        <div class="col-6 col-md-3 col-lg">
+        <div class="col-6 col-md-3 col-lg-2">
           <label class="small text-muted mb-1"><i class="bi bi-box-seam me-1"></i>Stock</label>
           <select class="form-select form-select-sm" name="stock"><option value="">Any</option><option value="in" <?= $f['stock']==='in'?'selected':'' ?>>In stock</option><option value="low" <?= $f['stock']==='low'?'selected':'' ?>>Low (&lt;5)</option><option value="out" <?= $f['stock']==='out'?'selected':'' ?>>Out</option></select>
         </div>
-        <div class="col-6 col-md-3 col-lg">
+        <div class="col-6 col-md-3 col-lg-2">
           <label class="small text-muted mb-1"><i class="bi bi-globe me-1"></i>Region</label>
           <select class="form-select form-select-sm" name="p_region"><option value="">All regions</option><?php foreach(all_regions() as $r): ?><option value="<?= esc($r['code']) ?>" <?= $f['region']===$r['code']?'selected':'' ?>><?= esc($r['code']) ?> · <?= esc($r['currency_symbol']) ?></option><?php endforeach; ?></select>
         </div>
-        <div class="col-6 col-md-3 col-lg">
-          <label class="small text-muted mb-1"><i class="bi bi-currency-dollar me-1"></i>Price range (<?= esc($rg['currency_symbol']) ?>)</label>
+        <div class="col-6 col-md-3 col-lg-2">
+          <label class="small text-muted mb-1"><i class="bi bi-currency-dollar me-1"></i>Price (<?= esc($rg['currency_symbol']) ?>)</label>
           <div class="d-flex gap-1">
             <input class="form-control form-control-sm" type="number" step="0.01" name="pmin" value="<?= esc($f['pmin']) ?>" placeholder="Min">
             <input class="form-control form-control-sm" type="number" step="0.01" name="pmax" value="<?= esc($f['pmax']) ?>" placeholder="Max">
           </div>
         </div>
-      </div>
-
-      <?php // Active filter chips
-      $chips = [];
-      $chipMap = ['q'=>'Search','year'=>'Year','os'=>'OS','cat'=>'Category','brand'=>'Brand','status'=>'Status','stock'=>'Stock','region'=>'Region','pmin'=>'Min','pmax'=>'Max'];
-      foreach ($f as $k=>$v) {
-        if ($v === '' || $v === null) continue;
-        $label = $chipMap[$k] ?? $k;
-        $val = $k==='status' ? ($v=='1'?'Active':'Inactive') : $v;
-        // Build remove URL
-        $remove = $_GET; unset($remove[$k==='region'?'p_region':$k]);
-        $remove['tab']='products';
-        $chips[] = ['label'=>$label, 'value'=>$val, 'url'=>'?'.http_build_query($remove)];
-      }
-      if ($chips): ?>
-        <div class="d-flex gap-1 flex-wrap mt-3">
-          <small class="text-muted me-1 mt-1">Active:</small>
-          <?php foreach ($chips as $c): ?>
-            <a href="<?= esc($c['url']) ?>" class="s-badge sent text-decoration-none" style="font-size:11px;">
-              <?= esc($c['label']) ?>: <strong><?= esc($c['value']) ?></strong> <i class="bi bi-x"></i>
-            </a>
-          <?php endforeach; ?>
-          <a href="?tab=products" class="s-badge failed text-decoration-none" style="font-size:11px;">Clear all <i class="bi bi-x-lg"></i></a>
+        <div class="col-12 col-md-auto">
+          <button class="btn btn-soft-blue btn-sm"><i class="bi bi-funnel me-1"></i>Apply</button>
+          <a href="?tab=products" class="btn btn-soft-gray btn-sm" title="Clear all"><i class="bi bi-x-lg"></i> Clear</a>
         </div>
-      <?php endif; ?>
+      </form>
     </div>
-  </form>
+
+    <?php // Active filter chips
+    $chips = [];
+    $chipMap = ['q'=>'Search','cat'=>'Category','brand'=>'Brand','status'=>'Status','stock'=>'Stock','region'=>'Region','pmin'=>'Min','pmax'=>'Max'];
+    foreach ($chipMap as $k=>$label) {
+      $v = $f[$k] ?? '';
+      if ($v === '' || $v === null) continue;
+      $val = $k==='status' ? ($v=='1'?'Active':'Inactive') : $v;
+      $remove = $_GET; unset($remove[$k==='region'?'p_region':$k]);
+      $remove['tab']='products';
+      $chips[] = ['label'=>$label, 'value'=>$val, 'url'=>'?'.http_build_query($remove)];
+    }
+    if ($chips): ?>
+      <div class="d-flex gap-1 flex-wrap mt-3 pt-3" style="border-top:1px dashed var(--border);">
+        <small class="text-muted me-1 mt-1">Filters:</small>
+        <?php foreach ($chips as $c): ?>
+          <a href="<?= esc($c['url']) ?>" class="s-badge sent text-decoration-none" style="font-size:11px;">
+            <?= esc($c['label']) ?>: <strong><?= esc($c['value']) ?></strong> <i class="bi bi-x"></i>
+          </a>
+        <?php endforeach; ?>
+        <a href="?tab=products" class="s-badge failed text-decoration-none" style="font-size:11px;">Clear all <i class="bi bi-x-lg"></i></a>
+      </div>
+    <?php endif; ?>
+  </div>
 
   <!-- COMPACT PRODUCT GRID -->
   <div class="row g-4" data-testid="products-grid">
