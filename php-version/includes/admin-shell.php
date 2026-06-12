@@ -144,6 +144,36 @@ $admin       = $admin ?? current_admin();
 .tpl-row .btn { align-self: stretch; }
 .tpl-row-active .btn { background: rgba(59,130,246,.18); border-color: rgba(59,130,246,.30); }
 
+/* ---------- Email template content editor ---------- */
+.tpl-toolbar { gap: 4px; }
+.tpl-toolbar .vr { background: var(--border); width:1px; height:24px; align-self:center; margin: 0 2px; }
+.tpl-toolbar .btn { padding: 4px 9px; font-size: 13px; line-height: 1; }
+.tpl-content-editor { outline: none; }
+.tpl-content-editor:focus { box-shadow: 0 0 0 .15rem rgba(59,130,246,.18); border-color: #93c5fd; }
+.tpl-content-editor h1, .tpl-content-editor h2 { font-weight:700; margin: .6em 0 .3em; }
+.tpl-content-editor p { margin: 0 0 .6em; }
+.tpl-content-editor a { color: #2563eb; text-decoration: underline; }
+.tpl-content-editor img { max-width: 100%; height: auto; border-radius: 6px; }
+/* Variable chips inside the editor — visual badges that the user can delete as a single unit */
+.tpl-var-chip {
+  display: inline-block;
+  background: linear-gradient(135deg, #dbeafe, #e0e7ff);
+  color: #1d4ed8;
+  padding: 1px 8px 2px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'SF Mono','Menlo','Monaco','Courier New',monospace;
+  margin: 0 2px;
+  vertical-align: 1px;
+  user-select: all;
+  border: 1px solid rgba(29,78,216,.25);
+  white-space: nowrap;
+}
+.tpl-var-chip::before { content: "{ "; opacity: .55; }
+.tpl-var-chip::after  { content: " }"; opacity: .55; }
+[data-bs-theme="dark"] .tpl-var-chip { background: rgba(59,130,246,.22); color:#bfdbfe; border-color: rgba(147,197,253,.35); }
+
 /* API form inputs: smaller + long keys wrap inside the box */
 [data-testid^="api-"] .form-control,
 [data-testid^="api-"] .form-select {

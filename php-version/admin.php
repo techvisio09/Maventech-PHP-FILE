@@ -1806,13 +1806,28 @@ elseif ($tab === 'templates'):
           if ($editing['code'] === 'order_delivery')   $tplHtml = default_email_template();
           elseif ($editing['code'] === 'review_request') $tplHtml = default_review_template();
         }
-        $versions = $pdo->prepare('SELECT * FROM email_template_versions WHERE template_id=? ORDER BY version_num DESC LIMIT 10');
-        $versions->execute([$editing['id']]); $versions = $versions->fetchAll();
+        // Variables you can insert into the content
+        $tplVars = [
+          'customer_name'   => "Customer's name",
+          'customer_email'  => "Customer's email",
+          'order_number'    => 'Order number',
+          'amount'          => 'Order total',
+          'product_name'    => 'Product name',
+          'products_block'  => 'Products + license keys block',
+          'installation_guide' => 'Installation guide steps',
+          'review_url'      => 'Star-rating review link',
+          'statement_name'  => 'Statement/merchant name',
+          'support_email'   => 'Support email',
+          'support_phone'   => 'Support phone',
+          'company_name'    => 'Company name',
+          'year'            => 'Current year',
+        ];
         ?>
         <div class="card-e p-3 mb-3">
-          <form method="post">
+          <form method="post" id="tplForm">
             <input type="hidden" name="action" value="save_template">
             <input type="hidden" name="tpl_id" value="<?= (int)$editing['id'] ?>">
+            <input type="hidden" name="html" id="htmlEd" value="">
             <div class="d-flex justify-content-between align-items-center mb-3">
               <div>
                 <strong><?= esc($editing['name']) ?></strong>
@@ -1824,16 +1839,50 @@ elseif ($tab === 'templates'):
               </div>
             </div>
             <label class="form-label small fw-semibold">Subject</label>
-            <input class="form-control mb-2" name="subject" value="<?= esc($editing['subject']) ?>">
+            <input class="form-control mb-3" name="subject" value="<?= esc($editing['subject']) ?>" data-testid="tpl-subject">
 
             <div class="row g-2">
               <div class="col-md-6">
-                <label class="form-label small fw-semibold">HTML</label>
-                <textarea name="html" class="form-control font-monospace" rows="18" id="htmlEd" style="font-size:11.5px;"><?= esc($tplHtml) ?></textarea>
+                <label class="form-label small fw-semibold d-flex align-items-center justify-content-between">
+                  <span><i class="bi bi-card-text me-1 text-primary"></i> Email Content <span class="text-muted fw-normal">— what your customer will see</span></span>
+                </label>
+
+                <!-- Formatting toolbar -->
+                <div class="tpl-toolbar d-flex flex-wrap gap-1 p-2 rounded-top" style="background:var(--bg);border:1px solid var(--border);border-bottom:0;" data-testid="tpl-toolbar">
+                  <button type="button" class="btn btn-sm btn-soft-gray tpl-tb-btn" data-cmd="bold" title="Bold (Ctrl+B)"><i class="bi bi-type-bold"></i></button>
+                  <button type="button" class="btn btn-sm btn-soft-gray tpl-tb-btn" data-cmd="italic" title="Italic (Ctrl+I)"><i class="bi bi-type-italic"></i></button>
+                  <button type="button" class="btn btn-sm btn-soft-gray tpl-tb-btn" data-cmd="underline" title="Underline"><i class="bi bi-type-underline"></i></button>
+                  <span class="vr"></span>
+                  <button type="button" class="btn btn-sm btn-soft-gray tpl-tb-btn" data-cmd="insertUnorderedList" title="Bullet list"><i class="bi bi-list-ul"></i></button>
+                  <button type="button" class="btn btn-sm btn-soft-gray tpl-tb-btn" data-cmd="insertOrderedList" title="Numbered list"><i class="bi bi-list-ol"></i></button>
+                  <span class="vr"></span>
+                  <button type="button" class="btn btn-sm btn-soft-gray tpl-tb-btn" data-cmd="formatBlock" data-val="h2" title="Heading"><i class="bi bi-type-h2"></i></button>
+                  <button type="button" class="btn btn-sm btn-soft-gray tpl-tb-btn" data-cmd="formatBlock" data-val="p" title="Normal text"><i class="bi bi-paragraph"></i></button>
+                  <span class="vr"></span>
+                  <button type="button" class="btn btn-sm btn-soft-gray" id="tplLinkBtn" title="Add link"><i class="bi bi-link-45deg"></i></button>
+                  <button type="button" class="btn btn-sm btn-soft-gray" id="tplAlignL" data-cmd="justifyLeft" title="Align left"><i class="bi bi-text-left"></i></button>
+                  <button type="button" class="btn btn-sm btn-soft-gray" id="tplAlignC" data-cmd="justifyCenter" title="Center"><i class="bi bi-text-center"></i></button>
+                  <span class="vr"></span>
+                  <select class="form-select form-select-sm tpl-var-pick" id="tplVarPick" style="max-width:170px;" data-testid="tpl-var-pick" title="Insert dynamic value">
+                    <option value="">Insert variable…</option>
+                    <?php foreach ($tplVars as $k => $lbl): ?>
+                      <option value="<?= esc($k) ?>"><?= esc($lbl) ?></option>
+                    <?php endforeach; ?>
+                  </select>
+                </div>
+
+                <!-- Rich content editor -->
+                <div id="tplContent"
+                     contenteditable="true"
+                     class="form-control tpl-content-editor"
+                     style="min-height:430px;max-height:600px;overflow:auto;border-top-left-radius:0;border-top-right-radius:0;background:#fff;color:#0f172a;line-height:1.55;font-size:14px;"
+                     data-testid="tpl-content"><?= $tplHtml ?></div>
+                <small class="text-muted d-block mt-1">Type freely. Use the toolbar to format. Use <strong>Insert variable</strong> for dynamic values like the customer's name or the license key block.</small>
               </div>
               <div class="col-md-6">
-                <label class="form-label small fw-semibold">Live Preview</label>
-                <iframe id="prev" style="width:100%;height:430px;border:1px solid var(--border);border-radius:10px;background:#fff;"></iframe>
+                <label class="form-label small fw-semibold"><i class="bi bi-eye me-1 text-primary"></i> Live Preview</label>
+                <iframe id="prev" style="width:100%;height:466px;border:1px solid var(--border);border-radius:10px;background:#fff;"></iframe>
+                <small class="text-muted d-block mt-1">This is exactly what the customer will receive.</small>
               </div>
             </div>
 
@@ -1866,8 +1915,7 @@ elseif ($tab === 'templates'):
             </div>
 
             <div class="d-flex gap-2 mt-3">
-              <button class="btn btn-soft-blue btn-sm" data-testid="save-template-btn"><i class="bi bi-check2 me-1"></i> Save (creates v<?= (int)$editing['current_version']+1 ?>)</button>
-              <button type="button" class="btn btn-soft-gray btn-sm" onclick="prevRender()"><i class="bi bi-arrow-clockwise me-1"></i> Refresh Preview</button>
+              <button class="btn btn-soft-blue btn-sm" data-testid="save-template-btn"><i class="bi bi-check2 me-1"></i> Save Changes</button>
             </div>
           </form>
         </div>
@@ -1948,47 +1996,132 @@ elseif ($tab === 'templates'):
         </script>
         <?php endif; ?>
 
-        <?php if ($versions): ?>
-          <div class="card-e p-3">
-            <h6 class="fw-bold mb-2"><i class="bi bi-clock-history me-1"></i> Version History</h6>
-            <div class="tbl-e">
-              <table class="table mb-0 small">
-                <thead><tr><th>v#</th><th>Subject</th><th>Edited by</th><th>When</th><th></th></tr></thead>
-                <tbody>
-                  <?php foreach ($versions as $v): ?>
-                    <tr>
-                      <td><strong>v<?= (int)$v['version_num'] ?></strong></td>
-                      <td><small><?= esc(mb_strimwidth($v['subject'],0,50,'…')) ?></small></td>
-                      <td><small><?= esc($v['edited_by_email'] ?: 'system') ?></small></td>
-                      <td><small class="text-muted"><?= esc(date('M j, Y H:i', strtotime($v['created_at']))) ?></small></td>
-                      <td>
-                        <form method="post" class="d-inline" onsubmit="return confirm('Restore this version?')">
-                          <input type="hidden" name="action" value="restore_template_version">
-                          <input type="hidden" name="tpl_id" value="<?= (int)$editing['id'] ?>">
-                          <input type="hidden" name="version_id" value="<?= (int)$v['id'] ?>">
-                          <button class="btn btn-soft-gray btn-sm py-0 px-2"><i class="bi bi-arrow-counterclockwise"></i></button>
-                        </form>
-                      </td>
-                    </tr>
-                  <?php endforeach; ?>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        <?php endif; ?>
-
         <script>
-        function prevRender(){
-          var html=document.getElementById('htmlEd').value;
-          var s={company_name:'<?= esc(SITE_BRAND) ?>',customer_name:'John Smith',customer_email:'john@example.com',order_number:'MVT-2026-0042',amount:'129.99',statement_name:'<?= esc(setting_get('gw_card_merchant_name', setting_get('statement_name_card','MAVENTECH SOFTWARE'))) ?>',support_email:'<?= esc(SITE_EMAIL) ?>',support_phone:'<?= esc(SITE_PHONE) ?>',year:new Date().getFullYear(),installation_guide:'1. Download installer.<br>2. Run setup.<br>3. Enter license key.<br>4. Activate.',product_name:'Microsoft Office 2024',review_url:'<?= esc(SITE_URL) ?>/review.php?t=DEMO_TOKEN',products_block:'<div style="border:1px solid #eef0f3;border-radius:12px;padding:14px;background:#fff;"><div style="font-weight:700;">Sample Product</div><div style="margin-top:10px;border:2px dashed #3b82f6;border-radius:10px;background:#eff6ff;padding:12px;text-align:center;"><div style="font-size:10px;color:#64748b;letter-spacing:1.5px;text-transform:uppercase;">License Key</div><div style="font-family:monospace;font-weight:bold;color:#1d4ed8;font-size:17px;">XXXXX-YYYYY-ZZZZZ-AAAAA</div></div></div>',tracking_pixel:''};
-          Object.keys(s).forEach(function(k){ html=html.split('{{'+k+'}}').join(s[k]); });
-          document.getElementById('prev').srcdoc=html;
-        }
-        prevRender();
-        document.getElementById('htmlEd').addEventListener('input',function(){clearTimeout(window._tt);window._tt=setTimeout(prevRender,400);});
-
-        /* ---- Template image uploader (AJAX -> /ajax/template-image.php) ---- */
         (function(){
+          var contentEl = document.getElementById('tplContent');
+          var hidden    = document.getElementById('htmlEd');
+          var form      = document.getElementById('tplForm');
+          var iframe    = document.getElementById('prev');
+          if (!contentEl || !hidden || !iframe) return;
+
+          // Demo substitutions for the live preview
+          var demo = {
+            company_name:'<?= esc(SITE_BRAND) ?>',
+            customer_name:'John Smith',
+            customer_email:'john@example.com',
+            order_number:'MVT-2026-0042',
+            amount:'129.99',
+            statement_name:'<?= esc(setting_get('gw_card_merchant_name', setting_get('statement_name_card','MAVENTECH SOFTWARE'))) ?>',
+            support_email:'<?= esc(SITE_EMAIL) ?>',
+            support_phone:'<?= esc(SITE_PHONE) ?>',
+            year: new Date().getFullYear(),
+            installation_guide:'1. Download installer.<br>2. Run setup.<br>3. Enter license key.<br>4. Activate.',
+            product_name:'Microsoft Office 2024',
+            review_url:'<?= esc(SITE_URL) ?>/review.php?t=DEMO_TOKEN',
+            products_block:'<div style="border:1px solid #eef0f3;border-radius:12px;padding:14px;background:#fff;"><div style="font-weight:700;">Sample Product</div><div style="margin-top:10px;border:2px dashed #3b82f6;border-radius:10px;background:#eff6ff;padding:12px;text-align:center;"><div style="font-size:10px;color:#64748b;letter-spacing:1.5px;text-transform:uppercase;">License Key</div><div style="font-family:monospace;font-weight:bold;color:#1d4ed8;font-size:17px;">XXXXX-YYYYY-ZZZZZ-AAAAA</div></div></div>',
+            tracking_pixel:''
+          };
+
+          // Friendly badges to show {{variables}} INSIDE the editor while typing
+          function makeVarBadges(node){
+            // Walk text nodes and wrap {{var}} occurrences in styled spans (display-only)
+            var walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, null);
+            var batch = [];
+            while (walker.nextNode()) batch.push(walker.currentNode);
+            batch.forEach(function(tn){
+              if (!/\{\{[a-z_]+\}\}/i.test(tn.nodeValue)) return;
+              var frag = document.createDocumentFragment();
+              var re = /\{\{([a-z_]+)\}\}/gi, last = 0, m;
+              while ((m = re.exec(tn.nodeValue)) !== null) {
+                if (m.index > last) frag.appendChild(document.createTextNode(tn.nodeValue.slice(last, m.index)));
+                var chip = document.createElement('span');
+                chip.className = 'tpl-var-chip';
+                chip.setAttribute('contenteditable','false');
+                chip.setAttribute('data-var', m[1]);
+                chip.textContent = m[1].replace(/_/g,' ');
+                frag.appendChild(chip);
+                last = m.index + m[0].length;
+              }
+              if (last < tn.nodeValue.length) frag.appendChild(document.createTextNode(tn.nodeValue.slice(last)));
+              tn.parentNode.replaceChild(frag, tn);
+            });
+          }
+          makeVarBadges(contentEl);
+
+          // Read HTML out of the editor, converting var chips back to {{var}} text
+          function exportHtml(){
+            var clone = contentEl.cloneNode(true);
+            clone.querySelectorAll('.tpl-var-chip').forEach(function(c){
+              var v = c.getAttribute('data-var');
+              c.replaceWith(document.createTextNode('{{'+v+'}}'));
+            });
+            return clone.innerHTML;
+          }
+
+          function renderPreview(){
+            var html = exportHtml();
+            Object.keys(demo).forEach(function(k){ html = html.split('{{'+k+'}}').join(demo[k]); });
+            iframe.srcdoc = html;
+            hidden.value = html;
+          }
+          renderPreview();
+          contentEl.addEventListener('input', function(){
+            clearTimeout(window._tt); window._tt = setTimeout(renderPreview, 350);
+          });
+          // Ensure hidden field is up-to-date right before submit
+          if (form) form.addEventListener('submit', function(){ hidden.value = exportHtml(); });
+
+          // Toolbar formatting buttons
+          document.querySelectorAll('.tpl-tb-btn').forEach(function(btn){
+            btn.addEventListener('click', function(){
+              contentEl.focus();
+              document.execCommand(btn.getAttribute('data-cmd'), false, btn.getAttribute('data-val') || null);
+              renderPreview();
+            });
+          });
+          ['tplAlignL','tplAlignC'].forEach(function(id){
+            var b = document.getElementById(id);
+            if (b) b.addEventListener('click', function(){
+              contentEl.focus();
+              document.execCommand(b.getAttribute('data-cmd'));
+              renderPreview();
+            });
+          });
+          var linkBtn = document.getElementById('tplLinkBtn');
+          if (linkBtn) linkBtn.addEventListener('click', function(){
+            var url = prompt('Enter the link URL (https://…)');
+            if (!url) return;
+            contentEl.focus();
+            document.execCommand('createLink', false, url);
+            renderPreview();
+          });
+
+          // Insert variable
+          var varPick = document.getElementById('tplVarPick');
+          if (varPick) varPick.addEventListener('change', function(){
+            if (!varPick.value) return;
+            contentEl.focus();
+            var chip = document.createElement('span');
+            chip.className = 'tpl-var-chip';
+            chip.setAttribute('contenteditable','false');
+            chip.setAttribute('data-var', varPick.value);
+            chip.textContent = varPick.value.replace(/_/g,' ');
+            // insert at caret
+            var sel = window.getSelection();
+            if (sel && sel.rangeCount && contentEl.contains(sel.anchorNode)) {
+              var range = sel.getRangeAt(0);
+              range.deleteContents();
+              range.insertNode(chip);
+              range.setStartAfter(chip); range.setEndAfter(chip);
+              sel.removeAllRanges(); sel.addRange(range);
+            } else {
+              contentEl.appendChild(chip);
+            }
+            varPick.value = '';
+            renderPreview();
+          });
+
+          // Image uploader (AJAX) — now inserts <img> into the contenteditable
           var fileEl   = document.getElementById('tplImgFile');
           var upBtn    = document.getElementById('tplImgUploadBtn');
           var resBox   = document.getElementById('tplImgResult');
@@ -1997,12 +2130,10 @@ elseif ($tab === 'templates'):
           var urlInput = document.getElementById('tplImgUrl');
           var copyBtn  = document.getElementById('tplImgCopyBtn');
           var insBtn   = document.getElementById('tplImgInsertBtn');
-          var htmlEd   = document.getElementById('htmlEd');
-          if (!fileEl || !upBtn) return;
 
-          function showErr(m){ errBox.textContent = m || ''; errBox.classList.toggle('d-none', !m); }
+          function showErr(m){ if (!errBox) return; errBox.textContent = m || ''; errBox.classList.toggle('d-none', !m); }
 
-          upBtn.addEventListener('click', function(){
+          if (upBtn) upBtn.addEventListener('click', function(){
             showErr('');
             if (!fileEl.files || !fileEl.files[0]) { showErr('Please choose an image first.'); return; }
             var fd = new FormData();
@@ -2010,23 +2141,19 @@ elseif ($tab === 'templates'):
             upBtn.disabled = true;
             var orig = upBtn.innerHTML;
             upBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Uploading…';
-            fetch('ajax/template-image.php', { method: 'POST', body: fd })
+            fetch('ajax/template-image.php', { method:'POST', body: fd })
               .then(function(r){ return r.json().catch(function(){ return {ok:false, error:'Server error'}; }); })
               .then(function(j){
-                upBtn.disabled = false;
-                upBtn.innerHTML = orig;
+                upBtn.disabled = false; upBtn.innerHTML = orig;
                 if (!j || !j.ok) { showErr((j && j.error) || 'Upload failed.'); return; }
-                thumb.src = j.url;
-                urlInput.value = j.url;
-                resBox.classList.remove('d-none');
+                thumb.src = j.url; urlInput.value = j.url; resBox.classList.remove('d-none');
               }).catch(function(){
-                upBtn.disabled = false;
-                upBtn.innerHTML = orig;
+                upBtn.disabled = false; upBtn.innerHTML = orig;
                 showErr('Network error — please try again.');
               });
           });
 
-          copyBtn && copyBtn.addEventListener('click', function(){
+          if (copyBtn) copyBtn.addEventListener('click', function(){
             urlInput.select();
             try {
               navigator.clipboard.writeText(urlInput.value);
@@ -2035,14 +2162,24 @@ elseif ($tab === 'templates'):
             } catch(e) { document.execCommand('copy'); }
           });
 
-          insBtn && insBtn.addEventListener('click', function(){
-            if (!htmlEd || !urlInput.value) return;
-            var snippet = '<img src="' + urlInput.value + '" alt="" style="max-width:100%;height:auto;display:block;border:0;outline:none;text-decoration:none;">';
-            var start = htmlEd.selectionStart, end = htmlEd.selectionEnd;
-            htmlEd.value = htmlEd.value.substring(0, start) + snippet + htmlEd.value.substring(end);
-            htmlEd.focus();
-            htmlEd.selectionStart = htmlEd.selectionEnd = start + snippet.length;
-            prevRender();
+          if (insBtn) insBtn.addEventListener('click', function(){
+            if (!urlInput.value) return;
+            contentEl.focus();
+            var img = document.createElement('img');
+            img.src = urlInput.value;
+            img.alt = '';
+            img.style.maxWidth = '100%'; img.style.height = 'auto'; img.style.display = 'block';
+            var sel = window.getSelection();
+            if (sel && sel.rangeCount && contentEl.contains(sel.anchorNode)) {
+              var range = sel.getRangeAt(0);
+              range.deleteContents();
+              range.insertNode(img);
+              range.setStartAfter(img); range.setEndAfter(img);
+              sel.removeAllRanges(); sel.addRange(range);
+            } else {
+              contentEl.appendChild(img);
+            }
+            renderPreview();
           });
         })();
         </script>
@@ -2228,9 +2365,21 @@ elseif ($tab === 'regions'):
       <div class="col-md-6">
         <div class="card-e p-4 region-card" data-region-card="<?= esc($r['code']) ?>" data-testid="region-card-<?= esc($r['code']) ?>">
           <div class="d-flex justify-content-between align-items-start mb-3">
-            <div>
-              <h6 class="fw-bold mb-0"><i class="bi bi-flag-fill me-1" style="color:var(--brand)"></i> <?= esc($r['code']) ?> · <?= esc($r['name']) ?></h6>
-              <small class="text-muted"><?= esc($r['currency_symbol']) ?> <?= esc($r['currency']) ?> · Tax <?= number_format($r['tax_rate']*100,1) ?>%</small>
+            <div class="d-flex align-items-center gap-3">
+              <?php
+                $flagMap = ['US'=>'us','UK'=>'gb','GB'=>'gb','CA'=>'ca','EU'=>'eu','AU'=>'au','IN'=>'in','DE'=>'de','FR'=>'fr','ES'=>'es','IT'=>'it','JP'=>'jp','MX'=>'mx','BR'=>'br'];
+                $fcode = $flagMap[strtoupper($r['code'])] ?? strtolower($r['code']);
+              ?>
+              <img src="https://flagcdn.com/w80/<?= esc($fcode) ?>.png"
+                   srcset="https://flagcdn.com/w160/<?= esc($fcode) ?>.png 2x"
+                   alt="<?= esc($r['name']) ?> flag"
+                   class="region-flag"
+                   data-testid="region-flag-<?= esc($r['code']) ?>"
+                   onerror="this.outerHTML='<span class=\'region-flag-fb\'><i class=\'bi bi-flag-fill\'></i></span>';">
+              <div>
+                <h6 class="fw-bold mb-0"><?= esc($r['code']) ?> · <?= esc($r['name']) ?></h6>
+                <small class="text-muted"><?= esc($r['currency_symbol']) ?> <?= esc($r['currency']) ?> · Tax <?= number_format($r['tax_rate']*100,1) ?>%</small>
+              </div>
             </div>
             <span class="rg-status-pill <?= $r['active']?'on':'off' ?>" data-rg-pill data-testid="region-pill-<?= esc($r['code']) ?>"><?= $r['active']?'<i class="bi bi-broadcast me-1"></i>Live':'<i class="bi bi-pause-circle me-1"></i>Paused' ?></span>
           </div>
@@ -2272,6 +2421,21 @@ elseif ($tab === 'regions'):
   </div>
 
   <style>
+    .region-flag {
+      width: 44px; height: 32px;
+      object-fit: cover;
+      border-radius: 6px;
+      box-shadow: 0 2px 6px rgba(0,0,0,.18);
+      border: 1px solid rgba(255,255,255,.6);
+      flex-shrink: 0;
+    }
+    [data-bs-theme="dark"] .region-flag { border-color: rgba(255,255,255,.15); box-shadow: 0 2px 8px rgba(0,0,0,.45); }
+    .region-flag-fb {
+      width: 44px; height: 32px;
+      display:inline-flex; align-items:center; justify-content:center;
+      border-radius: 6px; background: var(--bg); color: var(--brand);
+      border: 1px solid var(--border); font-size: 18px;
+    }
     .rg-status-pill { display:inline-flex; align-items:center; font-size:11px; font-weight:600; padding:4px 10px; border-radius:999px; letter-spacing:.3px; }
     .rg-status-pill.on  { background:#dcfce7; color:#166534; }
     .rg-status-pill.off { background:#fee2e2; color:#991b1b; }

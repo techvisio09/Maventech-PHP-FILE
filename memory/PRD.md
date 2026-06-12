@@ -112,7 +112,14 @@ Create a comprehensive and user-friendly Admin Panel for Maventech Software with
   - Public site queries (`get_products()`, `get_product()`, `index.php` Best Sellers / New Arrivals / Picked-for-You blocks, `merchant-feed.php`, `sitemap-xml.php`) now filter by `region IN (SELECT code FROM regions WHERE active=1)` via new helper `active_regions_sql_in()`. Deactivating a region instantly hides all of its products from the storefront. Verified via curl: deactivate `US` → index.php product links drop from 37 → 0; re-activate → back to 37.
 - **[Feb 2026]** Email Templates editor: explicit per-template **Edit** button + image upload:
   - Each of the 5 template list rows (`lead_followup`, `order_delivery`, `order_pending`, `refund_confirm`, `review_request`) now has a visible blue Edit pencil button alongside the clickable row label, with proper `data-testid="edit-template-<code>"` hooks.
-  - Added an in-editor **image uploader** card under the HTML textarea: choose JPG/PNG/GIF/WEBP/SVG (≤5 MB) → upload via AJAX to `/ajax/template-image.php` → displays a thumbnail + public URL → **Copy URL** and **Insert into HTML** buttons place a ready-to-use `<img>` snippet at the cursor position with the live preview auto-refreshing. Uploaded files persist under `/uploads/templates/`.
+  - Added an in-editor **image uploader** card under the content editor: choose JPG/PNG/GIF/WEBP/SVG (≤5 MB) → upload via AJAX to `/ajax/template-image.php` → displays a thumbnail + public URL → **Copy URL** and **Insert into HTML** buttons place a ready-to-use `<img>` snippet at the cursor position with the live preview auto-refreshing. Uploaded files persist under `/uploads/templates/`.
+- **[Feb 2026]** Email Templates editor — content-first redesign:
+  - **Removed the raw HTML textarea** in favor of a friendly **WYSIWYG content box** (`contenteditable`) where admins simply type what the customer will see. Toolbar offers Bold / Italic / Underline / bullet & numbered lists / Heading / Normal text / Link / Align left·center.
+  - **"Insert variable" dropdown** writes dynamic placeholders (customer name, order number, license-keys block, install guide, review URL, etc.) as styled blue chips inside the editor; on save they are exported back to `{{variable}}` tokens so the existing email-rendering pipeline keeps working.
+  - **Removed the Version History card** — editor view is now focused purely on the message and the live preview.
+  - Image-uploader insert now drops `<img>` directly at the caret position inside the rich-text editor.
+- **[Feb 2026]** Regions tab — country flag logos:
+  - Each region card now shows the country's actual flag image (44×32, rounded, subtle shadow) sourced from `flagcdn.com` (US, GB/UK, CA, EU, AU, IN, DE, FR, ES, IT, JP, MX, BR pre-mapped). Graceful fallback to a Bootstrap-Icon flag if the CDN image fails to load.
 
 ## Test Credentials
 See `/app/memory/test_credentials.md`.
