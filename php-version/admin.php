@@ -79,6 +79,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         fulfill_order((int)$_POST['order_id']);
         header('Location: admin.php?tab=orders&msg=Email+resent'); exit;
 
+    } elseif ($action === 'save_billing_note') {
+        // Customize the company name shown on customers' bank/card statements.
+        // Source of truth for billing notes in the order-delivery email.
+        if (isset($_POST['merchant_name'])) {
+            setting_set('gw_card_merchant_name', trim($_POST['merchant_name']));
+        }
+        if (isset($_POST['account_name'])) {
+            setting_set('gw_paypal_account_name', trim($_POST['account_name']));
+        }
+        $back = !empty($_POST['return_tpl_id'])
+            ? 'admin.php?tab=templates&edit='.(int)$_POST['return_tpl_id'].'&msg=Billing+note+updated'
+            : 'admin.php?tab=templates&msg=Billing+note+updated';
+        header('Location: '.$back); exit;
+
     } elseif ($action === 'resend_outbox') {
         // Re-attempt sending an outbox email — optionally to a new recipient
         $emailId = (int)$_POST['email_id'];
@@ -1530,6 +1544,66 @@ elseif ($tab === 'templates'):
           </form>
         </div>
 
+        <?php if ($editing['code'] === 'order_delivery'):
+          $bnCard   = setting_get('gw_card_merchant_name', defined('SITE_LEGAL') ? SITE_LEGAL : 'Maventech Software');
+          $bnPaypal = setting_get('gw_paypal_account_name', defined('SITE_LEGAL') ? SITE_LEGAL : 'Maventech Software LLC');
+        ?>
+        <div class="card-e p-3 mb-3" data-testid="billing-note-card" style="border-left:4px solid #10b981;">
+          <div class="d-flex justify-content-between align-items-start mb-2">
+            <div>
+              <h6 class="fw-bold mb-1"><i class="bi bi-receipt text-success me-1"></i>Billing Notes</h6>
+              <small class="text-muted">The company name customers see on their bank / card statement — also shown in the order-confirmation email's billing footer.</small>
+            </div>
+            <button type="button" class="btn btn-soft-blue btn-sm" data-testid="customize-billing-btn" onclick="document.getElementById('bnEdit').classList.toggle('d-none');document.getElementById('bnView').classList.toggle('d-none');">
+              <i class="bi bi-pencil-square me-1"></i> Customize
+            </button>
+          </div>
+
+          <!-- Read-only view -->
+          <div id="bnView" class="row g-2 mt-2">
+            <div class="col-md-6">
+              <div class="p-2 rounded" style="background:var(--bg);border:1px solid var(--border);">
+                <small class="text-muted text-uppercase fw-semibold" style="font-size:10px;letter-spacing:1px;"><i class="bi bi-credit-card me-1"></i>Card / Stripe statement</small>
+                <div class="fw-bold mt-1" data-testid="bn-card-current"><?= esc($bnCard) ?></div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="p-2 rounded" style="background:var(--bg);border:1px solid var(--border);">
+                <small class="text-muted text-uppercase fw-semibold" style="font-size:10px;letter-spacing:1px;"><i class="bi bi-paypal me-1"></i>PayPal merchant</small>
+                <div class="fw-bold mt-1" data-testid="bn-paypal-current"><?= esc($bnPaypal) ?></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Edit form (hidden by default) -->
+          <form id="bnEdit" method="post" class="d-none mt-2">
+            <input type="hidden" name="action" value="save_billing_note">
+            <input type="hidden" name="return_tpl_id" value="<?= (int)$editing['id'] ?>">
+            <div class="row g-2">
+              <div class="col-md-6">
+                <label class="form-label small fw-semibold"><i class="bi bi-credit-card me-1"></i>Card / Stripe statement name</label>
+                <input class="form-control form-control-sm" name="merchant_name" value="<?= esc($bnCard) ?>" maxlength="22" required data-testid="bn-card-input">
+                <small class="text-muted">Max 22 chars · shown on the customer's bank statement.</small>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label small fw-semibold"><i class="bi bi-paypal me-1"></i>PayPal merchant name</label>
+                <input class="form-control form-control-sm" name="account_name" value="<?= esc($bnPaypal) ?>" maxlength="60" required data-testid="bn-paypal-input">
+                <small class="text-muted">Shown when PayPal is used as the payment method.</small>
+              </div>
+            </div>
+            <div class="d-flex gap-2 mt-3">
+              <button class="btn btn-soft-blue btn-sm" data-testid="bn-save"><i class="bi bi-check2 me-1"></i> Save</button>
+              <button type="button" class="btn btn-soft-gray btn-sm" data-testid="bn-cancel" onclick="document.getElementById('bnEdit').classList.add('d-none');document.getElementById('bnView').classList.remove('d-none');">Cancel</button>
+              <small class="text-muted ms-auto align-self-center">Mirrors <a href="admin.php?tab=api">API Management</a> · billing notes update everywhere instantly.</small>
+            </div>
+          </form>
+
+          <div class="mt-3 p-2 rounded" style="background:#f0fdf4;border:1px dashed #86efac;">
+            <small><i class="bi bi-eye me-1 text-success"></i><strong>Preview in email:</strong> "Billing note: this charge appears as <strong style="color:#047857;"><?= esc($bnCard) ?></strong> on your card statement."</small>
+          </div>
+        </div>
+        <?php endif; ?>
+
         <?php if ($versions): ?>
           <div class="card-e p-3">
             <h6 class="fw-bold mb-2"><i class="bi bi-clock-history me-1"></i> Version History</h6>
@@ -1562,7 +1636,7 @@ elseif ($tab === 'templates'):
         <script>
         function prevRender(){
           var html=document.getElementById('htmlEd').value;
-          var s={company_name:'<?= esc(SITE_BRAND) ?>',customer_name:'John Smith',customer_email:'john@example.com',order_number:'MVT-2026-0042',amount:'129.99',statement_name:'<?= esc(setting_get('statement_name_card','MAVENTECH SOFTWARE')) ?>',support_email:'<?= esc(SITE_EMAIL) ?>',support_phone:'<?= esc(SITE_PHONE) ?>',year:new Date().getFullYear(),installation_guide:'1. Download installer.<br>2. Run setup.<br>3. Enter license key.<br>4. Activate.',products_block:'<div style="border:1px solid #eef0f3;border-radius:12px;padding:14px;background:#fff;"><div style="font-weight:700;">Sample Product</div><div style="margin-top:10px;border:2px dashed #3b82f6;border-radius:10px;background:#eff6ff;padding:12px;text-align:center;"><div style="font-size:10px;color:#64748b;letter-spacing:1.5px;text-transform:uppercase;">License Key</div><div style="font-family:monospace;font-weight:bold;color:#1d4ed8;font-size:17px;">XXXXX-YYYYY-ZZZZZ-AAAAA</div></div></div>',tracking_pixel:''};
+          var s={company_name:'<?= esc(SITE_BRAND) ?>',customer_name:'John Smith',customer_email:'john@example.com',order_number:'MVT-2026-0042',amount:'129.99',statement_name:'<?= esc(setting_get('gw_card_merchant_name', setting_get('statement_name_card','MAVENTECH SOFTWARE'))) ?>',support_email:'<?= esc(SITE_EMAIL) ?>',support_phone:'<?= esc(SITE_PHONE) ?>',year:new Date().getFullYear(),installation_guide:'1. Download installer.<br>2. Run setup.<br>3. Enter license key.<br>4. Activate.',products_block:'<div style="border:1px solid #eef0f3;border-radius:12px;padding:14px;background:#fff;"><div style="font-weight:700;">Sample Product</div><div style="margin-top:10px;border:2px dashed #3b82f6;border-radius:10px;background:#eff6ff;padding:12px;text-align:center;"><div style="font-size:10px;color:#64748b;letter-spacing:1.5px;text-transform:uppercase;">License Key</div><div style="font-family:monospace;font-weight:bold;color:#1d4ed8;font-size:17px;">XXXXX-YYYYY-ZZZZZ-AAAAA</div></div></div>',tracking_pixel:''};
           Object.keys(s).forEach(function(k){ html=html.split('{{'+k+'}}').join(s[k]); });
           document.getElementById('prev').srcdoc=html;
         }
