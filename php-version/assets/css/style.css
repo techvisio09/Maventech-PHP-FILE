@@ -213,49 +213,52 @@ h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6, .display-4, .display-5, .d
 .accordion-button:not(.collapsed) { background: rgba(6, 182, 212, .06); color: var(--uc-blue); box-shadow: none; }
 
 /* ---------- Hero (lightened Ochaka gradient: airy navy-teal → soft ember) ---------- */
-.hero { position: relative; overflow: hidden; color: #f2f5fa;
-  background: linear-gradient(115deg, #2c2152 0%, #2a3a6e 42%, #136a85 76%, #93573a 110%); }
-/* faint perspective grid */
+/* ---------- Hero (clean & elegant light theme) ---------- */
+.hero { position: relative; overflow: hidden; color: #0f172a;
+  background: #ffffff;
+  padding-top: 4.5rem; padding-bottom: 4.5rem;
+}
+/* Very subtle radial wash so the section doesn't look flat */
 .hero::before { content: ''; position: absolute; inset: 0; pointer-events: none;
-  background-image: linear-gradient(rgba(255, 255, 255, .05) 1px, transparent 1px),
-                    linear-gradient(90deg, rgba(255, 255, 255, .05) 1px, transparent 1px);
-  background-size: 46px 46px;
-  -webkit-mask-image: radial-gradient(75% 90% at 60% 40%, #000 25%, transparent 100%);
-  mask-image: radial-gradient(75% 90% at 60% 40%, #000 25%, transparent 100%); }
-/* warm + cool glow washes */
-.hero::after { content: ''; position: absolute; inset: 0; pointer-events: none;
-  background: radial-gradient(560px 320px at 90% 6%, rgba(255, 120, 73, .22), transparent 70%),
-              radial-gradient(640px 380px at 4% 100%, rgba(6, 182, 212, .18), transparent 70%); }
+  background:
+    radial-gradient(900px 500px at 10% 0%, rgba(59,130,246,.06), transparent 60%),
+    radial-gradient(700px 420px at 95% 110%, rgba(244,114,182,.05), transparent 65%);
+}
+.hero::after { content: none; }
 .hero .container { position: relative; z-index: 1; }
-/* starfield sparkle */
-.hero-stars { position: absolute; inset: 0; pointer-events: none; opacity: .8;
-  background-image:
-    radial-gradient(1.5px 1.5px at 12% 22%, rgba(255, 255, 255, .8), transparent 100%),
-    radial-gradient(1px 1px at 28% 64%, rgba(255, 255, 255, .55), transparent 100%),
-    radial-gradient(2px 2px at 44% 12%, rgba(165, 243, 252, .8), transparent 100%),
-    radial-gradient(1px 1px at 58% 42%, rgba(255, 255, 255, .5), transparent 100%),
-    radial-gradient(1.5px 1.5px at 70% 76%, rgba(255, 178, 122, .7), transparent 100%),
-    radial-gradient(1px 1px at 82% 28%, rgba(255, 255, 255, .6), transparent 100%),
-    radial-gradient(1.5px 1.5px at 92% 58%, rgba(165, 243, 252, .7), transparent 100%),
-    radial-gradient(1px 1px at 6% 84%, rgba(255, 255, 255, .5), transparent 100%);
-  animation: stars-twinkle 5.5s ease-in-out infinite alternate; }
-@keyframes stars-twinkle { from { opacity: .45; } to { opacity: 1; } }
-.hero h1 { font-weight: 800; color: #fff; font-size: clamp(2rem, 3.6vw, 2.75rem); }
-.hero .accent { background: linear-gradient(90deg, #8df1ff, #ffc69b); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.hero .text-secondary { color: #c3cde0 !important; }
+/* Hide leftover decorative layers from the old dark hero */
+.hero-stars { display: none; }
+.hero-art-glow { display: none; }
+.hero h1 { font-weight: 800; color: #0f172a; font-size: clamp(2rem, 3.6vw, 2.85rem); line-height: 1.18; letter-spacing: -.01em; }
+.hero .accent { background: linear-gradient(90deg, #2563eb, #06b6d4 60%, #f59e0b); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.hero .text-secondary { color: #475569 !important; }
 .hero .fs-5 { font-size: 1.05rem !important; }
-.hero .hero-stats .fs-3 { color: #fff; font-size: 1.45rem !important; }
-.hero-badge { display: inline-block; font-size: .78rem; font-weight: 750; color: #a5f3fc;
+.hero .hero-stats { gap: 2.75rem !important; }
+.hero .hero-stats .fs-3 { color: #0f172a; font-size: 1.55rem !important; font-weight: 800; }
+.hero .hero-stats small { color: #64748b; }
+.hero-badge { display: inline-block; font-size: .78rem; font-weight: 700; color: #2563eb;
   padding: .42rem 1rem; border-radius: 999px; letter-spacing: .02em;
-  background: rgba(103, 232, 249, .1); border: 1px solid rgba(103, 232, 249, .35);
-  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
-/* Warm orange CTA (Ochaka accent) */
-.btn-hero-cta { background: linear-gradient(135deg, #ff7849, #ea580c); color: #fff; border: none; font-weight: 750;
-  box-shadow: 0 12px 30px rgba(255, 120, 73, .38); }
+  background: rgba(59,130,246,.08); border: 1px solid rgba(59,130,246,.22);
+}
+.hero ul li { color: #334155; }
+.hero ul li i { font-size: 1.05rem; }
+/* CTA buttons re-tuned for the clean background */
+.btn-hero-cta { background: linear-gradient(135deg, #ff7849, #ea580c); color: #fff; border: none; font-weight: 700;
+  box-shadow: 0 10px 24px rgba(234,88,12,.28); transition: transform .18s ease, box-shadow .18s ease; }
 .btn-hero-cta:hover, .btn-hero-cta:focus { background: linear-gradient(135deg, #ff8a5e, #f97316); color: #fff;
-  transform: translateY(-2px); box-shadow: 0 16px 38px rgba(255, 120, 73, .5); }
-.btn-hero-ghost { color: #e6edf7; border: 1.5px solid rgba(255, 255, 255, .35); background: transparent; }
-.btn-hero-ghost:hover { color: #fff; border-color: rgba(103, 232, 249, .75); background: rgba(103, 232, 249, .1); }
+  transform: translateY(-2px); box-shadow: 0 14px 32px rgba(234,88,12,.38); }
+.btn-hero-ghost { color: #0f172a; border: 1.5px solid #e2e8f0; background: #fff; font-weight: 600; }
+.btn-hero-ghost:hover { color: #2563eb; border-color: #93c5fd; background: #eff6ff; }
+
+/* Dark mode: keep the clean look but with a dark surface */
+[data-bs-theme="dark"] .hero { background: #0b1220; color: #e6edf7; }
+[data-bs-theme="dark"] .hero h1 { color: #fff; }
+[data-bs-theme="dark"] .hero .text-secondary { color: #94a3b8 !important; }
+[data-bs-theme="dark"] .hero .hero-stats .fs-3 { color: #fff; }
+[data-bs-theme="dark"] .hero-badge { color: #a5f3fc; background: rgba(103,232,249,.1); border-color: rgba(103,232,249,.32); }
+[data-bs-theme="dark"] .hero ul li { color: #cbd5e1; }
+[data-bs-theme="dark"] .btn-hero-ghost { color: #e6edf7; background: transparent; border-color: rgba(255,255,255,.18); }
+[data-bs-theme="dark"] .btn-hero-ghost:hover { color: #fff; background: rgba(59,130,246,.18); border-color: rgba(59,130,246,.42); }
 
 /* ---------- Hero showcase: frameless 3D product display + watermark motif ---------- */
 .hero-showcase { position: relative; width: min(460px, 100%); }
