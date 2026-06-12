@@ -6,6 +6,8 @@ ensure_admin();
 $admin = require_admin();
 $pdo = db();
 $tab = $_GET['tab'] ?? 'dashboard';
+// Legacy `keys` tab merged into Products tab — keep URLs working
+if ($tab === 'keys') { header('Location: admin.php?tab=products'); exit; }
 $flash = $_GET['msg'] ?? '';
 $rg = active_region();
 $region_code = active_region_code();
@@ -76,19 +78,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         fulfill_order((int)$_POST['order_id']);
         header('Location: admin.php?tab=orders&msg=Email+resent'); exit;
 
+    } elseif ($action === 'resend_outbox') {
+        // Re-attempt sending an outbox email — optionally to a new recipient
+        $emailId = (int)$_POST['email_id'];
+        $newTo = trim($_POST['new_recipient'] ?? '');
+        $row = $pdo->prepare('SELECT * FROM email_outbox WHERE id=?');
+        $row->execute([$emailId]); $em = $row->fetch();
+        if ($em) {
+            $to = $newTo !== '' ? $newTo : $em['recipient'];
+            // Strip any existing tracking pixel so send_email can embed a fresh one
+            $html = preg_replace('#<img[^>]*track-open\.php[^>]*>#i', '', $em['html']);
+            send_email($to, $em['subject'], $html, $em['order_id'] ? (int)$em['order_id'] : null, $em['template_code']);
+            header('Location: admin.php?tab=emails&msg=Email+resent+to+'.urlencode($to)); exit;
+        }
+        header('Location: admin.php?tab=emails&msg=Email+not+found'); exit;
+
     } elseif ($action === 'add_keys') {
         $keys = array_filter(array_map('trim', explode("\n", $_POST['keys'] ?? '')));
         $stmt = $pdo->prepare('INSERT INTO license_keys (product_slug, license_key, region) VALUES (?,?,?)');
         $n=0; foreach ($keys as $k) try { $stmt->execute([$_POST['product_slug'], $k, $region_code]); $n++; } catch (Exception $e) {}
         $rs = $_POST['return_slug'] ?? $_POST['product_slug'] ?? '';
-        $exp = $rs ? '&expand='.urlencode($rs) : '';
-        header('Location: admin.php?tab=keys'.$exp.'&msg='.$n.'+key(s)+added'); exit;
+        $back = $rs ? 'admin.php?tab=products&inv='.urlencode($rs).'&invtab=available' : 'admin.php?tab=products';
+        header('Location: '.$back.'&msg='.$n.'+key(s)+added'); exit;
 
     } elseif ($action === 'delete_key') {
         $pdo->prepare('DELETE FROM license_keys WHERE id=? AND status="available"')->execute([(int)$_POST['key_id']]);
         $rs = $_POST['return_slug'] ?? '';
-        $exp = $rs ? '&expand='.urlencode($rs) : '';
-        header('Location: admin.php?tab=keys'.$exp.'&msg=Key+removed'); exit;
+        $back = $rs ? 'admin.php?tab=products&inv='.urlencode($rs).'&invtab=available' : 'admin.php?tab=products';
+        header('Location: '.$back.'&msg=Key+removed'); exit;
 
     } elseif ($action === 'save_template') {
         $tplId = (int)$_POST['tpl_id'];
@@ -564,7 +581,7 @@ elseif ($tab === 'products'):
   </form>
 
   <!-- COMPACT PRODUCT GRID -->
-  <div class="row g-2" data-testid="products-grid">
+  <div class="row g-4" data-testid="products-grid">
     <?php if (empty($products)): ?>
       <div class="col-12 card-e p-5 text-center text-muted">No products match the current filters.</div>
     <?php endif; ?>
@@ -573,35 +590,39 @@ elseif ($tab === 'products'):
               ? round(100 - ($p['price']/$p['original_price']*100)) : 0;
       $save = ($p['original_price'] && $p['original_price'] > $p['price']) ? $p['original_price'] - $p['price'] : 0;
       $av = (int)$p['avail_keys'];
+      $sd = (int)$p['sold_keys'];
     ?>
-      <div class="col-6 col-md-4 col-xl-3 col-xxl-2">
-        <div class="card-e h-100 position-relative" style="padding:8px;font-size:12px;<?= !$p['is_active']?'opacity:.55;':'' ?>" data-testid="prod-<?= esc($p['slug']) ?>">
+      <div class="col-6 col-md-4 col-xl-3">
+        <div class="card-e h-100 position-relative" style="padding:14px;font-size:13px;<?= !$p['is_active']?'opacity:.55;':'' ?>" data-testid="prod-<?= esc($p['slug']) ?>">
           <?php if ($p['badge']): ?>
-            <span style="position:absolute;top:6px;left:6px;background:#ef4444;color:#fff;font-weight:700;font-size:9px;padding:2px 6px;border-radius:4px;letter-spacing:.4px;"><?= esc($p['badge']) ?></span>
+            <span style="position:absolute;top:10px;left:10px;background:#ef4444;color:#fff;font-weight:700;font-size:10px;padding:3px 8px;border-radius:5px;letter-spacing:.4px;z-index:1;"><?= esc($p['badge']) ?></span>
           <?php endif; ?>
           <?php if ($disc > 0): ?>
-            <span style="position:absolute;top:6px;right:6px;background:#facc15;color:#854d0e;font-weight:700;font-size:10px;padding:2px 6px;border-radius:4px;"><?= $disc ?>% OFF</span>
+            <span style="position:absolute;top:10px;right:10px;background:#facc15;color:#854d0e;font-weight:700;font-size:11px;padding:3px 8px;border-radius:5px;z-index:1;"><?= $disc ?>% OFF</span>
           <?php endif; ?>
-          <div style="height:80px;background:var(--bg);border-radius:6px;display:flex;align-items:center;justify-content:center;margin-bottom:6px;">
-            <?php if ($p['image']): ?><img src="<?= esc($p['image']) ?>" style="max-height:72px;max-width:90%;object-fit:contain;"><?php else: ?><i class="bi bi-box-seam text-muted fs-3"></i><?php endif; ?>
-          </div>
-          <div class="fw-bold text-truncate" title="<?= esc($p['name']) ?>" style="font-size:12px;line-height:1.2;"><?= esc($p['name']) ?></div>
-          <div class="text-muted" style="font-size:10px;"><code style="font-size:10px;"><?= esc($p['sku']) ?></code> · <?= esc($p['platform']) ?></div>
-          <div class="d-flex align-items-baseline gap-1 mt-1">
-            <strong style="color:#10b981;font-size:13px;"><?= esc($rg['currency_symbol']) ?><?= number_format(region_price((float)$p['price']),2) ?></strong>
+          <a href="?tab=products&inv=<?= urlencode($p['slug']) ?>" class="d-block text-decoration-none" style="color:inherit;" title="Click to view & manage license keys">
+            <div style="height:110px;background:var(--bg);border-radius:8px;display:flex;align-items:center;justify-content:center;margin-bottom:10px;">
+              <?php if ($p['image']): ?><img src="<?= esc($p['image']) ?>" style="max-height:100px;max-width:90%;object-fit:contain;"><?php else: ?><i class="bi bi-box-seam text-muted fs-3"></i><?php endif; ?>
+            </div>
+            <div class="fw-bold" title="<?= esc($p['name']) ?>" style="font-size:13px;line-height:1.3;min-height:34px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;"><?= esc($p['name']) ?></div>
+            <div class="text-muted mt-1" style="font-size:11px;"><code style="font-size:10px;"><?= esc($p['sku']) ?></code> · <?= esc($p['platform']) ?></div>
+          </a>
+          <div class="d-flex align-items-baseline gap-2 mt-2">
+            <strong style="color:#10b981;font-size:15px;"><?= esc($rg['currency_symbol']) ?><?= number_format(region_price((float)$p['price']),2) ?></strong>
             <?php if ($p['original_price'] && $p['original_price'] > $p['price']): ?>
-              <small class="text-muted text-decoration-line-through" style="font-size:10px;"><?= esc($rg['currency_symbol']) ?><?= number_format(region_price((float)$p['original_price']),2) ?></small>
+              <small class="text-muted text-decoration-line-through" style="font-size:11px;"><?= esc($rg['currency_symbol']) ?><?= number_format(region_price((float)$p['original_price']),2) ?></small>
             <?php endif; ?>
           </div>
-          <div class="d-flex justify-content-between mt-1" style="font-size:10px;">
-            <span><span class="<?= $av==0?'text-danger':($av<5?'text-warning':'text-success') ?>">●</span> <?= $av ?> in stock</span>
+          <div class="d-flex justify-content-between mt-2 pt-2" style="font-size:11px;border-top:1px dashed var(--border);">
+            <span title="Available keys"><span class="<?= $av==0?'text-danger':($av<5?'text-warning':'text-success') ?>">●</span> <strong><?= $av ?></strong> stock</span>
+            <span title="Sold keys" class="text-primary"><i class="bi bi-cart-check"></i> <strong><?= $sd ?></strong> sold</span>
             <span class="<?= $p['is_active']?'text-success':'text-muted' ?>"><?= $p['is_active']?'Active':'Off' ?></span>
           </div>
-          <div class="d-flex gap-1 mt-2">
-            <a href="?tab=products&edit=<?= urlencode($p['slug']) ?>" class="btn btn-soft-blue btn-sm flex-grow-1 py-0" style="font-size:11px;" data-testid="edit-<?= esc($p['slug']) ?>"><i class="bi bi-pencil"></i> Edit</a>
-            <form method="post" class="d-inline"><input type="hidden" name="action" value="toggle_product"><input type="hidden" name="slug" value="<?= esc($p['slug']) ?>"><button class="btn btn-soft-gray btn-sm py-0 px-2" style="font-size:11px;" title="<?= $p['is_active']?'Disable':'Enable' ?>"><i class="bi bi-<?= $p['is_active']?'eye-slash':'eye' ?>"></i></button></form>
-            <form method="post" class="d-inline"><input type="hidden" name="action" value="duplicate_product"><input type="hidden" name="slug" value="<?= esc($p['slug']) ?>"><button class="btn btn-soft-gray btn-sm py-0 px-2" style="font-size:11px;" title="Duplicate"><i class="bi bi-files"></i></button></form>
-            <form method="post" class="d-inline" onsubmit="return confirm('Delete this product permanently?');"><input type="hidden" name="action" value="delete_product"><input type="hidden" name="slug" value="<?= esc($p['slug']) ?>"><button class="btn btn-soft-red btn-sm py-0 px-2" style="font-size:11px;" title="Delete"><i class="bi bi-trash"></i></button></form>
+          <div class="d-flex gap-1 mt-3">
+            <a href="?tab=products&edit=<?= urlencode($p['slug']) ?>" class="btn btn-soft-blue btn-sm flex-grow-1 py-1" style="font-size:11px;" data-testid="edit-<?= esc($p['slug']) ?>" title="Edit product info"><i class="bi bi-pencil"></i> Edit</a>
+            <a href="?tab=products&inv=<?= urlencode($p['slug']) ?>" class="btn btn-soft-green btn-sm flex-grow-1 py-1" style="font-size:11px;" data-testid="inv-<?= esc($p['slug']) ?>" title="Update inventory"><i class="bi bi-key"></i> Update Inventory</a>
+            <form method="post" class="d-inline"><input type="hidden" name="action" value="toggle_product"><input type="hidden" name="slug" value="<?= esc($p['slug']) ?>"><button class="btn btn-soft-gray btn-sm py-1 px-2" style="font-size:11px;" title="<?= $p['is_active']?'Disable':'Enable' ?>"><i class="bi bi-<?= $p['is_active']?'eye-slash':'eye' ?>"></i></button></form>
+            <form method="post" class="d-inline" onsubmit="return confirm('Delete this product permanently?');"><input type="hidden" name="action" value="delete_product"><input type="hidden" name="slug" value="<?= esc($p['slug']) ?>"><button class="btn btn-soft-red btn-sm py-1 px-2" style="font-size:11px;" title="Delete"><i class="bi bi-trash"></i></button></form>
           </div>
         </div>
       </div>
@@ -776,6 +797,132 @@ elseif ($tab === 'products'):
     }
   }
   </script>
+  <?php endif; ?>
+
+  <?php
+  // =======================================================================
+  // INVENTORY MODAL — opens when ?inv=SLUG (manage keys for one product)
+  // =======================================================================
+  $invSlug = $_GET['inv'] ?? '';
+  $invProd = null;
+  if ($invSlug) {
+    $ip = $pdo->prepare('SELECT * FROM products WHERE slug=?');
+    $ip->execute([$invSlug]);
+    $invProd = $ip->fetch();
+  }
+  if ($invProd):
+    $invTab = $_GET['invtab'] ?? 'available';
+    $availSt = $pdo->prepare("SELECT * FROM license_keys WHERE product_slug=? AND region=? AND status='available' ORDER BY created_at DESC LIMIT 300");
+    $availSt->execute([$invProd['slug'], $region_code]); $availKeys = $availSt->fetchAll();
+    $soldSt = $pdo->prepare("SELECT lk.*, o.id AS o_id, o.order_number, o.email AS o_email,
+                             CONCAT(COALESCE(o.first_name,''),' ',COALESCE(o.last_name,'')) AS o_name,
+                             o.total AS o_total, o.payment_method AS o_pm, o.status AS o_status
+                             FROM license_keys lk LEFT JOIN orders o ON o.id=lk.order_id
+                             WHERE lk.product_slug=? AND lk.region=? AND lk.status='sold'
+                             ORDER BY lk.assigned_at DESC LIMIT 300");
+    $soldSt->execute([$invProd['slug'], $region_code]); $soldKeys = $soldSt->fetchAll();
+    $cntAvail = count($availKeys); $cntSold = count($soldKeys);
+  ?>
+  <div class="modal d-block" style="background:rgba(0,0,0,.55);" tabindex="-1" data-testid="inv-modal">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+      <div class="modal-content card-e" style="background:var(--card-bg);">
+        <div class="modal-header" style="border-color:var(--border);">
+          <div class="d-flex align-items-center gap-3">
+            <?php if ($invProd['image']): ?><img src="<?= esc($invProd['image']) ?>" style="width:48px;height:48px;object-fit:contain;background:var(--bg);border-radius:8px;padding:4px;"><?php endif; ?>
+            <div>
+              <h5 class="modal-title mb-0"><i class="bi bi-key me-2 text-success"></i>Update Inventory</h5>
+              <small class="text-muted"><?= esc($invProd['name']) ?> · <code><?= esc($invProd['sku']) ?></code> · Region <strong><?= esc($region_code) ?></strong></small>
+            </div>
+          </div>
+          <a href="?tab=products<?= $f['q']?'&q='.urlencode($f['q']):'' ?>" class="btn-close" data-testid="close-inv-modal"></a>
+        </div>
+        <div class="modal-body">
+          <!-- Two-option toggle: Available / Sold -->
+          <ul class="nav nav-pills mb-3" role="tablist">
+            <li class="nav-item"><a class="nav-link <?= $invTab==='available'?'active':'' ?>" href="?tab=products&inv=<?= urlencode($invProd['slug']) ?>&invtab=available" data-testid="inv-tab-available">
+              <i class="bi bi-key text-success"></i> Available Keys <span class="badge bg-success ms-1"><?= $cntAvail ?></span>
+            </a></li>
+            <li class="nav-item"><a class="nav-link <?= $invTab==='sold'?'active':'' ?>" href="?tab=products&inv=<?= urlencode($invProd['slug']) ?>&invtab=sold" data-testid="inv-tab-sold">
+              <i class="bi bi-cart-check text-primary"></i> Sold Keys <span class="badge bg-primary ms-1"><?= $cntSold ?></span>
+            </a></li>
+          </ul>
+
+          <?php if ($invTab==='available'): ?>
+            <div class="row g-3">
+              <div class="col-lg-5">
+                <div class="card-e p-3" style="background:var(--bg);">
+                  <h6 class="fw-bold mb-2"><i class="bi bi-plus-circle text-success me-1"></i>Add License Keys</h6>
+                  <p class="small text-muted mb-2">Paste one license key per line. Region: <strong><?= esc($region_code) ?></strong></p>
+                  <form method="post">
+                    <input type="hidden" name="action" value="add_keys">
+                    <input type="hidden" name="product_slug" value="<?= esc($invProd['slug']) ?>">
+                    <input type="hidden" name="return_slug" value="<?= esc($invProd['slug']) ?>">
+                    <textarea name="keys" rows="8" required class="form-control font-monospace mb-2" placeholder="XXXX-XXXX-XXXX-XXXX&#10;YYYY-YYYY-YYYY-YYYY" data-testid="inv-add-keys-textarea"></textarea>
+                    <button class="btn btn-soft-blue w-100" data-testid="inv-add-keys-submit"><i class="bi bi-plus-circle me-1"></i>Add to Inventory</button>
+                  </form>
+                </div>
+              </div>
+              <div class="col-lg-7">
+                <h6 class="fw-bold mb-2"><i class="bi bi-key text-success me-1"></i>Available keys (<?= $cntAvail ?>)</h6>
+                <div class="tbl-e" style="max-height:420px;overflow-y:auto;">
+                  <table class="table mb-0">
+                    <thead><tr><th>License Key</th><th>Added</th><th></th></tr></thead>
+                    <tbody>
+                      <?php if (empty($availKeys)): ?>
+                        <tr><td colspan="3" class="text-center text-muted py-4"><i class="bi bi-inbox"></i> No available keys — add some on the left.</td></tr>
+                      <?php endif; ?>
+                      <?php foreach ($availKeys as $k): ?>
+                        <tr>
+                          <td><code style="font-size:12px;"><?= esc($k['license_key']) ?></code></td>
+                          <td><small class="text-muted"><?= esc(date('M j, Y', strtotime($k['created_at']))) ?></small></td>
+                          <td><form method="post" class="d-inline" onsubmit="return confirm('Delete this key?');">
+                            <input type="hidden" name="action" value="delete_key">
+                            <input type="hidden" name="key_id" value="<?= (int)$k['id'] ?>">
+                            <input type="hidden" name="return_slug" value="<?= esc($invProd['slug']) ?>">
+                            <button class="btn btn-soft-red btn-sm py-0 px-2"><i class="bi bi-trash"></i></button>
+                          </form></td>
+                        </tr>
+                      <?php endforeach; ?>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          <?php else: // sold tab ?>
+            <h6 class="fw-bold mb-2"><i class="bi bi-cart-check text-primary me-1"></i>Sold keys (<?= $cntSold ?>) <small class="text-muted fw-normal">— click any row to view full purchase details</small></h6>
+            <div class="tbl-e">
+              <table class="table mb-0">
+                <thead><tr><th>License Key</th><th>Customer</th><th>Order</th><th>Paid</th><th>Sold On</th><th></th></tr></thead>
+                <tbody>
+                  <?php if (empty($soldKeys)): ?>
+                    <tr><td colspan="6" class="text-center text-muted py-4"><i class="bi bi-bag-x"></i> No keys sold yet for this product.</td></tr>
+                  <?php endif; ?>
+                  <?php foreach ($soldKeys as $sk):
+                    $oid = (int)($sk['o_id'] ?? 0);
+                    $rowHref = $oid ? 'order-view.php?id='.$oid : '#';
+                  ?>
+                    <tr style="cursor:<?= $oid?'pointer':'default' ?>;" onclick="<?= $oid ? "window.location='".esc($rowHref)."'" : '' ?>" data-testid="inv-sold-key-<?= (int)$sk['id'] ?>">
+                      <td><code style="font-size:12px;"><?= esc($sk['license_key']) ?></code></td>
+                      <td>
+                        <strong style="font-size:13px;"><?= esc($sk['o_name'] ?? '—') ?></strong>
+                        <div><small class="text-muted"><?= esc($sk['o_email'] ?? '') ?></small></div>
+                      </td>
+                      <td><?= $sk['order_number'] ? '<code class="small">#'.esc($sk['order_number']).'</code>' : '—' ?>
+                        <div><small class="text-muted"><?= esc(ucfirst($sk['o_pm'] ?? '')) ?></small></div></td>
+                      <td><strong><?= esc($rg['currency_symbol']) ?><?= number_format(region_price((float)($sk['o_total'] ?? 0)),2) ?></strong>
+                        <div><span class="s-badge <?= ($sk['o_status']??'')==='paid'?'paid':'queued' ?>" style="font-size:10px;"><?= esc($sk['o_status'] ?? '—') ?></span></div></td>
+                      <td><small class="text-muted"><?= $sk['assigned_at'] ? esc(date('M j, Y H:i', strtotime($sk['assigned_at']))) : '—' ?></small></td>
+                      <td><?php if ($oid): ?><a href="<?= esc($rowHref) ?>" class="btn btn-soft-blue btn-sm py-0 px-2" onclick="event.stopPropagation();"><i class="bi bi-arrow-right-circle"></i> View order</a><?php endif; ?></td>
+                    </tr>
+                  <?php endforeach; ?>
+                </tbody>
+              </table>
+            </div>
+          <?php endif; ?>
+        </div>
+      </div>
+    </div>
+  </div>
   <?php endif; ?>
 
 <?php
@@ -1160,22 +1307,43 @@ elseif ($tab === 'emails'):
 
   <div class="tbl-e">
     <table class="table mb-0" data-testid="email-activity">
-      <thead><tr><th>Recipient</th><th>Subject</th><th>Template</th><th>Order</th><th>Delivery</th><th>Open</th><th>Click</th><th>Sent</th><th></th></tr></thead>
+      <thead><tr><th>Recipient</th><th>Subject</th><th>Template</th><th>Order</th><th>Delivery</th><th>Open</th><th>Click</th><th>Sent</th><th>Actions</th></tr></thead>
       <tbody>
         <?php foreach ($pdo->query("SELECT em.*, o.order_number FROM email_outbox em LEFT JOIN orders o ON o.id=em.order_id ORDER BY em.created_at DESC LIMIT 200") as $e):
           $ds = $e['status'];
           $os = $e['opened_at'] ? 'opened' : ($e['status']==='sent' ? 'delivered' : 'not viewed');
+          $undelivered = in_array($ds, ['failed','queued'], true);
         ?>
-          <tr>
+          <tr <?= $undelivered ? 'style="background:rgba(239,68,68,0.05);"' : '' ?>>
             <td><small><?= esc($e['recipient']) ?></small></td>
             <td><small><?= esc(mb_strimwidth($e['subject'],0,40,'…')) ?></small></td>
             <td><small><code style="font-size:11px;"><?= esc($e['template_code'] ?: 'inline') ?></code></small></td>
             <td><?= $e['order_number'] ? '<a href="order-view.php?id='.(int)$e['order_id'].'"><code>#'.esc($e['order_number']).'</code></a>' : '—' ?></td>
-            <td><span class="s-badge <?= esc($ds) ?>"><?= esc($ds) ?></span><?php if ($e['delivered_at']): ?><br><small class="text-muted"><?= esc(date('M j H:i', strtotime($e['delivered_at']))) ?></small><?php endif; ?></td>
+            <td><span class="s-badge <?= esc($ds) ?>"><?= esc($ds) ?></span><?php if ($e['delivered_at']): ?><br><small class="text-muted"><?= esc(date('M j H:i', strtotime($e['delivered_at']))) ?></small><?php endif; ?>
+              <?php if ($e['note']): ?><br><small class="text-danger" title="<?= esc($e['note']) ?>"><i class="bi bi-exclamation-triangle"></i> <?= esc(mb_strimwidth($e['note'],0,30,'…')) ?></small><?php endif; ?></td>
             <td><?php if ($e['opened_at']): ?><span class="s-badge opened">Opened <?= (int)$e['opened_count'] ?>×</span><br><small class="text-muted"><?= esc(date('M j H:i', strtotime($e['opened_at']))) ?></small><?php else: ?><span class="text-muted small"><?= esc($os) ?></span><?php endif; ?></td>
             <td><?php if ($e['clicked_at']): ?><span class="s-badge opened">Clicked <?= (int)$e['click_count'] ?>×</span><?php else: ?><span class="text-muted small">—</span><?php endif; ?></td>
             <td><small class="text-muted"><?= esc(date('M j, Y H:i', strtotime($e['created_at']))) ?></small></td>
-            <td><a class="btn btn-soft-blue btn-sm py-0 px-2" href="email-view.php?id=<?= (int)$e['id'] ?>" target="_blank" data-testid="view-email-<?= (int)$e['id'] ?>" title="View exact email sent"><i class="bi bi-eye"></i></a></td>
+            <td class="text-nowrap">
+              <a class="btn btn-soft-blue btn-sm py-0 px-2" href="email-view.php?id=<?= (int)$e['id'] ?>" target="_blank" data-testid="view-email-<?= (int)$e['id'] ?>" title="View exact email sent"><i class="bi bi-eye"></i></a>
+              <?php if ($undelivered): ?>
+                <form method="post" class="d-inline" onsubmit="return confirm('Resend this email to <?= esc($e['recipient']) ?>?');">
+                  <input type="hidden" name="action" value="resend_outbox">
+                  <input type="hidden" name="email_id" value="<?= (int)$e['id'] ?>">
+                  <button class="btn btn-soft-green btn-sm py-0 px-2" data-testid="resend-email-<?= (int)$e['id'] ?>" title="Resend to same recipient"><i class="bi bi-arrow-clockwise"></i></button>
+                </form>
+                <button type="button" class="btn btn-soft-gray btn-sm py-0 px-2" data-testid="edit-resend-<?= (int)$e['id'] ?>" title="Edit recipient & resend"
+                        onclick="document.getElementById('editResend<?= (int)$e['id'] ?>').classList.toggle('d-none');"><i class="bi bi-pencil-square"></i></button>
+                <div id="editResend<?= (int)$e['id'] ?>" class="d-none mt-2 p-2 card-e" style="background:var(--card-bg);text-align:left;">
+                  <form method="post" class="d-flex gap-1 align-items-center">
+                    <input type="hidden" name="action" value="resend_outbox">
+                    <input type="hidden" name="email_id" value="<?= (int)$e['id'] ?>">
+                    <input type="email" name="new_recipient" class="form-control form-control-sm" required placeholder="new@email.com" value="<?= esc($e['recipient']) ?>" style="min-width:200px;" data-testid="new-recipient-<?= (int)$e['id'] ?>">
+                    <button class="btn btn-soft-blue btn-sm py-0 px-2" data-testid="confirm-resend-<?= (int)$e['id'] ?>" title="Send to this address"><i class="bi bi-send"></i></button>
+                  </form>
+                </div>
+              <?php endif; ?>
+            </td>
           </tr>
         <?php endforeach; ?>
       </tbody>

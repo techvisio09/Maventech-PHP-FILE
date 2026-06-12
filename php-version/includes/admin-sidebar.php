@@ -5,11 +5,10 @@
 $navItems = [
     'dashboard'   => ['icon' => 'bi-speedometer2',  'label' => 'Dashboard',         'href' => 'admin.php?tab=dashboard'],
     'inventory'   => ['icon' => 'bi-boxes',         'label' => 'Inventory Mgmt',    'href' => 'inventory.php'],
-    'products'    => ['icon' => 'bi-box-seam',      'label' => 'Products',          'href' => 'admin.php?tab=products'],
+    'products'    => ['icon' => 'bi-box-seam',      'label' => 'Products / Key Inventory', 'href' => 'admin.php?tab=products'],
     'orders'      => ['icon' => 'bi-receipt',       'label' => 'Orders',            'href' => 'admin.php?tab=orders'],
     'sales'       => ['icon' => 'bi-graph-up-arrow','label' => 'Sales Detail',      'href' => 'admin.php?tab=sales'],
     'leads'       => ['icon' => 'bi-person-lines-fill','label' => 'Leads',          'href' => 'admin.php?tab=leads'],
-    'keys'        => ['icon' => 'bi-key',           'label' => 'Inventory & Keys',  'href' => 'admin.php?tab=keys'],
     'emails'      => ['icon' => 'bi-envelope',      'label' => 'Emails',            'href' => 'admin.php?tab=emails'],
     'template'    => ['icon' => 'bi-file-earmark-richtext', 'label' => 'Email Template', 'href' => 'admin.php?tab=template'],
     'settings'    => ['icon' => 'bi-gear',          'label' => 'Settings',          'href' => 'admin.php?tab=settings'],

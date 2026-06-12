@@ -45,6 +45,8 @@ Create a comprehensive and user-friendly Admin Panel for Maventech Software with
 - **[Feb 2026]** Reviews tab: hides unresponded reviews entirely (only customers who actually rated)
 - **[Feb 2026]** Inventory & Keys mixed UI — per-product card with stock/sold counts, inline Add Keys form, available + sold key tables, click sold key → navigates to order-view.php
 - **[Feb 2026]** Cleaned up duplicate `tab === 'settings'` routing block in admin.php
+- **[Feb 2026]** Merged Key Inventory into Products tab — sidebar renamed "Products / Key Inventory", each product card has "Update Inventory" button opening a modal with Available Keys / Sold Keys tabs (with Add-Keys form & sold-key drill-down). Card grid spacing upgraded (g-2 → g-4). `?tab=keys` URLs redirect to `?tab=products`.
+- **[Feb 2026]** Emails tab: undelivered (queued/failed) rows highlighted; each shows "Resend" (same recipient) and "Edit & Resend" (change recipient inline) buttons. New `resend_outbox` POST action.
 
 ## Test Credentials
 See `/app/memory/test_credentials.md`.

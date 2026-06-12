@@ -22,11 +22,10 @@ if (!function_exists('current_admin')) {
 $navItems = [
     'dashboard'   => ['icon' => 'bi-speedometer2',       'label' => 'Dashboard',          'href' => 'admin.php?tab=dashboard'],
     'inventory'   => ['icon' => 'bi-boxes',              'label' => 'Inventory Mgmt',     'href' => 'inventory.php'],
-    'products'    => ['icon' => 'bi-box-seam',           'label' => 'Products',           'href' => 'admin.php?tab=products'],
+    'products'    => ['icon' => 'bi-box-seam',           'label' => 'Products / Key Inventory', 'href' => 'admin.php?tab=products'],
     'orders'      => ['icon' => 'bi-receipt',            'label' => 'Orders',             'href' => 'admin.php?tab=orders'],
     'sales'       => ['icon' => 'bi-graph-up-arrow',     'label' => 'Sales Detail',       'href' => 'admin.php?tab=sales'],
     'leads'       => ['icon' => 'bi-person-lines-fill',  'label' => 'Lead Management',    'href' => 'admin.php?tab=leads'],
-    'keys'        => ['icon' => 'bi-key',                'label' => 'Key Inventory',      'href' => 'admin.php?tab=keys'],
     'emails'      => ['icon' => 'bi-envelope',           'label' => 'Email Activity',     'href' => 'admin.php?tab=emails'],
     'reviews'     => ['icon' => 'bi-star',                'label' => 'Customer Reviews',   'href' => 'admin.php?tab=reviews'],
     'templates'   => ['icon' => 'bi-file-earmark-richtext','label'=> 'Email Templates',   'href' => 'admin.php?tab=templates'],
