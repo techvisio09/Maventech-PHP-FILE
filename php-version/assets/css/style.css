@@ -967,12 +967,12 @@ body.has-deal-bar #chat-panel { bottom: 155px; }
 .pc-btn:hover { transform: translateY(-1px); }
 .pc-btn-cart   { background: linear-gradient(135deg, #f97316, #ea580c); color: #fff; box-shadow: 0 4px 12px rgba(234,88,12,.30); }
 .pc-btn-cart:hover  { background: linear-gradient(135deg, #fb923c, #f97316); box-shadow: 0 6px 16px rgba(234,88,12,.40); color:#fff; }
-.pc-btn-buy    { background: #fff; color: #ea580c; border-color: #fed7aa; }
-.pc-btn-buy:hover   { background: #fff7ed; border-color: #f97316; color: #c2410c; }
+.pc-btn-buy    { background: linear-gradient(135deg, #fff4ed, #ffedd5); color: #c2410c; border-color: #fdba74; box-shadow: 0 2px 6px rgba(249,115,22,.10); }
+.pc-btn-buy:hover   { background: linear-gradient(135deg, #ffedd5, #fed7aa); border-color: #f97316; color: #9a3412; box-shadow: 0 4px 12px rgba(249,115,22,.20); }
 .pc-btn-notify { background: #f1f5f9; color: #64748b; border-color: #e2e8f0; cursor: not-allowed; }
 .pc-btn-notify:hover { transform: none; }
-[data-bs-theme="dark"] .pc-btn-buy    { background: transparent; color: #fdba74; border-color: rgba(249,115,22,.45); }
-[data-bs-theme="dark"] .pc-btn-buy:hover { background: rgba(249,115,22,.12); border-color: #f97316; color: #fff; }
+[data-bs-theme="dark"] .pc-btn-buy    { background: rgba(249,115,22,.10); color: #fdba74; border-color: rgba(249,115,22,.40); box-shadow: none; }
+[data-bs-theme="dark"] .pc-btn-buy:hover { background: rgba(249,115,22,.18); border-color: #f97316; color: #fff; }
 [data-bs-theme="dark"] .pc-btn-notify { background: rgba(148,163,184,.12); color: #94a3b8; border-color: rgba(148,163,184,.3); }
 
 /* Hide the label on the very narrow card width so only the icon shows */
@@ -983,7 +983,7 @@ body.has-deal-bar #chat-panel { bottom: 155px; }
 /* Product detail page — orange-outlined Buy Now to match screenshot */
 .btn-orange-solid   { background: linear-gradient(135deg, #f97316, #ea580c); color: #fff; border: 1.5px solid transparent; box-shadow: 0 6px 16px rgba(234,88,12,.32); }
 .btn-orange-solid:hover, .btn-orange-solid:focus { background: linear-gradient(135deg, #fb923c, #f97316); color: #fff; box-shadow: 0 10px 24px rgba(234,88,12,.42); transform: translateY(-1px); }
-.btn-orange-outline { background: #fff; color: #ea580c; border: 1.5px solid #fed7aa; }
-.btn-orange-outline:hover, .btn-orange-outline:focus { background: #fff7ed; color: #c2410c; border-color: #f97316; }
-[data-bs-theme="dark"] .btn-orange-outline { background: transparent; color: #fdba74; border-color: rgba(249,115,22,.45); }
-[data-bs-theme="dark"] .btn-orange-outline:hover { background: rgba(249,115,22,.12); border-color: #f97316; color: #fff; }
+.btn-orange-outline { background: linear-gradient(135deg, #fff4ed, #ffedd5); color: #c2410c; border: 1.5px solid #fdba74; box-shadow: 0 2px 8px rgba(249,115,22,.12); }
+.btn-orange-outline:hover, .btn-orange-outline:focus { background: linear-gradient(135deg, #ffedd5, #fed7aa); color: #9a3412; border-color: #f97316; box-shadow: 0 6px 16px rgba(249,115,22,.22); }
+[data-bs-theme="dark"] .btn-orange-outline { background: rgba(249,115,22,.10); color: #fdba74; border-color: rgba(249,115,22,.40); box-shadow: none; }
+[data-bs-theme="dark"] .btn-orange-outline:hover { background: rgba(249,115,22,.18); border-color: #f97316; color: #fff; }
