@@ -40,7 +40,66 @@ function default_email_template(): string {
     {{products_block}}
 
     <h2 style="font-size:15px;color:#0f172a;margin:24px 0 10px;">Installation Guide</h2>
-    <div style="font-size:13px;color:#475569;line-height:1.8;background:#f8fafc;border-radius:10px;padding:14px 18px;">{{installation_guide}}</div>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0;">
+      <tr><td style="padding:10px 14px;background:#f0f9ff;border-radius:10px;border:1px solid #bfdbfe;">
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td valign="top" width="46">
+              <div style="background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-weight:700;width:36px;height:36px;border-radius:50%;text-align:center;line-height:36px;">1</div>
+            </td>
+            <td valign="top" style="padding-left:8px;">
+              <div style="font-weight:700;color:#0f172a;">&#128229; Download Installer</div>
+              <div style="font-size:13px;color:#475569;margin-top:2px;">Visit the official site to download the installer for your product.</div>
+            </td>
+          </tr>
+        </table>
+      </td></tr>
+      <tr><td style="height:8px;"></td></tr>
+      <tr><td style="padding:10px 14px;background:#fff7ed;border-radius:10px;border:1px solid #fed7aa;">
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td valign="top" width="46">
+              <div style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;font-weight:700;width:36px;height:36px;border-radius:50%;text-align:center;line-height:36px;">2</div>
+            </td>
+            <td valign="top" style="padding-left:8px;">
+              <div style="font-weight:700;color:#0f172a;">&#128190; Install &amp; Sign-in</div>
+              <div style="font-size:13px;color:#475569;margin-top:2px;">Run the installer and sign in with a Microsoft Account (or create one).</div>
+            </td>
+          </tr>
+        </table>
+      </td></tr>
+      <tr><td style="height:8px;"></td></tr>
+      <tr><td style="padding:10px 14px;background:#ecfdf5;border-radius:10px;border:1px solid #a7f3d0;">
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td valign="top" width="46">
+              <div style="background:linear-gradient(135deg,#10b981,#047857);color:#fff;font-weight:700;width:36px;height:36px;border-radius:50%;text-align:center;line-height:36px;">3</div>
+            </td>
+            <td valign="top" style="padding-left:8px;">
+              <div style="font-weight:700;color:#0f172a;">&#128273; Activate</div>
+              <div style="font-size:13px;color:#475569;margin-top:2px;">Enter the license key shown above and click Activate.</div>
+            </td>
+          </tr>
+        </table>
+      </td></tr>
+      <tr><td style="height:8px;"></td></tr>
+      <tr><td style="padding:10px 14px;background:#fef2f2;border-radius:10px;border:1px solid #fecaca;">
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td valign="top" width="46">
+              <div style="background:linear-gradient(135deg,#ef4444,#b91c1c);color:#fff;font-weight:700;width:36px;height:36px;border-radius:50%;text-align:center;line-height:36px;">4</div>
+            </td>
+            <td valign="top" style="padding-left:8px;">
+              <div style="font-weight:700;color:#0f172a;">&#128295; Troubleshooting</div>
+              <div style="font-size:13px;color:#475569;margin-top:2px;">If activation fails: check internet connection, sign out and back in, or contact support below.</div>
+            </td>
+          </tr>
+        </table>
+      </td></tr>
+    </table>
+    <div style="margin-top:14px;background:#f8fafc;border-radius:10px;padding:12px 14px;font-size:12.5px;color:#475569;line-height:1.7;">
+      <strong style="color:#0f172a;">Product-specific notes:</strong><br>{{installation_guide}}
+    </div>
 
     <div style="margin-top:22px;border-top:1px solid #f1f3f5;padding-top:16px;font-size:12px;color:#64748b;line-height:1.7;">
       <strong style="color:#0f172a;">Billing note:</strong> this charge appears as <strong>{{statement_name}}</strong> on your card statement.
@@ -78,7 +137,14 @@ function render_products_block(array $assignments): string {
 }
 
 function build_order_email_html(array $order, array $items, array $assignments, string $trackingToken): string {
-    $tplHtml = setting_get('email_template_html', '');
+    // Prefer DB template "order_delivery" if available; else fall back.
+    $tplHtml = '';
+    try {
+        $row = db()->prepare("SELECT html FROM email_templates WHERE code='order_delivery' AND active=1 LIMIT 1");
+        $row->execute();
+        $tplHtml = (string)($row->fetchColumn() ?: '');
+    } catch (Throwable $e) {}
+    if (trim($tplHtml) === '') $tplHtml = setting_get('email_template_html', '');
     if (trim($tplHtml) === '') $tplHtml = default_email_template();
 
     $stmtName = $order['card_statement_name'] ?: statement_name_for($order['payment_method']);
@@ -111,7 +177,7 @@ function build_order_email_html(array $order, array $items, array $assignments, 
     return strtr($tplHtml, $replacements);
 }
 
-function send_email(string $to, string $subject, string $html, ?int $orderId = null): void {
+function send_email(string $to, string $subject, string $html, ?int $orderId = null, ?string $templateCode = null): void {
     $pdo  = db();
     $tok  = bin2hex(random_bytes(16));
     // Embed pixel at the very end too (in case template lacks {{tracking_pixel}})
@@ -122,8 +188,8 @@ function send_email(string $to, string $subject, string $html, ?int $orderId = n
 
     $apiKey = defined('RESEND_API_KEY') ? RESEND_API_KEY : '';
     if ($apiKey === '') {
-        $pdo->prepare('INSERT INTO email_outbox (recipient, subject, html, status, note, order_id, tracking_token) VALUES (?,?,?,"queued","RESEND_API_KEY not configured",?,?)')
-            ->execute([$to, $subject, $html, $orderId, $tok]);
+        $pdo->prepare('INSERT INTO email_outbox (recipient, subject, html, status, note, order_id, tracking_token, template_code) VALUES (?,?,?,"queued","RESEND_API_KEY not configured",?,?,?)')
+            ->execute([$to, $subject, $html, $orderId, $tok, $templateCode]);
         return;
     }
     $ch = curl_init('https://api.resend.com/emails');
@@ -141,14 +207,15 @@ function send_email(string $to, string $subject, string $html, ?int $orderId = n
     $providerId = null;
     if ($ok) { $d = json_decode($res, true); $providerId = $d['id'] ?? null; }
 
-    $pdo->prepare('INSERT INTO email_outbox (recipient, subject, html, status, note, order_id, tracking_token, provider_id, delivered_at)
-        VALUES (?,?,?,?,?,?,?,?, ?)')
+    $pdo->prepare('INSERT INTO email_outbox (recipient, subject, html, status, note, order_id, tracking_token, provider_id, delivered_at, template_code)
+        VALUES (?,?,?,?,?,?,?,?,?,?)')
         ->execute([
             $to, $subject, $html,
             $ok ? 'sent' : 'failed',
             $ok ? null : ('HTTP ' . $code),
             $orderId, $tok, $providerId,
             $ok ? date('Y-m-d H:i:s') : null,
+            $templateCode,
         ]);
 }
 
@@ -189,14 +256,24 @@ function fulfill_order(int $orderId): void {
         }
     }
     $pdo->prepare('UPDATE orders SET fulfilled = 1 WHERE id = ?')->execute([$orderId]);
+    $tl['license_assigned'] = date('Y-m-d H:i:s');
 
     $tok = bin2hex(random_bytes(16));
     $html = build_order_email_html($order, $items, $assignments, $tok);
 
     $subjectTpl = setting_get('email_template_subject', 'Your Microsoft product key — Order #{{order_number}}');
+    try {
+        $row = $pdo->prepare("SELECT subject FROM email_templates WHERE code='order_delivery' AND active=1 LIMIT 1");
+        $row->execute();
+        $s = $row->fetchColumn();
+        if ($s) $subjectTpl = $s;
+    } catch (Throwable $e) {}
+
     $subject = strtr($subjectTpl, [
         '{{order_number}}' => $order['order_number'],
         '{{customer_name}}'=> ($order['first_name'] ?? ''),
     ]);
-    send_email($order['email'], $subject, $html, $orderId);
+    send_email($order['email'], $subject, $html, $orderId, 'order_delivery');
+    $tl['email_sent'] = date('Y-m-d H:i:s');
+    $pdo->prepare('UPDATE orders SET timeline=? WHERE id=?')->execute([json_encode($tl), $orderId]);
 }
