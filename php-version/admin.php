@@ -173,78 +173,239 @@ include __DIR__ . '/includes/admin-shell.php';
 // DASHBOARD
 // ============================================================================
 if ($tab === 'dashboard'):
-    $rev = (float)$pdo->prepare("SELECT COALESCE(SUM(total),0) FROM orders WHERE status IN ('paid','delivered') AND region=?")->execute([$region_code]) ?: 0;
-    $rev = (float)$pdo->query("SELECT COALESCE(SUM(total),0) FROM orders WHERE status IN ('paid','delivered') AND region=".$pdo->quote($region_code))->fetchColumn();
-    $ord = (int)$pdo->query("SELECT COUNT(*) FROM orders WHERE region=".$pdo->quote($region_code))->fetchColumn();
-    $cust= (int)$pdo->query("SELECT COUNT(DISTINCT email) FROM orders WHERE region=".$pdo->quote($region_code))->fetchColumn();
-    $kAv = (int)$pdo->query("SELECT COUNT(*) FROM license_keys WHERE status='available' AND region=".$pdo->quote($region_code))->fetchColumn();
-    $kSo = (int)$pdo->query("SELECT COUNT(*) FROM license_keys WHERE status='sold' AND region=".$pdo->quote($region_code))->fetchColumn();
+    $rev   = (float)$pdo->query("SELECT COALESCE(SUM(total),0) FROM orders WHERE status IN ('paid','delivered') AND region=".$pdo->quote($region_code))->fetchColumn();
+    $rev7  = (float)$pdo->query("SELECT COALESCE(SUM(total),0) FROM orders WHERE status IN ('paid','delivered') AND region=".$pdo->quote($region_code)." AND created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)")->fetchColumn();
+    $rev30 = (float)$pdo->query("SELECT COALESCE(SUM(total),0) FROM orders WHERE status IN ('paid','delivered') AND region=".$pdo->quote($region_code)." AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)")->fetchColumn();
+    $ord   = (int)$pdo->query("SELECT COUNT(*) FROM orders WHERE region=".$pdo->quote($region_code))->fetchColumn();
+    $ordPaid = (int)$pdo->query("SELECT COUNT(*) FROM orders WHERE status IN ('paid','delivered') AND region=".$pdo->quote($region_code))->fetchColumn();
+    $cust  = (int)$pdo->query("SELECT COUNT(DISTINCT email) FROM orders WHERE region=".$pdo->quote($region_code))->fetchColumn();
+    $kAv   = (int)$pdo->query("SELECT COUNT(*) FROM license_keys WHERE status='available' AND region=".$pdo->quote($region_code))->fetchColumn();
+    $kSo   = (int)$pdo->query("SELECT COUNT(*) FROM license_keys WHERE status='sold' AND region=".$pdo->quote($region_code))->fetchColumn();
+    $avg   = $ordPaid > 0 ? $rev / $ordPaid : 0;
     $opens = (int)$pdo->query("SELECT COUNT(*) FROM email_outbox WHERE opened_at IS NOT NULL")->fetchColumn();
+    $sent  = (int)$pdo->query("SELECT COUNT(*) FROM email_outbox WHERE status='sent'")->fetchColumn();
+    $openRate = $sent > 0 ? round($opens/$sent*100) : 0;
 
-    // API status snapshot
-    $cardStatus = setting_get('gw_card_status','inactive');
-    $ppStatus   = setting_get('gw_paypal_status','inactive');
+    // 30-day sales chart
+    $byDay = $pdo->prepare("SELECT DATE(created_at) AS d, SUM(total) AS r FROM orders WHERE status IN ('paid','delivered') AND region=? AND created_at >= DATE_SUB(CURDATE(), INTERVAL 29 DAY) GROUP BY DATE(created_at)");
+    $byDay->execute([$region_code]);
+    $dayMap = []; foreach ($byDay as $r) $dayMap[$r['d']] = (float)$r['r'];
+    $days = []; for ($i=29;$i>=0;$i--) { $d = date('Y-m-d', strtotime("-$i days")); $days[] = ['d'=>$d, 'r'=>(float)($dayMap[$d] ?? 0)]; }
+    $maxDay = max(array_column($days,'r')) ?: 1;
+
+    // Top sellers
+    $top = $pdo->prepare("SELECT oi.product_slug, oi.name, p.image, SUM(oi.qty) units, SUM(oi.qty*oi.price) revenue
+        FROM order_items oi JOIN orders o ON o.id=oi.order_id LEFT JOIN products p ON p.slug=oi.product_slug
+        WHERE o.status IN ('paid','delivered') AND o.region=?
+        GROUP BY oi.product_slug,oi.name,p.image ORDER BY revenue DESC LIMIT 5");
+    $top->execute([$region_code]);
+    $top = $top->fetchAll();
+
+    // Recent orders
+    $recent = $pdo->prepare("SELECT * FROM orders WHERE region=? ORDER BY created_at DESC LIMIT 6");
+    $recent->execute([$region_code]);
+    $recent = $recent->fetchAll();
+
+    // Low stock
+    $lowStock = $pdo->prepare("SELECT p.slug, p.name, p.image,
+        (SELECT COUNT(*) FROM license_keys lk WHERE lk.product_slug=p.slug AND lk.status='available' AND lk.region=?) AS avail
+        FROM products p WHERE p.is_active=1
+        HAVING avail < 5 ORDER BY avail ASC LIMIT 5");
+    $lowStock->execute([$region_code]);
+    $lowStock = $lowStock->fetchAll();
+
+    // Funnel
+    $leadsTotal = (int)$pdo->query("SELECT COUNT(*) FROM chat_leads")->fetchColumn();
+    $ordPending = (int)$pdo->query("SELECT COUNT(*) FROM orders WHERE status='pending' AND region=".$pdo->quote($region_code))->fetchColumn();
+    $ordDeliv   = (int)$pdo->query("SELECT COUNT(*) FROM orders WHERE status='delivered' AND region=".$pdo->quote($region_code))->fetchColumn();
+    $maxFunnel = max($leadsTotal, $ord, $ordPaid, $ordDeliv, 1);
 ?>
   <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
     <div>
-      <h1 class="h4 fw-bold mb-1">Dashboard · <span class="text-muted fs-6"><?= esc($rg['name']) ?> region</span></h1>
-      <small class="text-muted">Real-time overview · Showing data for <strong><?= esc($rg['code']) ?></strong></small>
+      <h1 class="h4 fw-bold mb-1">Dashboard <span class="text-muted fs-6">· <?= esc($rg['name']) ?> region</span></h1>
+      <small class="text-muted">Real-time business overview · Showing <strong><?= esc($rg['code']) ?></strong> data in <strong><?= esc($rg['currency']) ?></strong></small>
     </div>
     <?php if ($newLeadCount): ?>
-      <a href="admin.php?tab=leads" class="card-e px-3 py-2 text-decoration-none" style="border-left:4px solid var(--amber);">
-        <i class="bi bi-bell-fill text-warning"></i> <strong><?= $newLeadCount ?></strong> new lead(s) in last 24h →
+      <a href="admin.php?tab=leads" class="card-e px-3 py-2 text-decoration-none d-flex align-items-center gap-2" style="border-left:4px solid var(--amber);">
+        <i class="bi bi-bell-fill text-warning"></i>
+        <span><strong><?= $newLeadCount ?></strong> new lead<?= $newLeadCount>1?'s':'' ?> in last 24h</span>
+        <i class="bi bi-arrow-right text-muted"></i>
       </a>
     <?php endif; ?>
   </div>
 
-  <div class="row g-3 mb-3">
-    <?php
-    $tiles = [
-      ['Revenue',          region_money($rev), '#10b981'],
-      ['Orders',           number_format($ord), '#3b82f6'],
-      ['Customers',        number_format($cust), '#8b5cf6'],
-      ['Keys Available',   number_format($kAv), '#10b981'],
-      ['Keys Sold',        number_format($kSo), '#3b82f6'],
-      ['Emails Opened',    number_format($opens), '#06b6d4'],
-    ];
-    foreach ($tiles as $t): ?>
-      <div class="col-6 col-md-4 col-xl-2"><div class="card-e p-3">
-        <small class="text-muted text-uppercase fw-semibold" style="font-size:10px;letter-spacing:1px;"><?= $t[0] ?></small>
-        <div class="fs-4 fw-bold" style="color:<?= $t[2] ?>"><?= $t[1] ?></div>
-      </div></div>
-    <?php endforeach; ?>
+  <!-- KPI ROW -->
+  <div class="row g-3 mb-3" data-testid="admin-kpis">
+    <div class="col-6 col-md-4 col-xl-2"><div class="kpi-tile green">
+      <div class="kpi-icon"><i class="bi bi-currency-dollar"></i></div>
+      <div class="kpi-label">Revenue</div>
+      <div class="kpi-value"><?= esc($rg['currency_symbol']) ?><?= number_format($rev,0) ?></div>
+      <div class="kpi-delta text-success"><i class="bi bi-arrow-up-right"></i> Last 7d: <?= esc($rg['currency_symbol']) ?><?= number_format($rev7,0) ?></div>
+    </div></div>
+    <div class="col-6 col-md-4 col-xl-2"><div class="kpi-tile blue">
+      <div class="kpi-icon"><i class="bi bi-receipt"></i></div>
+      <div class="kpi-label">Orders</div>
+      <div class="kpi-value"><?= number_format($ord) ?></div>
+      <div class="kpi-delta text-muted"><?= $ordPaid ?> paid · <?= $ordPending ?> pending</div>
+    </div></div>
+    <div class="col-6 col-md-4 col-xl-2"><div class="kpi-tile purple">
+      <div class="kpi-icon"><i class="bi bi-people"></i></div>
+      <div class="kpi-label">Customers</div>
+      <div class="kpi-value"><?= number_format($cust) ?></div>
+      <div class="kpi-delta text-muted">avg <?= esc($rg['currency_symbol']) ?><?= number_format($avg,2) ?></div>
+    </div></div>
+    <div class="col-6 col-md-4 col-xl-2"><div class="kpi-tile amber">
+      <div class="kpi-icon"><i class="bi bi-key"></i></div>
+      <div class="kpi-label">Keys Available</div>
+      <div class="kpi-value"><?= number_format($kAv) ?></div>
+      <div class="kpi-delta text-muted"><?= $kSo ?> sold</div>
+    </div></div>
+    <div class="col-6 col-md-4 col-xl-2"><div class="kpi-tile cyan">
+      <div class="kpi-icon"><i class="bi bi-envelope-open"></i></div>
+      <div class="kpi-label">Email Open Rate</div>
+      <div class="kpi-value"><?= $openRate ?>%</div>
+      <div class="kpi-delta text-muted"><?= $opens ?> of <?= $sent ?> opened</div>
+    </div></div>
+    <div class="col-6 col-md-4 col-xl-2"><div class="kpi-tile red">
+      <div class="kpi-icon"><i class="bi bi-person-lines-fill"></i></div>
+      <div class="kpi-label">Leads (all)</div>
+      <div class="kpi-value"><?= number_format($leadsTotal) ?></div>
+      <div class="kpi-delta text-muted"><?= $newLeadCount ?> new in 24h</div>
+    </div></div>
   </div>
 
   <div class="row g-3">
-    <div class="col-lg-8">
-      <div class="card-e p-4">
-        <h6 class="fw-bold mb-3"><i class="bi bi-plug me-1 text-primary"></i> API Status Snapshot</h6>
-        <div class="row g-3">
-          <div class="col-md-6"><div class="d-flex align-items-center gap-3 p-3 rounded" style="background:var(--bg);">
-            <i class="bi bi-credit-card-2-front fs-3 text-primary"></i>
-            <div class="flex-grow-1"><div class="fw-bold">Card Payment Gateway</div><small class="text-muted"><?= esc(setting_get('gw_card_provider','Stripe')) ?></small></div>
-            <span class="s-badge <?= $cardStatus==='active'?'paid':'failed' ?>"><?= $cardStatus ?></span>
-          </div></div>
-          <div class="col-md-6"><div class="d-flex align-items-center gap-3 p-3 rounded" style="background:var(--bg);">
-            <i class="bi bi-paypal fs-3" style="color:#003087;"></i>
-            <div class="flex-grow-1"><div class="fw-bold">PayPal</div><small class="text-muted"><?= esc(setting_get('gw_paypal_account_name')) ?></small></div>
-            <span class="s-badge <?= $ppStatus==='active'?'paid':'failed' ?>"><?= $ppStatus ?></span>
-          </div></div>
+    <!-- 30-day Revenue Trend -->
+    <div class="col-xl-8">
+      <div class="card-e">
+        <div class="card-head"><div class="ttl"><i class="bi bi-bar-chart-line"></i> Revenue Trend <span class="sub ms-2">last 30 days</span></div>
+          <div class="sub">Total <strong style="color:var(--text);"><?= esc($rg['currency_symbol']) ?><?= number_format($rev30,2) ?></strong></div>
         </div>
-        <a href="admin.php?tab=api" class="btn btn-soft-blue btn-sm mt-3"><i class="bi bi-gear me-1"></i> Manage API Settings</a>
+        <div class="card-body-p">
+          <div class="chart-bars">
+            <?php foreach ($days as $d): $h = max(2, round($d['r']/$maxDay*120)); ?>
+              <div class="b" style="height:<?= $h ?>px;opacity:<?= $d['r']>0?1:.18 ?>;" title="<?= esc($d['d']) ?> — <?= esc($rg['currency_symbol']) ?><?= number_format($d['r'],2) ?>"></div>
+            <?php endforeach; ?>
+          </div>
+          <div class="d-flex justify-content-between mt-2 small text-muted">
+            <span><?= esc(date('M j', strtotime($days[0]['d']))) ?></span>
+            <span><?= esc(date('M j', strtotime($days[15]['d']))) ?></span>
+            <span><?= esc(date('M j', strtotime(end($days)['d']))) ?></span>
+          </div>
+        </div>
       </div>
     </div>
+
+    <!-- Conversion Funnel -->
+    <div class="col-xl-4">
+      <div class="card-e h-100">
+        <div class="card-head"><div class="ttl"><i class="bi bi-funnel"></i> Conversion Funnel</div></div>
+        <div class="card-body-p">
+          <?php
+          $funnel = [
+            ['Leads',        $leadsTotal, 'purple'],
+            ['Total Orders', $ord,        'cyan'],
+            ['Paid Orders',  $ordPaid,    ''],
+            ['Delivered',    $ordDeliv,   'green'],
+          ];
+          foreach ($funnel as [$lbl,$val,$cls]):
+            $pct = $maxFunnel>0 ? max(8, round($val/$maxFunnel*100)) : 8;
+          ?>
+            <div class="funnel-row">
+              <span class="funnel-label"><?= esc($lbl) ?></span>
+              <div class="funnel-bar <?= $cls ?>" style="max-width:<?= $pct ?>%;">
+                <span class="funnel-num"><?= number_format($val) ?></span>
+              </div>
+            </div>
+          <?php endforeach; ?>
+          <hr>
+          <div class="d-flex justify-content-between small">
+            <span class="text-muted">Lead → Paid conversion</span>
+            <strong class="text-success"><?= $leadsTotal>0 ? round($ordPaid/$leadsTotal*100,1).'%' : '—' ?></strong>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mt-1">
+    <!-- Top Sellers -->
     <div class="col-lg-4">
-      <div class="card-e p-4">
-        <h6 class="fw-bold mb-3"><i class="bi bi-bell text-primary me-1"></i> Recent Activity</h6>
-        <ul class="list-unstyled small mb-0">
-          <?php foreach ($pdo->query("SELECT 'order' AS t, order_number AS d, created_at FROM orders WHERE region=".$pdo->quote($region_code)." ORDER BY created_at DESC LIMIT 4") as $r): ?>
-            <li class="d-flex gap-2 py-1"><i class="bi bi-receipt text-primary"></i><span class="flex-grow-1">Order <strong>#<?= esc($r['d']) ?></strong></span><span class="text-muted"><?= esc(date('M j', strtotime($r['created_at']))) ?></span></li>
+      <div class="card-e h-100">
+        <div class="card-head"><div class="ttl"><i class="bi bi-trophy"></i> Top Sellers</div>
+          <a href="admin.php?tab=sales" class="sub" style="color:var(--brand);">View all →</a>
+        </div>
+        <div class="card-body-p">
+          <?php if (empty($top)): ?>
+            <p class="text-muted small mb-0 text-center py-3">No sales yet in this region.</p>
+          <?php endif; ?>
+          <?php foreach ($top as $i=>$t): ?>
+            <div class="mini-row">
+              <span class="rank"><?= $i+1 ?></span>
+              <?php if ($t['image']): ?><img src="<?= esc($t['image']) ?>" class="thumb"><?php endif; ?>
+              <div class="flex-grow-1 min-width-0">
+                <div class="small fw-semibold text-truncate" title="<?= esc($t['name']) ?>"><?= esc($t['name']) ?></div>
+                <small class="text-muted"><?= (int)$t['units'] ?> units sold</small>
+              </div>
+              <strong class="text-success small"><?= esc($rg['currency_symbol']) ?><?= number_format($t['revenue'],0) ?></strong>
+            </div>
           <?php endforeach; ?>
-          <?php foreach ($pdo->query("SELECT 'lead' AS t, name AS d, created_at FROM chat_leads ORDER BY created_at DESC LIMIT 3") as $r): ?>
-            <li class="d-flex gap-2 py-1"><i class="bi bi-person-plus text-warning"></i><span class="flex-grow-1">Lead from <strong><?= esc($r['d'] ?: 'Anonymous') ?></strong></span><span class="text-muted"><?= esc(date('M j', strtotime($r['created_at']))) ?></span></li>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent Orders -->
+    <div class="col-lg-4">
+      <div class="card-e h-100">
+        <div class="card-head"><div class="ttl"><i class="bi bi-receipt-cutoff"></i> Recent Orders</div>
+          <a href="admin.php?tab=orders" class="sub" style="color:var(--brand);">View all →</a>
+        </div>
+        <div class="card-body-p">
+          <?php if (empty($recent)): ?><p class="text-muted small mb-0 text-center py-3">No orders yet.</p><?php endif; ?>
+          <?php foreach ($recent as $o): ?>
+            <a href="order-view.php?id=<?= (int)$o['id'] ?>" class="mini-row text-decoration-none" style="color:var(--text);">
+              <i class="bi bi-receipt" style="font-size:18px;color:var(--brand);"></i>
+              <div class="flex-grow-1 min-width-0">
+                <div class="small fw-semibold">#<?= esc($o['order_number']) ?></div>
+                <small class="text-muted"><?= esc($o['first_name'].' '.$o['last_name']) ?> · <?= esc(date('M j', strtotime($o['created_at']))) ?></small>
+              </div>
+              <div class="text-end">
+                <strong class="small"><?= esc($rg['currency_symbol']) ?><?= number_format($o['total'],2) ?></strong><br>
+                <span class="s-badge <?= esc($o['status']) ?>" style="font-size:9px;padding:1px 7px;"><?= esc($o['status']) ?></span>
+              </div>
+            </a>
           <?php endforeach; ?>
-        </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Low Stock Alert -->
+    <div class="col-lg-4">
+      <div class="card-e h-100">
+        <div class="card-head"><div class="ttl"><i class="bi bi-exclamation-triangle text-danger"></i> Low Stock Alert</div>
+          <a href="inventory.php" class="sub" style="color:var(--brand);">Inventory →</a>
+        </div>
+        <div class="card-body-p">
+          <?php if (empty($lowStock)): ?>
+            <div class="text-center py-3">
+              <i class="bi bi-check-circle-fill text-success" style="font-size:32px;"></i>
+              <p class="small text-muted mb-0 mt-2">All products well-stocked!</p>
+            </div>
+          <?php endif; ?>
+          <?php foreach ($lowStock as $ls):
+            $cls = $ls['avail']==0?'danger':'warn';
+            $pct = min(100, ($ls['avail']/5)*100);
+          ?>
+            <div class="mini-row">
+              <?php if ($ls['image']): ?><img src="<?= esc($ls['image']) ?>" class="thumb"><?php else: ?><div class="thumb d-flex align-items-center justify-content-center"><i class="bi bi-box-seam text-muted"></i></div><?php endif; ?>
+              <div class="flex-grow-1 min-width-0">
+                <div class="small fw-semibold text-truncate" title="<?= esc($ls['name']) ?>"><?= esc($ls['name']) ?></div>
+                <div class="prog <?= $cls ?> mt-1"><span style="width:<?= $pct ?>%;"></span></div>
+              </div>
+              <span class="s-badge <?= $ls['avail']==0?'failed':'queued' ?>" style="font-size:10px;"><?= (int)$ls['avail'] ?> left</span>
+            </div>
+          <?php endforeach; ?>
+        </div>
       </div>
     </div>
   </div>
