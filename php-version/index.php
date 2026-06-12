@@ -3,9 +3,9 @@ require_once __DIR__ . '/includes/functions.php';
 $pageTitle = SITE_BRAND . ' | Genuine Microsoft Software Licenses — Instant Delivery';
 $pageDescription = 'Genuine Microsoft Office 2024/2021/2019, Windows 11 and antivirus license keys at up to 81% off. Instant digital delivery in 15-30 minutes, lifetime activation, 30-day money-back guarantee.';
 
-$bestSellers = db()->query("SELECT * FROM products WHERE badge IS NOT NULL ORDER BY reviews DESC LIMIT 4")->fetchAll();
-$newArrivals = db()->query("SELECT * FROM products WHERE is_new = 1 ORDER BY reviews DESC LIMIT 4")->fetchAll();
-$pickedForYou = db()->query("SELECT * FROM products ORDER BY reviews DESC LIMIT 8")->fetchAll();
+$bestSellers = db()->query("SELECT * FROM products WHERE badge IS NOT NULL AND " . active_regions_sql_in('region') . " ORDER BY reviews DESC LIMIT 4")->fetchAll();
+$newArrivals = db()->query("SELECT * FROM products WHERE is_new = 1 AND " . active_regions_sql_in('region') . " ORDER BY reviews DESC LIMIT 4")->fetchAll();
+$pickedForYou = db()->query("SELECT * FROM products WHERE " . active_regions_sql_in('region') . " ORDER BY reviews DESC LIMIT 8")->fetchAll();
 // Merge static testimonials with real published customer reviews
 $staticT = db()->query("SELECT name, initials, location, product, text, rating FROM testimonials ORDER BY rating DESC LIMIT 4")->fetchAll();
 $realR = db()->query("SELECT customer_name AS name, UPPER(LEFT(customer_name,2)) AS initials, 'Verified Customer' AS location, NULL AS product, comment AS text, rating FROM customer_reviews WHERE status='published' AND rating IS NOT NULL ORDER BY submitted_at DESC LIMIT 6")->fetchAll();

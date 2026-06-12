@@ -21,7 +21,7 @@ echo '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
   <title><?= esc(SITE_BRAND) ?></title>
   <link><?= esc($base) ?>/</link>
   <description>Genuine Microsoft Office, Windows and antivirus license keys with instant digital delivery.</description>
-<?php foreach (db()->query('SELECT * FROM products') as $p):
+<?php foreach (db()->query('SELECT * FROM products WHERE ' . active_regions_sql_in('region')) as $p):
     $hasSale = $p['original_price'] && $p['original_price'] > $p['price'];
     $desc = 'Genuine ' . $p['name'] . ' lifetime license key for ' . ($p['platform'] ?: 'Windows')
           . '. Instant email delivery within 15-30 minutes, official download link and free activation support from ' . SITE_BRAND . '.';

@@ -7,6 +7,11 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+// Regions are a core dependency: public queries must hide products from
+// regions that an admin has toggled off. Loaded here so it is available
+// in scripts that call db() before including the page header.
+require_once __DIR__ . '/regions.php';
+
 function esc($s): string
 {
     return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
@@ -115,7 +120,7 @@ function cart_subtotal(): float
 /* ---------------- Products ---------------- */
 function get_product(string $slug): ?array
 {
-    $stmt = db()->prepare('SELECT * FROM products WHERE slug = ?');
+    $stmt = db()->prepare('SELECT * FROM products WHERE slug = ? AND ' . active_regions_sql_in('region'));
     $stmt->execute([$slug]);
     return $stmt->fetch() ?: null;
 }
@@ -160,7 +165,7 @@ function category_title(string $slug): string
 function get_products(array $categories = [], string $platform = '', string $sort = ''): array
 {
     $sql = 'SELECT * FROM products';
-    $where = [];
+    $where = [active_regions_sql_in('region')];
     $params = [];
     if ($categories) {
         $where[] = 'category IN (' . implode(',', array_fill(0, count($categories), '?')) . ')';
@@ -170,7 +175,7 @@ function get_products(array $categories = [], string $platform = '', string $sor
         $where[] = 'platform = ?';
         $params[] = $platform;
     }
-    if ($where) $sql .= ' WHERE ' . implode(' AND ', $where);
+    $sql .= ' WHERE ' . implode(' AND ', $where);
     $orders = [
         'price_asc'  => 'price ASC',
         'price_desc' => 'price DESC',

@@ -310,7 +310,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $code = strtoupper($_POST['region_code']);
         $pdo->prepare('UPDATE regions SET name=?, currency=?, currency_symbol=?, tax_rate=?, active=? WHERE code=?')
             ->execute([trim($_POST['name']), trim($_POST['currency']), trim($_POST['currency_symbol']),
-                       (float)$_POST['tax_rate'], isset($_POST['active'])?1:0, $code]);
+                       (float)$_POST['tax_rate'], (int)($_POST['active'] ?? 0)?1:0, $code]);
         header('Location: admin.php?tab=regions&msg=Region+updated'); exit;
     }
 }
@@ -1783,13 +1783,18 @@ elseif ($tab === 'templates'):
     <div class="col-lg-4">
       <div class="card-e p-2">
         <?php foreach ($tpls as $t): ?>
-          <a href="?tab=templates&edit=<?= (int)$t['id'] ?>" class="d-block px-3 py-2 rounded text-decoration-none mb-1 tpl-list-item <?= $editId==$t['id']?'active':'' ?>">
-            <div class="d-flex justify-content-between align-items-center gap-2">
-              <strong style="font-size:13px;"><?= esc($t['name']) ?></strong>
-              <?= $t['active']?'<span class="s-badge active">ON</span>':'<span class="s-badge inactive">OFF</span>' ?>
-            </div>
-            <small class="text-muted" style="font-size:11px;"><code style="font-size:10.5px;"><?= esc($t['code']) ?></code> · v<?= (int)$t['current_version'] ?></small>
-          </a>
+          <div class="d-flex align-items-stretch gap-1 mb-1 tpl-row <?= $editId==$t['id']?'tpl-row-active':'' ?>" data-testid="tpl-row-<?= esc($t['code']) ?>">
+            <a href="?tab=templates&edit=<?= (int)$t['id'] ?>" class="flex-grow-1 px-3 py-2 rounded text-decoration-none tpl-list-item <?= $editId==$t['id']?'active':'' ?>">
+              <div class="d-flex justify-content-between align-items-center gap-2">
+                <strong style="font-size:13px;"><?= esc($t['name']) ?></strong>
+                <?= $t['active']?'<span class="s-badge active">ON</span>':'<span class="s-badge inactive">OFF</span>' ?>
+              </div>
+              <small class="text-muted" style="font-size:11px;"><code style="font-size:10.5px;"><?= esc($t['code']) ?></code> · v<?= (int)$t['current_version'] ?></small>
+            </a>
+            <a href="?tab=templates&edit=<?= (int)$t['id'] ?>" class="btn btn-soft-blue btn-sm d-inline-flex align-items-center px-2" data-testid="edit-template-<?= esc($t['code']) ?>" title="Edit template content &amp; images">
+              <i class="bi bi-pencil-square"></i><span class="d-none d-xl-inline ms-1">Edit</span>
+            </a>
+          </div>
         <?php endforeach; ?>
       </div>
     </div>
@@ -1831,8 +1836,37 @@ elseif ($tab === 'templates'):
                 <iframe id="prev" style="width:100%;height:430px;border:1px solid var(--border);border-radius:10px;background:#fff;"></iframe>
               </div>
             </div>
-            <div class="d-flex gap-2 mt-2">
-              <button class="btn btn-soft-blue btn-sm"><i class="bi bi-check2 me-1"></i> Save (creates v<?= (int)$editing['current_version']+1 ?>)</button>
+
+            <!-- Image upload + insert ----------------------------------------- -->
+            <div class="tpl-img-uploader mt-3 p-3 rounded" style="background:var(--bg);border:1px dashed var(--border);" data-testid="tpl-image-uploader">
+              <div class="d-flex justify-content-between align-items-start mb-2 flex-wrap gap-2">
+                <div>
+                  <h6 class="fw-bold mb-0" style="font-size:13px;"><i class="bi bi-image me-1 text-primary"></i> Add or replace an image</h6>
+                  <small class="text-muted">Upload a banner / logo / product image and insert it into the email HTML at the cursor position.</small>
+                </div>
+                <span class="badge bg-light text-muted" style="font-size:10.5px;">JPG · PNG · GIF · WEBP · SVG · max 5 MB</span>
+              </div>
+              <div class="row g-2 align-items-end">
+                <div class="col-sm-7">
+                  <input type="file" class="form-control form-control-sm" id="tplImgFile" accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml" data-testid="tpl-image-file">
+                </div>
+                <div class="col-sm-5 d-flex gap-2">
+                  <button type="button" class="btn btn-soft-blue btn-sm flex-grow-1" id="tplImgUploadBtn" data-testid="tpl-image-upload-btn"><i class="bi bi-cloud-upload me-1"></i> Upload</button>
+                </div>
+              </div>
+              <div id="tplImgResult" class="mt-2 d-none">
+                <div class="d-flex flex-wrap align-items-center gap-2 p-2 rounded" style="background:#fff;border:1px solid var(--border);">
+                  <img id="tplImgThumb" alt="" style="width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid var(--border);">
+                  <input type="text" class="form-control form-control-sm flex-grow-1" id="tplImgUrl" readonly style="font-size:11.5px;" data-testid="tpl-image-url">
+                  <button type="button" class="btn btn-soft-gray btn-sm" id="tplImgCopyBtn" data-testid="tpl-image-copy"><i class="bi bi-clipboard"></i></button>
+                  <button type="button" class="btn btn-soft-blue btn-sm" id="tplImgInsertBtn" data-testid="tpl-image-insert"><i class="bi bi-arrow-left-square me-1"></i>Insert into HTML</button>
+                </div>
+              </div>
+              <div id="tplImgError" class="small text-danger mt-2 d-none"></div>
+            </div>
+
+            <div class="d-flex gap-2 mt-3">
+              <button class="btn btn-soft-blue btn-sm" data-testid="save-template-btn"><i class="bi bi-check2 me-1"></i> Save (creates v<?= (int)$editing['current_version']+1 ?>)</button>
               <button type="button" class="btn btn-soft-gray btn-sm" onclick="prevRender()"><i class="bi bi-arrow-clockwise me-1"></i> Refresh Preview</button>
             </div>
           </form>
@@ -1952,6 +1986,65 @@ elseif ($tab === 'templates'):
         }
         prevRender();
         document.getElementById('htmlEd').addEventListener('input',function(){clearTimeout(window._tt);window._tt=setTimeout(prevRender,400);});
+
+        /* ---- Template image uploader (AJAX -> /ajax/template-image.php) ---- */
+        (function(){
+          var fileEl   = document.getElementById('tplImgFile');
+          var upBtn    = document.getElementById('tplImgUploadBtn');
+          var resBox   = document.getElementById('tplImgResult');
+          var errBox   = document.getElementById('tplImgError');
+          var thumb    = document.getElementById('tplImgThumb');
+          var urlInput = document.getElementById('tplImgUrl');
+          var copyBtn  = document.getElementById('tplImgCopyBtn');
+          var insBtn   = document.getElementById('tplImgInsertBtn');
+          var htmlEd   = document.getElementById('htmlEd');
+          if (!fileEl || !upBtn) return;
+
+          function showErr(m){ errBox.textContent = m || ''; errBox.classList.toggle('d-none', !m); }
+
+          upBtn.addEventListener('click', function(){
+            showErr('');
+            if (!fileEl.files || !fileEl.files[0]) { showErr('Please choose an image first.'); return; }
+            var fd = new FormData();
+            fd.append('image', fileEl.files[0]);
+            upBtn.disabled = true;
+            var orig = upBtn.innerHTML;
+            upBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Uploading…';
+            fetch('ajax/template-image.php', { method: 'POST', body: fd })
+              .then(function(r){ return r.json().catch(function(){ return {ok:false, error:'Server error'}; }); })
+              .then(function(j){
+                upBtn.disabled = false;
+                upBtn.innerHTML = orig;
+                if (!j || !j.ok) { showErr((j && j.error) || 'Upload failed.'); return; }
+                thumb.src = j.url;
+                urlInput.value = j.url;
+                resBox.classList.remove('d-none');
+              }).catch(function(){
+                upBtn.disabled = false;
+                upBtn.innerHTML = orig;
+                showErr('Network error — please try again.');
+              });
+          });
+
+          copyBtn && copyBtn.addEventListener('click', function(){
+            urlInput.select();
+            try {
+              navigator.clipboard.writeText(urlInput.value);
+              copyBtn.innerHTML = '<i class="bi bi-check2"></i>';
+              setTimeout(function(){ copyBtn.innerHTML = '<i class="bi bi-clipboard"></i>'; }, 1200);
+            } catch(e) { document.execCommand('copy'); }
+          });
+
+          insBtn && insBtn.addEventListener('click', function(){
+            if (!htmlEd || !urlInput.value) return;
+            var snippet = '<img src="' + urlInput.value + '" alt="" style="max-width:100%;height:auto;display:block;border:0;outline:none;text-decoration:none;">';
+            var start = htmlEd.selectionStart, end = htmlEd.selectionEnd;
+            htmlEd.value = htmlEd.value.substring(0, start) + snippet + htmlEd.value.substring(end);
+            htmlEd.focus();
+            htmlEd.selectionStart = htmlEd.selectionEnd = start + snippet.length;
+            prevRender();
+          });
+        })();
         </script>
       <?php else: ?>
         <div class="card-e p-5 text-center text-muted">Select a template on the left to edit.</div>
@@ -2125,7 +2218,7 @@ elseif ($tab === 'regions'):
   $regions = $pdo->query('SELECT * FROM regions ORDER BY code')->fetchAll();
 ?>
   <h5 class="fw-bold mb-1">Regions</h5>
-  <p class="text-muted small mb-3">Each region maintains separate inventory, license keys, pricing and reports. Switch the active region via the globe icon in the topbar.</p>
+  <p class="text-muted small mb-3">Each region maintains separate inventory, license keys, pricing and reports. Toggle a region <strong>off</strong> to instantly hide its products from the public website.</p>
   <div class="row g-3">
     <?php foreach ($regions as $r):
       $prodCount = (int)$pdo->query("SELECT COUNT(*) FROM products WHERE region=".$pdo->quote($r['code']))->fetchColumn();
@@ -2133,20 +2226,19 @@ elseif ($tab === 'regions'):
       $rev       = (float)$pdo->query("SELECT COALESCE(SUM(total),0) FROM orders WHERE region=".$pdo->quote($r['code'])." AND status IN ('paid','delivered')")->fetchColumn();
     ?>
       <div class="col-md-6">
-        <div class="card-e p-4">
-          <form method="post">
+        <div class="card-e p-4 region-card" data-region-card="<?= esc($r['code']) ?>" data-testid="region-card-<?= esc($r['code']) ?>">
+          <div class="d-flex justify-content-between align-items-start mb-3">
+            <div>
+              <h6 class="fw-bold mb-0"><i class="bi bi-flag-fill me-1" style="color:var(--brand)"></i> <?= esc($r['code']) ?> · <?= esc($r['name']) ?></h6>
+              <small class="text-muted"><?= esc($r['currency_symbol']) ?> <?= esc($r['currency']) ?> · Tax <?= number_format($r['tax_rate']*100,1) ?>%</small>
+            </div>
+            <span class="rg-status-pill <?= $r['active']?'on':'off' ?>" data-rg-pill data-testid="region-pill-<?= esc($r['code']) ?>"><?= $r['active']?'<i class="bi bi-broadcast me-1"></i>Live':'<i class="bi bi-pause-circle me-1"></i>Paused' ?></span>
+          </div>
+
+          <form method="post" class="rg-settings-form" data-testid="region-settings-<?= esc($r['code']) ?>">
             <input type="hidden" name="action" value="save_region">
             <input type="hidden" name="region_code" value="<?= esc($r['code']) ?>">
-            <div class="d-flex justify-content-between align-items-start mb-3">
-              <div>
-                <h6 class="fw-bold mb-0"><i class="bi bi-flag-fill me-1" style="color:var(--brand)"></i> <?= esc($r['code']) ?> · <?= esc($r['name']) ?></h6>
-                <small class="text-muted"><?= esc($r['currency_symbol']) ?> <?= esc($r['currency']) ?> · Tax <?= number_format($r['tax_rate']*100,1) ?>%</small>
-              </div>
-              <div class="form-check form-switch mb-0">
-                <input type="checkbox" class="form-check-input" name="active" id="rg_<?= esc($r['code']) ?>" <?= $r['active']?'checked':'' ?>>
-                <label for="rg_<?= esc($r['code']) ?>" class="form-check-label small">Active</label>
-              </div>
-            </div>
+            <input type="hidden" name="active" value="<?= $r['active'] ?>" data-rg-hidden-active>
             <div class="row g-2 small mb-3">
               <div class="col-12"><label class="form-label small mb-0">Region Name</label><input class="form-control form-control-sm" name="name" value="<?= esc($r['name']) ?>"></div>
               <div class="col-5"><label class="form-label small mb-0">Currency</label><input class="form-control form-control-sm" name="currency" value="<?= esc($r['currency']) ?>"></div>
@@ -2158,12 +2250,126 @@ elseif ($tab === 'regions'):
               <div class="col-4"><div class="p-2 rounded" style="background:var(--bg);"><div class="fw-bold text-success"><?= $keysAv ?></div><small class="text-muted">Keys Avail</small></div></div>
               <div class="col-4"><div class="p-2 rounded" style="background:var(--bg);"><div class="fw-bold"><?= esc($r['currency_symbol']) ?><?= number_format($rev,0) ?></div><small class="text-muted">Revenue</small></div></div>
             </div>
-            <button class="btn btn-soft-blue btn-sm w-100"><i class="bi bi-check2 me-1"></i> Save Region</button>
+            <button class="btn btn-soft-gray btn-sm w-100" data-testid="save-region-settings-<?= esc($r['code']) ?>"><i class="bi bi-sliders me-1"></i> Save Settings</button>
           </form>
+
+          <!-- Active / Deactive toggle bar (instant AJAX) -->
+          <div class="rg-toggle-bar mt-3" data-rg-bar data-rg-state="<?= $r['active']?'on':'off' ?>" role="group" aria-label="Region status">
+            <button type="button" class="rg-toggle-opt rg-on <?= $r['active']?'sel':'' ?>" data-rg-set="1" data-testid="region-activate-<?= esc($r['code']) ?>">
+              <i class="bi bi-check-circle-fill me-1"></i> Active
+            </button>
+            <button type="button" class="rg-toggle-opt rg-off <?= $r['active']?'':'sel' ?>" data-rg-set="0" data-testid="region-deactivate-<?= esc($r['code']) ?>">
+              <i class="bi bi-slash-circle me-1"></i> Deactive
+            </button>
+            <span class="rg-toggle-thumb" data-rg-thumb></span>
+          </div>
+          <div class="rg-toggle-hint small text-muted mt-2 text-center" data-rg-hint>
+            <?= $r['active']?'Products in this region are <strong>visible</strong> on the public website.':'Products in this region are <strong>hidden</strong> from the public website.' ?>
+          </div>
         </div>
       </div>
     <?php endforeach; ?>
   </div>
+
+  <style>
+    .rg-status-pill { display:inline-flex; align-items:center; font-size:11px; font-weight:600; padding:4px 10px; border-radius:999px; letter-spacing:.3px; }
+    .rg-status-pill.on  { background:#dcfce7; color:#166534; }
+    .rg-status-pill.off { background:#fee2e2; color:#991b1b; }
+    [data-bs-theme="dark"] .rg-status-pill.on  { background:rgba(34,197,94,.15); color:#86efac; }
+    [data-bs-theme="dark"] .rg-status-pill.off { background:rgba(239,68,68,.15); color:#fca5a5; }
+
+    .rg-toggle-bar {
+      position: relative;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 4px;
+      overflow: hidden;
+    }
+    .rg-toggle-opt {
+      position: relative; z-index: 2;
+      border: 0; background: transparent;
+      padding: 8px 10px;
+      font-size: 13px; font-weight: 600;
+      color: var(--text-muted, #64748b);
+      border-radius: 999px;
+      transition: color .25s ease;
+      cursor: pointer;
+    }
+    .rg-toggle-opt.sel { color: #fff; }
+    .rg-toggle-opt:focus { outline: none; }
+    .rg-toggle-thumb {
+      position: absolute; top: 4px; bottom: 4px;
+      width: calc(50% - 4px);
+      border-radius: 999px;
+      transition: transform .28s cubic-bezier(.4,.0,.2,1), background-color .25s ease, box-shadow .25s ease;
+      z-index: 1;
+      pointer-events: none;
+    }
+    .rg-toggle-bar[data-rg-state="on"]  .rg-toggle-thumb { transform: translateX(0);    background: linear-gradient(135deg,#10b981,#059669); box-shadow: 0 4px 12px rgba(16,185,129,.35); }
+    .rg-toggle-bar[data-rg-state="off"] .rg-toggle-thumb { transform: translateX(100%); background: linear-gradient(135deg,#ef4444,#b91c1c); box-shadow: 0 4px 12px rgba(239,68,68,.35); }
+    .rg-toggle-bar.is-saving { opacity: .6; pointer-events: none; }
+    .rg-toggle-bar.is-saving::after {
+      content:""; position:absolute; right:8px; top:50%; width:14px; height:14px;
+      margin-top:-7px; border:2px solid #fff; border-top-color:transparent;
+      border-radius:50%; animation: rg-spin .7s linear infinite; z-index:3;
+    }
+    @keyframes rg-spin { to { transform: rotate(360deg); } }
+  </style>
+
+  <script>
+  (function(){
+    document.querySelectorAll('[data-rg-bar]').forEach(function(bar){
+      var card  = bar.closest('[data-region-card]');
+      var code  = card.getAttribute('data-region-card');
+      var pill  = card.querySelector('[data-rg-pill]');
+      var hint  = card.querySelector('[data-rg-hint]');
+      var hidden= card.querySelector('[data-rg-hidden-active]');
+      bar.querySelectorAll('[data-rg-set]').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var want = btn.getAttribute('data-rg-set') === '1';
+          var cur  = bar.getAttribute('data-rg-state') === 'on';
+          if (want === cur) return;
+          bar.classList.add('is-saving');
+          fetch('ajax/region-toggle.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code: code, active: want ? 1 : 0 })
+          }).then(function(r){ return r.json(); }).then(function(j){
+            bar.classList.remove('is-saving');
+            if (!j || !j.ok) {
+              alert((j && j.error) ? j.error : 'Failed to update region');
+              return;
+            }
+            // Update UI in place
+            bar.setAttribute('data-rg-state', want ? 'on' : 'off');
+            bar.querySelectorAll('[data-rg-set]').forEach(function(b){
+              b.classList.toggle('sel', b.getAttribute('data-rg-set') === (want ? '1' : '0'));
+            });
+            if (pill) {
+              pill.classList.toggle('on',  want);
+              pill.classList.toggle('off', !want);
+              pill.innerHTML = want
+                ? '<i class="bi bi-broadcast me-1"></i>Live'
+                : '<i class="bi bi-pause-circle me-1"></i>Paused';
+            }
+            if (hint) {
+              hint.innerHTML = want
+                ? 'Products in this region are <strong>visible</strong> on the public website.'
+                : 'Products in this region are <strong>hidden</strong> from the public website.';
+            }
+            if (hidden) hidden.value = want ? 1 : 0;
+          }).catch(function(){
+            bar.classList.remove('is-saving');
+            alert('Network error — please try again.');
+          });
+        });
+      });
+    });
+  })();
+  </script>
 
 <?php
 // ============================================================================

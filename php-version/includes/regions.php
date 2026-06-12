@@ -31,6 +31,16 @@ function all_regions(): array {
     return db()->query('SELECT * FROM regions WHERE active=1 ORDER BY code')->fetchAll();
 }
 
+/** SQL snippet that limits a query to products belonging to currently-active regions.
+ *  Use it inside any public-facing product query, e.g.
+ *      SELECT * FROM products WHERE region IN (SELECT code FROM regions WHERE active=1)
+ *  When no region is active (edge case), the helper returns a clause that yields 0 rows
+ *  so deactivated regions never leak through.
+ */
+function active_regions_sql_in(string $column = 'region'): string {
+    return "$column IN (SELECT code FROM regions WHERE active=1)";
+}
+
 function region_money(float $amount): string {
     $r = active_region();
     return $r['currency_symbol'] . number_format($amount, 2);

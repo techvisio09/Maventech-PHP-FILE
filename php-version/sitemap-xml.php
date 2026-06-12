@@ -34,7 +34,7 @@ foreach ($catSlugs as $cs) {
 }
 
 // Products
-foreach (db()->query('SELECT slug FROM products') as $r) {
+foreach (db()->query('SELECT slug FROM products WHERE ' . active_regions_sql_in('region')) as $r) {
     $urls[] = [$base . '/product.php?slug=' . $r['slug'], $today, 'weekly', '0.8'];
 }
 

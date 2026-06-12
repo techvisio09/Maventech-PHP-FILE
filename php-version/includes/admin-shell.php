@@ -139,6 +139,10 @@ $admin       = $admin ?? current_admin();
 .tpl-list-item:hover { background: var(--bg); color: var(--text); }
 .tpl-list-item.active { background: rgba(59,130,246,.12); border-color: rgba(59,130,246,.30); }
 [data-bs-theme="dark"] .tpl-list-item.active { background: rgba(59,130,246,.18); border-color: rgba(59,130,246,.45); }
+/* Template row (clickable item + explicit Edit button) */
+.tpl-row { min-height: 50px; }
+.tpl-row .btn { align-self: stretch; }
+.tpl-row-active .btn { background: rgba(59,130,246,.18); border-color: rgba(59,130,246,.30); }
 
 /* API form inputs: smaller + long keys wrap inside the box */
 [data-testid^="api-"] .form-control,
