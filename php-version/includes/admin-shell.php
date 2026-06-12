@@ -126,6 +126,69 @@ $admin       = $admin ?? current_admin();
 .tbl-e table { table-layout:auto; }
 .tbl-e td, .tbl-e th { vertical-align: middle; word-break: break-word; }
 
+/* ============================================================
+   EMAIL ACTIVITY CENTER — light + dark mode styles
+   ============================================================ */
+.lk-row { margin: 2px 0; line-height: 1; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.lk-pill {
+  font-size: 10.5px; font-weight: 600;
+  background: #eff6ff; color: #1d4ed8;
+  padding: 3px 7px; border-radius: 5px;
+  border: 1px solid #bfdbfe;
+  font-family: 'SF Mono','Menlo','Monaco','Courier New',monospace;
+}
+.sold-tag {
+  font-size: 9px; font-weight: 800;
+  color: #065f46; background: #d1fae5;
+  padding: 3px 6px; border-radius: 4px;
+  letter-spacing: .5px; vertical-align: middle;
+  border: 1px solid #6ee7b7;
+}
+.tpl-chip {
+  display: inline-block; font-size: 10px; font-weight: 600;
+  padding: 3px 9px; border-radius: 999px; margin-top: 3px;
+  color: #2563eb; background: #dbeafe; border: 1px solid #93c5fd;
+}
+.tpl-chip[data-tpl="review_request"]  { color:#7c3aed; background:#ede9fe; border-color:#c4b5fd; }
+.tpl-chip[data-tpl="order_confirmation"] { color:#10b981; background:#d1fae5; border-color:#6ee7b7; }
+.tpl-chip[data-tpl="inline"]          { color:#475569; background:#f1f5f9; border-color:#cbd5e1; }
+
+/* DARK MODE — make every pill, tag & chip pop with proper contrast */
+[data-bs-theme="dark"] .lk-pill {
+  background: rgba(96,165,250,.12); color: #93c5fd; border-color: rgba(96,165,250,.35);
+}
+[data-bs-theme="dark"] .sold-tag {
+  background: rgba(16,185,129,.18); color: #6ee7b7; border-color: rgba(16,185,129,.40);
+}
+[data-bs-theme="dark"] .tpl-chip {
+  background: rgba(59,130,246,.18); color: #93c5fd; border-color: rgba(59,130,246,.40);
+}
+[data-bs-theme="dark"] .tpl-chip[data-tpl="review_request"] {
+  background: rgba(167,139,250,.18); color: #c4b5fd; border-color: rgba(167,139,250,.40);
+}
+[data-bs-theme="dark"] .tpl-chip[data-tpl="order_confirmation"] {
+  background: rgba(16,185,129,.18); color: #6ee7b7; border-color: rgba(16,185,129,.40);
+}
+[data-bs-theme="dark"] .tpl-chip[data-tpl="inline"] {
+  background: rgba(148,163,184,.18); color: #cbd5e1; border-color: rgba(148,163,184,.40);
+}
+
+/* Customer link in Email Activity — readable in both modes */
+[data-bs-theme="dark"] a[data-testid^="customer-link-"] { color: #93c5fd !important; }
+[data-bs-theme="dark"] a[data-testid^="customer-link-"]:hover { color: #bfdbfe !important; text-decoration: underline; }
+
+/* Resend popover background must match card-bg in dark mode (was hard-coded white) */
+[data-bs-theme="dark"] div[id^="editResend"] {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+[data-bs-theme="dark"] div[id^="editResend"] small { color: var(--muted); }
+
+/* KPI tiles in Email Activity header (Sent / Opened / Queued / Failed) — keep
+   their accent colour but lighten the value text in dark mode */
+[data-bs-theme="dark"] .kpi-tile .kpi-value { color: #f8fafc; }
+
 body { background: var(--bg); color: var(--text); font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; font-size: 14px; position:relative; }
 
 /* Microsoft-style watermark — very subtle 4-square logo pattern.

@@ -1702,9 +1702,9 @@ elseif ($tab === 'emails'):
             <td>
               <?php if (!empty($e['keys_list'])): ?>
                 <?php foreach (explode('|', $e['keys_list']) as $lk): ?>
-                  <div style="margin:2px 0;line-height:1;">
-                    <code style="font-size:10.5px;background:#eff6ff;color:#1d4ed8;padding:2px 6px;border-radius:4px;display:inline-block;"><?= esc($lk) ?></code>
-                    <span style="font-size:9px;font-weight:700;color:#047857;background:#d1fae5;padding:2px 5px;border-radius:3px;letter-spacing:.4px;margin-left:3px;vertical-align:middle;" title="License key has been sold &amp; assigned">SOLD</span>
+                  <div class="lk-row">
+                    <code class="lk-pill"><?= esc($lk) ?></code>
+                    <span class="sold-tag" title="License key has been sold &amp; assigned">SOLD</span>
                   </div>
                 <?php endforeach; ?>
               <?php else: ?>
@@ -1714,7 +1714,7 @@ elseif ($tab === 'emails'):
             <!-- Subject + template chip -->
             <td style="min-width:220px;">
               <div style="font-size:13px;"><?= esc(mb_strimwidth($e['subject'],0,48,'…')) ?></div>
-              <span style="display:inline-block;font-size:10px;font-weight:600;color:<?= esc($tpl['color']) ?>;background:<?= esc($tpl['bg']) ?>;padding:2px 8px;border-radius:999px;margin-top:3px;"><i class="bi bi-tag-fill" style="font-size:9px;"></i> <?= esc($tpl['label']) ?></span>
+              <span class="tpl-chip" data-tpl="<?= esc($e['template_code'] ?: 'inline') ?>"><i class="bi bi-tag-fill" style="font-size:9px;"></i> <?= esc($tpl['label']) ?></span>
             </td>
             <!-- Order link -->
             <td><?= $e['order_number'] ? '<a href="'.esc($detailHref).'" class="fw-semibold" style="font-size:12.5px;"><code>#'.esc($e['order_number']).'</code></a>' : '<small class="text-muted">—</small>' ?></td>
