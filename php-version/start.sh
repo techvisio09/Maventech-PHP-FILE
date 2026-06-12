@@ -1,4 +1,5 @@
 #!/bin/bash
+export EMERGENT_LLM_KEY="sk-emergent-8Ad362c4681F5B58f7"
 # ============================================================
 # Emergent preview launcher — serves the PHP store on port 3000
 # (replaces the React dev server; supervisor runs this via `yarn start`)

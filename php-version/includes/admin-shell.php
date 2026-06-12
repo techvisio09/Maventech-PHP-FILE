@@ -28,6 +28,7 @@ $navItems = [
     'leads'       => ['icon' => 'bi-person-lines-fill',  'label' => 'Lead Management',    'href' => 'admin.php?tab=leads'],
     'keys'        => ['icon' => 'bi-key',                'label' => 'Key Inventory',      'href' => 'admin.php?tab=keys'],
     'emails'      => ['icon' => 'bi-envelope',           'label' => 'Email Activity',     'href' => 'admin.php?tab=emails'],
+    'reviews'     => ['icon' => 'bi-star',                'label' => 'Customer Reviews',   'href' => 'admin.php?tab=reviews'],
     'templates'   => ['icon' => 'bi-file-earmark-richtext','label'=> 'Email Templates',   'href' => 'admin.php?tab=templates'],
     'api'         => ['icon' => 'bi-plug',               'label' => 'API Management',     'href' => 'admin.php?tab=api'],
     'regions'     => ['icon' => 'bi-globe',              'label' => 'Regions',            'href' => 'admin.php?tab=regions'],
@@ -418,7 +419,7 @@ hr { border-color: var(--border); opacity:.5; }
       </a>
     <?php endforeach; ?>
     <div class="side-section">Communication</div>
-    <?php foreach (['emails','templates'] as $k): $i = $navItems[$k]; ?>
+    <?php foreach (['emails','reviews','templates'] as $k): $i = $navItems[$k]; ?>
       <a class="item <?= $adminActive===$k?'active':'' ?>" href="<?= esc($i['href']) ?>" data-testid="adm-nav-<?= $k ?>">
         <i class="bi <?= esc($i['icon']) ?>"></i><?= esc($i['label']) ?>
       </a>

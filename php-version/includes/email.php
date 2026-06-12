@@ -276,4 +276,24 @@ function fulfill_order(int $orderId): void {
     send_email($order['email'], $subject, $html, $orderId, 'order_delivery');
     $tl['email_sent'] = date('Y-m-d H:i:s');
     $pdo->prepare('UPDATE orders SET timeline=? WHERE id=?')->execute([json_encode($tl), $orderId]);
+
+    // ---- Schedule review-request email + create token ----
+    foreach ($items as $item) {
+        $tok = bin2hex(random_bytes(16));
+        $pdo->prepare('INSERT INTO customer_reviews (order_id, product_slug, customer_email, customer_name, request_token, region) VALUES (?,?,?,?,?,?)')
+            ->execute([$orderId, $item['product_slug'], $order['email'], trim($order['first_name'].' '.$order['last_name']), $tok, $order['region'] ?? 'US']);
+        $reviewUrl = rtrim(site_url(),'/') . '/review.php?t=' . $tok;
+        $reviewHtml = '<!doctype html><html><body style="font-family:Arial,sans-serif;background:#f8fafc;padding:30px;">
+          <div style="max-width:580px;margin:0 auto;background:#fff;border-radius:14px;padding:32px;box-shadow:0 4px 20px rgba(0,0,0,.05);">
+            <div style="text-align:center;font-size:18px;font-weight:800;color:#0f172a;">'.esc(SITE_BRAND).'</div>
+            <h2 style="color:#0f172a;text-align:center;margin-top:16px;">How was your purchase, '.esc($order['first_name']).'?</h2>
+            <p style="color:#64748b;text-align:center;">We hope <strong>'.esc($item['name']).'</strong> is working great. Would you take 30 seconds to share your experience?</p>
+            <div style="text-align:center;margin:24px 0;">
+              <div style="font-size:32px;letter-spacing:6px;">★★★★★</div>
+              <a href="'.$reviewUrl.'" style="display:inline-block;margin-top:18px;padding:12px 32px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;border-radius:999px;text-decoration:none;font-weight:700;">Leave a Review</a>
+            </div>
+            <p style="font-size:12px;color:#94a3b8;text-align:center;">Includes an AI-assist option to help write your comment based on your rating. Thank you!</p>
+          </div></body></html>';
+        send_email($order['email'], 'How was your '.$item['name'].'? · Quick 30-second review', $reviewHtml, $orderId, 'review_request');
+    }
 }

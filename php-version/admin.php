@@ -142,6 +142,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         header('Location: admin.php?tab=leads&open='.$lid.'&msg=Lead+updated'); exit;
 
+    } elseif ($action === 'review_update_status') {
+        $pdo->prepare('UPDATE customer_reviews SET status=? WHERE id=?')
+            ->execute([$_POST['status'], (int)$_POST['review_id']]);
+        header('Location: admin.php?tab=reviews&msg=Status+updated'); exit;
+    } elseif ($action === 'review_delete') {
+        $pdo->prepare('DELETE FROM customer_reviews WHERE id=?')->execute([(int)$_POST['review_id']]);
+        header('Location: admin.php?tab=reviews&msg=Review+deleted'); exit;
     } elseif ($action === 'save_settings') {
         setting_set('statement_name_card',   trim($_POST['statement_name_card']));
         setting_set('statement_name_paypal', trim($_POST['statement_name_paypal']));
@@ -1335,7 +1342,90 @@ elseif ($tab === 'regions'):
 // ============================================================================
 // SETTINGS (statement names — moved here from old)
 // ============================================================================
-elseif ($tab === 'settings'):
+elseif ($tab === 'reviews'):
+  $sf = $_GET['status'] ?? '';
+  $w=''; $args=[];
+  if (in_array($sf,['pending','published','hidden'],true)) { $w=' WHERE cr.status=?'; $args[]=$sf; }
+  $st = $pdo->prepare("SELECT cr.*, p.name AS product_name, p.image AS product_image, o.order_number
+    FROM customer_reviews cr LEFT JOIN products p ON p.slug=cr.product_slug LEFT JOIN orders o ON o.id=cr.order_id $w ORDER BY cr.submitted_at DESC, cr.id DESC LIMIT 200");
+  $st->execute($args);
+  $reviews = $st->fetchAll();
+  $cnt = $pdo->query("SELECT
+    SUM(status='published' AND rating IS NOT NULL) p,
+    SUM(status='pending') pe, SUM(status='hidden') h,
+    AVG(CASE WHEN status='published' THEN rating END) avg_r,
+    COUNT(*) t FROM customer_reviews")->fetch();
+?>
+  <h5 class="fw-bold mb-1">Customer Reviews</h5>
+  <p class="text-muted small mb-3">Post-purchase feedback collected automatically. Published reviews appear live on the website.</p>
+
+  <div class="row g-3 mb-3">
+    <div class="col-6 col-md-3"><div class="kpi-tile amber"><div class="kpi-icon"><i class="bi bi-star-fill"></i></div><div class="kpi-label">Avg Rating</div><div class="kpi-value"><?= number_format((float)($cnt['avg_r'] ?? 0), 1) ?> ★</div></div></div>
+    <div class="col-6 col-md-3"><div class="kpi-tile green"><div class="kpi-icon"><i class="bi bi-check-circle"></i></div><div class="kpi-label">Published</div><div class="kpi-value"><?= (int)$cnt['p'] ?></div></div></div>
+    <div class="col-6 col-md-3"><div class="kpi-tile blue"><div class="kpi-icon"><i class="bi bi-hourglass-split"></i></div><div class="kpi-label">Awaiting reply</div><div class="kpi-value"><?= (int)$cnt['pe'] ?></div></div></div>
+    <div class="col-6 col-md-3"><div class="kpi-tile red"><div class="kpi-icon"><i class="bi bi-eye-slash"></i></div><div class="kpi-label">Hidden</div><div class="kpi-value"><?= (int)$cnt['h'] ?></div></div></div>
+  </div>
+
+  <div class="d-flex gap-2 mb-3 flex-wrap">
+    <?php foreach (['' => 'All', 'pending'=>'Pending', 'published'=>'Published', 'hidden'=>'Hidden'] as $k=>$lbl): ?>
+      <a class="adm-pill <?= $sf===$k?'active':'' ?>" href="?tab=reviews<?= $k?'&status='.$k:'' ?>"><?= esc($lbl) ?></a>
+    <?php endforeach; ?>
+  </div>
+
+  <div class="tbl-e">
+    <table class="table mb-0" data-testid="reviews-table">
+      <thead><tr><th>Customer</th><th>Product</th><th>Order</th><th>Rating</th><th>Comment</th><th>Source</th><th>Status</th><th>Submitted</th><th></th></tr></thead>
+      <tbody>
+        <?php if (empty($reviews)): ?><tr><td colspan="9" class="text-center text-muted py-4">No reviews yet. Reviews appear automatically after customers receive the post-purchase email and click "Leave a Review".</td></tr><?php endif; ?>
+        <?php foreach ($reviews as $r):
+          $r_stars = (int)$r['rating'];
+        ?>
+          <tr>
+            <td><strong><?= esc($r['customer_name']) ?></strong><br><small class="text-muted"><?= esc($r['customer_email']) ?></small></td>
+            <td><div class="d-flex align-items-center gap-2">
+              <?php if ($r['product_image']): ?><img src="<?= esc($r['product_image']) ?>" style="width:32px;height:32px;object-fit:contain;background:var(--bg);border-radius:6px;padding:3px;"><?php endif; ?>
+              <small><?= esc(mb_strimwidth($r['product_name'] ?? '', 0, 40, '…')) ?></small>
+            </div></td>
+            <td><?= $r['order_number'] ? '<a href="order-view.php?id='.(int)$r['order_id'].'"><code>#'.esc($r['order_number']).'</code></a>' : '—' ?></td>
+            <td><?php if ($r_stars): ?>
+              <span style="color:#facc15;font-size:14px;letter-spacing:1px;"><?= str_repeat('★', $r_stars) . str_repeat('☆', 5-$r_stars) ?></span>
+              <div><small><strong><?= $r_stars ?>/5</strong></small></div>
+            <?php else: ?><span class="text-muted small">awaiting</span><?php endif; ?></td>
+            <td style="max-width:300px;"><small><?= esc(mb_strimwidth($r['comment'] ?? '', 0, 120, '…')) ?></small></td>
+            <td><?= $r['ai_generated'] ? '<span class="s-badge sent" title="AI-assisted"><i class="bi bi-stars"></i> AI</span>' : '<span class="s-badge delivered">Manual</span>' ?></td>
+            <td><span class="s-badge <?= $r['status']==='published'?'paid':($r['status']==='hidden'?'failed':'queued') ?>"><?= esc($r['status']) ?></span></td>
+            <td><small class="text-muted"><?= $r['submitted_at'] ? esc(date('M j, Y', strtotime($r['submitted_at']))) : '—' ?></small></td>
+            <td class="text-nowrap">
+              <?php if ($r['status']==='pending' && $r['rating']): ?>
+                <form method="post" class="d-inline"><input type="hidden" name="action" value="review_update_status"><input type="hidden" name="review_id" value="<?= (int)$r['id'] ?>"><input type="hidden" name="status" value="published"><button class="btn btn-soft-green btn-sm py-0 px-2" title="Publish"><i class="bi bi-check2"></i></button></form>
+              <?php endif; ?>
+              <?php if ($r['status']!=='hidden'): ?>
+                <form method="post" class="d-inline"><input type="hidden" name="action" value="review_update_status"><input type="hidden" name="review_id" value="<?= (int)$r['id'] ?>"><input type="hidden" name="status" value="hidden"><button class="btn btn-soft-gray btn-sm py-0 px-2" title="Hide"><i class="bi bi-eye-slash"></i></button></form>
+              <?php else: ?>
+                <form method="post" class="d-inline"><input type="hidden" name="action" value="review_update_status"><input type="hidden" name="review_id" value="<?= (int)$r['id'] ?>"><input type="hidden" name="status" value="published"><button class="btn btn-soft-blue btn-sm py-0 px-2" title="Re-publish"><i class="bi bi-eye"></i></button></form>
+              <?php endif; ?>
+              <?php if (!$r['rating']): ?>
+                <a href="<?= esc(SITE_URL) ?>/review.php?t=<?= esc($r['request_token']) ?>" target="_blank" class="btn btn-soft-blue btn-sm py-0 px-2" title="Open submission link"><i class="bi bi-link-45deg"></i></a>
+              <?php endif; ?>
+              <form method="post" class="d-inline" onsubmit="return confirm('Delete this review permanently?')"><input type="hidden" name="action" value="review_delete"><input type="hidden" name="review_id" value="<?= (int)$r['id'] ?>"><button class="btn btn-soft-red btn-sm py-0 px-2"><i class="bi bi-trash"></i></button></form>
+            </td>
+          </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card-e p-3 mt-3">
+    <h6 class="fw-bold mb-2"><i class="bi bi-info-circle me-1"></i>How review collection works</h6>
+    <ol class="small text-muted mb-0">
+      <li>When an order is marked <strong>paid</strong>, a review-request record is created for each item with a unique token.</li>
+      <li>The customer receives a "How was your purchase?" email containing a one-click link to <code>review.php?t=TOKEN</code>.</li>
+      <li>The customer picks 1–5 stars and either types a comment or clicks <strong>✨ Help me write</strong> → AI generates a comment matching the rating (uses Emergent LLM key, falls back to templates if unavailable).</li>
+      <li>Submitted reviews are marked <strong>published</strong> automatically and appear on the public testimonials page in real time. Admin can hide/delete as needed.</li>
+    </ol>
+  </div>
+
+<?php elseif ($tab === 'settings'):
   $stmtCard   = setting_get('statement_name_card','MAVENTECH SOFTWARE');
   $stmtPaypal = setting_get('statement_name_paypal','MAVENTECH SOFTWARE LLC');
 ?>

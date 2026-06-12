@@ -6,7 +6,11 @@ $pageDescription = 'Genuine Microsoft Office 2024/2021/2019, Windows 11 and anti
 $bestSellers = db()->query("SELECT * FROM products WHERE badge IS NOT NULL ORDER BY reviews DESC LIMIT 4")->fetchAll();
 $newArrivals = db()->query("SELECT * FROM products WHERE is_new = 1 ORDER BY reviews DESC LIMIT 4")->fetchAll();
 $pickedForYou = db()->query("SELECT * FROM products ORDER BY reviews DESC LIMIT 8")->fetchAll();
-$testimonials = db()->query("SELECT * FROM testimonials ORDER BY rating DESC LIMIT 6")->fetchAll();
+// Merge static testimonials with real published customer reviews
+$staticT = db()->query("SELECT name, initials, location, product, text, rating FROM testimonials ORDER BY rating DESC LIMIT 4")->fetchAll();
+$realR = db()->query("SELECT customer_name AS name, UPPER(LEFT(customer_name,2)) AS initials, 'Verified Customer' AS location, NULL AS product, comment AS text, rating FROM customer_reviews WHERE status='published' AND rating IS NOT NULL ORDER BY submitted_at DESC LIMIT 6")->fetchAll();
+$testimonials = array_merge($realR, $staticT);
+$testimonials = array_slice($testimonials, 0, 6);
 $faqs = db()->query("SELECT * FROM faqs")->fetchAll();
 $posts = db()->query("SELECT * FROM blog_posts LIMIT 3")->fetchAll();
 
