@@ -128,6 +128,29 @@ $admin       = $admin ?? current_admin();
 .kpi-tile .kpi-label { font-size: 11px; letter-spacing: .5px; }
 [data-bs-theme="dark"] .card-e { box-shadow: 0 1px 3px rgba(0,0,0,0.25), 0 1px 2px rgba(0,0,0,0.18); }
 
+/* Email-template ON/OFF tiny pills (visible in dark mode too) */
+.s-badge.active   { background:#d1fae5; color:#065f46; padding:1px 7px; font-size:9px; font-weight:800; letter-spacing:.4px; border-radius:999px; border:1px solid #6ee7b7; }
+.s-badge.inactive { background:#fee2e2; color:#991b1b; padding:1px 7px; font-size:9px; font-weight:800; letter-spacing:.4px; border-radius:999px; border:1px solid #fca5a5; }
+[data-bs-theme="dark"] .s-badge.active   { background: rgba(16,185,129,.18); color:#6ee7b7; border-color: rgba(16,185,129,.40); }
+[data-bs-theme="dark"] .s-badge.inactive { background: rgba(239,68,68,.18);  color:#fca5a5; border-color: rgba(239,68,68,.40); }
+
+/* Template list items — clean hover & active state, dark-mode aware */
+.tpl-list-item { color: var(--text); border:1px solid transparent; transition: background .15s, border-color .15s; }
+.tpl-list-item:hover { background: var(--bg); color: var(--text); }
+.tpl-list-item.active { background: rgba(59,130,246,.12); border-color: rgba(59,130,246,.30); }
+[data-bs-theme="dark"] .tpl-list-item.active { background: rgba(59,130,246,.18); border-color: rgba(59,130,246,.45); }
+
+/* API form inputs: smaller + long keys wrap inside the box */
+[data-testid^="api-"] .form-control,
+[data-testid^="api-"] .form-select {
+  font-size: 12px; padding: 5px 9px; line-height: 1.35;
+  word-break: break-all; overflow-wrap: anywhere;
+}
+[data-testid^="api-"] textarea.form-control { min-height: 60px; font-family:'SF Mono','Menlo','Monaco','Courier New',monospace; }
+[data-testid^="api-"] .form-label { font-size: 11px; margin-bottom: 2px; }
+[data-testid^="api-"] code { word-break: break-all; overflow-wrap: anywhere; display:inline-block; max-width:100%; }
+[data-testid^="api-"] input[type="text"], [data-testid^="api-"] input[type="url"], [data-testid^="api-"] input[type="email"] { font-family:'SF Mono','Menlo','Monaco','Courier New',monospace; }
+
 /* Ensure content stays inside boxes — alignment + overflow safety */
 .card-e { overflow:hidden; }
 .card-e .card-body-p { overflow-x:auto; }

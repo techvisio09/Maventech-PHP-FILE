@@ -1783,12 +1783,12 @@ elseif ($tab === 'templates'):
     <div class="col-lg-4">
       <div class="card-e p-2">
         <?php foreach ($tpls as $t): ?>
-          <a href="?tab=templates&edit=<?= (int)$t['id'] ?>" class="d-block p-3 rounded text-decoration-none mb-1" style="background:<?= $editId==$t['id']?'var(--blue-soft)':'transparent' ?>;color:var(--text);">
-            <div class="d-flex justify-content-between">
-              <strong><?= esc($t['name']) ?></strong>
-              <?= $t['active']?'<span class="s-badge active">on</span>':'<span class="s-badge inactive">off</span>' ?>
+          <a href="?tab=templates&edit=<?= (int)$t['id'] ?>" class="d-block px-3 py-2 rounded text-decoration-none mb-1 tpl-list-item <?= $editId==$t['id']?'active':'' ?>">
+            <div class="d-flex justify-content-between align-items-center gap-2">
+              <strong style="font-size:13px;"><?= esc($t['name']) ?></strong>
+              <?= $t['active']?'<span class="s-badge active">ON</span>':'<span class="s-badge inactive">OFF</span>' ?>
             </div>
-            <small class="text-muted"><code><?= esc($t['code']) ?></code> · v<?= (int)$t['current_version'] ?></small>
+            <small class="text-muted" style="font-size:11px;"><code style="font-size:10.5px;"><?= esc($t['code']) ?></code> · v<?= (int)$t['current_version'] ?></small>
           </a>
         <?php endforeach; ?>
       </div>
