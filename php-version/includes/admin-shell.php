@@ -126,7 +126,28 @@ $admin       = $admin ?? current_admin();
 .tbl-e table { table-layout:auto; }
 .tbl-e td, .tbl-e th { vertical-align: middle; word-break: break-word; }
 
-body { background: var(--bg); color: var(--text); font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; font-size: 14px; }
+body { background: var(--bg); color: var(--text); font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; font-size: 14px; position:relative; }
+
+/* Microsoft-style watermark — very subtle 4-square logo pattern.
+   Uses a data:URI SVG repeated as background; opacity baked into the SVG
+   via fill colors so content stays fully readable. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220' viewBox='0 0 220 220'><g opacity='0.05'><rect x='40' y='40' width='28' height='28' fill='%23F25022'/><rect x='72' y='40' width='28' height='28' fill='%2300A4EF'/><rect x='40' y='72' width='28' height='28' fill='%237FBA00'/><rect x='72' y='72' width='28' height='28' fill='%23FFB900'/><text x='108' y='62' font-family='Segoe UI,Arial' font-size='13' font-weight='600' fill='%23999'>Microsoft</text><rect x='150' y='150' width='22' height='22' fill='%23185ABD'/><rect x='150' y='176' width='22' height='22' fill='%23107C41'/><rect x='176' y='150' width='22' height='22' fill='%23D24726'/><rect x='176' y='176' width='22' height='22' fill='%237B83EB'/></g></svg>");
+  background-repeat: repeat;
+  background-size: 220px 220px;
+  background-position: 0 0;
+  opacity: 1;
+}
+/* Dark mode — bump watermark opacity slightly (dark bg absorbs more) */
+[data-bs-theme="dark"] body::before { opacity: 0.55; }
+
+/* Ensure all admin content sits above the watermark */
+.adm-top, .adm-shell, .adm-sidebar, .adm-content, main, footer { position: relative; z-index: 1; }
 
 /* ============ ADMIN TOPBAR (no public navbar) ============ */
 .adm-top {
