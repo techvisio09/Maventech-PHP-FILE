@@ -56,7 +56,7 @@ $stats = [
     'Keys Avail.' => $pdo->query('SELECT COUNT(*) FROM license_keys WHERE status = "available"')->fetchColumn(),
     'Emails Queued' => $pdo->query('SELECT COUNT(*) FROM email_outbox WHERE status = "queued"')->fetchColumn(),
 ];
-$tabs = ['dashboard' => 'Dashboard', 'products' => 'Products', 'orders' => 'Orders', 'leads' => 'Leads', 'keys' => 'Key Inventory', 'emails' => 'Emails'];
+$tabs = ['dashboard' => 'Dashboard', 'inventory' => 'Inventory Mgmt', 'products' => 'Products', 'orders' => 'Orders', 'leads' => 'Leads', 'keys' => 'Key Inventory', 'emails' => 'Emails'];
 
 // Sales dashboard aggregates (revenue counts paid + delivered orders)
 $dash = null;
@@ -103,7 +103,7 @@ include __DIR__ . '/includes/header.php';
 
   <ul class="nav nav-pills mb-4 flex-wrap gap-1">
     <?php foreach ($tabs as $id => $label): ?>
-      <li class="nav-item"><a class="nav-link <?= $tab === $id ? 'active' : '' ?>" href="admin.php?tab=<?= $id ?>" data-testid="admin-tab-<?= $id ?>"><?= esc($label) ?></a></li>
+      <li class="nav-item"><a class="nav-link <?= $tab === $id ? 'active' : '' ?>" href="<?= $id === 'inventory' ? 'inventory.php' : 'admin.php?tab='.$id ?>" data-testid="admin-tab-<?= $id ?>"><?= esc($label) ?></a></li>
     <?php endforeach; ?>
   </ul>
 
