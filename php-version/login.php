@@ -18,7 +18,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($user && password_verify($password, $user['password_hash'])) {
             $_SESSION['user_id'] = $user['id'];
             unset($_SESSION['login_attempts']);
-            header('Location: ' . ($next ?: 'account.php'));
+            // If a specific ?next= was supplied, honor it. Otherwise admins land
+            // on the admin dashboard, regular customers on their account page.
+            $defaultLanding = ($user['role'] === 'admin') ? 'admin.php?tab=dashboard' : 'account.php';
+            $dest = (!empty($_GET['next']) || !empty($_POST['next'])) ? ($next ?: $defaultLanding) : $defaultLanding;
+            header('Location: ' . $dest);
             exit;
         }
         $_SESSION['login_attempts']++;
