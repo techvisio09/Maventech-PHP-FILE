@@ -369,7 +369,7 @@ if ($tab === 'dashboard'):
     $lowStock = $pdo->prepare("SELECT p.slug, p.name, p.image,
         (SELECT COUNT(*) FROM license_keys lk WHERE lk.product_slug=p.slug AND lk.status='available' AND lk.region=?) AS avail
         FROM products p WHERE p.is_active=1
-        HAVING avail < 5 ORDER BY avail ASC LIMIT 5");
+        HAVING avail > 0 AND avail < 5 ORDER BY avail ASC LIMIT 5");
     $lowStock->execute([$region_code]);
     $lowStock = $lowStock->fetchAll();
 
@@ -481,6 +481,71 @@ if ($tab === 'dashboard'):
           <div class="d-flex justify-content-between small">
             <span class="text-muted">Lead → Paid conversion</span>
             <strong class="text-success"><?= $leadsTotal>0 ? round($ordPaid/$leadsTotal*100,1).'%' : '—' ?></strong>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <?php
+  // ---- Payment Methods sales breakdown (Card vs PayPal + merchant name)
+  $pmStmt = $pdo->prepare("SELECT payment_method,
+                            COUNT(*) AS orders_cnt,
+                            COALESCE(SUM(CASE WHEN status='paid' THEN total ELSE 0 END),0) AS rev,
+                            SUM(status='paid') AS paid_cnt
+                          FROM orders WHERE region=? GROUP BY payment_method");
+  $pmStmt->execute([$region_code]);
+  $pmRows = $pmStmt->fetchAll();
+  $pmTotalRev = 0; foreach ($pmRows as $r) $pmTotalRev += (float)$r['rev'];
+  $cardMerch = setting_get('gw_card_merchant_name','Maventech Software');
+  $ppMerch   = setting_get('gw_paypal_account_name','Maventech Software LLC');
+  ?>
+  <div class="row g-3 mt-1">
+    <div class="col-12">
+      <div class="card-e">
+        <div class="card-head">
+          <div class="ttl"><i class="bi bi-credit-card-2-front"></i> Sales by Payment Method <span class="sub ms-2">(<?= esc($rg['name']) ?>)</span></div>
+          <a href="admin.php?tab=api" class="sub" style="color:var(--brand);">API Management →</a>
+        </div>
+        <div class="card-body-p">
+          <div class="row g-3" data-testid="payment-methods-breakdown">
+            <?php
+            $pmKnown = ['card'=>['Stripe', $cardMerch, '#635bff', 'bi-credit-card-2-front-fill'],
+                        'paypal'=>['PayPal', $ppMerch, '#0070ba', 'bi-paypal']];
+            foreach (['card','paypal'] as $pmKey):
+              $found = null;
+              foreach ($pmRows as $r) if (strtolower($r['payment_method'])===$pmKey) { $found=$r; break; }
+              $rev   = $found ? (float)$found['rev'] : 0;
+              $cnt   = $found ? (int)$found['orders_cnt'] : 0;
+              $paid  = $found ? (int)$found['paid_cnt'] : 0;
+              $share = $pmTotalRev > 0 ? round(($rev/$pmTotalRev)*100) : 0;
+              [$gw, $merch, $color, $icon] = $pmKnown[$pmKey];
+            ?>
+              <div class="col-md-6">
+                <div class="card-e p-3" style="border-left:4px solid <?= esc($color) ?>;background:var(--bg);">
+                  <div class="d-flex align-items-center gap-3 mb-2">
+                    <div style="width:46px;height:46px;border-radius:10px;background:<?= esc($color) ?>15;color:<?= esc($color) ?>;display:inline-flex;align-items:center;justify-content:center;font-size:22px;"><i class="bi <?= esc($icon) ?>"></i></div>
+                    <div class="flex-grow-1">
+                      <div class="fw-bold" style="font-size:15px;"><?= esc(ucfirst($pmKey)) ?> Payments</div>
+                      <small class="text-muted">Gateway: <strong style="color:<?= esc($color) ?>;"><?= esc($gw) ?></strong> · Merchant: <strong><?= esc($merch) ?></strong></small>
+                    </div>
+                    <div class="text-end">
+                      <div class="fw-bold" style="font-size:22px;color:<?= esc($color) ?>;" data-testid="pm-<?= $pmKey ?>-revenue"><?= esc($rg['currency_symbol']) ?><?= number_format(region_price($rev),2) ?></div>
+                      <small class="text-muted"><?= $share ?>% of revenue</small>
+                    </div>
+                  </div>
+                  <div class="d-flex justify-content-between" style="font-size:12px;">
+                    <span><i class="bi bi-receipt me-1 text-muted"></i><strong><?= $cnt ?></strong> total order<?= $cnt!==1?'s':'' ?></span>
+                    <span><i class="bi bi-check-circle-fill me-1 text-success"></i><strong><?= $paid ?></strong> paid</span>
+                    <?php $rate = $cnt > 0 ? round(($paid/$cnt)*100) : 0; ?>
+                    <span class="text-muted"><?= $rate ?>% conversion</span>
+                  </div>
+                  <div class="prog mt-2" style="height:6px;background:<?= esc($color) ?>1a;border-radius:3px;overflow:hidden;">
+                    <span style="display:block;height:100%;background:<?= esc($color) ?>;width:<?= $share ?>%;transition:width .3s;"></span>
+                  </div>
+                </div>
+              </div>
+            <?php endforeach; ?>
           </div>
         </div>
       </div>
