@@ -163,11 +163,22 @@ function render_products_block(array $assignments): string {
             : '<div style="margin-top:10px;background:#fef3c7;color:#92400e;padding:10px 14px;border-radius:8px;font-size:13px;">Key being prepared — you\'ll receive it within 30 minutes.</div>';
         // Activation button — per-product sign-in URL (vendor portal or Google search fallback)
         $actUrl = $a['activation_url'] ?? '';
-        $actBtn = $actUrl
-            ? '<div style="margin-top:12px;text-align:center;">
-                 <a href="' . esc($actUrl) . '" style="display:inline-block;padding:11px 26px;background:linear-gradient(135deg,#10b981,#047857);color:#ffffff;border-radius:999px;text-decoration:none;font-weight:700;font-size:13px;letter-spacing:.3px;">&#128274; Sign in to activate &rarr;</a>
-                 <div style="font-size:11px;color:#94a3b8;margin-top:6px;">Opens the official activation page for this product.</div>
-               </div>'
+        $guideUrl = $a['install_guide_url'] ?? '';
+        $buttons = '';
+        if ($actUrl) {
+            $buttons .= '<a href="' . esc($actUrl) . '" style="display:inline-block;margin:4px 6px;padding:11px 22px;background:linear-gradient(135deg,#10b981,#047857);color:#ffffff;border-radius:999px;text-decoration:none;font-weight:700;font-size:13px;letter-spacing:.3px;">&#128274; Sign in to activate &rarr;</a>';
+        }
+        if ($guideUrl) {
+            $buttons .= '<a href="' . esc($guideUrl) . '" style="display:inline-block;margin:4px 6px;padding:11px 22px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#ffffff;border-radius:999px;text-decoration:none;font-weight:700;font-size:13px;letter-spacing:.3px;">&#128214; View installation guide &rarr;</a>';
+        }
+        $actBtn = $buttons
+            ? '<div style="margin-top:12px;text-align:center;">' . $buttons
+                . '<div style="font-size:11px;color:#94a3b8;margin-top:6px;">'
+                . ($actUrl && $guideUrl ? 'Activate above &middot; step-by-step setup in the guide.' :
+                  ($actUrl ? 'Opens the official activation page for this product.' :
+                  'Step-by-step setup instructions for this product.'))
+                . '</div>'
+                . '</div>'
             : '';
         $rows .= '<table width="100%" style="border:1px solid #eef0f3;border-radius:12px;margin-bottom:14px;background:#fff;"><tr><td style="padding:14px;">
             <table width="100%"><tr><td width="80" valign="top">' . $img . '</td>
@@ -276,7 +287,7 @@ function fulfill_order(int $orderId): void {
         $order['card_statement_name'] = $stmtName;
     }
 
-    $itemsStmt = $pdo->prepare('SELECT oi.*, p.image, p.description, p.apps AS installation_guide, p.activation_url, p.brand FROM order_items oi LEFT JOIN products p ON p.slug = oi.product_slug WHERE oi.order_id = ?');
+    $itemsStmt = $pdo->prepare('SELECT oi.*, p.image, p.description, p.apps AS installation_guide, p.activation_url, p.install_guide_url, p.brand FROM order_items oi LEFT JOIN products p ON p.slug = oi.product_slug WHERE oi.order_id = ?');
     $itemsStmt->execute([$orderId]);
     $items = $itemsStmt->fetchAll();
 
@@ -295,6 +306,7 @@ function fulfill_order(int $orderId): void {
                 'description' => $item['description'] ?? '',
                 'installation_guide' => $item['installation_guide'] ?? '',
                 'activation_url' => activation_url_for_product($item['name'], $item['brand'] ?? '', $item['activation_url'] ?? ''),
+                'install_guide_url' => $item['install_guide_url'] ?? '',
                 'key' => $keyRow['license_key'] ?? null,
             ];
         }

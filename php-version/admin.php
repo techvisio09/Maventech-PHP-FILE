@@ -20,7 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'update_product') {
         $pdo->prepare('UPDATE products SET name=?, sku=?, brand=?, year=?, platform=?, category=?, license_type=?,
-            price=?, original_price=?, badge=?, description=?, is_active=?, activation_url=?, image=COALESCE(NULLIF(?,""),image) WHERE slug=?')
+            price=?, original_price=?, badge=?, description=?, is_active=?, activation_url=?, install_guide_url=?, image=COALESCE(NULLIF(?,""),image) WHERE slug=?')
             ->execute([
                 trim($_POST['name']), trim($_POST['sku']), trim($_POST['brand']) ?: null,
                 $_POST['year']!==''?(int)$_POST['year']:null, $_POST['platform'], $_POST['category'],
@@ -29,18 +29,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 trim($_POST['badge']) ?: null, trim($_POST['description'] ?? '') ?: null,
                 isset($_POST['is_active']) ? 1 : 0,
                 trim($_POST['activation_url'] ?? '') ?: null,
+                trim($_POST['install_guide_url'] ?? '') ?: null,
                 trim($_POST['image'] ?? ''), $_POST['slug']
             ]);
         header('Location: admin.php?tab=products&edit='.urlencode($_POST['slug']).'&msg=Saved'); exit;
 
     } elseif ($action === 'add_product') {
         $slug = preg_replace('/[^a-z0-9]+/i','-', strtolower(trim($_POST['name']))) . '-' . substr(md5(uniqid()),0,5);
-        $pdo->prepare('INSERT INTO products (slug,name,sku,brand,year,platform,category,license_type,price,original_price,badge,description,image,is_active,activation_url,region,apps,rating,reviews) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,4.5,0)')
+        $pdo->prepare('INSERT INTO products (slug,name,sku,brand,year,platform,category,license_type,price,original_price,badge,description,image,is_active,activation_url,install_guide_url,region,apps,rating,reviews) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,4.5,0)')
             ->execute([$slug, trim($_POST['name']), trim($_POST['sku']) ?: 'SKU-'.strtoupper(substr(md5($slug),0,8)), trim($_POST['brand']) ?: null,
                 $_POST['year']!==''?(int)$_POST['year']:null, $_POST['platform'], $_POST['category'], $_POST['license_type'],
                 (float)$_POST['price'], $_POST['original_price']!==''?(float)$_POST['original_price']:null,
                 trim($_POST['badge']) ?: null, trim($_POST['description'] ?? '') ?: null, trim($_POST['image'] ?? '') ?: null,
-                isset($_POST['is_active']) ? 1 : 0, trim($_POST['activation_url'] ?? '') ?: null, $region_code, '']);
+                isset($_POST['is_active']) ? 1 : 0, trim($_POST['activation_url'] ?? '') ?: null, trim($_POST['install_guide_url'] ?? '') ?: null, $region_code, '']);
         header('Location: admin.php?tab=products&edit='.urlencode($slug).'&msg=Product+created'); exit;
 
     } elseif ($action === 'duplicate_product') {
@@ -839,6 +840,22 @@ elseif ($tab === 'products'):
                         'Adobe'           => 'https://account.adobe.com',
                       ] as $lbl=>$u): ?>
                         <button type="button" class="btn btn-soft-gray btn-sm py-0 px-2" style="font-size:11px;" onclick="document.querySelector('[name=activation_url]').value='<?= esc($u) ?>';"><?= esc($lbl) ?></button>
+                      <?php endforeach; ?>
+                    </div>
+                  </div>
+                  <div class="col-12 mt-3">
+                    <label class="form-label small mb-0"><i class="bi bi-book me-1"></i>Installation Guide URL <span class="badge bg-success ms-1" style="font-size:9px;">used in order email</span></label>
+                    <input class="form-control form-control-sm" name="install_guide_url" value="<?= esc($editing['install_guide_url'] ?? '') ?>" placeholder="https://support.microsoft.com/install-office  (optional)" data-testid="f-install-guide-url">
+                    <small class="text-muted">Customers see a "📖 View installation guide →" button in the order email that opens this URL. Use a vendor support page, your own KB article, or a YouTube tutorial — whatever helps them install fastest.</small>
+                    <div class="d-flex gap-1 flex-wrap mt-1">
+                      <?php foreach ([
+                        'MS Office install'  => 'https://support.microsoft.com/office/install',
+                        'Bitdefender install'=> 'https://www.bitdefender.com/consumer/support/answer/2099/',
+                        'McAfee install'     => 'https://service.mcafee.com/?articleId=TS101331',
+                        'Norton install'     => 'https://support.norton.com/sp/en/us/home/current/solutions/v138918432',
+                        'Adobe install'      => 'https://helpx.adobe.com/download-install.html',
+                      ] as $lbl=>$u): ?>
+                        <button type="button" class="btn btn-soft-gray btn-sm py-0 px-2" style="font-size:11px;" onclick="document.querySelector('[name=install_guide_url]').value='<?= esc($u) ?>';"><?= esc($lbl) ?></button>
                       <?php endforeach; ?>
                     </div>
                   </div>
