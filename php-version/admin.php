@@ -435,8 +435,10 @@ elseif ($tab === 'products'):
   if ($f['cat'])    { $where[] = 'p.category = ?'; $args[] = $f['cat']; }
   if ($f['brand'])  { $where[] = 'p.brand = ?';    $args[] = $f['brand']; }
   if ($f['status']!=='') { $where[] = 'p.is_active = ?'; $args[] = (int)$f['status']; }
-  if ($f['pmin']!=='')   { $where[] = 'p.price >= ?'; $args[] = (float)$f['pmin']; }
-  if ($f['pmax']!=='')   { $where[] = 'p.price <= ?'; $args[] = (float)$f['pmax']; }
+  // Convert region-currency input to USD before comparing
+  $rate = region_rates()[$region_code] ?? 1.0;
+  if ($f['pmin']!=='')   { $where[] = 'p.price >= ?'; $args[] = (float)$f['pmin'] / $rate; }
+  if ($f['pmax']!=='')   { $where[] = 'p.price <= ?'; $args[] = (float)$f['pmax'] / $rate; }
   if ($f['region']) { $where[] = 'p.region = ?'; $args[] = $f['region']; }
 
   $sql = "SELECT p.*,
@@ -474,24 +476,79 @@ elseif ($tab === 'products'):
     <a href="?tab=products&add=1" class="btn-add-glow" data-testid="add-product-glow" title="Add new product"><i class="bi bi-plus-lg"></i></a>
   </div>
 
-  <!-- FILTER BAR -->
-  <form class="card-e p-3 mb-3" method="get" data-testid="product-filters">
+  <!-- ELEGANT FILTER BAR -->
+  <form class="card-e mb-3" method="get" data-testid="product-filters">
     <input type="hidden" name="tab" value="products">
-    <div class="row g-2">
-      <div class="col-md-3"><input class="form-control form-control-sm" name="q" value="<?= esc($f['q']) ?>" placeholder="Search name / SKU"></div>
-      <div class="col-md-1"><select class="form-select form-select-sm" name="year"><option value="">Year</option><?php foreach($years as $y): ?><option value="<?= $y ?>" <?= $f['year']==$y?'selected':'' ?>><?= $y ?></option><?php endforeach; ?></select></div>
-      <div class="col-md-1"><select class="form-select form-select-sm" name="os"><option value="">OS</option><?php foreach($oss as $o): ?><option value="<?= esc($o) ?>" <?= $f['os']===$o?'selected':'' ?>><?= esc($o) ?></option><?php endforeach; ?></select></div>
-      <div class="col-md-2"><select class="form-select form-select-sm" name="cat"><option value="">Category</option><?php foreach($cats as $c): ?><option value="<?= esc($c) ?>" <?= $f['cat']===$c?'selected':'' ?>><?= esc($c) ?></option><?php endforeach; ?></select></div>
-      <div class="col-md-1"><select class="form-select form-select-sm" name="brand"><option value="">Brand</option><?php foreach($brands as $b): ?><option value="<?= esc($b) ?>" <?= $f['brand']===$b?'selected':'' ?>><?= esc($b) ?></option><?php endforeach; ?></select></div>
-      <div class="col-md-1"><select class="form-select form-select-sm" name="status"><option value="">Status</option><option value="1" <?= $f['status']==='1'?'selected':'' ?>>Active</option><option value="0" <?= $f['status']==='0'?'selected':'' ?>>Inactive</option></select></div>
-      <div class="col-md-1"><input class="form-control form-control-sm" type="number" step="0.01" name="pmin" value="<?= esc($f['pmin']) ?>" placeholder="Min $"></div>
-      <div class="col-md-1"><input class="form-control form-control-sm" type="number" step="0.01" name="pmax" value="<?= esc($f['pmax']) ?>" placeholder="Max $"></div>
-      <div class="col-md-1"><select class="form-select form-select-sm" name="stock"><option value="">Stock</option><option value="in" <?= $f['stock']==='in'?'selected':'' ?>>In</option><option value="low" <?= $f['stock']==='low'?'selected':'' ?>>Low</option><option value="out" <?= $f['stock']==='out'?'selected':'' ?>>Out</option></select></div>
-      <div class="col-md-1"><select class="form-select form-select-sm" name="p_region"><option value="">Region</option><?php foreach(all_regions() as $r): ?><option value="<?= esc($r['code']) ?>" <?= $f['region']===$r['code']?'selected':'' ?>><?= esc($r['code']) ?></option><?php endforeach; ?></select></div>
+    <div class="p-3" style="border-bottom:1px solid var(--border);">
+      <div class="d-flex align-items-center gap-2">
+        <i class="bi bi-search text-muted"></i>
+        <input class="form-control border-0 shadow-none p-1 bg-transparent" style="color:var(--text);font-size:14px;" name="q" value="<?= esc($f['q']) ?>" placeholder="Search by product name or SKU…">
+        <button class="btn btn-soft-blue btn-sm"><i class="bi bi-funnel me-1"></i>Apply</button>
+        <a href="?tab=products" class="btn btn-soft-gray btn-sm" title="Clear all filters"><i class="bi bi-x-lg"></i></a>
+      </div>
     </div>
-    <div class="d-flex gap-2 mt-2 justify-content-end">
-      <a href="?tab=products" class="btn btn-soft-gray btn-sm"><i class="bi bi-x-lg me-1"></i>Reset</a>
-      <button class="btn btn-soft-blue btn-sm"><i class="bi bi-funnel me-1"></i>Apply Filters</button>
+    <div class="p-3">
+      <div class="row g-2">
+        <div class="col-6 col-md-3 col-lg">
+          <label class="small text-muted mb-1"><i class="bi bi-calendar3 me-1"></i>Year</label>
+          <select class="form-select form-select-sm" name="year"><option value="">All years</option><?php foreach($years as $y): ?><option value="<?= $y ?>" <?= $f['year']==$y?'selected':'' ?>><?= $y ?></option><?php endforeach; ?></select>
+        </div>
+        <div class="col-6 col-md-3 col-lg">
+          <label class="small text-muted mb-1"><i class="bi bi-display me-1"></i>OS</label>
+          <select class="form-select form-select-sm" name="os"><option value="">All OS</option><?php foreach($oss as $o): ?><option value="<?= esc($o) ?>" <?= $f['os']===$o?'selected':'' ?>><?= esc($o) ?></option><?php endforeach; ?></select>
+        </div>
+        <div class="col-6 col-md-3 col-lg">
+          <label class="small text-muted mb-1"><i class="bi bi-tag me-1"></i>Category</label>
+          <select class="form-select form-select-sm" name="cat"><option value="">All categories</option><?php foreach($cats as $c): ?><option value="<?= esc($c) ?>" <?= $f['cat']===$c?'selected':'' ?>><?= esc($c) ?></option><?php endforeach; ?></select>
+        </div>
+        <div class="col-6 col-md-3 col-lg">
+          <label class="small text-muted mb-1"><i class="bi bi-bookmark-star me-1"></i>Brand</label>
+          <select class="form-select form-select-sm" name="brand"><option value="">All brands</option><?php foreach($brands as $b): ?><option value="<?= esc($b) ?>" <?= $f['brand']===$b?'selected':'' ?>><?= esc($b) ?></option><?php endforeach; ?></select>
+        </div>
+        <div class="col-6 col-md-3 col-lg">
+          <label class="small text-muted mb-1"><i class="bi bi-toggle-on me-1"></i>Status</label>
+          <select class="form-select form-select-sm" name="status"><option value="">All status</option><option value="1" <?= $f['status']==='1'?'selected':'' ?>>Active</option><option value="0" <?= $f['status']==='0'?'selected':'' ?>>Inactive</option></select>
+        </div>
+        <div class="col-6 col-md-3 col-lg">
+          <label class="small text-muted mb-1"><i class="bi bi-box-seam me-1"></i>Stock</label>
+          <select class="form-select form-select-sm" name="stock"><option value="">Any</option><option value="in" <?= $f['stock']==='in'?'selected':'' ?>>In stock</option><option value="low" <?= $f['stock']==='low'?'selected':'' ?>>Low (&lt;5)</option><option value="out" <?= $f['stock']==='out'?'selected':'' ?>>Out</option></select>
+        </div>
+        <div class="col-6 col-md-3 col-lg">
+          <label class="small text-muted mb-1"><i class="bi bi-globe me-1"></i>Region</label>
+          <select class="form-select form-select-sm" name="p_region"><option value="">All regions</option><?php foreach(all_regions() as $r): ?><option value="<?= esc($r['code']) ?>" <?= $f['region']===$r['code']?'selected':'' ?>><?= esc($r['code']) ?> · <?= esc($r['currency_symbol']) ?></option><?php endforeach; ?></select>
+        </div>
+        <div class="col-6 col-md-3 col-lg">
+          <label class="small text-muted mb-1"><i class="bi bi-currency-dollar me-1"></i>Price range (<?= esc($rg['currency_symbol']) ?>)</label>
+          <div class="d-flex gap-1">
+            <input class="form-control form-control-sm" type="number" step="0.01" name="pmin" value="<?= esc($f['pmin']) ?>" placeholder="Min">
+            <input class="form-control form-control-sm" type="number" step="0.01" name="pmax" value="<?= esc($f['pmax']) ?>" placeholder="Max">
+          </div>
+        </div>
+      </div>
+
+      <?php // Active filter chips
+      $chips = [];
+      $chipMap = ['q'=>'Search','year'=>'Year','os'=>'OS','cat'=>'Category','brand'=>'Brand','status'=>'Status','stock'=>'Stock','region'=>'Region','pmin'=>'Min','pmax'=>'Max'];
+      foreach ($f as $k=>$v) {
+        if ($v === '' || $v === null) continue;
+        $label = $chipMap[$k] ?? $k;
+        $val = $k==='status' ? ($v=='1'?'Active':'Inactive') : $v;
+        // Build remove URL
+        $remove = $_GET; unset($remove[$k==='region'?'p_region':$k]);
+        $remove['tab']='products';
+        $chips[] = ['label'=>$label, 'value'=>$val, 'url'=>'?'.http_build_query($remove)];
+      }
+      if ($chips): ?>
+        <div class="d-flex gap-1 flex-wrap mt-3">
+          <small class="text-muted me-1 mt-1">Active:</small>
+          <?php foreach ($chips as $c): ?>
+            <a href="<?= esc($c['url']) ?>" class="s-badge sent text-decoration-none" style="font-size:11px;">
+              <?= esc($c['label']) ?>: <strong><?= esc($c['value']) ?></strong> <i class="bi bi-x"></i>
+            </a>
+          <?php endforeach; ?>
+          <a href="?tab=products" class="s-badge failed text-decoration-none" style="font-size:11px;">Clear all <i class="bi bi-x-lg"></i></a>
+        </div>
+      <?php endif; ?>
     </div>
   </form>
 
@@ -520,9 +577,9 @@ elseif ($tab === 'products'):
           <div class="fw-bold text-truncate" title="<?= esc($p['name']) ?>" style="font-size:12px;line-height:1.2;"><?= esc($p['name']) ?></div>
           <div class="text-muted" style="font-size:10px;"><code style="font-size:10px;"><?= esc($p['sku']) ?></code> · <?= esc($p['platform']) ?></div>
           <div class="d-flex align-items-baseline gap-1 mt-1">
-            <strong style="color:#10b981;font-size:13px;">$<?= number_format($p['price'],2) ?></strong>
+            <strong style="color:#10b981;font-size:13px;"><?= esc($rg['currency_symbol']) ?><?= number_format(region_price((float)$p['price']),2) ?></strong>
             <?php if ($p['original_price'] && $p['original_price'] > $p['price']): ?>
-              <small class="text-muted text-decoration-line-through" style="font-size:10px;">$<?= number_format($p['original_price'],2) ?></small>
+              <small class="text-muted text-decoration-line-through" style="font-size:10px;"><?= esc($rg['currency_symbol']) ?><?= number_format(region_price((float)$p['original_price']),2) ?></small>
             <?php endif; ?>
           </div>
           <div class="d-flex justify-content-between mt-1" style="font-size:10px;">

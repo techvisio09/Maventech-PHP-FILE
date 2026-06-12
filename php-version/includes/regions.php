@@ -34,3 +34,19 @@ function region_filter_sql(string $alias = ''): string {
     $pre = $alias === '' ? '' : ($alias . '.');
     return $pre . "region = " . db()->quote(active_region_code());
 }
+
+/** Static FX map (USD base). For production wire to live FX API. */
+function region_rates(): array {
+    return ['US' => 1.00, 'UK' => 0.79, 'CA' => 1.37, 'EU' => 0.92];
+}
+
+/** Convert a USD-stored price into the active region's currency value. */
+function region_price(float $usd): float {
+    $rates = region_rates();
+    return $usd * ($rates[active_region_code()] ?? 1.0);
+}
+
+/** Format an originally-USD price into the active region's currency string. */
+function region_money_from_usd(float $usd): string {
+    return region_money(region_price($usd));
+}
