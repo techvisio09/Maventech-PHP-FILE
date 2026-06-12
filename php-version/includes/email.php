@@ -438,6 +438,57 @@ function default_email_template(): string {
 </body></html>';
 }
 
+/**
+ * Render a DB-stored email template (by `code`) with the standard
+ * substitutions. Returns null when the template is missing/inactive.
+ * Centralises the Company-Info pipeline so that updating the
+ * Dashboard → Company Info card propagates to every transactional email.
+ */
+function render_template(string $code, array $vars = []): ?string {
+    try {
+        $row = db()->prepare("SELECT html FROM email_templates WHERE code=? AND active=1 LIMIT 1");
+        $row->execute([$code]);
+        $html = (string)($row->fetchColumn() ?: '');
+    } catch (Throwable $e) { return null; }
+    if (trim($html) === '') return null;
+
+    $co = company_info();
+    $logoHtml = $co['logo']
+        ? '<img src="' . esc($co['logo']) . '" alt="' . esc($co['name']) . ' logo" style="max-height:48px;max-width:200px;display:inline-block;vertical-align:middle;">'
+        : '';
+
+    $base = [
+        '{{company_name}}'    => esc($co['name']),
+        '{{company_logo}}'    => $logoHtml,
+        '{{company_address}}' => nl2br(esc($co['address'])),
+        '{{support_email}}'   => esc($co['email']),
+        '{{support_phone}}'   => esc($co['phone']),
+        '{{year}}'            => date('Y'),
+        '{{tracking_pixel}}'  => '',
+    ];
+    foreach ($vars as $k => $v) { $base['{{' . $k . '}}'] = $v; }
+    return strtr($html, $base);
+}
+
+function render_template_subject(string $code, array $vars = []): ?string {
+    try {
+        $row = db()->prepare("SELECT subject FROM email_templates WHERE code=? AND active=1 LIMIT 1");
+        $row->execute([$code]);
+        $s = (string)($row->fetchColumn() ?: '');
+    } catch (Throwable $e) { return null; }
+    if ($s === '') return null;
+    $co = company_info();
+    $base = [
+        '{{company_name}}'  => $co['name'],
+        '{{support_email}}' => $co['email'],
+        '{{support_phone}}' => $co['phone'],
+        '{{year}}'          => date('Y'),
+    ];
+    foreach ($vars as $k => $v) { $base['{{'.$k.'}}'] = $v; }
+    return strtr($s, $base);
+}
+
+
 function render_products_block(array $assignments): string {
     $rows = '';
     foreach ($assignments as $a) {
@@ -502,15 +553,23 @@ function build_order_email_html(array $order, array $items, array $assignments, 
     $base = rtrim(site_url(), '/');
     $pixel = '<img src="' . $base . '/track-open.php?t=' . urlencode($trackingToken) . '" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0;">';
 
+    $co = company_info();
+    $logoHtml = $co['logo']
+        ? '<img src="' . esc($co['logo']) . '" alt="' . esc($co['name']) . ' logo" style="max-height:48px;max-width:200px;display:inline-block;vertical-align:middle;">'
+        : '';
+    $addressHtml = $co['address'] ? nl2br(esc($co['address'])) : '';
+
     $replacements = [
-        '{{company_name}}'       => esc(defined('SITE_BRAND') ? SITE_BRAND : 'Maventech Software'),
+        '{{company_name}}'       => esc($co['name']),
+        '{{company_logo}}'       => $logoHtml,
+        '{{company_address}}'    => $addressHtml,
         '{{customer_name}}'      => esc(($order['first_name'] ?? '') ?: 'there'),
         '{{customer_email}}'     => esc($order['email'] ?? ''),
         '{{order_number}}'       => esc($order['order_number'] ?? ''),
         '{{amount}}'             => number_format((float)($order['total'] ?? 0), 2),
         '{{statement_name}}'     => esc($stmtName),
-        '{{support_email}}'      => esc(defined('SITE_EMAIL') ? SITE_EMAIL : ''),
-        '{{support_phone}}'      => esc(defined('SITE_PHONE') ? SITE_PHONE : ''),
+        '{{support_email}}'      => esc($co['email']),
+        '{{support_phone}}'      => esc($co['phone']),
         '{{year}}'               => date('Y'),
         '{{installation_guide}}' => $guideHtml,
         '{{products_block}}'     => render_products_block($assignments),
@@ -632,17 +691,28 @@ function fulfill_order(int $orderId): void {
         $pdo->prepare('INSERT INTO customer_reviews (order_id, product_slug, customer_email, customer_name, request_token, region) VALUES (?,?,?,?,?,?)')
             ->execute([$orderId, $item['product_slug'], $order['email'], trim($order['first_name'].' '.$order['last_name']), $tok, $order['region'] ?? 'US']);
         $reviewUrl = rtrim(site_url(),'/') . '/review.php?t=' . $tok;
-        $reviewHtml = '<!doctype html><html><body style="font-family:Arial,sans-serif;background:#f8fafc;padding:30px;">
-          <div style="max-width:580px;margin:0 auto;background:#fff;border-radius:14px;padding:32px;box-shadow:0 4px 20px rgba(0,0,0,.05);">
-            <div style="text-align:center;font-size:18px;font-weight:800;color:#0f172a;">'.esc(SITE_BRAND).'</div>
-            <h2 style="color:#0f172a;text-align:center;margin-top:16px;">How was your purchase, '.esc($order['first_name']).'?</h2>
-            <p style="color:#64748b;text-align:center;">We hope <strong>'.esc($item['name']).'</strong> is working great. Would you take 30 seconds to share your experience?</p>
-            <div style="text-align:center;margin:24px 0;">
-              <div style="font-size:32px;letter-spacing:6px;">★★★★★</div>
-              <a href="'.$reviewUrl.'" style="display:inline-block;margin-top:18px;padding:12px 32px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;border-radius:999px;text-decoration:none;font-weight:700;">Leave a Review</a>
-            </div>
-            <p style="font-size:12px;color:#94a3b8;text-align:center;">Includes an AI-assist option to help write your comment based on your rating. Thank you!</p>
-          </div></body></html>';
-        send_email($order['email'], 'How was your '.$item['name'].'? · Quick 30-second review', $reviewHtml, $orderId, 'review_request');
+        $vars = [
+            'customer_name' => esc(($order['first_name'] ?? '') ?: 'there'),
+            'customer_email'=> esc($order['email'] ?? ''),
+            'order_number'  => esc($order['order_number'] ?? ''),
+            'amount'        => number_format((float)($order['total'] ?? 0), 2),
+            'product_name'  => esc($item['name']),
+            'review_url'    => $reviewUrl,
+        ];
+        $reviewHtml = render_template('review_request', $vars);
+        if ($reviewHtml === null) {
+            // Fallback to baked-in default if the admin's template is empty.
+            $tplHtml = default_review_template();
+            $reviewHtml = strtr($tplHtml, array_merge([
+                '{{company_name}}'  => esc(company_info()['name']),
+                '{{support_email}}' => esc(company_info()['email']),
+                '{{support_phone}}' => esc(company_info()['phone']),
+                '{{year}}'          => date('Y'),
+                '{{tracking_pixel}}'=> '',
+            ], array_combine(array_map(fn($k) => '{{'.$k.'}}', array_keys($vars)), array_values($vars))));
+        }
+        $subj = render_template_subject('review_request', $vars)
+              ?: ('How was your ' . $item['name'] . '? · Quick 30-second review');
+        send_email($order['email'], $subj, $reviewHtml, $orderId, 'review_request');
     }
 }

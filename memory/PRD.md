@@ -127,6 +127,13 @@ Create a comprehensive and user-friendly Admin Panel for Maventech Software with
   - **Review Request** (rebuilt) — gradient brand header with embossed company name + M-logo, 5 clickable golden stars, AI-assist card ("Need help finding the words?"), full-review CTA, "Thanks for your valuable feedback" sign-off, support footer.
   - **Order Delivery** kept its existing polished default; subject updated to "Your {{product_name}} license is ready".
   - Helper `seed-templates.php` (with `--force` flag) populates these into the `email_templates` DB rows so they appear instantly in the admin Templates editor and live preview. Verified end-to-end via curl: each template loads with its signature elements (AUTHORIZED MICROSOFT RESELLER, PAYMENT PENDING, REFUND INITIATED, EXCLUSIVE OFFER, How did we do).
+- **[Feb 2026]** Dashboard **Company Info card** — single source of truth for email branding:
+  - New card at the top of the dashboard with: Company Name, Email Address, Toll-free Number, Company Address, and **Company Logo** (upload via AJAX to `/uploads/company/`).
+  - Read-only summary by default; **Edit** button reveals an inline form. Logo uploads through `/ajax/company-logo.php` (≤3 MB, JPG/PNG/GIF/WEBP/SVG); Remove button clears the logo.
+  - All values persist via the existing `settings` table (`company_name`, `company_email`, `company_phone`, `company_address`, `company_logo`).
+  - New helper `company_info()` in `includes/settings.php` is the single read-point used by `build_order_email_html()` and the centralised `render_template()` so every transactional email (order delivery, lead follow-up, order pending, refund, review request) automatically pulls the current company name, email, phone, address and logo. Updating the Dashboard card propagates immediately to every email and the template-editor's live preview.
+  - New placeholders `{{company_logo}}` and `{{company_address}}` available in the "Insert variable" dropdown.
+  - `fulfill_order()` review-request flow refactored to use the editable DB template via `render_template('review_request', …)` so it now also picks up the Company Info card.
 
 ## Test Credentials
 See `/app/memory/test_credentials.md`.

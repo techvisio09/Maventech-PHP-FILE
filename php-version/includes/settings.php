@@ -35,3 +35,18 @@ function statement_name_for(string $payment_method): string {
     if ($v === '') $v = setting_get('statement_name_card', '');
     return $v !== '' ? $v : SITE_LEGAL;
 }
+
+/**
+ * Single source of truth for company branding shown across emails.
+ * Reads from the Dashboard → "Company Info" card; falls back to the
+ * SITE_BRAND / SITE_EMAIL / SITE_PHONE constants when not customised.
+ */
+function company_info(): array {
+    return [
+        'name'    => setting_get('company_name',    defined('SITE_BRAND') ? SITE_BRAND : ''),
+        'email'   => setting_get('company_email',   defined('SITE_EMAIL') ? SITE_EMAIL : ''),
+        'phone'   => setting_get('company_phone',   defined('SITE_PHONE') ? SITE_PHONE : ''),
+        'address' => setting_get('company_address', ''),
+        'logo'    => setting_get('company_logo',    ''),
+    ];
+}
