@@ -337,8 +337,36 @@ hr { border-color: var(--border); opacity:.5; }
 
 @media (max-width: 991px) {
   .adm-top .brand-center { position:static; transform:none; }
-  .adm-shell { flex-direction:column; }
-  .adm-sidebar { width:100%; position:static; }
+  .adm-top .brand-center small { display:none; }
+  .adm-shell { flex-direction:column; padding:14px; gap:14px; }
+  .adm-sidebar { width:260px; position:fixed; top:0; left:-280px; height:100vh; z-index:2500; border-radius:0; padding-top:60px; transition:left .25s ease; box-shadow:0 0 20px rgba(0,0,0,.25); overflow-y:auto; }
+  .adm-sidebar.open { left:0; }
+  .adm-sidebar-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:2400; }
+  .adm-sidebar.open ~ .adm-sidebar-overlay,
+  .adm-sidebar.open + .adm-sidebar-overlay { display:block; }
+  .adm-hamburger { display:inline-flex !important; }
+  .adm-pill { padding:5px 9px; font-size:11px; }
+  .adm-pill .ms-1 { display:none; }
+}
+.adm-hamburger {
+  display:none;
+  width:36px; height:36px; border-radius:9px;
+  background: var(--bg); border:1px solid var(--border);
+  align-items:center; justify-content:center;
+  color: var(--text); cursor:pointer; font-size:20px;
+}
+.adm-hamburger:hover { background: var(--gray-soft); }
+
+/* Mobile-friendly tables (admin) */
+@media (max-width: 768px) {
+  .tbl-e { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .tbl-e table { min-width: 600px; }
+  .card-e { border-radius:10px; }
+  .card-e.p-3 { padding:12px !important; }
+  .kpi-tile { padding:14px 14px 12px; }
+  .kpi-tile .kpi-value { font-size:20px; }
+  .row.g-3 > [class^="col-"], .row.g-4 > [class^="col-"] { margin-bottom:8px; }
+  h5.fw-bold { font-size:16px; }
 }
 </style>
 </head>
@@ -346,20 +374,9 @@ hr { border-color: var(--border); opacity:.5; }
 
 <header class="adm-top" data-testid="adm-topbar">
   <div class="left">
-    <div class="adm-dropdown" id="ddRegion">
-      <button class="adm-pill" onclick="document.getElementById('ddRegion').classList.toggle('open')">
-        <i class="bi bi-globe"></i> <?= esc($rg['code']) ?> · <?= esc($rg['currency']) ?> (<?= esc($rg['currency_symbol']) ?>)
-        <i class="bi bi-chevron-down ms-1"></i>
-      </button>
-      <div class="adm-dropdown-menu">
-        <?php foreach (all_regions() as $r): ?>
-          <a href="?<?= http_build_query(array_merge($_GET, ['region' => $r['code']])) ?>" data-testid="region-<?= esc($r['code']) ?>">
-            <i class="bi bi-flag<?= $r['code']===$rg['code']?'-fill text-primary':'' ?>"></i>
-            <div><div class="fw-semibold"><?= esc($r['name']) ?></div><small class="text-muted"><?= esc($r['currency_symbol']) ?> <?= esc($r['currency']) ?> · Tax <?= number_format($r['tax_rate']*100,1) ?>%</small></div>
-          </a>
-        <?php endforeach; ?>
-      </div>
-    </div>
+    <button class="adm-hamburger" data-testid="sidebar-toggle" onclick="document.querySelector('.adm-sidebar').classList.toggle('open')" title="Menu">
+      <i class="bi bi-list"></i>
+    </button>
   </div>
 
   <div class="brand-center">
@@ -371,6 +388,20 @@ hr { border-color: var(--border); opacity:.5; }
   </div>
 
   <div class="right">
+    <div class="adm-dropdown" id="ddRegion" data-testid="region-dropdown">
+      <button class="adm-pill" onclick="document.getElementById('ddRegion').classList.toggle('open')" title="Switch region / currency">
+        <i class="bi bi-globe"></i> <?= esc($rg['code']) ?> · <?= esc($rg['currency_symbol']) ?>
+        <i class="bi bi-chevron-down ms-1"></i>
+      </button>
+      <div class="adm-dropdown-menu">
+        <?php foreach (all_regions() as $r): ?>
+          <a href="?<?= http_build_query(array_merge($_GET, ['region' => $r['code']])) ?>" data-testid="region-<?= esc($r['code']) ?>">
+            <i class="bi bi-flag<?= $r['code']===$rg['code']?'-fill text-primary':'' ?>"></i>
+            <div><div class="fw-semibold"><?= esc($r['name']) ?></div><small class="text-muted"><?= esc($r['currency_symbol']) ?> <?= esc($r['currency']) ?> · Tax <?= number_format($r['tax_rate']*100,1) ?>%</small></div>
+          </a>
+        <?php endforeach; ?>
+      </div>
+    </div>
     <a class="adm-iconbtn" href="?theme=<?= $adminMode==='dark'?'light':'dark' ?>" title="Toggle theme" data-testid="theme-toggle">
       <i class="bi <?= $adminMode==='dark'?'bi-sun':'bi-moon-stars' ?>"></i>
     </a>
@@ -406,7 +437,7 @@ hr { border-color: var(--border); opacity:.5; }
       </a>
     <?php endforeach; ?>
     <div class="side-section">Catalog</div>
-    <?php foreach (['products','keys'] as $k): $i = $navItems[$k]; ?>
+    <?php foreach (['products'] as $k): $i = $navItems[$k]; ?>
       <a class="item <?= $adminActive===$k?'active':'' ?>" href="<?= esc($i['href']) ?>" data-testid="adm-nav-<?= $k ?>">
         <i class="bi <?= esc($i['icon']) ?>"></i><?= esc($i['label']) ?>
       </a>
@@ -430,6 +461,7 @@ hr { border-color: var(--border); opacity:.5; }
       </a>
     <?php endforeach; ?>
   </aside>
+  <div class="adm-sidebar-overlay" onclick="document.querySelector('.adm-sidebar').classList.remove('open')"></div>
 
   <main class="adm-content">
 
