@@ -64,9 +64,67 @@ $admin       = $admin ?? current_admin();
   --blue-soft: #dbeafe;
 }
 [data-bs-theme="dark"] {
-  --bg: #0b1220; --card-bg: #111827; --border: #1f2937; --text: #e5e7eb; --muted: #94a3b8;
-  --green-soft:#064e3b; --red-soft:#7f1d1d; --amber-soft:#78350f; --gray-soft:#374151; --blue-soft:#1e3a8a;
+  /* Softer "light dark" palette — easier on the eyes, all text stays readable */
+  --bg: #1e293b;             /* slate-800 — page bg (was #0b1220) */
+  --card-bg: #334155;        /* slate-700 — card bg (was #111827) */
+  --border: #475569;         /* slate-600 — visible borders */
+  --text: #f1f5f9;           /* slate-100 — primary text */
+  --muted: #cbd5e1;          /* slate-300 — secondary text (was #94a3b8) */
+  --gray-soft: #475569;
+  --blue-soft: #1e40af;
+  --green-soft:#065f46; --red-soft:#991b1b; --amber-soft:#92400e;
 }
+/* Dark-mode contrast fixes: code blocks, links, soft badges, tables */
+[data-bs-theme="dark"] code { background: rgba(255,255,255,0.08); color:#e0e7ff; }
+[data-bs-theme="dark"] a { color:#93c5fd; }
+[data-bs-theme="dark"] a:hover { color:#bfdbfe; }
+[data-bs-theme="dark"] .text-muted { color:#cbd5e1 !important; }
+[data-bs-theme="dark"] .s-badge { color:#f1f5f9; }
+[data-bs-theme="dark"] .s-badge.paid, [data-bs-theme="dark"] .s-badge.delivered, [data-bs-theme="dark"] .s-badge.sent {
+  background:#065f46; color:#a7f3d0;
+}
+[data-bs-theme="dark"] .s-badge.failed, [data-bs-theme="dark"] .s-badge.refunded {
+  background:#991b1b; color:#fecaca;
+}
+[data-bs-theme="dark"] .s-badge.queued, [data-bs-theme="dark"] .s-badge.pending {
+  background:#92400e; color:#fde68a;
+}
+[data-bs-theme="dark"] .s-badge.opened { background:#1e40af; color:#bfdbfe; }
+[data-bs-theme="dark"] .btn-soft-blue { background:#1e3a8a; color:#bfdbfe; }
+[data-bs-theme="dark"] .btn-soft-blue:hover { background:#1d4ed8; color:#fff; }
+[data-bs-theme="dark"] .btn-soft-green { background:#065f46; color:#a7f3d0; }
+[data-bs-theme="dark"] .btn-soft-green:hover { background:#047857; color:#fff; }
+[data-bs-theme="dark"] .btn-soft-red { background:#7f1d1d; color:#fecaca; }
+[data-bs-theme="dark"] .btn-soft-red:hover { background:#991b1b; color:#fff; }
+[data-bs-theme="dark"] .btn-soft-gray { background:#475569; color:#e2e8f0; }
+[data-bs-theme="dark"] .btn-soft-gray:hover { background:#64748b; color:#fff; }
+[data-bs-theme="dark"] .form-control, [data-bs-theme="dark"] .form-select {
+  background: #1e293b; color:#f1f5f9; border-color: #475569;
+}
+[data-bs-theme="dark"] .form-control:focus, [data-bs-theme="dark"] .form-select:focus {
+  background:#1e293b; color:#f1f5f9; border-color:#3b82f6; box-shadow:0 0 0 .2rem rgba(59,130,246,.25);
+}
+[data-bs-theme="dark"] .form-control::placeholder { color:#94a3b8; }
+[data-bs-theme="dark"] .table { color: #f1f5f9; }
+[data-bs-theme="dark"] .table thead th { background: #2d3a52; color:#e2e8f0; border-bottom-color:#475569; }
+[data-bs-theme="dark"] .table tbody tr { border-bottom: 1px solid #475569; }
+[data-bs-theme="dark"] .table tbody tr:hover { background: rgba(255,255,255,0.03); }
+[data-bs-theme="dark"] .card-e { background: var(--card-bg); border-color: var(--border); color: var(--text); }
+[data-bs-theme="dark"] .kpi-tile { background: var(--card-bg); border-color: var(--border); }
+[data-bs-theme="dark"] .kpi-tile .kpi-label { color: #cbd5e1; }
+[data-bs-theme="dark"] .kpi-tile .kpi-value { color:#f1f5f9; }
+[data-bs-theme="dark"] .alert-success { background:#065f46; color:#a7f3d0; border-color:#047857; }
+[data-bs-theme="dark"] .alert-danger { background:#991b1b; color:#fecaca; border-color:#dc2626; }
+[data-bs-theme="dark"] .text-success { color:#6ee7b7 !important; }
+[data-bs-theme="dark"] .text-primary { color:#93c5fd !important; }
+[data-bs-theme="dark"] .text-danger { color:#fca5a5 !important; }
+[data-bs-theme="dark"] .text-warning { color:#fcd34d !important; }
+/* Ensure content stays inside boxes — alignment + overflow safety */
+.card-e { overflow:hidden; }
+.card-e .card-body-p { overflow-x:auto; }
+.tbl-e { overflow:auto; max-width:100%; }
+.tbl-e table { table-layout:auto; }
+.tbl-e td, .tbl-e th { vertical-align: middle; word-break: break-word; }
 
 body { background: var(--bg); color: var(--text); font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; font-size: 14px; }
 
