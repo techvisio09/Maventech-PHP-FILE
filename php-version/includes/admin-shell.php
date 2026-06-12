@@ -1,10 +1,18 @@
 <?php
 // Standalone admin layout (replaces public site header for /admin*, /inventory.php, /order-view.php).
-// Provides: centered company name, region switcher, currency selector, dark mode toggle,
-// user profile menu, + vertical sidebar navigation.
 require_once __DIR__ . '/regions.php';
 
 if (session_status() === PHP_SESSION_NONE) session_start();
+
+// Handle theme toggle BEFORE any HTML output
+if (isset($_GET['theme']) && in_array($_GET['theme'], ['dark','light'], true)) {
+    setcookie('adm_mode', $_GET['theme'], time()+86400*365, '/');
+    $_COOKIE['adm_mode'] = $_GET['theme']; // immediate effect
+    $u = strtok($_SERVER['REQUEST_URI'], '?');
+    $qs = $_GET; unset($qs['theme']);
+    header('Location: ' . $u . ($qs ? '?'.http_build_query($qs) : ''));
+    exit;
+}
 
 $adminMode = $_COOKIE['adm_mode'] ?? 'light';
 $rg = active_region();
@@ -248,26 +256,14 @@ hr { border-color: var(--border); opacity:.5; }
   <div class="left">
     <div class="adm-dropdown" id="ddRegion">
       <button class="adm-pill" onclick="document.getElementById('ddRegion').classList.toggle('open')">
-        <i class="bi bi-globe"></i> <?= esc($rg['code']) ?> · <?= esc($rg['currency']) ?>
-        <i class="bi bi-chevron-down"></i>
+        <i class="bi bi-globe"></i> <?= esc($rg['code']) ?> · <?= esc($rg['currency']) ?> (<?= esc($rg['currency_symbol']) ?>)
+        <i class="bi bi-chevron-down ms-1"></i>
       </button>
       <div class="adm-dropdown-menu">
         <?php foreach (all_regions() as $r): ?>
           <a href="?<?= http_build_query(array_merge($_GET, ['region' => $r['code']])) ?>" data-testid="region-<?= esc($r['code']) ?>">
-            <i class="bi bi-flag<?= $r['code']===$rg['code']?'-fill':'' ?>"></i>
-            <?= esc($r['name']) ?> <small class="ms-auto text-muted"><?= esc($r['currency']) ?></small>
-          </a>
-        <?php endforeach; ?>
-      </div>
-    </div>
-    <div class="adm-dropdown" id="ddCur">
-      <button class="adm-pill" onclick="document.getElementById('ddCur').classList.toggle('open')">
-        <i class="bi bi-currency-exchange"></i> <?= esc($rg['currency']) ?> (<?= esc($rg['currency_symbol']) ?>)
-      </button>
-      <div class="adm-dropdown-menu">
-        <?php foreach (all_regions() as $r): ?>
-          <a href="?<?= http_build_query(array_merge($_GET, ['region' => $r['code']])) ?>">
-            <?= esc($r['currency_symbol']) ?> <?= esc($r['currency']) ?> <small class="text-muted ms-auto"><?= esc($r['code']) ?></small>
+            <i class="bi bi-flag<?= $r['code']===$rg['code']?'-fill text-primary':'' ?>"></i>
+            <div><div class="fw-semibold"><?= esc($r['name']) ?></div><small class="text-muted"><?= esc($r['currency_symbol']) ?> <?= esc($r['currency']) ?> · Tax <?= number_format($r['tax_rate']*100,1) ?>%</small></div>
           </a>
         <?php endforeach; ?>
       </div>
@@ -306,14 +302,7 @@ hr { border-color: var(--border); opacity:.5; }
 </header>
 
 <?php
-// Theme toggle via query param → cookie
-if (isset($_GET['theme']) && in_array($_GET['theme'], ['dark','light'], true)) {
-    setcookie('adm_mode', $_GET['theme'], time()+86400*365, '/');
-    $u = strtok($_SERVER['REQUEST_URI'], '?');
-    $qs = $_GET; unset($qs['theme']);
-    header('Location: ' . $u . ($qs ? '?'.http_build_query($qs) : ''));
-    exit;
-}
+// Theme toggle is now handled at the top of this file BEFORE HTML output.
 ?>
 
 <div class="adm-shell">

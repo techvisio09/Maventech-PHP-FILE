@@ -17,10 +17,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
     if ($action === 'update_product') {
-        $pdo->prepare('UPDATE products SET price=?, original_price=?, badge=? WHERE slug=?')
-            ->execute([(float)$_POST['price'], $_POST['original_price']!==''?(float)$_POST['original_price']:null,
-                       trim($_POST['badge'])?:null, $_POST['slug']]);
-        header('Location: admin.php?tab=products&msg=Saved'); exit;
+        $pdo->prepare('UPDATE products SET name=?, sku=?, brand=?, year=?, platform=?, category=?, license_type=?,
+            price=?, original_price=?, badge=?, description=?, is_active=?, image=COALESCE(NULLIF(?,""),image) WHERE slug=?')
+            ->execute([
+                trim($_POST['name']), trim($_POST['sku']), trim($_POST['brand']) ?: null,
+                $_POST['year']!==''?(int)$_POST['year']:null, $_POST['platform'], $_POST['category'],
+                $_POST['license_type'], (float)$_POST['price'],
+                $_POST['original_price']!==''?(float)$_POST['original_price']:null,
+                trim($_POST['badge']) ?: null, trim($_POST['description'] ?? '') ?: null,
+                isset($_POST['is_active']) ? 1 : 0,
+                trim($_POST['image'] ?? ''), $_POST['slug']
+            ]);
+        header('Location: admin.php?tab=products&edit='.urlencode($_POST['slug']).'&msg=Saved'); exit;
+
+    } elseif ($action === 'add_product') {
+        $slug = preg_replace('/[^a-z0-9]+/i','-', strtolower(trim($_POST['name']))) . '-' . substr(md5(uniqid()),0,5);
+        $pdo->prepare('INSERT INTO products (slug,name,sku,brand,year,platform,category,license_type,price,original_price,badge,description,image,is_active,region,apps,rating,reviews) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,4.5,0)')
+            ->execute([$slug, trim($_POST['name']), trim($_POST['sku']) ?: 'SKU-'.strtoupper(substr(md5($slug),0,8)), trim($_POST['brand']) ?: null,
+                $_POST['year']!==''?(int)$_POST['year']:null, $_POST['platform'], $_POST['category'], $_POST['license_type'],
+                (float)$_POST['price'], $_POST['original_price']!==''?(float)$_POST['original_price']:null,
+                trim($_POST['badge']) ?: null, trim($_POST['description'] ?? '') ?: null, trim($_POST['image'] ?? '') ?: null,
+                isset($_POST['is_active']) ? 1 : 0, $region_code, '']);
+        header('Location: admin.php?tab=products&edit='.urlencode($slug).'&msg=Product+created'); exit;
+
+    } elseif ($action === 'duplicate_product') {
+        $src = $pdo->prepare('SELECT * FROM products WHERE slug=?'); $src->execute([$_POST['slug']]); $s = $src->fetch();
+        if ($s) {
+            $newSlug = $s['slug'] . '-copy-' . substr(md5(uniqid()),0,4);
+            $pdo->prepare('INSERT INTO products (slug,name,sku,brand,year,platform,category,license_type,price,original_price,badge,description,image,is_active,region,apps,rating,reviews) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+                ->execute([$newSlug, $s['name'].' (copy)', 'SKU-'.strtoupper(substr(md5($newSlug),0,8)),
+                    $s['brand'], $s['year'], $s['platform'], $s['category'], $s['license_type'],
+                    $s['price'], $s['original_price'], $s['badge'], $s['description'], $s['image'],
+                    $s['is_active'], $region_code, $s['apps'], $s['rating'], 0]);
+        }
+        header('Location: admin.php?tab=products&msg=Product+duplicated'); exit;
+
+    } elseif ($action === 'delete_product') {
+        $pdo->prepare('DELETE FROM products WHERE slug=?')->execute([$_POST['slug']]);
+        header('Location: admin.php?tab=products&msg=Product+deleted'); exit;
+
+    } elseif ($action === 'toggle_product') {
+        $pdo->prepare('UPDATE products SET is_active=1-is_active WHERE slug=?')->execute([$_POST['slug']]);
+        header('Location: admin.php?tab=products&msg=Status+toggled'); exit;
+
+    } elseif ($action === 'move_product') {
+        $pdo->prepare('UPDATE products SET category=? WHERE slug=?')->execute([$_POST['category'], $_POST['slug']]);
+        header('Location: admin.php?tab=products&msg=Moved'); exit;
+
+    } elseif ($action === 'old_update_product') {
 
     } elseif ($action === 'update_order') {
         $pdo->prepare('UPDATE orders SET status=? WHERE id=?')->execute([$_POST['status'], (int)$_POST['order_id']]);
@@ -210,47 +254,300 @@ if ($tab === 'dashboard'):
 // PRODUCTS (region-filtered)
 // ============================================================================
 elseif ($tab === 'products'):
-  $st = $pdo->prepare("SELECT p.*,
-      (SELECT COUNT(*) FROM license_keys lk WHERE lk.product_slug=p.slug AND lk.status='available' AND lk.region=?) AS avail_keys,
-      (SELECT COUNT(*) FROM license_keys lk WHERE lk.product_slug=p.slug AND lk.status='sold'      AND lk.region=?) AS sold_keys
-    FROM products p WHERE p.region=? OR p.region IS NULL ORDER BY p.name");
-  $st->execute([$region_code,$region_code,$region_code]);
+  // ---- Filters
+  $f = [
+    'q'       => trim($_GET['q'] ?? ''),
+    'year'    => $_GET['year'] ?? '',
+    'os'      => $_GET['os'] ?? '',
+    'cat'     => $_GET['cat'] ?? '',
+    'brand'   => $_GET['brand'] ?? '',
+    'status'  => $_GET['status'] ?? '',
+    'pmin'    => $_GET['pmin'] ?? '',
+    'pmax'    => $_GET['pmax'] ?? '',
+    'stock'   => $_GET['stock'] ?? '',
+    'region'  => $_GET['p_region'] ?? '',
+  ];
+  $where = ['1=1']; $args = [];
+  if ($f['q'])      { $where[] = '(p.name LIKE ? OR p.sku LIKE ?)'; $args[]="%{$f['q']}%"; $args[]="%{$f['q']}%"; }
+  if ($f['year']!=='')   { $where[] = 'p.year = ?';     $args[] = (int)$f['year']; }
+  if ($f['os'])     { $where[] = 'p.platform = ?'; $args[] = $f['os']; }
+  if ($f['cat'])    { $where[] = 'p.category = ?'; $args[] = $f['cat']; }
+  if ($f['brand'])  { $where[] = 'p.brand = ?';    $args[] = $f['brand']; }
+  if ($f['status']!=='') { $where[] = 'p.is_active = ?'; $args[] = (int)$f['status']; }
+  if ($f['pmin']!=='')   { $where[] = 'p.price >= ?'; $args[] = (float)$f['pmin']; }
+  if ($f['pmax']!=='')   { $where[] = 'p.price <= ?'; $args[] = (float)$f['pmax']; }
+  if ($f['region']) { $where[] = 'p.region = ?'; $args[] = $f['region']; }
+
+  $sql = "SELECT p.*,
+    (SELECT COUNT(*) FROM license_keys lk WHERE lk.product_slug=p.slug AND lk.status='available') AS avail_keys,
+    (SELECT COUNT(*) FROM license_keys lk WHERE lk.product_slug=p.slug AND lk.status='sold')      AS sold_keys
+    FROM products p WHERE " . implode(' AND ', $where) . " ORDER BY p.is_active DESC, p.name LIMIT 500";
+  $st = $pdo->prepare($sql); $st->execute($args);
   $products = $st->fetchAll();
+  if ($f['stock']==='in')    $products = array_filter($products, fn($p) => $p['avail_keys'] > 0);
+  if ($f['stock']==='out')   $products = array_filter($products, fn($p) => $p['avail_keys'] == 0);
+  if ($f['stock']==='low')   $products = array_filter($products, fn($p) => $p['avail_keys'] > 0 && $p['avail_keys'] < 5);
+
+  // ---- Filter dropdown values
+  $years  = $pdo->query('SELECT DISTINCT year FROM products WHERE year IS NOT NULL ORDER BY year DESC')->fetchAll(PDO::FETCH_COLUMN);
+  $oss    = $pdo->query('SELECT DISTINCT platform FROM products ORDER BY platform')->fetchAll(PDO::FETCH_COLUMN);
+  $cats   = $pdo->query('SELECT DISTINCT category FROM products ORDER BY category')->fetchAll(PDO::FETCH_COLUMN);
+  $brands = $pdo->query('SELECT DISTINCT brand FROM products WHERE brand IS NOT NULL ORDER BY brand')->fetchAll(PDO::FETCH_COLUMN);
+
+  $editSlug = $_GET['edit'] ?? ($_GET['add'] ?? '');
+  $isAdd = ($_GET['add'] ?? '') !== '';
+  $editing = null;
+  if ($editSlug && !$isAdd) {
+    $e = $pdo->prepare('SELECT * FROM products WHERE slug=?'); $e->execute([$editSlug]); $editing = $e->fetch();
+  } elseif ($isAdd) {
+    $editing = ['slug'=>'','name'=>'','sku'=>'','brand'=>'Microsoft','year'=>date('Y'),'platform'=>'Windows','category'=>($cats[0]??''),'license_type'=>'lifetime','price'=>'','original_price'=>'','badge'=>'','description'=>'','image'=>'','is_active'=>1,'rating'=>4.5,'reviews'=>0];
+  }
 ?>
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h5 class="fw-bold mb-0">Products <span class="text-muted fs-6">(<?= count($products) ?> in <?= esc($region_code) ?>)</span></h5>
-    <a href="inventory.php" class="btn-add-glow" data-testid="add-product-btn"><i class="bi bi-plus-lg"></i></a>
+
+  <!-- Header -->
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h5 class="fw-bold mb-0">Product Management <span class="text-muted fs-6">(<?= count($products) ?> shown)</span></h5>
+      <small class="text-muted">Filter, edit, add, duplicate, enable/disable products with full pricing + badge control.</small>
+    </div>
+    <a href="?tab=products&add=1" class="btn-add-glow" data-testid="add-product-glow" title="Add new product"><i class="bi bi-plus-lg"></i></a>
   </div>
-  <div class="row g-3" data-testid="products-grid">
-    <?php foreach ($products as $p): ?>
-      <div class="col-md-6 col-xl-4">
-        <div class="card-e p-3 h-100">
-          <div class="d-flex align-items-start gap-3 mb-3">
-            <?php if ($p['image']): ?><img src="<?= esc($p['image']) ?>" alt="" style="width:60px;height:60px;object-fit:contain;background:var(--bg);border-radius:8px;padding:5px;"><?php endif; ?>
-            <div class="flex-grow-1 min-width-0">
-              <div class="fw-semibold small"><?= esc($p['name']) ?></div>
-              <div class="small text-muted"><?= esc($p['platform']) ?> · <?= esc($p['category']) ?></div>
-              <a href="inventory.php?view=product&slug=<?= esc($p['slug']) ?>&tab=keys" class="small">Manage keys →</a>
-            </div>
+
+  <!-- FILTER BAR -->
+  <form class="card-e p-3 mb-3" method="get" data-testid="product-filters">
+    <input type="hidden" name="tab" value="products">
+    <div class="row g-2">
+      <div class="col-md-3"><input class="form-control form-control-sm" name="q" value="<?= esc($f['q']) ?>" placeholder="Search name / SKU"></div>
+      <div class="col-md-1"><select class="form-select form-select-sm" name="year"><option value="">Year</option><?php foreach($years as $y): ?><option value="<?= $y ?>" <?= $f['year']==$y?'selected':'' ?>><?= $y ?></option><?php endforeach; ?></select></div>
+      <div class="col-md-1"><select class="form-select form-select-sm" name="os"><option value="">OS</option><?php foreach($oss as $o): ?><option value="<?= esc($o) ?>" <?= $f['os']===$o?'selected':'' ?>><?= esc($o) ?></option><?php endforeach; ?></select></div>
+      <div class="col-md-2"><select class="form-select form-select-sm" name="cat"><option value="">Category</option><?php foreach($cats as $c): ?><option value="<?= esc($c) ?>" <?= $f['cat']===$c?'selected':'' ?>><?= esc($c) ?></option><?php endforeach; ?></select></div>
+      <div class="col-md-1"><select class="form-select form-select-sm" name="brand"><option value="">Brand</option><?php foreach($brands as $b): ?><option value="<?= esc($b) ?>" <?= $f['brand']===$b?'selected':'' ?>><?= esc($b) ?></option><?php endforeach; ?></select></div>
+      <div class="col-md-1"><select class="form-select form-select-sm" name="status"><option value="">Status</option><option value="1" <?= $f['status']==='1'?'selected':'' ?>>Active</option><option value="0" <?= $f['status']==='0'?'selected':'' ?>>Inactive</option></select></div>
+      <div class="col-md-1"><input class="form-control form-control-sm" type="number" step="0.01" name="pmin" value="<?= esc($f['pmin']) ?>" placeholder="Min $"></div>
+      <div class="col-md-1"><input class="form-control form-control-sm" type="number" step="0.01" name="pmax" value="<?= esc($f['pmax']) ?>" placeholder="Max $"></div>
+      <div class="col-md-1"><select class="form-select form-select-sm" name="stock"><option value="">Stock</option><option value="in" <?= $f['stock']==='in'?'selected':'' ?>>In</option><option value="low" <?= $f['stock']==='low'?'selected':'' ?>>Low</option><option value="out" <?= $f['stock']==='out'?'selected':'' ?>>Out</option></select></div>
+      <div class="col-md-1"><select class="form-select form-select-sm" name="p_region"><option value="">Region</option><?php foreach(all_regions() as $r): ?><option value="<?= esc($r['code']) ?>" <?= $f['region']===$r['code']?'selected':'' ?>><?= esc($r['code']) ?></option><?php endforeach; ?></select></div>
+    </div>
+    <div class="d-flex gap-2 mt-2 justify-content-end">
+      <a href="?tab=products" class="btn btn-soft-gray btn-sm"><i class="bi bi-x-lg me-1"></i>Reset</a>
+      <button class="btn btn-soft-blue btn-sm"><i class="bi bi-funnel me-1"></i>Apply Filters</button>
+    </div>
+  </form>
+
+  <!-- COMPACT PRODUCT GRID -->
+  <div class="row g-2" data-testid="products-grid">
+    <?php if (empty($products)): ?>
+      <div class="col-12 card-e p-5 text-center text-muted">No products match the current filters.</div>
+    <?php endif; ?>
+    <?php foreach ($products as $p):
+      $disc = ($p['original_price'] && $p['original_price'] > $p['price'])
+              ? round(100 - ($p['price']/$p['original_price']*100)) : 0;
+      $save = ($p['original_price'] && $p['original_price'] > $p['price']) ? $p['original_price'] - $p['price'] : 0;
+      $av = (int)$p['avail_keys'];
+    ?>
+      <div class="col-6 col-md-4 col-xl-3 col-xxl-2">
+        <div class="card-e h-100 position-relative" style="padding:8px;font-size:12px;<?= !$p['is_active']?'opacity:.55;':'' ?>" data-testid="prod-<?= esc($p['slug']) ?>">
+          <?php if ($p['badge']): ?>
+            <span style="position:absolute;top:6px;left:6px;background:#ef4444;color:#fff;font-weight:700;font-size:9px;padding:2px 6px;border-radius:4px;letter-spacing:.4px;"><?= esc($p['badge']) ?></span>
+          <?php endif; ?>
+          <?php if ($disc > 0): ?>
+            <span style="position:absolute;top:6px;right:6px;background:#facc15;color:#854d0e;font-weight:700;font-size:10px;padding:2px 6px;border-radius:4px;"><?= $disc ?>% OFF</span>
+          <?php endif; ?>
+          <div style="height:80px;background:var(--bg);border-radius:6px;display:flex;align-items:center;justify-content:center;margin-bottom:6px;">
+            <?php if ($p['image']): ?><img src="<?= esc($p['image']) ?>" style="max-height:72px;max-width:90%;object-fit:contain;"><?php else: ?><i class="bi bi-box-seam text-muted fs-3"></i><?php endif; ?>
           </div>
-          <div class="key-stats mb-3">
-            <div class="key-pill avail"><div class="num text-success"><?= (int)$p['avail_keys'] ?></div><div class="lbl">Available</div></div>
-            <div class="key-pill sold"><div class="num" style="color:#3b82f6;"><?= (int)$p['sold_keys'] ?></div><div class="lbl">Sold</div></div>
+          <div class="fw-bold text-truncate" title="<?= esc($p['name']) ?>" style="font-size:12px;line-height:1.2;"><?= esc($p['name']) ?></div>
+          <div class="text-muted" style="font-size:10px;"><code style="font-size:10px;"><?= esc($p['sku']) ?></code> · <?= esc($p['platform']) ?></div>
+          <div class="d-flex align-items-baseline gap-1 mt-1">
+            <strong style="color:#10b981;font-size:13px;">$<?= number_format($p['price'],2) ?></strong>
+            <?php if ($p['original_price'] && $p['original_price'] > $p['price']): ?>
+              <small class="text-muted text-decoration-line-through" style="font-size:10px;">$<?= number_format($p['original_price'],2) ?></small>
+            <?php endif; ?>
           </div>
-          <form method="post">
-            <input type="hidden" name="action" value="update_product">
-            <input type="hidden" name="slug" value="<?= esc($p['slug']) ?>">
-            <div class="row g-2">
-              <div class="col-6"><label class="form-label small mb-0">Price</label><input name="price" type="number" step="0.01" class="form-control form-control-sm" value="<?= esc($p['price']) ?>"></div>
-              <div class="col-6"><label class="form-label small mb-0">Original</label><input name="original_price" type="number" step="0.01" class="form-control form-control-sm" value="<?= esc($p['original_price'] ?? '') ?>"></div>
-              <div class="col-12"><input name="badge" class="form-control form-control-sm" value="<?= esc($p['badge'] ?? '') ?>" placeholder="Badge"></div>
-            </div>
-            <button class="btn btn-soft-blue btn-sm w-100 mt-2"><i class="bi bi-check2 me-1"></i>Save</button>
-          </form>
+          <div class="d-flex justify-content-between mt-1" style="font-size:10px;">
+            <span><span class="<?= $av==0?'text-danger':($av<5?'text-warning':'text-success') ?>">●</span> <?= $av ?> in stock</span>
+            <span class="<?= $p['is_active']?'text-success':'text-muted' ?>"><?= $p['is_active']?'Active':'Off' ?></span>
+          </div>
+          <div class="d-flex gap-1 mt-2">
+            <a href="?tab=products&edit=<?= urlencode($p['slug']) ?>" class="btn btn-soft-blue btn-sm flex-grow-1 py-0" style="font-size:11px;" data-testid="edit-<?= esc($p['slug']) ?>"><i class="bi bi-pencil"></i> Edit</a>
+            <form method="post" class="d-inline"><input type="hidden" name="action" value="toggle_product"><input type="hidden" name="slug" value="<?= esc($p['slug']) ?>"><button class="btn btn-soft-gray btn-sm py-0 px-2" style="font-size:11px;" title="<?= $p['is_active']?'Disable':'Enable' ?>"><i class="bi bi-<?= $p['is_active']?'eye-slash':'eye' ?>"></i></button></form>
+            <form method="post" class="d-inline"><input type="hidden" name="action" value="duplicate_product"><input type="hidden" name="slug" value="<?= esc($p['slug']) ?>"><button class="btn btn-soft-gray btn-sm py-0 px-2" style="font-size:11px;" title="Duplicate"><i class="bi bi-files"></i></button></form>
+            <form method="post" class="d-inline" onsubmit="return confirm('Delete this product permanently?');"><input type="hidden" name="action" value="delete_product"><input type="hidden" name="slug" value="<?= esc($p['slug']) ?>"><button class="btn btn-soft-red btn-sm py-0 px-2" style="font-size:11px;" title="Delete"><i class="bi bi-trash"></i></button></form>
+          </div>
         </div>
       </div>
     <?php endforeach; ?>
   </div>
+
+  <!-- EDIT / ADD MODAL -->
+  <?php if ($editing):
+    $editPrice = (float)($editing['price'] ?: 0);
+    $editOrig  = (float)($editing['original_price'] ?: 0);
+    $disc = ($editOrig > $editPrice && $editPrice > 0)
+            ? round(100 - ($editPrice/$editOrig*100)) : 0;
+    $editSave = max(0, $editOrig - $editPrice);
+    $hasDisc  = $editOrig > $editPrice;
+  ?>
+  <div class="modal d-block" style="background:rgba(0,0,0,.55);" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+      <div class="modal-content card-e" style="background:var(--card-bg);">
+        <div class="modal-header" style="border-color:var(--border);">
+          <h5 class="modal-title"><i class="bi bi-<?= $isAdd?'plus-square':'pencil-square' ?> me-2"></i><?= $isAdd?'Add Product':'Edit Product' ?></h5>
+          <a href="?tab=products" class="btn-close"></a>
+        </div>
+        <div class="modal-body">
+          <form method="post" id="prodForm">
+            <input type="hidden" name="action" value="<?= $isAdd?'add_product':'update_product' ?>">
+            <?php if (!$isAdd): ?><input type="hidden" name="slug" value="<?= esc($editing['slug']) ?>"><?php endif; ?>
+            <div class="row g-3">
+              <div class="col-lg-7">
+                <h6 class="fw-bold mb-2"><i class="bi bi-info-circle me-1"></i>Product Information</h6>
+                <div class="row g-2 mb-3">
+                  <div class="col-12"><label class="form-label small mb-0">Product Name *</label><input class="form-control form-control-sm" id="f_name" name="name" required value="<?= esc($editing['name']) ?>"></div>
+                  <div class="col-6"><label class="form-label small mb-0">SKU / Product ID</label><input class="form-control form-control-sm" id="f_sku" name="sku" value="<?= esc($editing['sku']) ?>"></div>
+                  <div class="col-6"><label class="form-label small mb-0">Brand</label><input class="form-control form-control-sm" name="brand" value="<?= esc($editing['brand'] ?? '') ?>"></div>
+                  <div class="col-4"><label class="form-label small mb-0">Year</label><input class="form-control form-control-sm" name="year" type="number" value="<?= esc($editing['year']) ?>"></div>
+                  <div class="col-4"><label class="form-label small mb-0">OS / Platform</label>
+                    <select class="form-select form-select-sm" id="f_platform" name="platform">
+                      <?php foreach (['Windows','Mac','Linux','Cross-platform'] as $o): ?><option value="<?= $o ?>" <?= $editing['platform']===$o?'selected':'' ?>><?= $o ?></option><?php endforeach; ?>
+                    </select>
+                  </div>
+                  <div class="col-4"><label class="form-label small mb-0">License Type</label>
+                    <select class="form-select form-select-sm" name="license_type">
+                      <?php foreach (['lifetime','subscription','single_use','multi_use'] as $o): ?><option value="<?= $o ?>" <?= ($editing['license_type'] ?? '')===$o?'selected':'' ?>><?= ucfirst(str_replace('_',' ',$o)) ?></option><?php endforeach; ?>
+                    </select>
+                  </div>
+                  <div class="col-8"><label class="form-label small mb-0">Category</label>
+                    <select class="form-select form-select-sm" id="f_cat" name="category">
+                      <?php foreach ($cats as $c): ?><option value="<?= esc($c) ?>" <?= $editing['category']===$c?'selected':'' ?>><?= esc($c) ?></option><?php endforeach; ?>
+                    </select>
+                  </div>
+                  <div class="col-4 d-flex align-items-end"><div class="form-check form-switch mt-2"><input type="checkbox" class="form-check-input" name="is_active" id="f_act" <?= ($editing['is_active'] ?? 1)?'checked':'' ?>><label class="form-check-label small" for="f_act">Active</label></div></div>
+                  <div class="col-12"><label class="form-label small mb-0">Image URL</label><input class="form-control form-control-sm" id="f_image" name="image" value="<?= esc($editing['image']) ?>" placeholder="https://… or upload to /uploads"></div>
+                  <div class="col-12"><label class="form-label small mb-0">Description</label><textarea class="form-control form-control-sm" id="f_desc" name="description" rows="3"><?= esc($editing['description'] ?? '') ?></textarea></div>
+                </div>
+
+                <h6 class="fw-bold mb-2"><i class="bi bi-tag me-1"></i>Pricing &amp; Discount</h6>
+                <div class="row g-2 mb-3">
+                  <div class="col-4"><label class="form-label small mb-0">Original Price</label><input class="form-control form-control-sm" id="f_orig" name="original_price" type="number" step="0.01" value="<?= esc($editing['original_price']) ?>" oninput="updPrev()"></div>
+                  <div class="col-4"><label class="form-label small mb-0">Sale Price *</label><input class="form-control form-control-sm" id="f_price" name="price" type="number" step="0.01" required value="<?= esc($editing['price']) ?>" oninput="updPrev()"></div>
+                  <div class="col-4">
+                    <label class="form-label small mb-0">Auto-Calculated</label>
+                    <div class="form-control form-control-sm bg-light" style="background:var(--bg)!important;">
+                      <span class="text-danger fw-bold" id="discOut"><?= $disc ?>% OFF</span>
+                      <small class="text-muted ms-1" id="saveOut">save $<?= number_format($editSave,2) ?></small>
+                    </div>
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label small mb-0">Promotional Badge</label>
+                    <div class="d-flex gap-1 flex-wrap mb-1">
+                      <?php foreach (['Best Seller','New Arrival','Limited Time Offer','Most Popular','Hot Deal','Recommended','Featured Product','Special Discount'] as $bg): ?>
+                        <button type="button" class="btn btn-soft-gray btn-sm py-0 px-2" style="font-size:11px;" onclick="document.getElementById('f_badge').value='<?= $bg ?>';updPrev();"><?= $bg ?></button>
+                      <?php endforeach; ?>
+                    </div>
+                    <input class="form-control form-control-sm" id="f_badge" name="badge" value="<?= esc($editing['badge']) ?>" oninput="updPrev()" placeholder="Or type custom badge text">
+                  </div>
+                </div>
+
+                <div class="d-flex gap-2 mt-3">
+                  <button class="btn btn-soft-blue"><i class="bi bi-check2 me-1"></i><?= $isAdd?'Create Product':'Save Changes' ?></button>
+                  <a href="?tab=products" class="btn btn-soft-gray">Cancel</a>
+                  <?php if (!$isAdd): ?>
+                    <button type="submit" formaction="?tab=products&dummy=1" name="action" value="duplicate_product" class="btn btn-soft-gray ms-auto"><i class="bi bi-files me-1"></i>Duplicate</button>
+                    <button type="submit" name="action" value="delete_product" formnovalidate class="btn btn-soft-red" onclick="return confirm('Delete permanently?')"><i class="bi bi-trash me-1"></i>Delete</button>
+                  <?php endif; ?>
+                </div>
+              </div>
+
+              <!-- LIVE PREVIEW -->
+              <div class="col-lg-5">
+                <h6 class="fw-bold mb-2"><i class="bi bi-eye me-1"></i>Live Website Preview</h6>
+                <div id="livePrev" class="card-e p-3" style="background:#fff;color:#1f2937;border:1px solid #e5e7eb;font-family:Arial,sans-serif;">
+                  <div class="position-relative" style="height:160px;background:#f8fafc;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;">
+                    <span id="pvBadge" style="position:absolute;top:8px;left:8px;background:#ef4444;color:#fff;font-weight:700;font-size:11px;padding:3px 8px;border-radius:5px;<?= $editing['badge']?'':'display:none;' ?>"><?= esc($editing['badge']) ?></span>
+                    <span id="pvDisc"  style="position:absolute;top:8px;right:8px;background:#facc15;color:#854d0e;font-weight:700;font-size:12px;padding:3px 8px;border-radius:5px;<?= $disc?'':'display:none;' ?>"><span id="pvDiscN"><?= $disc ?></span>% OFF</span>
+                    <img id="pvImg" src="<?= esc($editing['image']) ?>" style="max-height:140px;max-width:90%;object-fit:contain;<?= $editing['image']?'':'display:none;' ?>">
+                    <i id="pvNoimg" class="bi bi-box-seam text-muted" style="font-size:42px;<?= $editing['image']?'display:none;':'' ?>"></i>
+                  </div>
+                  <div style="font-size:11px;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;" id="pvCat"><?= esc($editing['category']) ?> · <span id="pvPlatform"><?= esc($editing['platform']) ?></span></div>
+                  <div style="font-size:16px;font-weight:700;margin:6px 0;color:#0f172a;" id="pvName"><?= esc($editing['name'] ?: 'Product Name') ?></div>
+                  <div style="font-size:13px;color:#64748b;line-height:1.5;" id="pvDesc"><?= esc(mb_strimwidth($editing['description'] ?? '', 0, 140, '…')) ?></div>
+                  <div style="margin:10px 0;">
+                    <span style="color:#f59e0b;">★★★★☆</span>
+                    <small style="color:#94a3b8;"><?= $editing['rating'] ?? '4.5' ?> (<?= $editing['reviews'] ?? 0 ?> reviews)</small>
+                  </div>
+                  <div class="d-flex align-items-baseline gap-2 mb-1">
+                    <span style="font-size:22px;font-weight:800;color:#10b981;" id="pvPrice">$<?= number_format($editing['price'] ?: 0,2) ?></span>
+                    <span id="pvOrig" style="font-size:14px;color:#94a3b8;text-decoration:line-through;<?= $hasDisc?'':'display:none;' ?>">$<?= number_format($editing['original_price'] ?: 0,2) ?></span>
+                  </div>
+                  <div id="pvSave" style="font-size:12px;color:#10b981;font-weight:600;<?= $hasDisc?'':'display:none;' ?>">You save <span id="pvSaveN">$<?= number_format($editSave,2) ?></span></div>
+                  <div class="mt-2" style="font-size:12px;color:#10b981;">● <span id="pvStock">In stock — instant delivery</span></div>
+                </div>
+
+                <?php if (!$isAdd): ?>
+                  <hr>
+                  <h6 class="fw-bold mb-2 small"><i class="bi bi-arrow-left-right me-1"></i>Move to another category</h6>
+                  <div class="d-flex gap-2">
+                    <select id="moveCat" class="form-select form-select-sm">
+                      <?php foreach ($cats as $c): ?><option value="<?= esc($c) ?>" <?= $editing['category']===$c?'selected':'' ?>><?= esc($c) ?></option><?php endforeach; ?>
+                    </select>
+                    <form method="post" onsubmit="document.getElementById('moveCatHidden').value=document.getElementById('moveCat').value;">
+                      <input type="hidden" name="action" value="move_product">
+                      <input type="hidden" name="slug" value="<?= esc($editing['slug']) ?>">
+                      <input type="hidden" name="category" id="moveCatHidden">
+                      <button class="btn btn-soft-gray btn-sm">Move</button>
+                    </form>
+                  </div>
+                <?php endif; ?>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+  function updPrev() {
+    var price = parseFloat(document.getElementById('f_price').value) || 0;
+    var orig  = parseFloat(document.getElementById('f_orig').value)  || 0;
+    var name  = document.getElementById('f_name').value || 'Product Name';
+    var desc  = document.getElementById('f_desc').value || '';
+    var badge = document.getElementById('f_badge').value;
+    var img   = document.getElementById('f_image').value;
+    var cat   = document.getElementById('f_cat').value;
+    var pf    = document.getElementById('f_platform').value;
+
+    document.getElementById('pvName').textContent = name;
+    document.getElementById('pvDesc').textContent = desc.length>140?desc.substring(0,140)+'…':desc;
+    document.getElementById('pvCat').firstChild.textContent = cat + ' · ';
+    document.getElementById('pvPlatform').textContent = pf;
+    document.getElementById('pvPrice').textContent = '$' + price.toFixed(2);
+    document.getElementById('pvImg').src = img;
+    document.getElementById('pvImg').style.display = img ? '' : 'none';
+    document.getElementById('pvNoimg').style.display = img ? 'none' : '';
+    document.getElementById('pvBadge').textContent = badge;
+    document.getElementById('pvBadge').style.display = badge ? '' : 'none';
+    if (orig > price) {
+      var pct = Math.round(100 - (price/orig*100));
+      var save = (orig-price).toFixed(2);
+      document.getElementById('pvDisc').style.display='';
+      document.getElementById('pvDiscN').textContent = pct;
+      document.getElementById('pvOrig').textContent = '$' + orig.toFixed(2);
+      document.getElementById('pvOrig').style.display='';
+      document.getElementById('pvSave').style.display='';
+      document.getElementById('pvSaveN').textContent = '$' + save;
+      document.getElementById('discOut').textContent = pct + '% OFF';
+      document.getElementById('saveOut').textContent = 'save $' + save;
+    } else {
+      document.getElementById('pvDisc').style.display='none';
+      document.getElementById('pvOrig').style.display='none';
+      document.getElementById('pvSave').style.display='none';
+      document.getElementById('discOut').textContent = '0% OFF';
+      document.getElementById('saveOut').textContent = 'save $0.00';
+    }
+  }
+  </script>
+  <?php endif; ?>
 
 <?php
 // ============================================================================
@@ -334,7 +631,7 @@ elseif ($tab === 'leads'):
   $st = $pdo->prepare("SELECT * FROM chat_leads $w ORDER BY created_at DESC LIMIT 200");
   $st->execute($args);
   $leads = $st->fetchAll();
-  $admins = $pdo->query('SELECT id, email FROM admins')->fetchAll();
+  $admins = $pdo->query("SELECT id, email FROM users WHERE role='admin'")->fetchAll();
 ?>
   <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
     <h5 class="fw-bold mb-0">Lead Management</h5>
