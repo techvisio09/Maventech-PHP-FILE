@@ -183,19 +183,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: '.$back); exit;
 
     } elseif ($action === 'resend_outbox') {
-        // Re-attempt sending an outbox email — optionally to a new recipient
+        // Re-attempt sending an outbox email — UPDATE the existing row in place
+        // (status / recipient / delivered_at) instead of creating a duplicate row.
         $emailId = (int)$_POST['email_id'];
         $newTo = trim($_POST['new_recipient'] ?? '');
         $row = $pdo->prepare('SELECT * FROM email_outbox WHERE id=?');
         $row->execute([$emailId]); $em = $row->fetch();
-        if ($em) {
-            $to = $newTo !== '' ? $newTo : $em['recipient'];
-            // Strip any existing tracking pixel so send_email can embed a fresh one
-            $html = preg_replace('#<img[^>]*track-open\.php[^>]*>#i', '', $em['html']);
-            send_email($to, $em['subject'], $html, $em['order_id'] ? (int)$em['order_id'] : null, $em['template_code']);
-            header('Location: admin.php?tab=emails&msg=Email+resent+to+'.urlencode($to)); exit;
+        if (!$em) { header('Location: admin.php?tab=emails&msg=Email+not+found'); exit; }
+
+        $to = $newTo !== '' ? $newTo : $em['recipient'];
+        // Try real delivery via Resend if configured, otherwise dev-mode success
+        $apiKey = defined('RESEND_API_KEY') ? RESEND_API_KEY : '';
+        $ok = true; $note = null; $providerId = $em['provider_id'] ?? null;
+        if ($apiKey !== '') {
+            $ch = curl_init('https://api.resend.com/emails');
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => json_encode(['from' => SENDER_EMAIL, 'to' => [$to], 'subject' => $em['subject'], 'html' => $em['html']]),
+                CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Authorization: Bearer ' . $apiKey],
+                CURLOPT_TIMEOUT => 20,
+            ]);
+            $res = curl_exec($ch);
+            $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            $ok = $res !== false && $code >= 200 && $code < 300;
+            if ($ok) { $d = json_decode($res, true); $providerId = $d['id'] ?? $providerId; }
+            else { $note = 'Delivery failed (HTTP '.$code.')'; }
         }
-        header('Location: admin.php?tab=emails&msg=Email+not+found'); exit;
+        // Update existing row in place — same id, new status / recipient / timestamps
+        $pdo->prepare('UPDATE email_outbox
+                       SET recipient=?, status=?, note=?, provider_id=?, delivered_at=?, opened_at=NULL, opened_count=0, clicked_at=NULL, click_count=0, created_at=NOW()
+                       WHERE id=?')
+            ->execute([
+                $to,
+                $ok ? 'sent' : 'failed',
+                $note,
+                $providerId,
+                $ok ? date('Y-m-d H:i:s') : null,
+                $emailId,
+            ]);
+        header('Location: admin.php?tab=emails&msg=Email+'.($ok?'resent+to+'.urlencode($to):'failed')); exit;
 
     } elseif ($action === 'add_keys') {
         $keys = array_filter(array_map('trim', explode("\n", $_POST['keys'] ?? '')));
@@ -1569,7 +1596,7 @@ elseif ($tab === 'emails'):
 
   <div class="tbl-e">
     <table class="table mb-0" data-testid="email-activity">
-      <thead><tr><th>Customer</th><th>Phone</th><th>License Key</th><th>Email Subject</th><th>Order</th><th>Email Status</th><th>Sent</th><th class="text-end">Actions</th></tr></thead>
+      <thead><tr><th>Customer</th><th>Phone</th><th>License Key</th><th>Email Subject</th><th>Order</th><th>Sent &amp; Status</th><th class="text-end">Actions</th></tr></thead>
       <tbody>
         <?php
         $emQuery = $pdo->query("SELECT em.*, o.order_number, o.first_name, o.last_name, o.phone,
@@ -1581,7 +1608,6 @@ elseif ($tab === 'emails'):
         foreach ($emQuery as $e):
           $rowCount++;
           $ds = $e['status'];
-          $undelivered = in_array($ds, ['failed','queued'], true);
           $custName = trim(($e['first_name'] ?? '').' '.($e['last_name'] ?? ''));
           $oid = (int)($e['order_id'] ?? 0);
           $detailHref = $oid ? 'order-view.php?id='.$oid : '#';
@@ -1592,11 +1618,9 @@ elseif ($tab === 'emails'):
             'order_confirmation' => ['label'=>'Order confirm', 'color'=>'#10b981', 'bg'=>'#d1fae5'],
           ];
           $tpl = $tplLabels[$e['template_code']] ?? ['label'=>($e['template_code'] ?: 'inline'), 'color'=>'#475569', 'bg'=>'#f1f5f9'];
-          // Friendly status
-          $statusFriendly = $ds === 'sent' ? 'Success' : ($ds === 'failed' ? 'Failed' : ucfirst($ds));
         ?>
-          <tr <?= $undelivered ? 'style="background:rgba(239,68,68,0.04);"' : '' ?>>
-            <!-- Customer: clickable name → full transaction detail -->
+          <tr>
+            <!-- Customer: clickable name -->
             <td style="min-width:180px;">
               <?php if ($custName !== '' && $oid): ?>
                 <a href="<?= esc($detailHref) ?>" class="fw-bold text-decoration-none" style="font-size:13.5px;color:var(--brand-dk,#1d4ed8);" data-testid="customer-link-<?= (int)$e['id'] ?>" title="View full transaction detail">
@@ -1609,11 +1633,14 @@ elseif ($tab === 'emails'):
             </td>
             <!-- Phone -->
             <td><small><?= $e['phone'] ? '<i class="bi bi-telephone-fill text-success" style="font-size:10px;"></i> '.esc($e['phone']) : '<span class="text-muted">—</span>' ?></small></td>
-            <!-- License Key (compact pills) -->
+            <!-- License Key + "sold" tag inline -->
             <td>
               <?php if (!empty($e['keys_list'])): ?>
                 <?php foreach (explode('|', $e['keys_list']) as $lk): ?>
-                  <code style="font-size:10.5px;background:#eff6ff;color:#1d4ed8;padding:2px 6px;border-radius:4px;display:inline-block;margin:1px 0;"><?= esc($lk) ?></code><br>
+                  <div style="margin:2px 0;line-height:1;">
+                    <code style="font-size:10.5px;background:#eff6ff;color:#1d4ed8;padding:2px 6px;border-radius:4px;display:inline-block;"><?= esc($lk) ?></code>
+                    <span style="font-size:9px;font-weight:700;color:#047857;background:#d1fae5;padding:2px 5px;border-radius:3px;letter-spacing:.4px;margin-left:3px;vertical-align:middle;" title="License key has been sold &amp; assigned">SOLD</span>
+                  </div>
                 <?php endforeach; ?>
               <?php else: ?>
                 <small class="text-muted">—</small>
@@ -1626,25 +1653,25 @@ elseif ($tab === 'emails'):
             </td>
             <!-- Order link -->
             <td><?= $e['order_number'] ? '<a href="'.esc($detailHref).'" class="fw-semibold" style="font-size:12.5px;"><code>#'.esc($e['order_number']).'</code></a>' : '<small class="text-muted">—</small>' ?></td>
-            <!-- Email Status: Success / Failed (friendly) -->
-            <td style="min-width:140px;">
-              <?php if ($ds === 'sent'): ?>
-                <span class="s-badge paid" data-testid="status-badge-<?= (int)$e['id'] ?>" style="font-weight:600;"><i class="bi bi-check-circle-fill me-1"></i>Success</span>
-              <?php elseif ($ds === 'failed'): ?>
-                <span class="s-badge failed" data-testid="status-badge-<?= (int)$e['id'] ?>" style="font-weight:600;"><i class="bi bi-x-circle-fill me-1"></i>Failed</span>
-              <?php else: ?>
-                <span class="s-badge <?= esc($ds) ?>" data-testid="status-badge-<?= (int)$e['id'] ?>" style="font-weight:600;"><i class="bi bi-hourglass-split me-1"></i><?= esc(ucfirst($ds)) ?></span>
-              <?php endif; ?>
-              <?php if ($e['opened_at']): ?>
-                <div class="mt-1"><i class="bi bi-eye-fill text-success" style="font-size:12px;"></i> <small class="text-success" style="font-size:10.5px;font-weight:600;"><?= (int)$e['opened_count'] ?> open<?= $e['opened_count']>1?'s':'' ?></small>
-                <?php if ($e['clicked_at']): ?> · <i class="bi bi-cursor-fill text-primary" style="font-size:12px;"></i> <small class="text-primary" style="font-size:10.5px;font-weight:600;"><?= (int)$e['click_count'] ?> click<?= $e['click_count']>1?'s':'' ?></small>
+            <!-- Sent timestamp + status INLINE in same cell -->
+            <td style="min-width:170px;">
+              <div class="d-flex align-items-center gap-2">
+                <?php if ($ds === 'sent'): ?>
+                  <span class="s-badge paid" data-testid="status-badge-<?= (int)$e['id'] ?>" style="font-weight:600;font-size:10.5px;"><i class="bi bi-check-circle-fill me-1"></i>Success</span>
+                <?php elseif ($ds === 'failed'): ?>
+                  <span class="s-badge failed" data-testid="status-badge-<?= (int)$e['id'] ?>" style="font-weight:600;font-size:10.5px;"><i class="bi bi-x-circle-fill me-1"></i>Failed</span>
+                <?php else: ?>
+                  <span class="s-badge <?= esc($ds) ?>" data-testid="status-badge-<?= (int)$e['id'] ?>" style="font-weight:600;font-size:10.5px;"><i class="bi bi-hourglass-split me-1"></i><?= esc(ucfirst($ds)) ?></span>
                 <?php endif; ?>
+                <small class="text-muted" style="line-height:1.2;"><?= esc(date('M j', strtotime($e['created_at']))) ?><br><?= esc(date('H:i', strtotime($e['created_at']))) ?></small>
+              </div>
+              <?php if ($e['opened_at']): ?>
+                <div class="mt-1"><i class="bi bi-eye-fill text-success" style="font-size:11px;"></i> <small class="text-success" style="font-size:10px;font-weight:600;"><?= (int)$e['opened_count'] ?> open<?= $e['opened_count']>1?'s':'' ?></small>
+                <?php if ($e['clicked_at']): ?> · <i class="bi bi-cursor-fill text-primary" style="font-size:11px;"></i> <small class="text-primary" style="font-size:10px;font-weight:600;"><?= (int)$e['click_count'] ?> click<?= $e['click_count']>1?'s':'' ?></small><?php endif; ?>
                 </div>
               <?php endif; ?>
-              <?php if ($e['note']): ?><div class="mt-1"><small class="text-danger" title="<?= esc($e['note']) ?>" style="font-size:10.5px;"><i class="bi bi-exclamation-circle"></i> <?= esc(mb_strimwidth($e['note'],0,26,'…')) ?></small></div><?php endif; ?>
+              <?php if ($e['note']): ?><div class="mt-1"><small class="text-danger" title="<?= esc($e['note']) ?>" style="font-size:10px;"><i class="bi bi-exclamation-circle"></i> <?= esc(mb_strimwidth($e['note'],0,30,'…')) ?></small></div><?php endif; ?>
             </td>
-            <!-- Sent timestamp -->
-            <td><small class="text-muted"><?= esc(date('M j, Y', strtotime($e['created_at']))) ?><br><?= esc(date('H:i', strtotime($e['created_at']))) ?></small></td>
             <!-- Actions -->
             <td class="text-end text-nowrap">
               <a class="btn btn-soft-blue btn-sm py-0 px-2" href="email-view.php?id=<?= (int)$e['id'] ?>" target="_blank" data-testid="view-email-<?= (int)$e['id'] ?>" title="View email content"><i class="bi bi-eye"></i></a>
@@ -1668,7 +1695,7 @@ elseif ($tab === 'emails'):
           </tr>
         <?php endforeach; ?>
         <?php if ($rowCount === 0): ?>
-          <tr><td colspan="8" class="text-center text-muted py-5"><i class="bi bi-inbox" style="font-size:24px;"></i><br>No transactional emails yet. They'll appear here automatically after the first order.</td></tr>
+          <tr><td colspan="7" class="text-center text-muted py-5"><i class="bi bi-inbox" style="font-size:24px;"></i><br>No transactional emails yet. They'll appear here automatically after the first order.</td></tr>
         <?php endif; ?>
       </tbody>
     </table>
