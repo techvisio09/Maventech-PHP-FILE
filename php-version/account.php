@@ -2,6 +2,11 @@
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/email.php';
 $user = current_user();
+// Admins skip the customer account page entirely — drop them straight into the admin panel.
+if ($user && ($user['role'] ?? '') === 'admin') {
+    header('Location: admin.php?tab=dashboard');
+    exit;
+}
 $pageTitle = 'My Account | ' . SITE_BRAND;
 
 function verification_email_html(string $code): string
