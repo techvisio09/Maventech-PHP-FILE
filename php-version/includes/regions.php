@@ -1,6 +1,63 @@
 <?php
 // Region helpers — multi-region inventory + per-region pricing/tax/currency.
 
+/**
+ * Auto-bootstrap the `regions` and `settings` tables on first request.
+ * Runs at most once per PHP process. Protects against partial/legacy
+ * database.sql imports on shared hosting (cPanel/phpMyAdmin) where the
+ * admin uploaded an older dump that didn't include these tables.
+ */
+function regions_bootstrap(): void {
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    try {
+        $pdo = db();
+        // settings (Company Info, statement names, active_region, etc.)
+        $pdo->exec("CREATE TABLE IF NOT EXISTS settings (
+            k VARCHAR(80) NOT NULL PRIMARY KEY,
+            v MEDIUMTEXT NOT NULL,
+            updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        // regions
+        $pdo->exec("CREATE TABLE IF NOT EXISTS regions (
+            code VARCHAR(8) NOT NULL PRIMARY KEY,
+            name VARCHAR(60) NOT NULL,
+            currency VARCHAR(8) NOT NULL,
+            currency_symbol VARCHAR(4) NOT NULL,
+            tax_rate DECIMAL(5,4) NOT NULL DEFAULT 0.0000,
+            active TINYINT(1) NOT NULL DEFAULT 1
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        // Seed default regions if the table is empty
+        $count = (int)$pdo->query("SELECT COUNT(*) FROM regions")->fetchColumn();
+        if ($count === 0) {
+            $pdo->exec("INSERT INTO regions (code, name, currency, currency_symbol, tax_rate, active) VALUES
+                ('US', 'United States',  'USD', '$',  0.0000, 1),
+                ('UK', 'United Kingdom', 'GBP', '£',  0.2000, 1),
+                ('CA', 'Canada',         'CAD', 'C$', 0.1300, 1),
+                ('EU', 'Europe',         'EUR', '€',  0.2000, 0)");
+        }
+
+        // products / orders / license_keys / customer_reviews need a `region` column.
+        // ADD COLUMN IF NOT EXISTS is MariaDB / MySQL 8+. Wrapped in try/catch
+        // so older MySQL 5.7 falls through gracefully (the user would need to
+        // run the full database.sql once on those hosts).
+        foreach ([
+            "ALTER TABLE products ADD COLUMN IF NOT EXISTS region VARCHAR(8) NOT NULL DEFAULT 'US'",
+            "ALTER TABLE orders ADD COLUMN IF NOT EXISTS region VARCHAR(8) NOT NULL DEFAULT 'US'",
+            "ALTER TABLE license_keys ADD COLUMN IF NOT EXISTS region VARCHAR(8) NOT NULL DEFAULT 'US'",
+        ] as $alter) {
+            try { $pdo->exec($alter); } catch (Throwable $e) { /* older MySQL — ignore */ }
+        }
+    } catch (Throwable $e) {
+        // DB not reachable yet or insufficient privileges — silently skip,
+        // the page will surface the underlying error normally.
+    }
+}
+regions_bootstrap();
+
 function active_region_code(): string {
     if (isset($_GET['region'])) {
         $r = strtoupper(preg_replace('/[^A-Z]/i', '', $_GET['region']));
