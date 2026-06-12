@@ -190,7 +190,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         setting_set('company_address', trim($_POST['company_address'] ?? ''));
         if (!empty($_POST['company_logo'])) setting_set('company_logo', trim($_POST['company_logo']));
         if (!empty($_POST['clear_logo']))    setting_set('company_logo', '');
-        header('Location: admin.php?tab=dashboard&msg=Company+info+saved'); exit;
+        header('Location: admin.php?tab=company&msg=Saved'); exit;
 
     } elseif ($action === 'resend_outbox') {
         // Re-attempt sending an outbox email — UPDATE the existing row in place
@@ -404,175 +404,9 @@ if ($tab === 'dashboard'):
   </div>
 
   <!-- ====================================================================
-       COMPANY INFO — single source of truth used by every email template.
+       (Company Info card lives on its own tab — admin.php?tab=company)
        ==================================================================== -->
-  <?php $co = company_info(); ?>
-  <div class="card-e p-4 mb-3" data-testid="company-info-card" style="border-left:4px solid #3b82f6;">
-    <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-3">
-      <div class="d-flex align-items-center gap-3">
-        <div class="ci-logo-box" data-testid="ci-logo-preview">
-          <?php if ($co['logo']): ?>
-            <img src="<?= esc($co['logo']) ?>" alt="Logo" class="ci-logo-img" data-testid="ci-logo-img">
-          <?php else: ?>
-            <span class="ci-logo-fb"><i class="bi bi-buildings"></i></span>
-          <?php endif; ?>
-        </div>
-        <div>
-          <h6 class="fw-bold mb-0"><i class="bi bi-building me-1 text-primary"></i> Company Info</h6>
-          <small class="text-muted">These details appear in <strong>every</strong> email your customers receive — headers, footers, signatures and the billing note.</small>
-        </div>
-      </div>
-      <button type="button" class="btn btn-soft-blue btn-sm" id="ciEditBtn" data-testid="ci-edit-btn"><i class="bi bi-pencil-square me-1"></i> Edit</button>
-    </div>
 
-    <!-- Read-only summary -->
-    <div id="ciView" class="row g-2 small">
-      <div class="col-md-3"><div class="ci-tile"><div class="ci-tile-label"><i class="bi bi-building me-1"></i>Company</div><div class="ci-tile-val" data-testid="ci-name-current"><?= esc($co['name'] ?: '—') ?></div></div></div>
-      <div class="col-md-3"><div class="ci-tile"><div class="ci-tile-label"><i class="bi bi-envelope me-1"></i>Email</div><div class="ci-tile-val" data-testid="ci-email-current"><?= esc($co['email'] ?: '—') ?></div></div></div>
-      <div class="col-md-3"><div class="ci-tile"><div class="ci-tile-label"><i class="bi bi-telephone me-1"></i>Toll-free</div><div class="ci-tile-val" data-testid="ci-phone-current"><?= esc($co['phone'] ?: '—') ?></div></div></div>
-      <div class="col-md-3"><div class="ci-tile"><div class="ci-tile-label"><i class="bi bi-geo-alt me-1"></i>Address</div><div class="ci-tile-val" data-testid="ci-address-current" style="white-space:pre-wrap;font-size:12px;"><?= esc($co['address'] ?: '—') ?></div></div></div>
-    </div>
-
-    <!-- Edit form -->
-    <form id="ciEdit" method="post" class="d-none mt-3" data-testid="ci-edit-form">
-      <input type="hidden" name="action" value="save_company_info">
-      <input type="hidden" name="company_logo" id="ciLogoUrl" value="<?= esc($co['logo']) ?>" data-testid="ci-logo-url">
-      <div class="row g-3">
-        <div class="col-md-6">
-          <label class="form-label small fw-semibold"><i class="bi bi-building me-1"></i>Company Name</label>
-          <input class="form-control" name="company_name" value="<?= esc($co['name']) ?>" required data-testid="ci-name-input">
-        </div>
-        <div class="col-md-6">
-          <label class="form-label small fw-semibold"><i class="bi bi-envelope me-1"></i>Email Address</label>
-          <input class="form-control" name="company_email" type="email" value="<?= esc($co['email']) ?>" required data-testid="ci-email-input">
-        </div>
-        <div class="col-md-6">
-          <label class="form-label small fw-semibold"><i class="bi bi-telephone me-1"></i>Toll-free Number</label>
-          <input class="form-control" name="company_phone" value="<?= esc($co['phone']) ?>" placeholder="1-888-…" data-testid="ci-phone-input">
-        </div>
-        <div class="col-md-6">
-          <label class="form-label small fw-semibold"><i class="bi bi-geo-alt me-1"></i>Company Address</label>
-          <textarea class="form-control" name="company_address" rows="2" placeholder="Street, City, State ZIP, Country" data-testid="ci-address-input"><?= esc($co['address']) ?></textarea>
-        </div>
-        <div class="col-12">
-          <label class="form-label small fw-semibold"><i class="bi bi-image me-1"></i>Company Logo <span class="text-muted fw-normal">— shows at the top of every email</span></label>
-          <div class="d-flex align-items-center gap-3 flex-wrap p-3 rounded" style="background:var(--bg);border:1px dashed var(--border);">
-            <div class="ci-logo-preview-lg" id="ciLogoPreviewLg">
-              <?php if ($co['logo']): ?>
-                <img src="<?= esc($co['logo']) ?>" alt="Logo" data-testid="ci-logo-preview-img">
-              <?php else: ?>
-                <span class="text-muted small"><i class="bi bi-image"></i> No logo yet</span>
-              <?php endif; ?>
-            </div>
-            <div class="flex-grow-1 d-flex gap-2 flex-wrap align-items-center">
-              <input type="file" class="form-control form-control-sm" id="ciLogoFile" accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml" style="max-width:300px;" data-testid="ci-logo-file">
-              <button type="button" class="btn btn-soft-blue btn-sm" id="ciLogoUploadBtn" data-testid="ci-logo-upload-btn"><i class="bi bi-cloud-upload me-1"></i> Upload</button>
-              <?php if ($co['logo']): ?>
-                <button type="button" class="btn btn-soft-gray btn-sm" id="ciLogoRemoveBtn" data-testid="ci-logo-remove-btn"><i class="bi bi-x-circle me-1"></i> Remove</button>
-              <?php endif; ?>
-              <span class="text-muted small">JPG · PNG · SVG · max 3 MB</span>
-            </div>
-          </div>
-          <div id="ciLogoErr" class="small text-danger mt-2 d-none"></div>
-        </div>
-      </div>
-      <div class="d-flex gap-2 mt-3">
-        <button class="btn btn-soft-blue btn-sm" data-testid="ci-save-btn"><i class="bi bi-check2 me-1"></i> Save Company Info</button>
-        <button type="button" class="btn btn-soft-gray btn-sm" id="ciCancelBtn" data-testid="ci-cancel-btn">Cancel</button>
-        <small class="text-muted align-self-center ms-auto">All email templates pick up these values automatically.</small>
-      </div>
-    </form>
-  </div>
-
-  <style>
-    .ci-logo-box {
-      width: 60px; height: 60px;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      display: inline-flex; align-items: center; justify-content: center;
-      overflow: hidden;
-      flex-shrink: 0;
-    }
-    .ci-logo-img { max-width: 56px; max-height: 56px; object-fit: contain; }
-    .ci-logo-fb  { font-size: 28px; color: var(--brand); }
-    .ci-tile {
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 10px 12px;
-      height: 100%;
-    }
-    .ci-tile-label { font-size: 10.5px; color: var(--text-muted, #64748b); letter-spacing: .5px; text-transform: uppercase; font-weight: 600; }
-    .ci-tile-val   { font-weight: 700; color: var(--text, #0f172a); margin-top: 4px; font-size: 13.5px; word-break: break-word; }
-    .ci-logo-preview-lg {
-      width: 96px; height: 96px;
-      background: #fff;
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      display: inline-flex; align-items: center; justify-content: center;
-      overflow: hidden;
-      flex-shrink: 0;
-    }
-    .ci-logo-preview-lg img { max-width: 90px; max-height: 90px; object-fit: contain; }
-  </style>
-
-  <script>
-  (function(){
-    var editBtn = document.getElementById('ciEditBtn');
-    var view    = document.getElementById('ciView');
-    var form    = document.getElementById('ciEdit');
-    var cancel  = document.getElementById('ciCancelBtn');
-    if (editBtn) editBtn.addEventListener('click', function(){ view.classList.add('d-none'); form.classList.remove('d-none'); });
-    if (cancel)  cancel.addEventListener('click',  function(){ form.classList.add('d-none'); view.classList.remove('d-none'); });
-
-    // Logo upload via AJAX
-    var fileEl   = document.getElementById('ciLogoFile');
-    var upBtn    = document.getElementById('ciLogoUploadBtn');
-    var rmBtn    = document.getElementById('ciLogoRemoveBtn');
-    var urlInput = document.getElementById('ciLogoUrl');
-    var preview  = document.getElementById('ciLogoPreviewLg');
-    var errBox   = document.getElementById('ciLogoErr');
-
-    function showErr(m){ if (!errBox) return; errBox.textContent = m || ''; errBox.classList.toggle('d-none', !m); }
-    function renderLogo(url){
-      if (!preview) return;
-      preview.innerHTML = url
-        ? '<img src="' + url + '" alt="Logo" data-testid="ci-logo-preview-img">'
-        : '<span class="text-muted small"><i class="bi bi-image"></i> No logo yet</span>';
-    }
-
-    if (upBtn) upBtn.addEventListener('click', function(){
-      showErr('');
-      if (!fileEl.files || !fileEl.files[0]) { showErr('Please choose a logo image first.'); return; }
-      var fd = new FormData(); fd.append('logo', fileEl.files[0]);
-      var orig = upBtn.innerHTML; upBtn.disabled = true;
-      upBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Uploading…';
-      fetch('ajax/company-logo.php', { method:'POST', body: fd })
-        .then(function(r){ return r.json().catch(function(){ return {ok:false, error:'Server error'}; }); })
-        .then(function(j){
-          upBtn.disabled = false; upBtn.innerHTML = orig;
-          if (!j || !j.ok) { showErr((j && j.error) || 'Upload failed.'); return; }
-          urlInput.value = j.url;
-          renderLogo(j.url);
-        }).catch(function(){
-          upBtn.disabled = false; upBtn.innerHTML = orig;
-          showErr('Network error — please try again.');
-        });
-    });
-
-    if (rmBtn) rmBtn.addEventListener('click', function(){
-      if (!confirm('Remove the company logo?')) return;
-      urlInput.value = '';
-      renderLogo('');
-      // Also add a hidden clear_logo flag so the server clears the setting on next save.
-      var clr = document.createElement('input');
-      clr.type = 'hidden'; clr.name = 'clear_logo'; clr.value = '1';
-      form.appendChild(clr);
-      rmBtn.disabled = true;
-    });
-  })();
-  </script>
 
   <!-- KPI ROW -->
   <div class="row g-3 mb-3" data-testid="admin-kpis">
@@ -814,6 +648,207 @@ if ($tab === 'dashboard'):
       </div>
     </div>
   </div>
+
+<?php
+// ============================================================================
+// COMPANY INFO — single source of truth used by every email template.
+// Sidebar item below Dashboard.
+// ============================================================================
+elseif ($tab === 'company'):
+  $co = company_info();
+?>
+  <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+    <div>
+      <h1 class="h4 fw-bold mb-1"><i class="bi bi-building me-1 text-primary"></i> Company Info</h1>
+      <small class="text-muted">Update your company name, email, toll-free number, address and logo. These details appear in <strong>every</strong> transactional email your customers receive — headers, footers, signatures and the billing note.</small>
+    </div>
+    <?php if (!empty($_GET['msg'])): ?>
+      <span class="badge bg-success-subtle text-success" data-testid="ci-saved-toast"><i class="bi bi-check2-circle me-1"></i><?= esc($_GET['msg']) ?></span>
+    <?php endif; ?>
+  </div>
+
+  <div class="card-e p-4 mb-3" data-testid="company-info-card" style="border-left:4px solid #3b82f6;">
+    <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-3">
+      <div class="d-flex align-items-center gap-3">
+        <div class="ci-logo-box" data-testid="ci-logo-preview">
+          <?php if ($co['logo']): ?>
+            <img src="<?= esc($co['logo']) ?>" alt="Logo" class="ci-logo-img" data-testid="ci-logo-img">
+          <?php else: ?>
+            <span class="ci-logo-fb"><i class="bi bi-buildings"></i></span>
+          <?php endif; ?>
+        </div>
+        <div>
+          <h6 class="fw-bold mb-0"><?= esc($co['name'] ?: 'Your company') ?></h6>
+          <small class="text-muted">Updating any field below auto-syncs across all 5 email templates.</small>
+        </div>
+      </div>
+      <button type="button" class="btn btn-soft-blue btn-sm" id="ciEditBtn" data-testid="ci-edit-btn"><i class="bi bi-pencil-square me-1"></i> Edit</button>
+    </div>
+
+    <!-- Read-only summary -->
+    <div id="ciView" class="row g-2 small">
+      <div class="col-md-3"><div class="ci-tile"><div class="ci-tile-label"><i class="bi bi-building me-1"></i>Company</div><div class="ci-tile-val" data-testid="ci-name-current"><?= esc($co['name'] ?: '—') ?></div></div></div>
+      <div class="col-md-3"><div class="ci-tile"><div class="ci-tile-label"><i class="bi bi-envelope me-1"></i>Email</div><div class="ci-tile-val" data-testid="ci-email-current"><?= esc($co['email'] ?: '—') ?></div></div></div>
+      <div class="col-md-3"><div class="ci-tile"><div class="ci-tile-label"><i class="bi bi-telephone me-1"></i>Toll-free</div><div class="ci-tile-val" data-testid="ci-phone-current"><?= esc($co['phone'] ?: '—') ?></div></div></div>
+      <div class="col-md-3"><div class="ci-tile"><div class="ci-tile-label"><i class="bi bi-geo-alt me-1"></i>Address</div><div class="ci-tile-val" data-testid="ci-address-current" style="white-space:pre-wrap;font-size:12px;"><?= esc($co['address'] ?: '—') ?></div></div></div>
+    </div>
+
+    <!-- Edit form -->
+    <form id="ciEdit" method="post" class="d-none mt-3" data-testid="ci-edit-form">
+      <input type="hidden" name="action" value="save_company_info">
+      <input type="hidden" name="company_logo" id="ciLogoUrl" value="<?= esc($co['logo']) ?>" data-testid="ci-logo-url">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label small fw-semibold"><i class="bi bi-building me-1"></i>Company Name</label>
+          <input class="form-control" name="company_name" value="<?= esc($co['name']) ?>" required data-testid="ci-name-input">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label small fw-semibold"><i class="bi bi-envelope me-1"></i>Email Address</label>
+          <input class="form-control" name="company_email" type="email" value="<?= esc($co['email']) ?>" required data-testid="ci-email-input">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label small fw-semibold"><i class="bi bi-telephone me-1"></i>Toll-free Number</label>
+          <input class="form-control" name="company_phone" value="<?= esc($co['phone']) ?>" placeholder="1-888-…" data-testid="ci-phone-input">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label small fw-semibold"><i class="bi bi-geo-alt me-1"></i>Company Address</label>
+          <textarea class="form-control" name="company_address" rows="2" placeholder="Street, City, State ZIP, Country" data-testid="ci-address-input"><?= esc($co['address']) ?></textarea>
+        </div>
+        <div class="col-12">
+          <label class="form-label small fw-semibold"><i class="bi bi-image me-1"></i>Company Logo <span class="text-muted fw-normal">— shows at the top of every email</span></label>
+          <div class="d-flex align-items-center gap-3 flex-wrap p-3 rounded" style="background:var(--bg);border:1px dashed var(--border);">
+            <div class="ci-logo-preview-lg" id="ciLogoPreviewLg">
+              <?php if ($co['logo']): ?>
+                <img src="<?= esc($co['logo']) ?>" alt="Logo" data-testid="ci-logo-preview-img">
+              <?php else: ?>
+                <span class="text-muted small"><i class="bi bi-image"></i> No logo yet</span>
+              <?php endif; ?>
+            </div>
+            <div class="flex-grow-1 d-flex gap-2 flex-wrap align-items-center">
+              <input type="file" class="form-control form-control-sm" id="ciLogoFile" accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml" style="max-width:300px;" data-testid="ci-logo-file">
+              <button type="button" class="btn btn-soft-blue btn-sm" id="ciLogoUploadBtn" data-testid="ci-logo-upload-btn"><i class="bi bi-cloud-upload me-1"></i> Upload</button>
+              <?php if ($co['logo']): ?>
+                <button type="button" class="btn btn-soft-gray btn-sm" id="ciLogoRemoveBtn" data-testid="ci-logo-remove-btn"><i class="bi bi-x-circle me-1"></i> Remove</button>
+              <?php endif; ?>
+              <span class="text-muted small">JPG · PNG · SVG · max 3 MB</span>
+            </div>
+          </div>
+          <div id="ciLogoErr" class="small text-danger mt-2 d-none"></div>
+        </div>
+      </div>
+      <div class="d-flex gap-2 mt-3">
+        <button class="btn btn-soft-blue btn-sm" data-testid="ci-save-btn"><i class="bi bi-check2 me-1"></i> Save Company Info</button>
+        <button type="button" class="btn btn-soft-gray btn-sm" id="ciCancelBtn" data-testid="ci-cancel-btn">Cancel</button>
+        <small class="text-muted align-self-center ms-auto">All email templates pick up these values automatically.</small>
+      </div>
+    </form>
+  </div>
+
+  <!-- Where it shows up -->
+  <div class="card-e p-3 mb-3" style="background:linear-gradient(135deg,#f0f9ff,#eff6ff);border:1px solid #bfdbfe;">
+    <div class="d-flex gap-3 align-items-start">
+      <i class="bi bi-info-circle text-primary" style="font-size:22px;line-height:1;"></i>
+      <div class="small">
+        <strong class="d-block mb-1" style="color:#1e40af;">Where these details appear</strong>
+        <div class="row g-2">
+          <div class="col-md-4">&bull; Email header logo &amp; brand name</div>
+          <div class="col-md-4">&bull; Order confirmation footer (support email + phone)</div>
+          <div class="col-md-4">&bull; Refund &amp; review-request emails</div>
+          <div class="col-md-4">&bull; Lead follow-up signature</div>
+          <div class="col-md-4">&bull; Billing-statement note</div>
+          <div class="col-md-4">&bull; Template editor live preview</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    .ci-logo-box {
+      width: 60px; height: 60px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      display: inline-flex; align-items: center; justify-content: center;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .ci-logo-img { max-width: 56px; max-height: 56px; object-fit: contain; }
+    .ci-logo-fb  { font-size: 28px; color: var(--brand); }
+    .ci-tile {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      height: 100%;
+    }
+    .ci-tile-label { font-size: 10.5px; color: var(--text-muted, #64748b); letter-spacing: .5px; text-transform: uppercase; font-weight: 600; }
+    .ci-tile-val   { font-weight: 700; color: var(--text, #0f172a); margin-top: 4px; font-size: 13.5px; word-break: break-word; }
+    .ci-logo-preview-lg {
+      width: 96px; height: 96px;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      display: inline-flex; align-items: center; justify-content: center;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .ci-logo-preview-lg img { max-width: 90px; max-height: 90px; object-fit: contain; }
+  </style>
+
+  <script>
+  (function(){
+    var editBtn = document.getElementById('ciEditBtn');
+    var view    = document.getElementById('ciView');
+    var form    = document.getElementById('ciEdit');
+    var cancel  = document.getElementById('ciCancelBtn');
+    if (editBtn) editBtn.addEventListener('click', function(){ view.classList.add('d-none'); form.classList.remove('d-none'); });
+    if (cancel)  cancel.addEventListener('click',  function(){ form.classList.add('d-none'); view.classList.remove('d-none'); });
+
+    var fileEl   = document.getElementById('ciLogoFile');
+    var upBtn    = document.getElementById('ciLogoUploadBtn');
+    var rmBtn    = document.getElementById('ciLogoRemoveBtn');
+    var urlInput = document.getElementById('ciLogoUrl');
+    var preview  = document.getElementById('ciLogoPreviewLg');
+    var errBox   = document.getElementById('ciLogoErr');
+
+    function showErr(m){ if (!errBox) return; errBox.textContent = m || ''; errBox.classList.toggle('d-none', !m); }
+    function renderLogo(url){
+      if (!preview) return;
+      preview.innerHTML = url
+        ? '<img src="' + url + '" alt="Logo" data-testid="ci-logo-preview-img">'
+        : '<span class="text-muted small"><i class="bi bi-image"></i> No logo yet</span>';
+    }
+
+    if (upBtn) upBtn.addEventListener('click', function(){
+      showErr('');
+      if (!fileEl.files || !fileEl.files[0]) { showErr('Please choose a logo image first.'); return; }
+      var fd = new FormData(); fd.append('logo', fileEl.files[0]);
+      var orig = upBtn.innerHTML; upBtn.disabled = true;
+      upBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Uploading…';
+      fetch('ajax/company-logo.php', { method:'POST', body: fd })
+        .then(function(r){ return r.json().catch(function(){ return {ok:false, error:'Server error'}; }); })
+        .then(function(j){
+          upBtn.disabled = false; upBtn.innerHTML = orig;
+          if (!j || !j.ok) { showErr((j && j.error) || 'Upload failed.'); return; }
+          urlInput.value = j.url;
+          renderLogo(j.url);
+        }).catch(function(){
+          upBtn.disabled = false; upBtn.innerHTML = orig;
+          showErr('Network error — please try again.');
+        });
+    });
+
+    if (rmBtn) rmBtn.addEventListener('click', function(){
+      if (!confirm('Remove the company logo?')) return;
+      urlInput.value = '';
+      renderLogo('');
+      var clr = document.createElement('input');
+      clr.type = 'hidden'; clr.name = 'clear_logo'; clr.value = '1';
+      form.appendChild(clr);
+      rmBtn.disabled = true;
+    });
+  })();
+  </script>
 
 <?php
 // ============================================================================

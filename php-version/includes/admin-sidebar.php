@@ -4,6 +4,7 @@
 
 $navItems = [
     'dashboard'   => ['icon' => 'bi-speedometer2',  'label' => 'Dashboard',         'href' => 'admin.php?tab=dashboard'],
+    'company'     => ['icon' => 'bi-building',      'label' => 'Company Info',      'href' => 'admin.php?tab=company'],
     'inventory'   => ['icon' => 'bi-boxes',         'label' => 'Inventory Mgmt',    'href' => 'inventory.php'],
     'products'    => ['icon' => 'bi-box-seam',      'label' => 'Products / Key Inventory', 'href' => 'admin.php?tab=products'],
     'orders'      => ['icon' => 'bi-receipt',       'label' => 'Orders',            'href' => 'admin.php?tab=orders'],
