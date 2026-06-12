@@ -377,8 +377,11 @@ function render_product_row(array $p): string
         <div class="shop-row-buy text-sm-end flex-shrink-0">
           ' . $orig . '
           <div class="fw-bold text-primary fs-4 lh-1 mb-2">' . format_price((float)$p['price']) . '</div>
+          <div class="mb-2">' . render_stock_pill($p['slug']) . '</div>
           <div class="d-flex flex-sm-column gap-2">
-            <button class="btn btn-sm btn-primary rounded-pill px-3 add-to-cart-btn" data-slug="' . esc($p['slug']) . '" data-testid="add-to-cart-' . esc($p['slug']) . '"><i class="bi bi-cart-plus me-1"></i>Add to Cart</button>
+            ' . (available_keys_count($p['slug']) > 0
+                ? '<button class="btn btn-sm btn-primary rounded-pill px-3 add-to-cart-btn" data-slug="' . esc($p['slug']) . '" data-testid="add-to-cart-' . esc($p['slug']) . '"><i class="bi bi-cart-plus me-1"></i>Add to Cart</button>'
+                : '<button class="btn btn-sm btn-secondary rounded-pill px-3" disabled data-testid="out-of-stock-' . esc($p['slug']) . '"><i class="bi bi-bell me-1"></i>Notify Me</button>') . '
             <a href="product.php?slug=' . esc($p['slug']) . '" class="btn btn-sm btn-outline-secondary rounded-pill px-3" data-testid="view-details-' . esc($p['slug']) . '">Details</a>
           </div>
         </div>
@@ -394,8 +397,13 @@ function render_product_card(array $p): string
     $badge = $p['badge'] ? '<span class="badge text-bg-primary position-absolute top-0 start-0 m-2">' . esc($p['badge']) . '</span>' : '';
     $orig = $pct ? '<small class="text-secondary text-decoration-line-through">' . format_price((float)$p['original_price']) . '</small>' : '';
     $osIcon = $p['platform'] === 'Mac' ? 'macos' : 'windows';
+    $stockN = available_keys_count($p['slug']);
+    $stockPill = render_stock_pill($p['slug']);
+    $cartBtn = $stockN > 0
+        ? '<button class="btn btn-sm btn-primary rounded-pill px-3 add-to-cart-btn" data-slug="' . esc($p['slug']) . '" data-testid="add-to-cart-' . esc($p['slug']) . '"><i class="bi bi-cart-plus me-1"></i>Add</button>'
+        : '<button class="btn btn-sm btn-secondary rounded-pill px-3" disabled data-testid="out-of-stock-' . esc($p['slug']) . '"><i class="bi bi-bell me-1"></i>Notify</button>';
     return '
-    <div class="card product-card tilt-3d h-100 position-relative" data-testid="product-card-' . esc($p['slug']) . '">
+    <div class="card product-card tilt-3d h-100 position-relative ' . ($stockN <= 0 ? 'is-out-of-stock' : '') . '" data-testid="product-card-' . esc($p['slug']) . '">
       ' . $badge . $discount . '
       <a href="product.php?slug=' . esc($p['slug']) . '" class="text-decoration-none">
         <div class="ratio ratio-1x1 bg-body-tertiary rounded-top product-img-wrap">
@@ -408,10 +416,11 @@ function render_product_card(array $p): string
           <span class="small">' . render_stars((float)$p['rating']) . ' <span class="text-secondary">(' . (int)$p['reviews'] . ')</span></span>
         </div>
         <a href="product.php?slug=' . esc($p['slug']) . '" class="text-decoration-none text-body fw-semibold product-title mb-1">' . esc($p['name']) . '</a>
+        <div class="mb-2">' . $stockPill . '</div>
         <small class="text-secondary pc-meta mb-2"><i class="bi bi-lightning-charge-fill text-warning me-1"></i>Instant email delivery · Lifetime license</small>
         <div class="pc-price-row d-flex align-items-center justify-content-between gap-2 mt-auto pt-2">
           <div class="lh-1 d-flex align-items-baseline gap-2"><span class="fw-bold text-primary fs-5">' . format_price((float)$p['price']) . '</span>' . $orig . '</div>
-          <button class="btn btn-sm btn-primary rounded-pill px-3 add-to-cart-btn" data-slug="' . esc($p['slug']) . '" data-testid="add-to-cart-' . esc($p['slug']) . '"><i class="bi bi-cart-plus me-1"></i>Add</button>
+          ' . $cartBtn . '
         </div>
       </div>
     </div>';
@@ -420,6 +429,44 @@ function render_product_card(array $p): string
 function generate_order_number(): string
 {
     return 'MV' . date('ymd') . strtoupper(substr(bin2hex(random_bytes(3)), 0, 5));
+}
+
+/**
+ * Inventory helpers — count available license-keys for a product (within the
+ * active region) so the public site can show real stock instead of relying on
+ * the manual `products.stock` column.
+ *
+ * Results are memoized per-request so a listing of 12 products only hits the
+ * DB once, not 12 times.
+ */
+function available_keys_count(string $slug): int {
+    static $cache = null;
+    if ($cache === null) $cache = [];
+    if (array_key_exists($slug, $cache)) return $cache[$slug];
+    try {
+        $region = active_region_code();
+        $st = db()->prepare("SELECT COUNT(*) FROM license_keys WHERE product_slug = ? AND status = 'available' AND region = ?");
+        $st->execute([$slug, $region]);
+        $cache[$slug] = (int)$st->fetchColumn();
+    } catch (Throwable $e) {
+        $cache[$slug] = 0;
+    }
+    return $cache[$slug];
+}
+
+/** Renders the stock pill shown on every product card / row / strip card. */
+function render_stock_pill(string $slug, string $size = 'sm'): string {
+    $n = available_keys_count($slug);
+    $cls = $size === 'lg' ? 'pc-stock-pill pc-stock-lg' : 'pc-stock-pill';
+    if ($n <= 0) {
+        return '<span class="' . $cls . ' is-out" data-testid="stock-out-' . esc($slug) . '">'
+             . '<i class="bi bi-x-octagon-fill me-1"></i>Out of Stock</span>';
+    }
+    $low = $n <= 5;
+    return '<span class="' . $cls . ' ' . ($low ? 'is-low' : 'is-in') . '" data-testid="stock-avail-' . esc($slug) . '" data-count="' . $n . '">'
+         . '<i class="bi ' . ($low ? 'bi-exclamation-triangle-fill' : 'bi-check-circle-fill') . ' me-1"></i>'
+         . ($low ? 'Only ' . $n . ' left' : $n . ' in stock')
+         . '</span>';
 }
 
 // Elegant page-header band with breadcrumb (shop / category / blog / cart)

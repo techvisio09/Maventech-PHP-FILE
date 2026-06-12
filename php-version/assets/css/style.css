@@ -918,3 +918,30 @@ body.has-deal-bar #chat-panel { bottom: 155px; }
   .display-4, .display-5 { font-size: 2rem; }
   .reviews-cta h2 { font-size: 1.3rem; }
 }
+
+/* =================================================================
+   Stock pills — public site product listings & detail page
+   ================================================================= */
+.pc-stock-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: .2px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  line-height: 1.5;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.pc-stock-pill.pc-stock-lg { font-size: 13.5px; padding: 6px 14px; }
+.pc-stock-pill.is-in   { background:#dcfce7; color:#166534; border-color:#a7f3d0; }
+.pc-stock-pill.is-low  { background:#fff7ed; color:#9a3412; border-color:#fed7aa; }
+.pc-stock-pill.is-out  { background:#fee2e2; color:#991b1b; border-color:#fecaca; }
+[data-bs-theme="dark"] .pc-stock-pill.is-in   { background: rgba(34,197,94,.15);  color:#86efac; border-color: rgba(34,197,94,.35); }
+[data-bs-theme="dark"] .pc-stock-pill.is-low  { background: rgba(249,115,22,.18); color:#fdba74; border-color: rgba(249,115,22,.35); }
+[data-bs-theme="dark"] .pc-stock-pill.is-out  { background: rgba(239,68,68,.18);  color:#fca5a5; border-color: rgba(239,68,68,.35); }
+
+/* Dim the whole card slightly when out of stock */
+.product-card.is-out-of-stock { opacity: .82; }
+.product-card.is-out-of-stock .product-img-wrap img { filter: grayscale(.35); }
