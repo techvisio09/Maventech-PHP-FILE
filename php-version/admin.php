@@ -463,6 +463,7 @@ elseif ($tab === 'products'):
     'q'       => trim($_GET['q'] ?? ''),
     'year'    => $_GET['year'] ?? '',
     'os'      => $_GET['os'] ?? '',
+    'type'    => $_GET['type'] ?? '',
     'cat'     => $_GET['cat'] ?? '',
     'brand'   => $_GET['brand'] ?? '',
     'status'  => $_GET['status'] ?? '',
@@ -476,6 +477,11 @@ elseif ($tab === 'products'):
   if ($f['q'])      { $where[] = '(p.name LIKE ? OR p.sku LIKE ?)'; $args[]="%{$f['q']}%"; $args[]="%{$f['q']}%"; }
   if ($f['year']!=='')   { $where[] = 'p.year = ?';     $args[] = (int)$f['year']; }
   if ($f['os'])     { $where[] = 'p.platform = ?'; $args[] = $f['os']; }
+  // ---- High-level Type filter (groups categories/brands into intuitive buckets)
+  if ($f['type']==='office')    { $where[] = "p.category LIKE 'office-%'"; }
+  elseif ($f['type']==='antivirus') { $where[] = "(p.brand IN ('Bitdefender','McAfee','Norton','Kaspersky','Avast','AVG','ESET','Trend Micro','Webroot') OR p.category LIKE 'antivirus%' OR p.category IN ('bitdefender','mcafee','norton','kaspersky'))"; }
+  elseif ($f['type']==='windows-os') { $where[] = "p.category LIKE 'windows-%'"; }
+  elseif ($f['type']==='other') { $where[] = "p.category NOT LIKE 'office-%' AND p.category NOT LIKE 'windows-%' AND (p.brand IS NULL OR p.brand NOT IN ('Bitdefender','McAfee','Norton','Kaspersky','Avast','AVG','ESET','Trend Micro','Webroot'))"; }
   if ($f['cat'])    { $where[] = 'p.category = ?'; $args[] = $f['cat']; }
   if ($f['brand'])  { $where[] = 'p.brand = ?';    $args[] = $f['brand']; }
   if ($f['status']!=='') { $where[] = 'p.is_active = ?'; $args[] = (int)$f['status']; }
@@ -528,7 +534,7 @@ elseif ($tab === 'products'):
   // Helper to build pill URLs preserving other query params
   $qsBuild = function (array $overrides) {
     $base = ['tab'=>'products'];
-    $cur = array_intersect_key($_GET, array_flip(['q','year','os','cat','brand','status','pmin','pmax','stock','p_region','sort']));
+    $cur = array_intersect_key($_GET, array_flip(['q','year','os','type','cat','brand','status','pmin','pmax','stock','p_region','sort']));
     $merged = array_merge($base, $cur, $overrides);
     // strip empty values
     foreach ($merged as $k=>$v) if ($v === '' || $v === null) unset($merged[$k]);
@@ -569,7 +575,7 @@ elseif ($tab === 'products'):
     <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
       <form method="get" class="flex-grow-1" style="min-width:220px;max-width:480px;">
         <input type="hidden" name="tab" value="products">
-        <?php foreach (['year','os','cat','brand','status','pmin','pmax','stock','p_region','sort'] as $kp): if (!empty($_GET[$kp])): ?>
+        <?php foreach (['year','os','type','cat','brand','status','pmin','pmax','stock','p_region','sort'] as $kp): if (!empty($_GET[$kp])): ?>
           <input type="hidden" name="<?= esc($kp) ?>" value="<?= esc($_GET[$kp]) ?>">
         <?php endif; endforeach; ?>
         <label class="search-pill">
@@ -585,7 +591,7 @@ elseif ($tab === 'products'):
         </span>
         <form method="get" class="d-inline">
           <input type="hidden" name="tab" value="products">
-          <?php foreach (['q','year','os','cat','brand','status','pmin','pmax','stock','p_region'] as $kp): if (!empty($_GET[$kp])): ?>
+          <?php foreach (['q','year','os','type','cat','brand','status','pmin','pmax','stock','p_region'] as $kp): if (!empty($_GET[$kp])): ?>
             <input type="hidden" name="<?= esc($kp) ?>" value="<?= esc($_GET[$kp]) ?>">
           <?php endif; endforeach; ?>
           <select class="sort-select" name="sort" onchange="this.form.submit()" data-testid="sort-select">
@@ -597,7 +603,17 @@ elseif ($tab === 'products'):
       </div>
     </div>
 
-    <!-- Row 2: Platform pills -->
+    <!-- Row 2: Type pills (high-level grouping) -->
+    <div class="pill-row mb-2" data-testid="type-pills">
+      <span class="pill-label">Type</span>
+      <a href="<?= esc($qsBuild(['type'=>''])) ?>" class="pill-toggle <?= $f['type']===''?'active':'' ?>" data-testid="type-all">All</a>
+      <a href="<?= esc($qsBuild(['type'=>'office'])) ?>" class="pill-toggle <?= $f['type']==='office'?'active':'' ?>" data-testid="type-office"><i class="bi bi-file-earmark-text"></i> Office</a>
+      <a href="<?= esc($qsBuild(['type'=>'antivirus'])) ?>" class="pill-toggle <?= $f['type']==='antivirus'?'active':'' ?>" data-testid="type-antivirus"><i class="bi bi-shield-check"></i> Antivirus</a>
+      <a href="<?= esc($qsBuild(['type'=>'windows-os'])) ?>" class="pill-toggle <?= $f['type']==='windows-os'?'active':'' ?>" data-testid="type-windows-os"><i class="bi bi-windows"></i> Windows OS</a>
+      <a href="<?= esc($qsBuild(['type'=>'other'])) ?>" class="pill-toggle <?= $f['type']==='other'?'active':'' ?>" data-testid="type-other"><i class="bi bi-three-dots"></i> Other</a>
+    </div>
+
+    <!-- Row 3: Platform pills -->
     <div class="pill-row mb-2" data-testid="platform-pills">
       <span class="pill-label">Platform</span>
       <a href="<?= esc($qsBuild(['os'=>''])) ?>" class="pill-toggle <?= $f['os']===''?'active':'' ?>" data-testid="platform-all">All</a>
@@ -663,11 +679,14 @@ elseif ($tab === 'products'):
 
     <?php // Active filter chips
     $chips = [];
-    $chipMap = ['q'=>'Search','cat'=>'Category','brand'=>'Brand','status'=>'Status','stock'=>'Stock','region'=>'Region','pmin'=>'Min','pmax'=>'Max'];
+    $chipMap = ['q'=>'Search','type'=>'Type','cat'=>'Category','brand'=>'Brand','status'=>'Status','stock'=>'Stock','region'=>'Region','pmin'=>'Min','pmax'=>'Max'];
+    $typeLabels = ['office'=>'Office','antivirus'=>'Antivirus','windows-os'=>'Windows OS','other'=>'Other'];
     foreach ($chipMap as $k=>$label) {
       $v = $f[$k] ?? '';
       if ($v === '' || $v === null) continue;
-      $val = $k==='status' ? ($v=='1'?'Active':'Inactive') : $v;
+      if ($k==='status') $val = ($v=='1'?'Active':'Inactive');
+      elseif ($k==='type') $val = $typeLabels[$v] ?? $v;
+      else $val = $v;
       $remove = $_GET; unset($remove[$k==='region'?'p_region':$k]);
       $remove['tab']='products';
       $chips[] = ['label'=>$label, 'value'=>$val, 'url'=>'?'.http_build_query($remove)];
