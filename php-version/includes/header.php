@@ -1,7 +1,12 @@
 <?php
 require_once __DIR__ . '/functions.php';
 require_once __DIR__ . '/regions.php';
-$pageTitle = $pageTitle ?? (SITE_BRAND . ' | Genuine Microsoft Software');
+$co = company_info();                                       // single source of truth
+$brandName  = $co['name']  ?: (defined('SITE_BRAND') ? SITE_BRAND : 'Maventech Software');
+$brandEmail = $co['email'] ?: (defined('SITE_EMAIL') ? SITE_EMAIL : '');
+$brandPhone = $co['phone'] ?: (defined('SITE_PHONE') ? SITE_PHONE : '');
+$brandLogo  = $co['logo']  ?: '';
+$pageTitle = $pageTitle ?? ($brandName . ' | Genuine Microsoft Software');
 $cur = current_currency();
 $checkoutHeader = $checkoutHeader ?? false;
 
@@ -36,7 +41,7 @@ $ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.sv
   <meta name="google-site-verification" content="<?= esc(GOOGLE_SITE_VERIFICATION) ?>">
   <?php endif; ?>
   <!-- Open Graph / Twitter -->
-  <meta property="og:site_name" content="<?= SITE_BRAND ?>">
+  <meta property="og:site_name" content="<?= esc($brandName) ?>">
   <meta property="og:type" content="<?= isset($ogType) ? esc($ogType) : 'website' ?>">
   <meta property="og:title" content="<?= esc($pageTitle) ?>">
   <meta property="og:description" content="<?= esc($pageDescription) ?>">
@@ -50,16 +55,17 @@ $ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.sv
   <script type="application/ld+json"><?= json_encode([
       '@context' => 'https://schema.org',
       '@graph' => [
-          [
+          array_filter([
               '@type' => 'Organization',
-              'name' => SITE_LEGAL,
-              'url' => site_url() . '/',
-              'logo' => site_url() . '/assets/images/badges/microsoft-verified.svg',
-              'contactPoint' => ['@type' => 'ContactPoint', 'telephone' => SITE_PHONE, 'contactType' => 'customer service', 'availableLanguage' => 'English'],
-          ],
+              'name'  => $brandName,
+              'url'   => site_url() . '/',
+              'logo'  => $brandLogo ?: (site_url() . '/assets/images/badges/microsoft-verified.svg'),
+              'email' => $brandEmail ?: null,
+              'contactPoint' => $brandPhone ? ['@type' => 'ContactPoint', 'telephone' => $brandPhone, 'contactType' => 'customer service', 'availableLanguage' => 'English'] : null,
+          ]),
           [
               '@type' => 'WebSite',
-              'name' => SITE_BRAND,
+              'name' => $brandName,
               'url' => site_url() . '/',
               'potentialAction' => ['@type' => 'SearchAction', 'target' => site_url() . '/shop.php?q={search_term_string}', 'query-input' => 'required name=search_term_string'],
           ],
@@ -89,7 +95,7 @@ $ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.sv
       <span class="badge text-bg-warning text-dark">★ 4.6</span>
     </div>
     <div class="d-flex align-items-center gap-3 small">
-      <a href="tel:<?= SITE_PHONE ?>" class="text-decoration-none fw-semibold"><i class="bi bi-telephone-fill me-1"></i><?= SITE_PHONE ?></a>
+      <a href="tel:<?= esc($brandPhone) ?>" class="text-decoration-none fw-semibold"><i class="bi bi-telephone-fill me-1"></i><?= esc($brandPhone) ?></a>
       <span class="text-success fw-semibold d-none d-sm-inline"><i class="bi bi-lock-fill me-1"></i>Secure Checkout</span>
     </div>
   </div>
@@ -112,7 +118,7 @@ $ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.sv
     <div class="d-flex gap-3 align-items-center">
       <span class="badge text-bg-warning text-dark">★ Trusted Software Store</span>
       <span class="badge bg-white text-dark border">5 <small>YRS</small></span>
-      <a href="tel:<?= SITE_PHONE ?>" class="text-decoration-none text-white trustbar-phone"><i class="bi bi-telephone-fill me-1"></i><?= SITE_PHONE ?></a>
+      <a href="tel:<?= esc($brandPhone) ?>" class="text-decoration-none text-white trustbar-phone"><i class="bi bi-telephone-fill me-1"></i><?= esc($brandPhone) ?></a>
     </div>
   </div>
 </div>
@@ -175,9 +181,9 @@ $ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.sv
         <li class="nav-item"><a class="nav-link fw-semibold" href="affiliate.php" data-testid="nav-affiliates">Affiliates</a></li>
       </ul>
       <div class="d-flex align-items-center gap-2 flex-wrap">
-        <a href="tel:<?= SITE_PHONE ?>" class="phone-cta d-none d-xl-inline-flex" data-testid="navbar-phone-cta">
+        <a href="tel:<?= esc($brandPhone) ?>" class="phone-cta d-none d-xl-inline-flex" data-testid="navbar-phone-cta">
           <span class="phone-cta-icon"><i class="bi bi-telephone-fill"></i></span>
-          <span class="lh-1 text-start"><small class="phone-cta-label">CALL TOLL-FREE</small><?= SITE_PHONE ?></span>
+          <span class="lh-1 text-start"><small class="phone-cta-label">CALL TOLL-FREE</small><?= esc($brandPhone) ?></span>
         </a>
         <button class="btn btn-sm btn-outline-primary rounded-pill" onclick="toggleChat()" data-testid="ask-ai-btn"><i class="bi bi-stars me-1"></i>Ask AI</button>
         <div class="dropdown">
@@ -218,7 +224,7 @@ $ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.sv
         <div class="text-secondary" style="font-size:.62rem;">Call Mon–Fri 9 AM–6 PM EST</div>
       </div>
       <div class="d-flex gap-2 flex-shrink-0">
-        <a href="tel:<?= SITE_PHONE ?>" class="btn btn-sm rounded-pill fw-bold phone-cta-mobile" data-testid="mobile-call-btn"><i class="bi bi-telephone-fill me-1"></i><?= SITE_PHONE ?></a>
+        <a href="tel:<?= esc($brandPhone) ?>" class="btn btn-sm rounded-pill fw-bold phone-cta-mobile" data-testid="mobile-call-btn"><i class="bi bi-telephone-fill me-1"></i><?= esc($brandPhone) ?></a>
         <button class="btn btn-sm btn-primary rounded-pill fw-bold" style="font-size:.7rem;" onclick="toggleChat()" data-testid="mobile-chat-btn"><i class="bi bi-chat-dots-fill me-1"></i>Chat</button>
       </div>
     </div>

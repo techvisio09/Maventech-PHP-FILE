@@ -38,8 +38,8 @@
           <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-arrow-right"></i></button>
         </form>
 
-        <p class="small mb-1"><i class="bi bi-telephone me-2 text-info"></i><a href="tel:<?= SITE_PHONE ?>"><?= SITE_PHONE ?></a></p>
-        <p class="small mb-1"><i class="bi bi-envelope me-2 text-info"></i><a href="mailto:<?= SITE_EMAIL ?>"><?= SITE_EMAIL ?></a></p>
+        <p class="small mb-1"><i class="bi bi-telephone me-2 text-info"></i><a href="tel:<?= esc($brandPhone) ?>"><?= esc($brandPhone) ?></a></p>
+        <p class="small mb-1"><i class="bi bi-envelope me-2 text-info"></i><a href="mailto:<?= esc($brandEmail) ?>"><?= esc($brandEmail) ?></a></p>
         <p class="small mb-2"><i class="bi bi-geo-alt me-2 text-info"></i><?= SITE_ADDRESS ?></p>
         <a href="https://www.google.com/maps/search/?api=1&query=<?= urlencode(SITE_ADDRESS) ?>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-light rounded-pill mb-2 gmap-btn" data-testid="footer-gmap-btn">
           <span class="gmap-pin"><i class="bi bi-geo-alt-fill"></i></span>View on Google Maps
@@ -176,7 +176,14 @@
     <input id="chat-input" class="form-control form-control-sm chat-input" placeholder="Ask anything…" autocomplete="off" data-testid="chat-input">
     <button class="btn chat-send-btn" type="submit" aria-label="Send" data-testid="chat-send"><i class="bi bi-send-fill"></i></button>
   </form>
-  <div class="chat-talk-band px-3 py-2 small text-center" data-testid="chat-talk-band"><i class="bi bi-headset me-1"></i><strong>Prefer to talk?</strong> <?= SITE_HOURS ?> · <a href="tel:<?= SITE_PHONE ?>" class="fw-bold"><?= SITE_PHONE ?></a></div>
+  <div class="chat-talk-band px-3 py-2 small text-center" data-testid="chat-talk-band"><i class="bi bi-headset me-1"></i><strong>Prefer to talk?</strong> <?= esc(SITE_HOURS) ?> · <a href="tel:<?= esc($brandPhone) ?>" class="fw-bold"><?= esc($brandPhone) ?></a></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="assets/js/main.js"></script>
+</body>
+</html>
+-3 py-2 small text-center" data-testid="chat-talk-band"><i class="bi bi-headset me-1"></i><strong>Prefer to talk?</strong> <?= SITE_HOURS ?> · <a href="tel:<?= SITE_PHONE ?>" class="fw-bold"><?= SITE_PHONE ?></a></div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>

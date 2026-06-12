@@ -440,18 +440,18 @@ function generate_order_number(): string
  * DB once, not 12 times.
  */
 function available_keys_count(string $slug): int {
-    static $cache = null;
-    if ($cache === null) $cache = [];
-    if (array_key_exists($slug, $cache)) return $cache[$slug];
+    static $cache = [];
+    $region = active_region_code();
+    $key = $region . ':' . $slug;
+    if (array_key_exists($key, $cache)) return $cache[$key];
     try {
-        $region = active_region_code();
         $st = db()->prepare("SELECT COUNT(*) FROM license_keys WHERE product_slug = ? AND status = 'available' AND region = ?");
         $st->execute([$slug, $region]);
-        $cache[$slug] = (int)$st->fetchColumn();
+        $cache[$key] = (int)$st->fetchColumn();
     } catch (Throwable $e) {
-        $cache[$slug] = 0;
+        $cache[$key] = 0;
     }
-    return $cache[$slug];
+    return $cache[$key];
 }
 
 /** Renders the stock pill shown on every product card / row / strip card. */
