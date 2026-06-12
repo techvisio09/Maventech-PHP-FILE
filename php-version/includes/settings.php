@@ -23,6 +23,15 @@ function paypal_enabled(): bool {
 }
 
 function statement_name_for(string $payment_method): string {
-    $key = $payment_method === 'paypal' ? 'statement_name_paypal' : 'statement_name_card';
-    return setting_get($key, SITE_LEGAL);
+    // Source of truth for company / merchant name = API Management section
+    // (gw_card_merchant_name / gw_paypal_account_name). Falls back to the
+    // legacy Settings-tab keys, then to SITE_LEGAL.
+    if ($payment_method === 'paypal') {
+        $v = setting_get('gw_paypal_account_name', '');
+        if ($v === '') $v = setting_get('statement_name_paypal', '');
+        return $v !== '' ? $v : SITE_LEGAL;
+    }
+    $v = setting_get('gw_card_merchant_name', '');
+    if ($v === '') $v = setting_get('statement_name_card', '');
+    return $v !== '' ? $v : SITE_LEGAL;
 }

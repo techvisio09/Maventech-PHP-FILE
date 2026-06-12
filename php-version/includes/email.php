@@ -3,6 +3,41 @@
 require_once __DIR__ . '/functions.php';
 require_once __DIR__ . '/settings.php';
 
+/**
+ * Resolve the activation / sign-in URL for a product.
+ * Priority:
+ *   1. Per-product `activation_url` configured by admin
+ *   2. Smart per-brand defaults (Microsoft / Bitdefender / McAfee / Norton / Adobe)
+ *   3. Google search fallback prefilled with the product name → always lands on the right page
+ */
+function activation_url_for_product(string $name, string $brand = '', string $override = ''): string {
+    $override = trim($override);
+    if ($override !== '') return $override;
+    $n = strtolower($name . ' ' . $brand);
+    $brandMap = [
+        'office'       => 'https://setup.office.com',
+        'microsoft 365'=> 'https://setup.office.com',
+        'microsoft'    => 'https://account.microsoft.com',
+        'bitdefender'  => 'https://central.bitdefender.com',
+        'mcafee'       => 'https://home.mcafee.com',
+        'norton'       => 'https://my.norton.com',
+        'adobe'        => 'https://account.adobe.com',
+        'kaspersky'    => 'https://my.kaspersky.com',
+        'avast'        => 'https://my.avast.com',
+        'avg'          => 'https://my.avg.com',
+        'eset'         => 'https://home.eset.com',
+        'trend micro'  => 'https://account.trendmicro.com',
+        'webroot'      => 'https://my.webrootanywhere.com',
+        'autocad'      => 'https://accounts.autodesk.com',
+        'autodesk'     => 'https://accounts.autodesk.com',
+    ];
+    foreach ($brandMap as $needle => $url) {
+        if (strpos($n, $needle) !== false) return $url;
+    }
+    // Fallback: Google search for "<product name> sign in activate" so the customer lands on the right vendor page.
+    return 'https://www.google.com/search?q=' . urlencode(trim($name) . ' sign in activate');
+}
+
 /** Default "light" template w/ Microsoft icon watermark. Used when admin
  *  hasn't customised it via the Email Template editor.                    */
 function default_email_template(): string {
@@ -91,7 +126,7 @@ function default_email_template(): string {
             </td>
             <td valign="top" style="padding-left:8px;">
               <div style="font-weight:700;color:#0f172a;">&#128295; Troubleshooting</div>
-              <div style="font-size:13px;color:#475569;margin-top:2px;">If activation fails: check internet connection, sign out and back in, or contact support below.</div>
+              <div style="font-size:13px;color:#475569;margin-top:2px;">If activation fails: check internet connection, sign out and back in, then use the <strong>Sign in to activate</strong> button above to open the official page. Still stuck? Contact support below.</div>
             </td>
           </tr>
         </table>
@@ -126,12 +161,20 @@ function render_products_block(array $assignments): string {
                  <div style="font-size:10px;color:#64748b;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px;font-weight:600;">License Key</div>
                  <div style="font-family:\'Courier New\',monospace;font-size:17px;font-weight:bold;color:#1d4ed8;letter-spacing:1.8px;">' . esc($a['key']) . '</div></div>'
             : '<div style="margin-top:10px;background:#fef3c7;color:#92400e;padding:10px 14px;border-radius:8px;font-size:13px;">Key being prepared — you\'ll receive it within 30 minutes.</div>';
+        // Activation button — per-product sign-in URL (vendor portal or Google search fallback)
+        $actUrl = $a['activation_url'] ?? '';
+        $actBtn = $actUrl
+            ? '<div style="margin-top:12px;text-align:center;">
+                 <a href="' . esc($actUrl) . '" style="display:inline-block;padding:11px 26px;background:linear-gradient(135deg,#10b981,#047857);color:#ffffff;border-radius:999px;text-decoration:none;font-weight:700;font-size:13px;letter-spacing:.3px;">&#128274; Sign in to activate &rarr;</a>
+                 <div style="font-size:11px;color:#94a3b8;margin-top:6px;">Opens the official activation page for this product.</div>
+               </div>'
+            : '';
         $rows .= '<table width="100%" style="border:1px solid #eef0f3;border-radius:12px;margin-bottom:14px;background:#fff;"><tr><td style="padding:14px;">
             <table width="100%"><tr><td width="80" valign="top">' . $img . '</td>
             <td valign="top" style="padding-left:10px;">
               <div style="font-size:15px;font-weight:bold;color:#0f172a;">' . esc($a['name']) . '</div>
               <div style="font-size:12px;color:#94a3b8;margin-top:2px;">' . esc($a['description'] ?? 'Genuine lifetime license') . '</div>
-            </td></tr></table>' . $key . '</td></tr></table>';
+            </td></tr></table>' . $key . $actBtn . '</td></tr></table>';
     }
     return $rows;
 }
@@ -233,7 +276,7 @@ function fulfill_order(int $orderId): void {
         $order['card_statement_name'] = $stmtName;
     }
 
-    $itemsStmt = $pdo->prepare('SELECT oi.*, p.image, p.description, p.apps AS installation_guide FROM order_items oi LEFT JOIN products p ON p.slug = oi.product_slug WHERE oi.order_id = ?');
+    $itemsStmt = $pdo->prepare('SELECT oi.*, p.image, p.description, p.apps AS installation_guide, p.activation_url, p.brand FROM order_items oi LEFT JOIN products p ON p.slug = oi.product_slug WHERE oi.order_id = ?');
     $itemsStmt->execute([$orderId]);
     $items = $itemsStmt->fetchAll();
 
@@ -251,6 +294,7 @@ function fulfill_order(int $orderId): void {
                 'image' => $item['image'],
                 'description' => $item['description'] ?? '',
                 'installation_guide' => $item['installation_guide'] ?? '',
+                'activation_url' => activation_url_for_product($item['name'], $item['brand'] ?? '', $item['activation_url'] ?? ''),
                 'key' => $keyRow['license_key'] ?? null,
             ];
         }

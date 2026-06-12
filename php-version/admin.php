@@ -20,7 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'update_product') {
         $pdo->prepare('UPDATE products SET name=?, sku=?, brand=?, year=?, platform=?, category=?, license_type=?,
-            price=?, original_price=?, badge=?, description=?, is_active=?, image=COALESCE(NULLIF(?,""),image) WHERE slug=?')
+            price=?, original_price=?, badge=?, description=?, is_active=?, activation_url=?, image=COALESCE(NULLIF(?,""),image) WHERE slug=?')
             ->execute([
                 trim($_POST['name']), trim($_POST['sku']), trim($_POST['brand']) ?: null,
                 $_POST['year']!==''?(int)$_POST['year']:null, $_POST['platform'], $_POST['category'],
@@ -28,18 +28,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_POST['original_price']!==''?(float)$_POST['original_price']:null,
                 trim($_POST['badge']) ?: null, trim($_POST['description'] ?? '') ?: null,
                 isset($_POST['is_active']) ? 1 : 0,
+                trim($_POST['activation_url'] ?? '') ?: null,
                 trim($_POST['image'] ?? ''), $_POST['slug']
             ]);
         header('Location: admin.php?tab=products&edit='.urlencode($_POST['slug']).'&msg=Saved'); exit;
 
     } elseif ($action === 'add_product') {
         $slug = preg_replace('/[^a-z0-9]+/i','-', strtolower(trim($_POST['name']))) . '-' . substr(md5(uniqid()),0,5);
-        $pdo->prepare('INSERT INTO products (slug,name,sku,brand,year,platform,category,license_type,price,original_price,badge,description,image,is_active,region,apps,rating,reviews) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,4.5,0)')
+        $pdo->prepare('INSERT INTO products (slug,name,sku,brand,year,platform,category,license_type,price,original_price,badge,description,image,is_active,activation_url,region,apps,rating,reviews) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,4.5,0)')
             ->execute([$slug, trim($_POST['name']), trim($_POST['sku']) ?: 'SKU-'.strtoupper(substr(md5($slug),0,8)), trim($_POST['brand']) ?: null,
                 $_POST['year']!==''?(int)$_POST['year']:null, $_POST['platform'], $_POST['category'], $_POST['license_type'],
                 (float)$_POST['price'], $_POST['original_price']!==''?(float)$_POST['original_price']:null,
                 trim($_POST['badge']) ?: null, trim($_POST['description'] ?? '') ?: null, trim($_POST['image'] ?? '') ?: null,
-                isset($_POST['is_active']) ? 1 : 0, $region_code, '']);
+                isset($_POST['is_active']) ? 1 : 0, trim($_POST['activation_url'] ?? '') ?: null, $region_code, '']);
         header('Location: admin.php?tab=products&edit='.urlencode($slug).'&msg=Product+created'); exit;
 
     } elseif ($action === 'duplicate_product') {
@@ -696,6 +697,27 @@ elseif ($tab === 'products'):
                       <?php endforeach; ?>
                     </div>
                     <input class="form-control form-control-sm" id="f_badge" name="badge" value="<?= esc($editing['badge']) ?>" oninput="updPrev()" placeholder="Or type custom badge text">
+                  </div>
+                </div>
+
+                <h6 class="fw-bold mb-2"><i class="bi bi-link-45deg me-1"></i>Activation / Sign-in URL</h6>
+                <div class="row g-2 mb-3">
+                  <div class="col-12">
+                    <label class="form-label small mb-0">Where should the customer go to activate? <span class="badge bg-success ms-1" style="font-size:9px;">used in order email</span></label>
+                    <input class="form-control form-control-sm" name="activation_url" value="<?= esc($editing['activation_url'] ?? '') ?>" placeholder="https://setup.office.com (leave blank → auto Google search per product name)" data-testid="f-activation-url">
+                    <small class="text-muted">Customers see a "Sign in to activate →" button in the order email that opens this URL. Leave blank and we auto-generate a Google search link with the product name so they always land on the right page.</small>
+                    <div class="d-flex gap-1 flex-wrap mt-1">
+                      <?php foreach ([
+                        'Office (setup)'  => 'https://setup.office.com',
+                        'Microsoft Account' => 'https://account.microsoft.com',
+                        'Bitdefender'     => 'https://central.bitdefender.com',
+                        'McAfee'          => 'https://home.mcafee.com',
+                        'Norton'          => 'https://my.norton.com',
+                        'Adobe'           => 'https://account.adobe.com',
+                      ] as $lbl=>$u): ?>
+                        <button type="button" class="btn btn-soft-gray btn-sm py-0 px-2" style="font-size:11px;" onclick="document.querySelector('[name=activation_url]').value='<?= esc($u) ?>';"><?= esc($lbl) ?></button>
+                      <?php endforeach; ?>
+                    </div>
                   </div>
                 </div>
 
@@ -1511,7 +1533,11 @@ elseif ($tab === 'api'):
               </select>
             </div>
             <div class="col-6"><label class="form-label small mb-0">Gateway Provider</label><input class="form-control form-control-sm" name="provider" value="<?= esc($cardProv) ?>"></div>
-            <div class="col-12"><label class="form-label small mb-0">Merchant / Company Name</label><input class="form-control form-control-sm" name="merchant_name" value="<?= esc($cardMerch) ?>"></div>
+            <div class="col-12">
+              <label class="form-label small mb-0">Merchant / Company Name <span class="badge bg-success ms-1" style="font-size:9px;">used in Billing notes</span></label>
+              <input class="form-control form-control-sm" name="merchant_name" value="<?= esc($cardMerch) ?>" data-testid="api-card-merchant">
+              <small class="text-muted">Shown on bank/card statements <em>and</em> in the order-confirmation email billing note.</small>
+            </div>
             <div class="col-12"><label class="form-label small mb-0">Publishable Key <small class="text-muted"><?= esc(mask($cardPub)) ?></small></label><input class="form-control form-control-sm" name="public_key" type="password" placeholder="leave blank to keep current"></div>
             <div class="col-12"><label class="form-label small mb-0">Secret Key <small class="text-muted"><?= esc(mask($cardSec)) ?></small></label><input class="form-control form-control-sm" name="secret_key" type="password" placeholder="leave blank to keep current"></div>
             <div class="col-12"><label class="form-label small mb-0">Webhook Secret <small class="text-muted"><?= esc(mask($cardWh)) ?></small></label><input class="form-control form-control-sm" name="webhook_secret" type="password" placeholder="leave blank to keep current"></div>
@@ -1550,7 +1576,11 @@ elseif ($tab === 'api'):
               </select>
               <small class="text-muted">Toggling Active also reveals PayPal on the public checkout.</small>
             </div>
-            <div class="col-12"><label class="form-label small mb-0">PayPal Business Account Name</label><input class="form-control form-control-sm" name="account_name" value="<?= esc($ppAcc) ?>"></div>
+            <div class="col-12">
+              <label class="form-label small mb-0">PayPal Business Account Name <span class="badge bg-success ms-1" style="font-size:9px;">used in Billing notes</span></label>
+              <input class="form-control form-control-sm" name="account_name" value="<?= esc($ppAcc) ?>" data-testid="api-paypal-account">
+              <small class="text-muted">Shown in the order email billing note when PayPal is used as payment method.</small>
+            </div>
             <div class="col-12"><label class="form-label small mb-0">Client ID <small class="text-muted"><?= esc(mask($ppCid)) ?></small></label><input class="form-control form-control-sm" name="client_id" type="password" placeholder="leave blank to keep current"></div>
             <div class="col-12"><label class="form-label small mb-0">Client Secret <small class="text-muted"><?= esc(mask($ppSec)) ?></small></label><input class="form-control form-control-sm" name="secret" type="password" placeholder="leave blank to keep current"></div>
             <div class="col-12"><label class="form-label small mb-0">Webhook ID <small class="text-muted"><?= esc(mask($ppWh)) ?></small></label><input class="form-control form-control-sm" name="webhook_id" type="password" placeholder="leave blank to keep current"></div>
@@ -1710,22 +1740,36 @@ elseif ($tab === 'reviews'):
   </div>
 
 <?php elseif ($tab === 'settings'):
-  $stmtCard   = setting_get('statement_name_card','MAVENTECH SOFTWARE');
-  $stmtPaypal = setting_get('statement_name_paypal','MAVENTECH SOFTWARE LLC');
+  $cardMerch  = setting_get('gw_card_merchant_name','Maventech Software');
+  $ppAcc      = setting_get('gw_paypal_account_name','Maventech Software LLC');
 ?>
   <h5 class="fw-bold mb-1">Settings</h5>
-  <p class="text-muted small mb-3">General settings. For payment credentials see <a href="admin.php?tab=api">API Management</a>.</p>
+  <p class="text-muted small mb-3">General settings. Payment credentials and merchant/company names live in <a href="admin.php?tab=api">API Management</a>.</p>
 
-  <form method="post" class="card-e p-4" style="max-width:760px;">
-    <input type="hidden" name="action" value="save_settings">
-    <h6 class="fw-bold mb-3"><i class="bi bi-credit-card me-1"></i> Card Statement Names</h6>
-    <p class="text-muted small mb-3">What customers see on their bank/card statement so they recognize the charge. This is also included in the order email.</p>
-    <div class="row g-3 mb-3">
-      <div class="col-md-6"><label class="form-label small fw-semibold">Card / Stripe statement name</label><input class="form-control" name="statement_name_card" value="<?= esc($stmtCard) ?>" maxlength="22"><small class="text-muted">Max 22 chars</small></div>
-      <div class="col-md-6"><label class="form-label small fw-semibold">PayPal merchant name</label><input class="form-control" name="statement_name_paypal" value="<?= esc($stmtPaypal) ?>" maxlength="60"></div>
+  <div class="card-e p-4" style="max-width:760px;">
+    <h6 class="fw-bold mb-2"><i class="bi bi-credit-card me-1"></i> Billing &amp; Statement Names</h6>
+    <p class="text-muted small mb-3">
+      The company name shown on the customer's bank/card statement and in the order-confirmation email
+      is now sourced from <a href="admin.php?tab=api"><strong>API Management</strong></a>.
+      Update it on the Card or PayPal API card and it will flow through to billing notes everywhere automatically.
+    </p>
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="p-3 rounded" style="background:var(--bg);border:1px solid var(--border);">
+          <small class="text-muted text-uppercase fw-semibold" style="font-size:10px;letter-spacing:1px;">Card / Stripe Merchant</small>
+          <div class="fw-bold mt-1" data-testid="stmt-card-readonly"><?= esc($cardMerch) ?></div>
+          <a href="admin.php?tab=api" class="small">Edit in API Management <i class="bi bi-arrow-right-short"></i></a>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="p-3 rounded" style="background:var(--bg);border:1px solid var(--border);">
+          <small class="text-muted text-uppercase fw-semibold" style="font-size:10px;letter-spacing:1px;">PayPal Business</small>
+          <div class="fw-bold mt-1" data-testid="stmt-paypal-readonly"><?= esc($ppAcc) ?></div>
+          <a href="admin.php?tab=api" class="small">Edit in API Management <i class="bi bi-arrow-right-short"></i></a>
+        </div>
+      </div>
     </div>
-    <button class="btn btn-soft-blue"><i class="bi bi-check2 me-1"></i> Save</button>
-  </form>
+  </div>
 
 <?php endif; ?>
 

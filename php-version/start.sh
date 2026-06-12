@@ -26,6 +26,9 @@ if ! mysql -uroot -e "USE ucode_store" 2>/dev/null; then
   echo "[start.sh] Database ucode_store created and seeded"
 fi
 
+# 2b) Idempotent schema migrations (safe on every boot)
+mysql -uroot ucode_store -e "ALTER TABLE products ADD COLUMN IF NOT EXISTS activation_url VARCHAR(500) DEFAULT NULL" 2>/dev/null || true
+
 # 3) Export integration keys from the backend .env (preview convenience)
 ENVF=/app/backend/.env
 if [ -f "$ENVF" ]; then

@@ -47,6 +47,8 @@ Create a comprehensive and user-friendly Admin Panel for Maventech Software with
 - **[Feb 2026]** Cleaned up duplicate `tab === 'settings'` routing block in admin.php
 - **[Feb 2026]** Merged Key Inventory into Products tab — sidebar renamed "Products / Key Inventory", each product card has "Update Inventory" button opening a modal with Available Keys / Sold Keys tabs (with Add-Keys form & sold-key drill-down). Card grid spacing upgraded (g-2 → g-4). `?tab=keys` URLs redirect to `?tab=products`.
 - **[Feb 2026]** Emails tab: undelivered (queued/failed) rows highlighted; each shows "Resend" (same recipient) and "Edit & Resend" (change recipient inline) buttons. New `resend_outbox` POST action.
+- **[Feb 2026]** Per-product **Activation / Sign-in URL** field — admin can set a vendor portal (Office, Bitdefender, McAfee, Norton, Adobe quick-select). Order-confirmation email now renders a green "🔒 Sign in to activate →" button next to each license key. Falls back to brand-aware defaults, finally to a Google search prefilled with product name so the customer always lands on the right page. Added `activation_url_for_product()` helper in `includes/email.php`; added idempotent `ALTER TABLE products ADD COLUMN activation_url` in `start.sh`.
+- **[Feb 2026]** Billing notes (statement name on order emails) now sourced from API Management section (`gw_card_merchant_name` / `gw_paypal_account_name`) — single source of truth. Settings tab "Card Statement Names" form replaced with a read-only summary linking to API Management. `statement_name_for()` updated in `includes/settings.php`.
 
 ## Test Credentials
 See `/app/memory/test_credentials.md`.
