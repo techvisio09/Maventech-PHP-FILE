@@ -48,20 +48,282 @@ function default_review_template(): string {
                     . 'style="text-decoration:none;display:inline-block;margin:0 4px;font-size:42px;line-height:1;color:#f59e0b;text-shadow:0 2px 6px rgba(245,158,11,0.35);" '
                     . 'title="Rate ' . $i . ' star' . ($i>1?'s':'') . '">&#9733;</a>';
     }
-    return '<!doctype html><html><body style="font-family:Arial,sans-serif;background:#f8fafc;padding:30px;">
-  <div style="max-width:580px;margin:0 auto;background:#fff;border-radius:14px;padding:32px;box-shadow:0 4px 20px rgba(0,0,0,.05);">
-    <div style="text-align:center;font-size:18px;font-weight:800;color:#0f172a;">{{company_name}}</div>
-    <h2 style="color:#0f172a;text-align:center;margin-top:16px;">How was your purchase, {{customer_name}}?</h2>
-    <p style="color:#64748b;text-align:center;">We hope <strong>{{product_name}}</strong> is working great. Tap a star below to rate &mdash; we&rsquo;ll pre-fill your selection.</p>
-    <div style="text-align:center;margin:28px 0 10px;">
-      ' . $starsHtml . '
+    return '<!doctype html><html><body style="margin:0;padding:0;background:#f8fafc;font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#1f2937;">
+<div style="max-width:620px;margin:0 auto;padding:30px 16px;">
+  <div style="background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 6px 28px rgba(15,23,42,.06);">
+    <!-- Brand header -->
+    <div style="background:linear-gradient(135deg,#0ea5e9,#2563eb);padding:28px 32px;text-align:center;color:#fff;">
+      <div style="display:inline-block;background:rgba(255,255,255,.18);border-radius:14px;padding:8px 14px;font-weight:800;font-size:22px;letter-spacing:.3px;">
+        <span style="display:inline-block;width:30px;height:30px;background:#fff;color:#2563eb;border-radius:8px;text-align:center;line-height:30px;font-weight:900;margin-right:8px;vertical-align:-8px;">M</span>{{company_name}}
+      </div>
+      <div style="font-size:11px;letter-spacing:1.8px;font-weight:600;margin-top:8px;opacity:.95;">AUTHORIZED MICROSOFT RESELLER</div>
     </div>
-    <p style="text-align:center;font-size:12px;color:#94a3b8;margin:0 0 24px;">Click any star: <strong style="color:#f59e0b;">1</strong> = needs work &middot; <strong style="color:#f59e0b;">5</strong> = excellent</p>
-    <div style="text-align:center;margin:0 0 18px;">
-      <a href="{{review_url}}" style="display:inline-block;padding:12px 32px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;border-radius:999px;text-decoration:none;font-weight:700;">Or write a full review &rarr;</a>
+
+    <div style="padding:32px;">
+      <h1 style="margin:0 0 8px;font-size:24px;color:#0f172a;font-weight:700;text-align:center;">How did we do, {{customer_name}}?</h1>
+      <p style="margin:0 0 4px;color:#475569;text-align:center;font-size:14px;line-height:1.6;">We hope you&rsquo;re loving <strong style="color:#0f172a;">{{product_name}}</strong>.<br>Tap a star below &mdash; one click sends us your rating.</p>
+
+      <div style="text-align:center;margin:24px 0 6px;">
+        ' . $starsHtml . '
+      </div>
+      <p style="text-align:center;font-size:12px;color:#94a3b8;margin:0 0 22px;">
+        <strong style="color:#f59e0b;">1</strong> = needs work &nbsp;&middot;&nbsp; <strong style="color:#f59e0b;">5</strong> = excellent
+      </p>
+
+      <!-- AI-assist card -->
+      <div style="background:linear-gradient(135deg,#eef2ff,#f5f3ff);border:1px solid #c7d2fe;border-radius:14px;padding:18px;margin:0 0 20px;">
+        <div style="font-weight:700;color:#3730a3;font-size:14px;margin-bottom:4px;">&#10024; Need help finding the words?</div>
+        <div style="font-size:13px;color:#475569;line-height:1.6;">After you pick a star rating, our <strong>AI assistant</strong> can draft a thoughtful comment for you in one click &mdash; or you can write it manually. Either way, your feedback helps thousands of other customers.</div>
+      </div>
+
+      <div style="text-align:center;margin:0 0 22px;">
+        <a href="{{review_url}}" style="display:inline-block;padding:13px 34px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;border-radius:999px;text-decoration:none;font-weight:700;box-shadow:0 6px 18px rgba(59,130,246,.35);">Write a full review &rarr;</a>
+      </div>
+
+      <div style="text-align:center;border-top:1px solid #f1f3f5;padding-top:18px;margin-top:14px;">
+        <div style="font-size:13px;color:#0f172a;font-weight:600;">Thanks for your valuable feedback!</div>
+        <div style="font-size:12px;color:#94a3b8;margin-top:4px;">Your review helps us keep prices low and service genuine.</div>
+      </div>
     </div>
-    <p style="font-size:12px;color:#94a3b8;text-align:center;">Includes an AI-assist option to help write your comment based on your rating. Thank you!</p>
-  </div>{{tracking_pixel}}</body></html>';
+
+    <div style="background:#f8fafc;padding:18px 32px;border-top:1px solid #f1f3f5;font-size:12px;color:#64748b;text-align:center;">
+      <strong style="color:#0f172a;">Need help?</strong> <a href="mailto:{{support_email}}" style="color:#3b82f6;text-decoration:none;">{{support_email}}</a> &middot; {{support_phone}}<br>
+      <span style="font-size:11px;color:#94a3b8;">&copy; {{year}} {{company_name}}. All rights reserved.</span>
+    </div>
+  </div>
+</div>{{tracking_pixel}}</body></html>';
+}
+
+/* Default Lead Follow-up template — sent to a prospective customer who showed interest. */
+function default_lead_followup_template(): string {
+    $siteUrl = defined('SITE_URL') ? SITE_URL : '';
+    return '<!doctype html><html><body style="margin:0;padding:0;background:#f8fafc;font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#1f2937;">
+<div style="max-width:620px;margin:0 auto;padding:30px 16px;">
+  <div style="background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 6px 28px rgba(15,23,42,.06);">
+    <!-- Brand header -->
+    <div style="background:#fff;padding:24px 32px;border-bottom:1px solid #f1f3f5;display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <div style="font-size:20px;font-weight:800;color:#0f172a;letter-spacing:.3px;">
+          <span style="display:inline-block;width:28px;height:28px;background:linear-gradient(135deg,#0ea5e9,#2563eb);color:#fff;border-radius:7px;text-align:center;line-height:28px;font-weight:900;margin-right:8px;vertical-align:-6px;">M</span>{{company_name}}
+        </div>
+        <div style="font-size:10px;color:#94a3b8;letter-spacing:1.8px;font-weight:600;margin-top:2px;">AUTHORIZED MICROSOFT RESELLER</div>
+      </div>
+      <span style="font-size:11px;color:#2563eb;font-weight:700;background:#dbeafe;padding:6px 12px;border-radius:999px;">&#128075; CHECKING IN</span>
+    </div>
+
+    <div style="padding:30px 32px;">
+      <h1 style="margin:0 0 8px;font-size:22px;color:#0f172a;font-weight:700;">Hi {{customer_name}}, still thinking it over?</h1>
+      <p style="margin:0 0 18px;font-size:14px;color:#475569;line-height:1.65;">
+        We noticed you were browsing genuine Microsoft license keys on our store but didn&rsquo;t finish checking out. No worries &mdash; we&rsquo;re saving your cart for you, and we wanted to make sure you have everything you need to decide.
+      </p>
+
+      <!-- Why buy from us -->
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 22px;">
+        <tr>
+          <td style="padding:14px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:12px;width:33%;text-align:center;">
+            <div style="font-size:22px;">&#10003;</div>
+            <div style="font-weight:700;color:#065f46;font-size:13px;margin-top:4px;">100% Genuine</div>
+            <div style="font-size:11.5px;color:#475569;margin-top:2px;">Direct from authorized channels</div>
+          </td>
+          <td style="width:8px;"></td>
+          <td style="padding:14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;width:33%;text-align:center;">
+            <div style="font-size:22px;">&#9889;</div>
+            <div style="font-weight:700;color:#1e40af;font-size:13px;margin-top:4px;">Instant Delivery</div>
+            <div style="font-size:11.5px;color:#475569;margin-top:2px;">Email within 15&ndash;30 minutes</div>
+          </td>
+          <td style="width:8px;"></td>
+          <td style="padding:14px;background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;width:33%;text-align:center;">
+            <div style="font-size:22px;">&#127942;</div>
+            <div style="font-weight:700;color:#9a3412;font-size:13px;margin-top:4px;">Lifetime License</div>
+            <div style="font-size:11.5px;color:#475569;margin-top:2px;">One purchase, no subscription</div>
+          </td>
+        </tr>
+      </table>
+
+      <!-- Exclusive discount -->
+      <div style="background:linear-gradient(135deg,#fef3c7,#fde68a);border:1px dashed #f59e0b;border-radius:14px;padding:18px;text-align:center;margin:0 0 24px;">
+        <div style="font-size:12px;color:#92400e;letter-spacing:1.5px;font-weight:700;">EXCLUSIVE OFFER &middot; JUST FOR YOU</div>
+        <div style="font-size:26px;font-weight:800;color:#0f172a;margin:6px 0;">10% OFF your order</div>
+        <div style="font-size:13px;color:#78350f;">Use code <code style="background:#fff;padding:3px 10px;border-radius:6px;font-weight:700;letter-spacing:1px;">WELCOME10</code> at checkout</div>
+      </div>
+
+      <div style="text-align:center;margin:0 0 20px;">
+        <a href="' . htmlspecialchars($siteUrl) . '/shop.php" style="display:inline-block;padding:13px 34px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;border-radius:999px;text-decoration:none;font-weight:700;box-shadow:0 6px 18px rgba(59,130,246,.35);">Continue Shopping &rarr;</a>
+      </div>
+
+      <!-- Questions / chat -->
+      <div style="background:#f8fafc;border-radius:12px;padding:16px;border:1px solid #e2e8f0;font-size:13px;color:#475569;line-height:1.7;">
+        <strong style="color:#0f172a;">Questions before you buy?</strong> Reply to this email, call us, or chat with our <strong>AI assistant</strong> on the site &mdash; we&rsquo;re here Mon&ndash;Sat to help you pick the right product.
+      </div>
+    </div>
+
+    <div style="background:#f8fafc;padding:18px 32px;border-top:1px solid #f1f3f5;font-size:12px;color:#64748b;text-align:center;">
+      <strong style="color:#0f172a;">Talk to a human:</strong> <a href="mailto:{{support_email}}" style="color:#3b82f6;text-decoration:none;">{{support_email}}</a> &middot; {{support_phone}}<br>
+      <span style="font-size:11px;color:#94a3b8;">&copy; {{year}} {{company_name}}. All rights reserved.</span>
+    </div>
+  </div>
+</div>{{tracking_pixel}}</body></html>';
+}
+
+/* Default Order Pending Payment template — payment not yet received. */
+function default_order_pending_template(): string {
+    $siteUrl = defined('SITE_URL') ? SITE_URL : '';
+    return '<!doctype html><html><body style="margin:0;padding:0;background:#fffbeb;font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#1f2937;">
+<div style="max-width:640px;margin:0 auto;padding:30px 16px;">
+  <div style="background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 6px 28px rgba(15,23,42,.06);">
+    <!-- Brand header -->
+    <div style="background:#fff;padding:24px 32px;border-bottom:1px solid #f1f3f5;display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <div style="font-size:20px;font-weight:800;color:#0f172a;">
+          <span style="display:inline-block;width:28px;height:28px;background:linear-gradient(135deg,#0ea5e9,#2563eb);color:#fff;border-radius:7px;text-align:center;line-height:28px;font-weight:900;margin-right:8px;vertical-align:-6px;">M</span>{{company_name}}
+        </div>
+        <div style="font-size:10px;color:#94a3b8;letter-spacing:1.8px;font-weight:600;margin-top:2px;">AUTHORIZED MICROSOFT RESELLER</div>
+      </div>
+      <span style="font-size:11px;color:#92400e;font-weight:700;background:#fef3c7;padding:6px 12px;border-radius:999px;">&#9203; PAYMENT PENDING</span>
+    </div>
+
+    <div style="padding:30px 32px;">
+      <h1 style="margin:0 0 6px;font-size:22px;color:#0f172a;font-weight:700;">Almost there, {{customer_name}}!</h1>
+      <p style="margin:0 0 18px;font-size:14px;color:#475569;line-height:1.6;">
+        Your order has been placed but we haven&rsquo;t received your payment yet. Once it&rsquo;s confirmed, we&rsquo;ll email you the license key + step-by-step install guide instantly.
+      </p>
+
+      <!-- Order summary -->
+      <table width="100%" style="border-collapse:separate;border-spacing:0;background:#f8fafc;border-radius:12px;margin-bottom:20px;font-size:13px;color:#475569;">
+        <tr>
+          <td style="padding:14px 18px;">Order #<br><strong style="color:#0f172a;font-size:15px;">{{order_number}}</strong></td>
+          <td style="padding:14px 18px;">Amount Due<br><strong style="color:#0f172a;font-size:15px;">${{amount}}</strong></td>
+          <td style="padding:14px 18px;">Account<br><strong style="color:#0f172a;font-size:13px;">{{customer_email}}</strong></td>
+        </tr>
+      </table>
+
+      <!-- Statement / merchant name notice -->
+      <div style="border:1px solid #bfdbfe;background:#eff6ff;border-radius:12px;padding:16px;margin:0 0 20px;">
+        <div style="font-weight:700;color:#1e40af;font-size:14px;margin-bottom:6px;">&#128179; Look for this on your statement</div>
+        <p style="margin:0;font-size:13px;color:#1e3a8a;line-height:1.6;">
+          When the charge goes through, it will appear as
+          <strong style="font-family:\'SF Mono\',Menlo,monospace;background:#fff;padding:2px 8px;border-radius:6px;letter-spacing:1px;color:#1d4ed8;">{{statement_name}}</strong>
+          on your card or bank statement. There&rsquo;s no need to do anything else &mdash; we&rsquo;ll send delivery as soon as it clears.
+        </p>
+      </div>
+
+      <!-- What happens next -->
+      <h2 style="font-size:15px;color:#0f172a;margin:24px 0 10px;">What happens next?</h2>
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr><td style="padding:10px 14px;background:#f0f9ff;border-radius:10px;border:1px solid #bfdbfe;">
+          <table width="100%" cellpadding="0" cellspacing="0"><tr>
+            <td valign="top" width="46"><div style="background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-weight:700;width:36px;height:36px;border-radius:50%;text-align:center;line-height:36px;">1</div></td>
+            <td valign="top" style="padding-left:8px;"><div style="font-weight:700;color:#0f172a;">Payment confirmation</div><div style="font-size:13px;color:#475569;margin-top:2px;">We&rsquo;ll verify the transaction (usually within minutes for cards &middot; up to 1 hour for PayPal).</div></td>
+          </tr></table>
+        </td></tr>
+        <tr><td style="height:8px;"></td></tr>
+        <tr><td style="padding:10px 14px;background:#fff7ed;border-radius:10px;border:1px solid #fed7aa;">
+          <table width="100%" cellpadding="0" cellspacing="0"><tr>
+            <td valign="top" width="46"><div style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;font-weight:700;width:36px;height:36px;border-radius:50%;text-align:center;line-height:36px;">2</div></td>
+            <td valign="top" style="padding-left:8px;"><div style="font-weight:700;color:#0f172a;">License key delivery</div><div style="font-size:13px;color:#475569;margin-top:2px;">You&rsquo;ll get a second email with the genuine key, official download link and full activation guide.</div></td>
+          </tr></table>
+        </td></tr>
+        <tr><td style="height:8px;"></td></tr>
+        <tr><td style="padding:10px 14px;background:#ecfdf5;border-radius:10px;border:1px solid #a7f3d0;">
+          <table width="100%" cellpadding="0" cellspacing="0"><tr>
+            <td valign="top" width="46"><div style="background:linear-gradient(135deg,#10b981,#047857);color:#fff;font-weight:700;width:36px;height:36px;border-radius:50%;text-align:center;line-height:36px;">3</div></td>
+            <td valign="top" style="padding-left:8px;"><div style="font-weight:700;color:#0f172a;">Install &amp; activate</div><div style="font-size:13px;color:#475569;margin-top:2px;">Run the installer, sign in with a Microsoft Account and enter the key &mdash; activation is instant.</div></td>
+          </tr></table>
+        </td></tr>
+      </table>
+
+      <!-- Support + AI chat -->
+      <div style="margin-top:24px;background:linear-gradient(135deg,#f5f3ff,#ede9fe);border:1px solid #c7d2fe;border-radius:14px;padding:18px;">
+        <div style="font-weight:700;color:#5b21b6;font-size:14px;margin-bottom:6px;">&#129302; Need help right now?</div>
+        <p style="margin:0 0 12px;font-size:13px;color:#475569;line-height:1.6;">Our <strong>AI chat assistant</strong> is online 24/7 to answer questions about your order, activation or compatibility &mdash; right inside our website.</p>
+        <a href="' . htmlspecialchars($siteUrl) . '/?openchat=1" style="display:inline-block;padding:10px 22px;background:linear-gradient(135deg,#7c3aed,#5b21b6);color:#fff;border-radius:999px;text-decoration:none;font-weight:700;font-size:13px;">&#128172; Open Live Chat</a>
+        <a href="mailto:{{support_email}}" style="display:inline-block;padding:10px 22px;border:1px solid #c7d2fe;color:#5b21b6;border-radius:999px;text-decoration:none;font-weight:700;font-size:13px;margin-left:6px;">&#9993; Email Support</a>
+      </div>
+
+      <p style="font-size:12px;color:#64748b;margin-top:20px;">
+        Already paid? Please ignore this email &mdash; you&rsquo;ll receive your license key as soon as your payment is verified.
+      </p>
+    </div>
+
+    <div style="background:#f8fafc;padding:18px 32px;border-top:1px solid #f1f3f5;font-size:12px;color:#64748b;text-align:center;">
+      <strong style="color:#0f172a;">Need help?</strong> <a href="mailto:{{support_email}}" style="color:#3b82f6;text-decoration:none;">{{support_email}}</a> &middot; {{support_phone}}<br>
+      <span style="font-size:11px;color:#94a3b8;">&copy; {{year}} {{company_name}}. All rights reserved.</span>
+    </div>
+  </div>
+</div>{{tracking_pixel}}</body></html>';
+}
+
+/* Default Refund Confirmation template. */
+function default_refund_template(): string {
+    return '<!doctype html><html><body style="margin:0;padding:0;background:#f8fafc;font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#1f2937;">
+<div style="max-width:620px;margin:0 auto;padding:30px 16px;">
+  <div style="background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 6px 28px rgba(15,23,42,.06);">
+    <!-- Brand header -->
+    <div style="background:#fff;padding:24px 32px;border-bottom:1px solid #f1f3f5;display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <div style="font-size:20px;font-weight:800;color:#0f172a;">
+          <span style="display:inline-block;width:28px;height:28px;background:linear-gradient(135deg,#0ea5e9,#2563eb);color:#fff;border-radius:7px;text-align:center;line-height:28px;font-weight:900;margin-right:8px;vertical-align:-6px;">M</span>{{company_name}}
+        </div>
+        <div style="font-size:10px;color:#94a3b8;letter-spacing:1.8px;font-weight:600;margin-top:2px;">AUTHORIZED MICROSOFT RESELLER</div>
+      </div>
+      <span style="font-size:11px;color:#7e22ce;font-weight:700;background:#f3e8ff;padding:6px 12px;border-radius:999px;">&#128179; REFUND INITIATED</span>
+    </div>
+
+    <div style="padding:30px 32px;">
+      <h1 style="margin:0 0 8px;font-size:22px;color:#0f172a;font-weight:700;">Your refund is on its way, {{customer_name}}</h1>
+      <p style="margin:0 0 18px;font-size:14px;color:#475569;line-height:1.65;">
+        We&rsquo;ve initiated the refund for your order. The amount will be credited back to the <strong>same bank account / card</strong> you used at checkout. Most banks process this within <strong>3&ndash;5 business working days</strong>, though some may take a little longer depending on their settlement schedule.
+      </p>
+
+      <!-- Refund summary -->
+      <table width="100%" style="border-collapse:separate;border-spacing:0;background:#f8fafc;border-radius:12px;margin-bottom:22px;font-size:13px;color:#475569;">
+        <tr>
+          <td style="padding:14px 18px;">Order #<br><strong style="color:#0f172a;font-size:15px;">{{order_number}}</strong></td>
+          <td style="padding:14px 18px;">Refund Amount<br><strong style="color:#059669;font-size:15px;">${{amount}}</strong></td>
+          <td style="padding:14px 18px;">Initiated<br><strong style="color:#0f172a;font-size:13px;">Today</strong></td>
+        </tr>
+      </table>
+
+      <!-- Timeline -->
+      <h2 style="font-size:15px;color:#0f172a;margin:0 0 10px;">When will I see the money?</h2>
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr><td style="padding:12px 14px;background:#ecfdf5;border-radius:10px;border:1px solid #a7f3d0;">
+          <table width="100%" cellpadding="0" cellspacing="0"><tr>
+            <td valign="top" width="46"><div style="background:linear-gradient(135deg,#10b981,#047857);color:#fff;font-weight:700;width:36px;height:36px;border-radius:50%;text-align:center;line-height:36px;">&#10003;</div></td>
+            <td valign="top" style="padding-left:8px;"><div style="font-weight:700;color:#0f172a;">Refund initiated today</div><div style="font-size:13px;color:#475569;margin-top:2px;">We&rsquo;ve pushed the reversal to our payment processor.</div></td>
+          </tr></table>
+        </td></tr>
+        <tr><td style="height:8px;"></td></tr>
+        <tr><td style="padding:12px 14px;background:#f0f9ff;border-radius:10px;border:1px solid #bfdbfe;">
+          <table width="100%" cellpadding="0" cellspacing="0"><tr>
+            <td valign="top" width="46"><div style="background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-weight:700;width:36px;height:36px;border-radius:50%;text-align:center;line-height:36px;">&#9201;</div></td>
+            <td valign="top" style="padding-left:8px;"><div style="font-weight:700;color:#0f172a;">3&ndash;5 business working days</div><div style="font-size:13px;color:#475569;margin-top:2px;">The amount will appear in your authorized bank account / card statement.</div></td>
+          </tr></table>
+        </td></tr>
+        <tr><td style="height:8px;"></td></tr>
+        <tr><td style="padding:12px 14px;background:#fff7ed;border-radius:10px;border:1px solid #fed7aa;">
+          <table width="100%" cellpadding="0" cellspacing="0"><tr>
+            <td valign="top" width="46"><div style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;font-weight:700;width:36px;height:36px;border-radius:50%;text-align:center;line-height:36px;">&#9888;</div></td>
+            <td valign="top" style="padding-left:8px;"><div style="font-weight:700;color:#0f172a;">Don&rsquo;t see it after 5 business days?</div><div style="font-size:13px;color:#475569;margin-top:2px;">Reach out and we&rsquo;ll share the bank reference / ARN so your bank can locate it.</div></td>
+          </tr></table>
+        </td></tr>
+      </table>
+
+      <!-- Apology box -->
+      <div style="margin-top:22px;background:linear-gradient(135deg,#fef3c7,#fff7ed);border:1px solid #fed7aa;border-radius:14px;padding:18px;">
+        <div style="font-weight:700;color:#92400e;font-size:14px;margin-bottom:6px;">We&rsquo;re truly sorry for the inconvenience.</div>
+        <p style="margin:0;font-size:13px;color:#78350f;line-height:1.65;">
+          Whatever made the experience fall short of your expectations, we&rsquo;d love to hear about it. A quick reply with what went wrong helps us do better for the next customer &mdash; and we&rsquo;d be grateful if you gave us another chance in the future.
+        </p>
+      </div>
+    </div>
+
+    <div style="background:#f8fafc;padding:18px 32px;border-top:1px solid #f1f3f5;font-size:12px;color:#64748b;text-align:center;">
+      <strong style="color:#0f172a;">Questions about your refund?</strong> <a href="mailto:{{support_email}}" style="color:#3b82f6;text-decoration:none;">{{support_email}}</a> &middot; {{support_phone}}<br>
+      <span style="font-size:11px;color:#94a3b8;">Reference order <strong>{{order_number}}</strong> in your reply &middot; &copy; {{year}} {{company_name}}.</span>
+    </div>
+  </div>
+</div>{{tracking_pixel}}</body></html>';
 }
 
 /** Default "light" template w/ Microsoft icon watermark. Used when admin

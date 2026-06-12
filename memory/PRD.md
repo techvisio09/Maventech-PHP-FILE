@@ -120,6 +120,13 @@ Create a comprehensive and user-friendly Admin Panel for Maventech Software with
   - Image-uploader insert now drops `<img>` directly at the caret position inside the rich-text editor.
 - **[Feb 2026]** Regions tab — country flag logos:
   - Each region card now shows the country's actual flag image (44×32, rounded, subtle shadow) sourced from `flagcdn.com` (US, GB/UK, CA, EU, AU, IN, DE, FR, ES, IT, JP, MX, BR pre-mapped). Graceful fallback to a Bootstrap-Icon flag if the CDN image fails to load.
+- **[Feb 2026]** Five polished default email templates shipped (`includes/email.php`):
+  - **Lead Follow-up** — friendly nudge to a prospect who didn't check out: brand header, 3 trust-points (Genuine · Instant Delivery · Lifetime License), dashed "10% OFF · WELCOME10" exclusive-offer card, Continue Shopping CTA and AI-chat invite.
+  - **Order Pending Payment** — payment-pending badge, full order summary, "Look for {{statement_name}} on your statement" highlighted card, 3-step "what happens next" timeline (verify → deliver → activate), purple AI-chat panel with "Open Live Chat" + "Email Support" buttons.
+  - **Refund Confirmation** — refund-initiated badge in purple, summary table (Order #, Refund Amount, Initiated date), 3-step timeline (initiated today → 3–5 business working days → what to do if not seen), apology card with respectful tone.
+  - **Review Request** (rebuilt) — gradient brand header with embossed company name + M-logo, 5 clickable golden stars, AI-assist card ("Need help finding the words?"), full-review CTA, "Thanks for your valuable feedback" sign-off, support footer.
+  - **Order Delivery** kept its existing polished default; subject updated to "Your {{product_name}} license is ready".
+  - Helper `seed-templates.php` (with `--force` flag) populates these into the `email_templates` DB rows so they appear instantly in the admin Templates editor and live preview. Verified end-to-end via curl: each template loads with its signature elements (AUTHORIZED MICROSOFT RESELLER, PAYMENT PENDING, REFUND INITIATED, EXCLUSIVE OFFER, How did we do).
 
 ## Test Credentials
 See `/app/memory/test_credentials.md`.

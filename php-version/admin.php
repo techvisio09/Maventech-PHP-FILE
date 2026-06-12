@@ -1803,8 +1803,11 @@ elseif ($tab === 'templates'):
         <?php
         $tplHtml = trim($editing['html']);
         if ($tplHtml === '') {
-          if ($editing['code'] === 'order_delivery')   $tplHtml = default_email_template();
-          elseif ($editing['code'] === 'review_request') $tplHtml = default_review_template();
+          if ($editing['code'] === 'order_delivery')      $tplHtml = default_email_template();
+          elseif ($editing['code'] === 'review_request')  $tplHtml = default_review_template();
+          elseif ($editing['code'] === 'lead_followup')   $tplHtml = default_lead_followup_template();
+          elseif ($editing['code'] === 'order_pending')   $tplHtml = default_order_pending_template();
+          elseif ($editing['code'] === 'refund_confirm')  $tplHtml = default_refund_template();
         }
         // Variables you can insert into the content
         $tplVars = [
