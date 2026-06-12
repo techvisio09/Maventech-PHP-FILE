@@ -14,10 +14,16 @@ function active_region_code(): string {
 
 function active_region(): array {
     $code = active_region_code();
-    $row = db()->prepare('SELECT * FROM regions WHERE code = ?');
+    $row = db()->prepare('SELECT * FROM regions WHERE code = ? AND active = 1');
     $row->execute([$code]);
     $r = $row->fetch();
     if ($r) return $r;
+    // Session region was deactivated — fall back to first available active region
+    $fb = db()->query('SELECT * FROM regions WHERE active = 1 ORDER BY code LIMIT 1')->fetch();
+    if ($fb) {
+        $_SESSION['region'] = $fb['code'];
+        return $fb;
+    }
     return ['code'=>'US','name'=>'United States','currency'=>'USD','currency_symbol'=>'$','tax_rate'=>0,'active'=>1];
 }
 

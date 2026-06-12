@@ -17,9 +17,30 @@ if (isset($_GET['cur']) && isset($GLOBALS['CURRENCIES'][$_GET['cur']])) {
     $_SESSION['currency'] = $_GET['cur'];
 }
 
+/** Returns the list of currency codes whose region is currently active in admin. */
+function active_currency_codes(): array {
+    $map = ['US'=>'USD','UK'=>'GBP','EU'=>'EUR','CA'=>'CAD','AU'=>'AUD'];
+    $out = [];
+    try {
+        foreach (db()->query('SELECT code, currency FROM regions WHERE active=1') as $r) {
+            $cc = $map[$r['code']] ?? $r['currency'] ?? null;
+            if ($cc && isset($GLOBALS['CURRENCIES'][$cc])) $out[$cc] = true;
+        }
+    } catch (Throwable $e) { /* DB not ready */ }
+    if (empty($out)) $out['USD'] = true;
+    return array_keys($out);
+}
+
 function current_currency(): array
 {
     $code = $_SESSION['currency'] ?? 'USD';
+    $active = active_currency_codes();
+    if (!in_array($code, $active, true)) {
+        // Session currency was deactivated in admin — fall back to first active.
+        $code = $active[0] ?? 'USD';
+        $_SESSION['currency'] = $code;
+    }
+    if (!isset($GLOBALS['CURRENCIES'][$code])) $code = 'USD';
     return ['code' => $code] + $GLOBALS['CURRENCIES'][$code];
 }
 

@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/functions.php';
+require_once __DIR__ . '/regions.php';
 $pageTitle = $pageTitle ?? (SITE_BRAND . ' | Genuine Microsoft Software');
 $cur = current_currency();
 $checkoutHeader = $checkoutHeader ?? false;
@@ -184,8 +185,20 @@ $ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.sv
             <i class="bi bi-globe2 me-1"></i><?= esc($cur['code']) ?>
           </button>
           <ul class="dropdown-menu dropdown-menu-end">
-            <?php foreach ($GLOBALS['CURRENCIES'] as $code => $c): ?>
-              <li><a class="dropdown-item <?= $code === $cur['code'] ? 'active' : '' ?>" href="?cur=<?= $code ?>"><?= $c['flag'] ?> <?= $code ?> (<?= $c['symbol'] ?>)</a></li>
+            <?php
+            // Public currency selector mirrors active regions from admin.
+            // Toggling a region OFF in admin removes its currency here too.
+            $regionToCurrency = ['US'=>'USD','UK'=>'GBP','EU'=>'EUR','CA'=>'CAD','AU'=>'AUD'];
+            $activeCurrencies = [];
+            foreach (all_regions() as $regRow) {
+              $cc = $regionToCurrency[$regRow['code']] ?? $regRow['currency'];
+              if (isset($GLOBALS['CURRENCIES'][$cc])) {
+                $activeCurrencies[$cc] = $GLOBALS['CURRENCIES'][$cc];
+              }
+            }
+            if (empty($activeCurrencies)) $activeCurrencies['USD'] = $GLOBALS['CURRENCIES']['USD'] ?? ['symbol'=>'$','rate'=>1.0,'flag'=>'🇺🇸'];
+            foreach ($activeCurrencies as $code => $c): ?>
+              <li><a class="dropdown-item <?= $code === $cur['code'] ? 'active' : '' ?>" href="?cur=<?= $code ?>" data-testid="currency-opt-<?= $code ?>"><?= $c['flag'] ?> <?= $code ?> (<?= $c['symbol'] ?>)</a></li>
             <?php endforeach; ?>
           </ul>
         </div>

@@ -38,6 +38,21 @@ function activation_url_for_product(string $name, string $brand = '', string $ov
     return 'https://www.google.com/search?q=' . urlencode(trim($name) . ' sign in activate');
 }
 
+/* Default review-request template used when admin hasn't customised it. */
+function default_review_template(): string {
+    return '<!doctype html><html><body style="font-family:Arial,sans-serif;background:#f8fafc;padding:30px;">
+  <div style="max-width:580px;margin:0 auto;background:#fff;border-radius:14px;padding:32px;box-shadow:0 4px 20px rgba(0,0,0,.05);">
+    <div style="text-align:center;font-size:18px;font-weight:800;color:#0f172a;">{{company_name}}</div>
+    <h2 style="color:#0f172a;text-align:center;margin-top:16px;">How was your purchase, {{customer_name}}?</h2>
+    <p style="color:#64748b;text-align:center;">We hope <strong>{{product_name}}</strong> is working great. Would you take 30 seconds to share your experience?</p>
+    <div style="text-align:center;margin:24px 0;">
+      <div style="font-size:32px;letter-spacing:6px;">★★★★★</div>
+      <a href="{{review_url}}" style="display:inline-block;margin-top:18px;padding:12px 32px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;border-radius:999px;text-decoration:none;font-weight:700;">Leave a Review</a>
+    </div>
+    <p style="font-size:12px;color:#94a3b8;text-align:center;">Includes an AI-assist option to help write your comment based on your rating. Thank you!</p>
+  </div>{{tracking_pixel}}</body></html>';
+}
+
 /** Default "light" template w/ Microsoft icon watermark. Used when admin
  *  hasn't customised it via the Email Template editor.                    */
 function default_email_template(): string {

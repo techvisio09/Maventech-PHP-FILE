@@ -1796,7 +1796,11 @@ elseif ($tab === 'templates'):
     <div class="col-lg-8">
       <?php if ($editing): ?>
         <?php
-        $tplHtml = trim($editing['html']) === '' && $editing['code']==='order_delivery' ? default_email_template() : $editing['html'];
+        $tplHtml = trim($editing['html']);
+        if ($tplHtml === '') {
+          if ($editing['code'] === 'order_delivery')   $tplHtml = default_email_template();
+          elseif ($editing['code'] === 'review_request') $tplHtml = default_review_template();
+        }
         $versions = $pdo->prepare('SELECT * FROM email_template_versions WHERE template_id=? ORDER BY version_num DESC LIMIT 10');
         $versions->execute([$editing['id']]); $versions = $versions->fetchAll();
         ?>
@@ -1942,7 +1946,7 @@ elseif ($tab === 'templates'):
         <script>
         function prevRender(){
           var html=document.getElementById('htmlEd').value;
-          var s={company_name:'<?= esc(SITE_BRAND) ?>',customer_name:'John Smith',customer_email:'john@example.com',order_number:'MVT-2026-0042',amount:'129.99',statement_name:'<?= esc(setting_get('gw_card_merchant_name', setting_get('statement_name_card','MAVENTECH SOFTWARE'))) ?>',support_email:'<?= esc(SITE_EMAIL) ?>',support_phone:'<?= esc(SITE_PHONE) ?>',year:new Date().getFullYear(),installation_guide:'1. Download installer.<br>2. Run setup.<br>3. Enter license key.<br>4. Activate.',products_block:'<div style="border:1px solid #eef0f3;border-radius:12px;padding:14px;background:#fff;"><div style="font-weight:700;">Sample Product</div><div style="margin-top:10px;border:2px dashed #3b82f6;border-radius:10px;background:#eff6ff;padding:12px;text-align:center;"><div style="font-size:10px;color:#64748b;letter-spacing:1.5px;text-transform:uppercase;">License Key</div><div style="font-family:monospace;font-weight:bold;color:#1d4ed8;font-size:17px;">XXXXX-YYYYY-ZZZZZ-AAAAA</div></div></div>',tracking_pixel:''};
+          var s={company_name:'<?= esc(SITE_BRAND) ?>',customer_name:'John Smith',customer_email:'john@example.com',order_number:'MVT-2026-0042',amount:'129.99',statement_name:'<?= esc(setting_get('gw_card_merchant_name', setting_get('statement_name_card','MAVENTECH SOFTWARE'))) ?>',support_email:'<?= esc(SITE_EMAIL) ?>',support_phone:'<?= esc(SITE_PHONE) ?>',year:new Date().getFullYear(),installation_guide:'1. Download installer.<br>2. Run setup.<br>3. Enter license key.<br>4. Activate.',product_name:'Microsoft Office 2024',review_url:'<?= esc(SITE_URL) ?>/review.php?t=DEMO_TOKEN',products_block:'<div style="border:1px solid #eef0f3;border-radius:12px;padding:14px;background:#fff;"><div style="font-weight:700;">Sample Product</div><div style="margin-top:10px;border:2px dashed #3b82f6;border-radius:10px;background:#eff6ff;padding:12px;text-align:center;"><div style="font-size:10px;color:#64748b;letter-spacing:1.5px;text-transform:uppercase;">License Key</div><div style="font-family:monospace;font-weight:bold;color:#1d4ed8;font-size:17px;">XXXXX-YYYYY-ZZZZZ-AAAAA</div></div></div>',tracking_pixel:''};
           Object.keys(s).forEach(function(k){ html=html.split('{{'+k+'}}').join(s[k]); });
           document.getElementById('prev').srcdoc=html;
         }
