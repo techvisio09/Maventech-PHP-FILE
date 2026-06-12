@@ -80,11 +80,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $keys = array_filter(array_map('trim', explode("\n", $_POST['keys'] ?? '')));
         $stmt = $pdo->prepare('INSERT INTO license_keys (product_slug, license_key, region) VALUES (?,?,?)');
         $n=0; foreach ($keys as $k) try { $stmt->execute([$_POST['product_slug'], $k, $region_code]); $n++; } catch (Exception $e) {}
-        header('Location: admin.php?tab=keys&msg='.$n.'+key(s)+added'); exit;
+        $rs = $_POST['return_slug'] ?? $_POST['product_slug'] ?? '';
+        $exp = $rs ? '&expand='.urlencode($rs) : '';
+        header('Location: admin.php?tab=keys'.$exp.'&msg='.$n.'+key(s)+added'); exit;
 
     } elseif ($action === 'delete_key') {
         $pdo->prepare('DELETE FROM license_keys WHERE id=? AND status="available"')->execute([(int)$_POST['key_id']]);
-        header('Location: admin.php?tab=keys&msg=Key+removed'); exit;
+        $rs = $_POST['return_slug'] ?? '';
+        $exp = $rs ? '&expand='.urlencode($rs) : '';
+        header('Location: admin.php?tab=keys'.$exp.'&msg=Key+removed'); exit;
 
     } elseif ($action === 'save_template') {
         $tplId = (int)$_POST['tpl_id'];
@@ -958,52 +962,184 @@ elseif ($tab === 'leads'):
 // ============================================================================
 // KEY INVENTORY
 // ============================================================================
-elseif ($tab === 'keys'): ?>
-  <div class="row g-3">
-    <div class="col-lg-5">
-      <div class="card-e p-4">
-        <div class="d-flex align-items-center justify-content-between mb-3">
-          <h6 class="fw-bold mb-0">Add License Keys to <?= esc($rg['code']) ?></h6>
-          <button type="button" class="btn-add-glow" style="width:42px;height:42px;font-size:18px;" onclick="document.getElementById('keysTa').focus()"><i class="bi bi-plus-lg"></i></button>
-        </div>
-        <form method="post">
-          <input type="hidden" name="action" value="add_keys">
-          <select name="product_slug" required class="form-select mb-2">
-            <option value="">Select product…</option>
-            <?php foreach ($pdo->query('SELECT slug,name FROM products ORDER BY name') as $p): ?>
-              <option value="<?= esc($p['slug']) ?>"><?= esc($p['name']) ?></option>
-            <?php endforeach; ?>
-          </select>
-          <textarea id="keysTa" name="keys" rows="7" required class="form-control font-monospace mb-2" placeholder="One key per line"></textarea>
-          <button class="btn btn-soft-blue w-100"><i class="bi bi-plus-circle me-1"></i>Add to Inventory</button>
-        </form>
-      </div>
+elseif ($tab === 'keys'):
+  // ============================================================================
+  // MIXED INVENTORY + KEYS VIEW — per-product card with stock / sold / add-key
+  // ============================================================================
+  $invFilter = trim($_GET['inv_q'] ?? '');
+  $expandSlug = $_GET['expand'] ?? '';
+
+  // Build product list scoped to current region, with key counts
+  $sqlInv = "SELECT p.slug, p.name, p.sku, p.image, p.platform, p.category, p.price, p.is_active,
+              (SELECT COUNT(*) FROM license_keys lk WHERE lk.product_slug=p.slug AND lk.region=? AND lk.status='available') AS stock,
+              (SELECT COUNT(*) FROM license_keys lk WHERE lk.product_slug=p.slug AND lk.region=? AND lk.status='sold')      AS sold
+            FROM products p WHERE p.region=?";
+  $args = [$region_code, $region_code, $region_code];
+  if ($invFilter !== '') { $sqlInv .= " AND (p.name LIKE ? OR p.sku LIKE ?)"; $args[]="%$invFilter%"; $args[]="%$invFilter%"; }
+  $sqlInv .= " ORDER BY p.is_active DESC, p.name ASC LIMIT 500";
+  $stInv = $pdo->prepare($sqlInv); $stInv->execute($args);
+  $invProducts = $stInv->fetchAll();
+
+  // Totals (region scope)
+  $totalAvail = $pdo->prepare("SELECT COUNT(*) FROM license_keys WHERE region=? AND status='available'");
+  $totalAvail->execute([$region_code]); $kpiAvail = (int)$totalAvail->fetchColumn();
+  $totalSold = $pdo->prepare("SELECT COUNT(*) FROM license_keys WHERE region=? AND status='sold'");
+  $totalSold->execute([$region_code]); $kpiSold = (int)$totalSold->fetchColumn();
+  $kpiOutCount = 0; $kpiLowCount = 0;
+  foreach ($invProducts as $ip) { if ((int)$ip['stock']===0) $kpiOutCount++; elseif ((int)$ip['stock']<5) $kpiLowCount++; }
+?>
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h5 class="fw-bold mb-0">Inventory &amp; Keys <span class="text-muted fs-6">— <?= esc($rg['code']) ?> region</span></h5>
+      <small class="text-muted">Select a product to add license keys, view stock vs sold counts, and drill into purchase details.</small>
     </div>
-    <div class="col-lg-7">
-      <div class="tbl-e" style="max-height:600px;overflow-y:auto;">
-        <table class="table mb-0">
-          <thead><tr><th>Key</th><th>Product</th><th>Region</th><th>Status</th><th></th></tr></thead>
-          <tbody>
-            <?php
-            $kSt = $pdo->prepare('SELECT lk.*, p.name FROM license_keys lk LEFT JOIN products p ON p.slug=lk.product_slug WHERE lk.region=? ORDER BY lk.created_at DESC LIMIT 300');
-            $kSt->execute([$region_code]);
-            foreach ($kSt as $k): ?>
-              <tr>
-                <td><code style="font-size:12px;"><?= esc($k['license_key']) ?></code></td>
-                <td><small><?= esc($k['name'] ?: $k['product_slug']) ?></small></td>
-                <td><small><?= esc($k['region']) ?></small></td>
-                <td><span class="s-badge <?= $k['status']==='available'?'paid':($k['status']==='sold'?'sent':'refunded') ?>"><?= esc($k['status']) ?></span></td>
-                <td><?php if ($k['status']==='available'): ?>
-                  <form method="post" class="d-inline"><input type="hidden" name="action" value="delete_key"><input type="hidden" name="key_id" value="<?= (int)$k['id'] ?>">
-                    <button class="btn btn-soft-red btn-sm py-0 px-2"><i class="bi bi-trash"></i></button></form>
-                <?php endif; ?></td>
-              </tr>
-            <?php endforeach; ?>
-          </tbody>
-        </table>
+    <form method="get" class="d-flex gap-2" style="min-width:260px;">
+      <input type="hidden" name="tab" value="keys">
+      <div class="input-group input-group-sm">
+        <span class="input-group-text"><i class="bi bi-search"></i></span>
+        <input class="form-control" name="inv_q" value="<?= esc($invFilter) ?>" placeholder="Search products by name or SKU…">
+        <?php if ($invFilter): ?><a href="?tab=keys" class="btn btn-soft-gray"><i class="bi bi-x-lg"></i></a><?php endif; ?>
       </div>
-    </div>
+    </form>
   </div>
+
+  <!-- KPI tiles -->
+  <div class="row g-3 mb-3">
+    <div class="col-6 col-md-3"><div class="kpi-tile blue"><div class="kpi-icon"><i class="bi bi-box-seam"></i></div><div class="kpi-label">Products</div><div class="kpi-value" data-testid="kpi-products"><?= count($invProducts) ?></div></div></div>
+    <div class="col-6 col-md-3"><div class="kpi-tile green"><div class="kpi-icon"><i class="bi bi-key"></i></div><div class="kpi-label">Keys in stock</div><div class="kpi-value" data-testid="kpi-stock"><?= $kpiAvail ?></div></div></div>
+    <div class="col-6 col-md-3"><div class="kpi-tile amber"><div class="kpi-icon"><i class="bi bi-cart-check"></i></div><div class="kpi-label">Keys sold</div><div class="kpi-value" data-testid="kpi-sold"><?= $kpiSold ?></div></div></div>
+    <div class="col-6 col-md-3"><div class="kpi-tile red"><div class="kpi-icon"><i class="bi bi-exclamation-triangle"></i></div><div class="kpi-label">Out / Low (&lt;5)</div><div class="kpi-value"><?= $kpiOutCount ?> <small class="text-muted fs-6">/ <?= $kpiLowCount ?></small></div></div></div>
+  </div>
+
+  <?php if (empty($invProducts)): ?>
+    <div class="card-e p-5 text-center text-muted">No products in this region match the filter.</div>
+  <?php endif; ?>
+
+  <!-- Per-product inventory rows -->
+  <div class="d-flex flex-column gap-2" data-testid="inventory-list">
+    <?php foreach ($invProducts as $ip):
+      $isExpanded = ($expandSlug === $ip['slug']);
+      $stock = (int)$ip['stock']; $sold = (int)$ip['sold'];
+      $stockColor = $stock===0 ? '#ef4444' : ($stock<5 ? '#f59e0b' : '#10b981');
+      $stockLabel = $stock===0 ? 'Out of stock' : ($stock<5 ? 'Low stock' : 'In stock');
+    ?>
+      <div class="card-e p-0 overflow-hidden" data-testid="inv-row-<?= esc($ip['slug']) ?>">
+        <!-- Compact row -->
+        <a href="?tab=keys<?= $invFilter ? '&inv_q='.urlencode($invFilter) : '' ?><?= $isExpanded ? '' : '&expand='.urlencode($ip['slug']) ?>" class="d-flex align-items-center gap-3 p-3 text-decoration-none" style="color:var(--text);">
+          <div style="width:48px;height:48px;background:var(--bg);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+            <?php if ($ip['image']): ?><img src="<?= esc($ip['image']) ?>" style="max-width:42px;max-height:42px;object-fit:contain;"><?php else: ?><i class="bi bi-box-seam text-muted"></i><?php endif; ?>
+          </div>
+          <div class="flex-grow-1 min-w-0">
+            <div class="fw-semibold text-truncate" style="font-size:14px;"><?= esc($ip['name']) ?></div>
+            <div class="text-muted small text-truncate"><code style="font-size:11px;"><?= esc($ip['sku']) ?></code> · <?= esc($ip['platform']) ?> · <?= esc($ip['category']) ?> · <strong><?= esc($rg['currency_symbol']) ?><?= number_format(region_price((float)$ip['price']),2) ?></strong></div>
+          </div>
+          <div class="text-center" style="min-width:90px;">
+            <div class="fw-bold" style="font-size:18px;color:<?= $stockColor ?>;"><?= $stock ?></div>
+            <small class="text-muted">Stock</small>
+          </div>
+          <div class="text-center" style="min-width:90px;">
+            <div class="fw-bold" style="font-size:18px;color:#3b82f6;"><?= $sold ?></div>
+            <small class="text-muted">Sold</small>
+          </div>
+          <span class="s-badge <?= $stock===0?'failed':($stock<5?'queued':'paid') ?>" style="min-width:90px;text-align:center;"><?= $stockLabel ?></span>
+          <i class="bi bi-chevron-<?= $isExpanded?'up':'down' ?> text-muted ms-2"></i>
+        </a>
+
+        <?php if ($isExpanded):
+          $availSt = $pdo->prepare("SELECT * FROM license_keys WHERE product_slug=? AND region=? AND status='available' ORDER BY created_at DESC LIMIT 200");
+          $availSt->execute([$ip['slug'], $region_code]);
+          $availKeys = $availSt->fetchAll();
+          $soldSt = $pdo->prepare("SELECT lk.*, o.id AS o_id, o.order_number, o.email AS o_email,
+                                   CONCAT(COALESCE(o.first_name,''),' ',COALESCE(o.last_name,'')) AS o_name,
+                                   o.total AS o_total, o.payment_method AS o_pm, o.status AS o_status, o.created_at AS o_created
+                                   FROM license_keys lk LEFT JOIN orders o ON o.id=lk.order_id
+                                   WHERE lk.product_slug=? AND lk.region=? AND lk.status='sold'
+                                   ORDER BY lk.assigned_at DESC LIMIT 200");
+          $soldSt->execute([$ip['slug'], $region_code]);
+          $soldKeys = $soldSt->fetchAll();
+        ?>
+        <div class="p-3" style="border-top:1px solid var(--border);background:var(--bg);">
+          <div class="row g-3">
+            <!-- Add Keys form -->
+            <div class="col-lg-5">
+              <div class="card-e p-3" style="background:var(--card-bg);">
+                <h6 class="fw-bold mb-2"><i class="bi bi-plus-circle text-success me-1"></i>Add License Keys</h6>
+                <p class="small text-muted mb-2">Paste one license key per line. Region: <strong><?= esc($region_code) ?></strong></p>
+                <form method="post">
+                  <input type="hidden" name="action" value="add_keys">
+                  <input type="hidden" name="product_slug" value="<?= esc($ip['slug']) ?>">
+                  <input type="hidden" name="return_slug" value="<?= esc($ip['slug']) ?>">
+                  <textarea name="keys" rows="6" required class="form-control font-monospace mb-2" placeholder="XXXX-XXXX-XXXX-XXXX&#10;YYYY-YYYY-YYYY-YYYY" data-testid="add-keys-<?= esc($ip['slug']) ?>"></textarea>
+                  <button class="btn btn-soft-blue w-100" data-testid="submit-keys-<?= esc($ip['slug']) ?>"><i class="bi bi-plus-circle me-1"></i>Add to Inventory</button>
+                </form>
+              </div>
+            </div>
+
+            <!-- Available keys -->
+            <div class="col-lg-7">
+              <h6 class="fw-bold mb-2"><i class="bi bi-key text-success me-1"></i>Available keys (<?= count($availKeys) ?>)</h6>
+              <div class="tbl-e mb-3" style="max-height:230px;overflow-y:auto;">
+                <table class="table mb-0">
+                  <thead><tr><th>License Key</th><th>Added</th><th></th></tr></thead>
+                  <tbody>
+                    <?php if (empty($availKeys)): ?>
+                      <tr><td colspan="3" class="text-center text-muted py-3"><i class="bi bi-inbox"></i> No available keys yet — add some on the left.</td></tr>
+                    <?php endif; ?>
+                    <?php foreach ($availKeys as $k): ?>
+                      <tr>
+                        <td><code style="font-size:12px;"><?= esc($k['license_key']) ?></code></td>
+                        <td><small class="text-muted"><?= esc(date('M j, Y', strtotime($k['created_at']))) ?></small></td>
+                        <td><form method="post" class="d-inline" onsubmit="return confirm('Delete this key?');">
+                          <input type="hidden" name="action" value="delete_key">
+                          <input type="hidden" name="key_id" value="<?= (int)$k['id'] ?>">
+                          <input type="hidden" name="return_slug" value="<?= esc($ip['slug']) ?>">
+                          <button class="btn btn-soft-red btn-sm py-0 px-2"><i class="bi bi-trash"></i></button>
+                        </form></td>
+                      </tr>
+                    <?php endforeach; ?>
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- Sold keys with click → order-view.php -->
+              <h6 class="fw-bold mb-2"><i class="bi bi-cart-check text-primary me-1"></i>Sold keys (<?= count($soldKeys) ?>) <small class="text-muted fw-normal">— click any row to view purchase details</small></h6>
+              <div class="tbl-e" style="max-height:260px;overflow-y:auto;">
+                <table class="table mb-0">
+                  <thead><tr><th>License Key</th><th>Customer</th><th>Order</th><th>Paid</th><th>Sold On</th></tr></thead>
+                  <tbody>
+                    <?php if (empty($soldKeys)): ?>
+                      <tr><td colspan="5" class="text-center text-muted py-3"><i class="bi bi-bag-x"></i> No keys sold yet for this product.</td></tr>
+                    <?php endif; ?>
+                    <?php foreach ($soldKeys as $sk):
+                      $oid = (int)($sk['o_id'] ?? 0);
+                      $rowHref = $oid ? 'order-view.php?id='.$oid : '#';
+                    ?>
+                      <tr style="cursor:<?= $oid?'pointer':'default' ?>;" onclick="<?= $oid ? "window.location='".esc($rowHref)."'" : '' ?>" data-testid="sold-key-<?= (int)$sk['id'] ?>">
+                        <td><code style="font-size:12px;"><?= esc($sk['license_key']) ?></code></td>
+                        <td>
+                          <strong style="font-size:13px;"><?= esc($sk['o_name'] ?? '—') ?></strong>
+                          <div><small class="text-muted"><?= esc($sk['o_email'] ?? '') ?></small></div>
+                        </td>
+                        <td><?= $sk['order_number'] ? '<code class="small">#'.esc($sk['order_number']).'</code>' : '—' ?>
+                          <div><small class="text-muted"><?= esc(ucfirst($sk['o_pm'] ?? '')) ?></small></div></td>
+                        <td><strong><?= esc($rg['currency_symbol']) ?><?= number_format(region_price((float)($sk['o_total'] ?? 0)),2) ?></strong>
+                          <div><span class="s-badge <?= ($sk['o_status']??'')==='paid'?'paid':'queued' ?>" style="font-size:10px;"><?= esc($sk['o_status'] ?? '—') ?></span></div></td>
+                        <td><small class="text-muted"><?= $sk['assigned_at'] ? esc(date('M j, Y H:i', strtotime($sk['assigned_at']))) : '—' ?></small>
+                          <?php if ($oid): ?><div><a href="<?= esc($rowHref) ?>" class="small text-decoration-none" onclick="event.stopPropagation();"><i class="bi bi-arrow-right-circle"></i> View order</a></div><?php endif; ?>
+                        </td>
+                      </tr>
+                    <?php endforeach; ?>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+        <?php endif; ?>
+      </div>
+    <?php endforeach; ?>
+  </div>
+<?php ?>
 
 <?php
 // ============================================================================
@@ -1344,30 +1480,31 @@ elseif ($tab === 'regions'):
 // ============================================================================
 elseif ($tab === 'reviews'):
   $sf = $_GET['status'] ?? '';
-  $w=''; $args=[];
-  if (in_array($sf,['pending','published','hidden'],true)) { $w=' WHERE cr.status=?'; $args[]=$sf; }
+  $w='WHERE cr.rating IS NOT NULL'; $args=[];
+  if (in_array($sf,['published','hidden'],true)) { $w.=' AND cr.status=?'; $args[]=$sf; }
   $st = $pdo->prepare("SELECT cr.*, p.name AS product_name, p.image AS product_image, o.order_number
     FROM customer_reviews cr LEFT JOIN products p ON p.slug=cr.product_slug LEFT JOIN orders o ON o.id=cr.order_id $w ORDER BY cr.submitted_at DESC, cr.id DESC LIMIT 200");
   $st->execute($args);
   $reviews = $st->fetchAll();
   $cnt = $pdo->query("SELECT
     SUM(status='published' AND rating IS NOT NULL) p,
-    SUM(status='pending') pe, SUM(status='hidden') h,
+    SUM(status='hidden' AND rating IS NOT NULL) h,
     AVG(CASE WHEN status='published' THEN rating END) avg_r,
+    SUM(rating IS NOT NULL) responded,
     COUNT(*) t FROM customer_reviews")->fetch();
 ?>
-  <h5 class="fw-bold mb-1">Customer Reviews</h5>
-  <p class="text-muted small mb-3">Post-purchase feedback collected automatically. Published reviews appear live on the website.</p>
+  <h5 class="fw-bold mb-1">Customer Reviews <span class="text-muted fs-6">— only customers who responded</span></h5>
+  <p class="text-muted small mb-3">Showing reviews where the customer submitted a rating. Pending invites are hidden by default.</p>
 
   <div class="row g-3 mb-3">
     <div class="col-6 col-md-3"><div class="kpi-tile amber"><div class="kpi-icon"><i class="bi bi-star-fill"></i></div><div class="kpi-label">Avg Rating</div><div class="kpi-value"><?= number_format((float)($cnt['avg_r'] ?? 0), 1) ?> ★</div></div></div>
     <div class="col-6 col-md-3"><div class="kpi-tile green"><div class="kpi-icon"><i class="bi bi-check-circle"></i></div><div class="kpi-label">Published</div><div class="kpi-value"><?= (int)$cnt['p'] ?></div></div></div>
-    <div class="col-6 col-md-3"><div class="kpi-tile blue"><div class="kpi-icon"><i class="bi bi-hourglass-split"></i></div><div class="kpi-label">Awaiting reply</div><div class="kpi-value"><?= (int)$cnt['pe'] ?></div></div></div>
+    <div class="col-6 col-md-3"><div class="kpi-tile blue"><div class="kpi-icon"><i class="bi bi-chat-square-text"></i></div><div class="kpi-label">Total Responded</div><div class="kpi-value"><?= (int)$cnt['responded'] ?></div></div></div>
     <div class="col-6 col-md-3"><div class="kpi-tile red"><div class="kpi-icon"><i class="bi bi-eye-slash"></i></div><div class="kpi-label">Hidden</div><div class="kpi-value"><?= (int)$cnt['h'] ?></div></div></div>
   </div>
 
   <div class="d-flex gap-2 mb-3 flex-wrap">
-    <?php foreach (['' => 'All', 'pending'=>'Pending', 'published'=>'Published', 'hidden'=>'Hidden'] as $k=>$lbl): ?>
+    <?php foreach (['' => 'All Responded', 'published'=>'Published', 'hidden'=>'Hidden'] as $k=>$lbl): ?>
       <a class="adm-pill <?= $sf===$k?'active':'' ?>" href="?tab=reviews<?= $k?'&status='.$k:'' ?>"><?= esc($lbl) ?></a>
     <?php endforeach; ?>
   </div>
@@ -1376,10 +1513,8 @@ elseif ($tab === 'reviews'):
     <table class="table mb-0" data-testid="reviews-table">
       <thead><tr><th>Customer</th><th>Product</th><th>Order</th><th>Rating</th><th>Comment</th><th>Source</th><th>Status</th><th>Submitted</th><th></th></tr></thead>
       <tbody>
-        <?php if (empty($reviews)): ?><tr><td colspan="9" class="text-center text-muted py-4">No reviews yet. Reviews appear automatically after customers receive the post-purchase email and click "Leave a Review".</td></tr><?php endif; ?>
-        <?php foreach ($reviews as $r):
-          $r_stars = (int)$r['rating'];
-        ?>
+        <?php if (empty($reviews)): ?><tr><td colspan="9" class="text-center text-muted py-4">No customer responses yet. Reviews appear here only after the customer submits a rating + comment via the post-purchase email.</td></tr><?php endif; ?>
+        <?php foreach ($reviews as $r): $r_stars = (int)$r['rating']; ?>
           <tr>
             <td><strong><?= esc($r['customer_name']) ?></strong><br><small class="text-muted"><?= esc($r['customer_email']) ?></small></td>
             <td><div class="d-flex align-items-center gap-2">
@@ -1387,25 +1522,16 @@ elseif ($tab === 'reviews'):
               <small><?= esc(mb_strimwidth($r['product_name'] ?? '', 0, 40, '…')) ?></small>
             </div></td>
             <td><?= $r['order_number'] ? '<a href="order-view.php?id='.(int)$r['order_id'].'"><code>#'.esc($r['order_number']).'</code></a>' : '—' ?></td>
-            <td><?php if ($r_stars): ?>
-              <span style="color:#facc15;font-size:14px;letter-spacing:1px;"><?= str_repeat('★', $r_stars) . str_repeat('☆', 5-$r_stars) ?></span>
-              <div><small><strong><?= $r_stars ?>/5</strong></small></div>
-            <?php else: ?><span class="text-muted small">awaiting</span><?php endif; ?></td>
-            <td style="max-width:300px;"><small><?= esc(mb_strimwidth($r['comment'] ?? '', 0, 120, '…')) ?></small></td>
-            <td><?= $r['ai_generated'] ? '<span class="s-badge sent" title="AI-assisted"><i class="bi bi-stars"></i> AI</span>' : '<span class="s-badge delivered">Manual</span>' ?></td>
-            <td><span class="s-badge <?= $r['status']==='published'?'paid':($r['status']==='hidden'?'failed':'queued') ?>"><?= esc($r['status']) ?></span></td>
-            <td><small class="text-muted"><?= $r['submitted_at'] ? esc(date('M j, Y', strtotime($r['submitted_at']))) : '—' ?></small></td>
+            <td><span style="color:#facc15;font-size:14px;letter-spacing:1px;"><?= str_repeat('★', $r_stars) . str_repeat('☆', 5-$r_stars) ?></span><div><small><strong><?= $r_stars ?>/5</strong></small></div></td>
+            <td style="max-width:320px;"><small><?= esc(mb_strimwidth($r['comment'] ?? '', 0, 140, '…')) ?></small></td>
+            <td><?= $r['ai_generated'] ? '<span class="s-badge sent"><i class="bi bi-stars"></i> AI</span>' : '<span class="s-badge delivered">Manual</span>' ?></td>
+            <td><span class="s-badge <?= $r['status']==='published'?'paid':'failed' ?>"><?= esc($r['status']) ?></span></td>
+            <td><small class="text-muted"><?= esc(date('M j, Y', strtotime($r['submitted_at']))) ?></small></td>
             <td class="text-nowrap">
-              <?php if ($r['status']==='pending' && $r['rating']): ?>
-                <form method="post" class="d-inline"><input type="hidden" name="action" value="review_update_status"><input type="hidden" name="review_id" value="<?= (int)$r['id'] ?>"><input type="hidden" name="status" value="published"><button class="btn btn-soft-green btn-sm py-0 px-2" title="Publish"><i class="bi bi-check2"></i></button></form>
-              <?php endif; ?>
               <?php if ($r['status']!=='hidden'): ?>
                 <form method="post" class="d-inline"><input type="hidden" name="action" value="review_update_status"><input type="hidden" name="review_id" value="<?= (int)$r['id'] ?>"><input type="hidden" name="status" value="hidden"><button class="btn btn-soft-gray btn-sm py-0 px-2" title="Hide"><i class="bi bi-eye-slash"></i></button></form>
               <?php else: ?>
                 <form method="post" class="d-inline"><input type="hidden" name="action" value="review_update_status"><input type="hidden" name="review_id" value="<?= (int)$r['id'] ?>"><input type="hidden" name="status" value="published"><button class="btn btn-soft-blue btn-sm py-0 px-2" title="Re-publish"><i class="bi bi-eye"></i></button></form>
-              <?php endif; ?>
-              <?php if (!$r['rating']): ?>
-                <a href="<?= esc(SITE_URL) ?>/review.php?t=<?= esc($r['request_token']) ?>" target="_blank" class="btn btn-soft-blue btn-sm py-0 px-2" title="Open submission link"><i class="bi bi-link-45deg"></i></a>
               <?php endif; ?>
               <form method="post" class="d-inline" onsubmit="return confirm('Delete this review permanently?')"><input type="hidden" name="action" value="review_delete"><input type="hidden" name="review_id" value="<?= (int)$r['id'] ?>"><button class="btn btn-soft-red btn-sm py-0 px-2"><i class="bi bi-trash"></i></button></form>
             </td>
@@ -1413,16 +1539,6 @@ elseif ($tab === 'reviews'):
         <?php endforeach; ?>
       </tbody>
     </table>
-  </div>
-
-  <div class="card-e p-3 mt-3">
-    <h6 class="fw-bold mb-2"><i class="bi bi-info-circle me-1"></i>How review collection works</h6>
-    <ol class="small text-muted mb-0">
-      <li>When an order is marked <strong>paid</strong>, a review-request record is created for each item with a unique token.</li>
-      <li>The customer receives a "How was your purchase?" email containing a one-click link to <code>review.php?t=TOKEN</code>.</li>
-      <li>The customer picks 1–5 stars and either types a comment or clicks <strong>✨ Help me write</strong> → AI generates a comment matching the rating (uses Emergent LLM key, falls back to templates if unavailable).</li>
-      <li>Submitted reviews are marked <strong>published</strong> automatically and appear on the public testimonials page in real time. Admin can hide/delete as needed.</li>
-    </ol>
   </div>
 
 <?php elseif ($tab === 'settings'):

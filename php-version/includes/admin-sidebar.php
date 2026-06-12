@@ -9,7 +9,7 @@ $navItems = [
     'orders'      => ['icon' => 'bi-receipt',       'label' => 'Orders',            'href' => 'admin.php?tab=orders'],
     'sales'       => ['icon' => 'bi-graph-up-arrow','label' => 'Sales Detail',      'href' => 'admin.php?tab=sales'],
     'leads'       => ['icon' => 'bi-person-lines-fill','label' => 'Leads',          'href' => 'admin.php?tab=leads'],
-    'keys'        => ['icon' => 'bi-key',           'label' => 'Key Inventory',     'href' => 'admin.php?tab=keys'],
+    'keys'        => ['icon' => 'bi-key',           'label' => 'Inventory & Keys',  'href' => 'admin.php?tab=keys'],
     'emails'      => ['icon' => 'bi-envelope',      'label' => 'Emails',            'href' => 'admin.php?tab=emails'],
     'template'    => ['icon' => 'bi-file-earmark-richtext', 'label' => 'Email Template', 'href' => 'admin.php?tab=template'],
     'settings'    => ['icon' => 'bi-gear',          'label' => 'Settings',          'href' => 'admin.php?tab=settings'],
