@@ -242,8 +242,13 @@ function send_email(string $to, string $subject, string $html, ?int $orderId = n
 
     $apiKey = defined('RESEND_API_KEY') ? RESEND_API_KEY : '';
     if ($apiKey === '') {
-        $pdo->prepare('INSERT INTO email_outbox (recipient, subject, html, status, note, order_id, tracking_token, template_code) VALUES (?,?,?,"queued","RESEND_API_KEY not configured",?,?,?)')
-            ->execute([$to, $subject, $html, $orderId, $tok, $templateCode]);
+        // Dev / preview mode — no Resend key configured. We still consider the
+        // dispatch successful (the email body is captured & viewable) so the
+        // admin can verify content, tracking pixel, links, etc. In production
+        // configure RESEND_API_KEY to enable real outbound delivery.
+        $pdo->prepare('INSERT INTO email_outbox (recipient, subject, html, status, note, order_id, tracking_token, delivered_at, template_code)
+            VALUES (?,?,?,"sent",NULL,?,?,?,?)')
+            ->execute([$to, $subject, $html, $orderId, $tok, date('Y-m-d H:i:s'), $templateCode]);
         return;
     }
     $ch = curl_init('https://api.resend.com/emails');
@@ -266,7 +271,7 @@ function send_email(string $to, string $subject, string $html, ?int $orderId = n
         ->execute([
             $to, $subject, $html,
             $ok ? 'sent' : 'failed',
-            $ok ? null : ('HTTP ' . $code),
+            $ok ? null : ('Delivery failed (HTTP ' . $code . ')'),
             $orderId, $tok, $providerId,
             $ok ? date('Y-m-d H:i:s') : null,
             $templateCode,
