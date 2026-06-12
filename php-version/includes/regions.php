@@ -41,15 +41,29 @@ function regions_bootstrap(): void {
         }
 
         // products / orders / license_keys / customer_reviews need a `region` column.
-        // ADD COLUMN IF NOT EXISTS is MariaDB / MySQL 8+. Wrapped in try/catch
-        // so older MySQL 5.7 falls through gracefully (the user would need to
-        // run the full database.sql once on those hosts).
-        foreach ([
-            "ALTER TABLE products ADD COLUMN IF NOT EXISTS region VARCHAR(8) NOT NULL DEFAULT 'US'",
-            "ALTER TABLE orders ADD COLUMN IF NOT EXISTS region VARCHAR(8) NOT NULL DEFAULT 'US'",
-            "ALTER TABLE license_keys ADD COLUMN IF NOT EXISTS region VARCHAR(8) NOT NULL DEFAULT 'US'",
-        ] as $alter) {
-            try { $pdo->exec($alter); } catch (Throwable $e) { /* older MySQL — ignore */ }
+        // Detect via INFORMATION_SCHEMA so this works on MySQL 5.6 / 5.7 / 8 / MariaDB.
+        $needs = [
+            'products'     => "VARCHAR(8) NOT NULL DEFAULT 'US'",
+            'orders'       => "VARCHAR(8) NOT NULL DEFAULT 'US'",
+            'license_keys' => "VARCHAR(8) NOT NULL DEFAULT 'US'",
+        ];
+        foreach ($needs as $table => $colDef) {
+            try {
+                // Skip if the table itself doesn't exist on this host.
+                $tableExists = $pdo->prepare(
+                    "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?"
+                );
+                $tableExists->execute([$table]);
+                if (!(int)$tableExists->fetchColumn()) continue;
+
+                $colExists = $pdo->prepare(
+                    "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = 'region'"
+                );
+                $colExists->execute([$table]);
+                if (!(int)$colExists->fetchColumn()) {
+                    $pdo->exec("ALTER TABLE `$table` ADD COLUMN `region` $colDef");
+                }
+            } catch (Throwable $e) { /* ignore — keep going */ }
         }
     } catch (Throwable $e) {
         // DB not reachable yet or insufficient privileges — silently skip,
