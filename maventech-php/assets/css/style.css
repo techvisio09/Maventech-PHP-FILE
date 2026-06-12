@@ -1,0 +1,186 @@
+/* ============================================================
+   Maventech Admin Panel - Stylesheet
+   ============================================================ */
+:root {
+  --bg: #f5f7fb;
+  --card: #ffffff;
+  --primary: #0f172a;
+  --primary-2: #1e293b;
+  --accent: #facc15;
+  --accent-2: #fbbf24;
+  --text: #0f172a;
+  --muted: #64748b;
+  --border: #e5e7eb;
+  --success: #10b981;
+  --danger:  #ef4444;
+  --warning: #f59e0b;
+  --info:    #0ea5e9;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 14px;
+}
+
+/* ---------- Topbar ---------- */
+.topbar {
+  background: linear-gradient(90deg, #0f172a 0%, #1e293b 100%);
+  height: 60px;
+}
+.topbar .navbar-brand { font-size: 18px; letter-spacing: .3px; }
+
+/* ---------- Layout ---------- */
+.layout {
+  display: flex;
+  min-height: calc(100vh - 60px);
+}
+
+.sidebar {
+  width: 240px;
+  background: #0f172a;
+  color: #cbd5e1;
+  padding: 18px 0;
+  transition: transform .2s ease;
+  position: sticky;
+  top: 60px;
+  align-self: flex-start;
+  height: calc(100vh - 60px);
+  overflow-y: auto;
+}
+.sidebar .nav-section {
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 1px;
+  padding: 14px 22px 6px;
+  color: #64748b;
+}
+.sidebar .nav-link {
+  color: #cbd5e1;
+  padding: 9px 22px;
+  border-left: 3px solid transparent;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sidebar .nav-link:hover {
+  background: rgba(255,255,255,.04);
+  color: #fff;
+}
+.sidebar .nav-link.active {
+  background: rgba(250,204,21,.08);
+  border-left-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+.sidebar .nav-link i { width: 18px; text-align: center; }
+
+.content { flex: 1; min-width: 0; }
+
+/* ---------- Cards & widgets ---------- */
+.card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(15,23,42,.04);
+}
+.card-header {
+  background: #fff;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  padding: 14px 18px;
+}
+.stat-card {
+  border-left: 4px solid var(--primary);
+}
+.stat-card.warn   { border-left-color: var(--warning); }
+.stat-card.danger { border-left-color: var(--danger); }
+.stat-card.ok     { border-left-color: var(--success); }
+.stat-card.info   { border-left-color: var(--info); }
+
+.stat-card .stat-label {
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--muted);
+}
+.stat-card .stat-value {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--primary);
+}
+.stat-card .stat-icon {
+  width: 46px; height: 46px; border-radius: 10px;
+  display:flex; align-items:center; justify-content:center;
+  background: rgba(15,23,42,.05); color: var(--primary);
+  font-size: 18px;
+}
+
+.badge.bg-available { background: #d1fae5 !important; color: #065f46 !important; }
+.badge.bg-assigned  { background: #fef3c7 !important; color: #92400e !important; }
+.badge.bg-sold      { background: #dbeafe !important; color: #1e40af !important; }
+.badge.bg-expired   { background: #fee2e2 !important; color: #991b1b !important; }
+.badge.bg-pending   { background: #fef3c7 !important; color: #92400e !important; }
+.badge.bg-paid      { background: #d1fae5 !important; color: #065f46 !important; }
+.badge.bg-failed    { background: #fee2e2 !important; color: #991b1b !important; }
+.badge.bg-refunded  { background: #e5e7eb !important; color: #374151 !important; }
+
+/* ---------- Tables ---------- */
+.table { font-size: 14px; }
+.table thead th {
+  background: #f8fafc;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: .8px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+.table-hover tbody tr:hover { background: #f8fafc; }
+
+/* ---------- Buttons ---------- */
+.btn-primary {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.btn-primary:hover { background: var(--primary-2); border-color: var(--primary-2); }
+.btn-accent {
+  background: var(--accent);
+  color: var(--primary);
+  border: none;
+  font-weight: 600;
+}
+.btn-accent:hover { background: var(--accent-2); color: var(--primary); }
+
+/* ---------- Login ---------- */
+.login-wrap {
+  min-height: 100vh;
+  display:flex; align-items:center; justify-content:center;
+  background: radial-gradient(circle at 20% 10%, #1e293b 0, #0f172a 60%);
+}
+.login-card {
+  width: 420px; max-width: 92vw;
+  background: #fff; border-radius: 16px; padding: 36px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.3);
+}
+.login-card h1 { font-size: 22px; margin-bottom: 4px; color: var(--primary); }
+.login-card .muted { color: var(--muted); font-size: 13px; margin-bottom: 22px; }
+
+/* ---------- Misc ---------- */
+.kbd {
+  background:#0f172a;color:#facc15;font-family:Consolas,monospace;
+  padding:4px 8px;border-radius:6px;font-size:13px;letter-spacing:.5px;
+}
+.dot { display:inline-block; width:8px;height:8px;border-radius:50%; }
+.dot.green{ background:#10b981; }
+.dot.red{ background:#ef4444; }
+.dot.amber{ background:#f59e0b; }
+
+@media (max-width: 991px) {
+  .sidebar {
+    position: fixed; left: 0; top: 60px; z-index: 1030;
+    transform: translateX(-100%);
+  }
+  .sidebar.open { transform: translateX(0); }
+}
