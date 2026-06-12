@@ -1648,24 +1648,22 @@ elseif ($tab === 'emails'):
             <!-- Actions -->
             <td class="text-end text-nowrap">
               <a class="btn btn-soft-blue btn-sm py-0 px-2" href="email-view.php?id=<?= (int)$e['id'] ?>" target="_blank" data-testid="view-email-<?= (int)$e['id'] ?>" title="View email content"><i class="bi bi-eye"></i></a>
-              <?php if ($undelivered): ?>
-                <form method="post" class="d-inline" onsubmit="return confirm('Resend this email to <?= esc($e['recipient']) ?>?');">
+              <form method="post" class="d-inline" onsubmit="return confirm('Resend this email to <?= esc($e['recipient']) ?>?');">
+                <input type="hidden" name="action" value="resend_outbox">
+                <input type="hidden" name="email_id" value="<?= (int)$e['id'] ?>">
+                <button class="btn btn-soft-green btn-sm py-0 px-2" data-testid="resend-email-<?= (int)$e['id'] ?>" title="Resend to same recipient"><i class="bi bi-arrow-clockwise"></i></button>
+              </form>
+              <button type="button" class="btn btn-soft-gray btn-sm py-0 px-2" data-testid="edit-resend-<?= (int)$e['id'] ?>" title="Edit recipient &amp; resend"
+                      onclick="document.getElementById('editResend<?= (int)$e['id'] ?>').classList.toggle('d-none');"><i class="bi bi-pencil-square"></i></button>
+              <div id="editResend<?= (int)$e['id'] ?>" class="d-none mt-2 p-2 card-e" style="background:var(--card-bg);text-align:left;position:absolute;right:14px;z-index:10;min-width:280px;box-shadow:0 8px 24px rgba(0,0,0,.12);">
+                <small class="text-muted d-block mb-1">Resend to a different address:</small>
+                <form method="post" class="d-flex gap-1 align-items-center">
                   <input type="hidden" name="action" value="resend_outbox">
                   <input type="hidden" name="email_id" value="<?= (int)$e['id'] ?>">
-                  <button class="btn btn-soft-green btn-sm py-0 px-2" data-testid="resend-email-<?= (int)$e['id'] ?>" title="Resend to same recipient"><i class="bi bi-arrow-clockwise"></i></button>
+                  <input type="email" name="new_recipient" class="form-control form-control-sm" required placeholder="new@email.com" value="<?= esc($e['recipient']) ?>" data-testid="new-recipient-<?= (int)$e['id'] ?>">
+                  <button class="btn btn-soft-blue btn-sm py-0 px-2" data-testid="confirm-resend-<?= (int)$e['id'] ?>" title="Send"><i class="bi bi-send"></i></button>
                 </form>
-                <button type="button" class="btn btn-soft-gray btn-sm py-0 px-2" data-testid="edit-resend-<?= (int)$e['id'] ?>" title="Edit recipient & resend"
-                        onclick="document.getElementById('editResend<?= (int)$e['id'] ?>').classList.toggle('d-none');"><i class="bi bi-pencil-square"></i></button>
-                <div id="editResend<?= (int)$e['id'] ?>" class="d-none mt-2 p-2 card-e" style="background:var(--card-bg);text-align:left;position:absolute;right:14px;z-index:10;min-width:280px;box-shadow:0 8px 24px rgba(0,0,0,.12);">
-                  <small class="text-muted d-block mb-1">Resend to a different address:</small>
-                  <form method="post" class="d-flex gap-1 align-items-center">
-                    <input type="hidden" name="action" value="resend_outbox">
-                    <input type="hidden" name="email_id" value="<?= (int)$e['id'] ?>">
-                    <input type="email" name="new_recipient" class="form-control form-control-sm" required placeholder="new@email.com" value="<?= esc($e['recipient']) ?>" data-testid="new-recipient-<?= (int)$e['id'] ?>">
-                    <button class="btn btn-soft-blue btn-sm py-0 px-2" data-testid="confirm-resend-<?= (int)$e['id'] ?>" title="Send"><i class="bi bi-send"></i></button>
-                  </form>
-                </div>
-              <?php endif; ?>
+              </div>
             </td>
           </tr>
         <?php endforeach; ?>

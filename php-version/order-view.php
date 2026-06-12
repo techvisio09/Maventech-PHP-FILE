@@ -48,7 +48,7 @@ include __DIR__ . '/includes/admin-shell.php';
 
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
   <div>
-    <a href="admin.php?tab=orders" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Back to orders</a>
+    <a href="javascript:void(0)" onclick="if(document.referrer && document.referrer.indexOf(location.host) !== -1){history.back();} else {location.href='admin.php?tab=orders';}" class="text-decoration-none small" data-testid="back-btn"><i class="bi bi-arrow-left"></i> Back</a>
     <h1 class="h4 fw-bold mb-0 mt-1" data-testid="order-title">Order #<?= esc($o['order_number']) ?></h1>
     <small class="text-muted">Placed <?= esc(date('M j, Y H:i', strtotime($o['created_at']))) ?> · Region <?= esc($o['region']) ?></small>
   </div>
