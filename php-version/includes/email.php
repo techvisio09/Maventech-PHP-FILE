@@ -40,14 +40,25 @@ function activation_url_for_product(string $name, string $brand = '', string $ov
 
 /* Default review-request template used when admin hasn't customised it. */
 function default_review_template(): string {
+    // 5 clickable golden stars — each pre-fills the rating on review.php?t=...&rating=N
+    $sep = strpos('{{review_url}}', '?') !== false ? '&' : '?';
+    $starsHtml = '';
+    for ($i = 1; $i <= 5; $i++) {
+        $starsHtml .= '<a href="{{review_url}}' . $sep . 'rating=' . $i . '" '
+                    . 'style="text-decoration:none;display:inline-block;margin:0 4px;font-size:42px;line-height:1;color:#f59e0b;text-shadow:0 2px 6px rgba(245,158,11,0.35);" '
+                    . 'title="Rate ' . $i . ' star' . ($i>1?'s':'') . '">&#9733;</a>';
+    }
     return '<!doctype html><html><body style="font-family:Arial,sans-serif;background:#f8fafc;padding:30px;">
   <div style="max-width:580px;margin:0 auto;background:#fff;border-radius:14px;padding:32px;box-shadow:0 4px 20px rgba(0,0,0,.05);">
     <div style="text-align:center;font-size:18px;font-weight:800;color:#0f172a;">{{company_name}}</div>
     <h2 style="color:#0f172a;text-align:center;margin-top:16px;">How was your purchase, {{customer_name}}?</h2>
-    <p style="color:#64748b;text-align:center;">We hope <strong>{{product_name}}</strong> is working great. Would you take 30 seconds to share your experience?</p>
-    <div style="text-align:center;margin:24px 0;">
-      <div style="font-size:32px;letter-spacing:6px;">★★★★★</div>
-      <a href="{{review_url}}" style="display:inline-block;margin-top:18px;padding:12px 32px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;border-radius:999px;text-decoration:none;font-weight:700;">Leave a Review</a>
+    <p style="color:#64748b;text-align:center;">We hope <strong>{{product_name}}</strong> is working great. Tap a star below to rate &mdash; we&rsquo;ll pre-fill your selection.</p>
+    <div style="text-align:center;margin:28px 0 10px;">
+      ' . $starsHtml . '
+    </div>
+    <p style="text-align:center;font-size:12px;color:#94a3b8;margin:0 0 24px;">Click any star: <strong style="color:#f59e0b;">1</strong> = needs work &middot; <strong style="color:#f59e0b;">5</strong> = excellent</p>
+    <div style="text-align:center;margin:0 0 18px;">
+      <a href="{{review_url}}" style="display:inline-block;padding:12px 32px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;border-radius:999px;text-decoration:none;font-weight:700;">Or write a full review &rarr;</a>
     </div>
     <p style="font-size:12px;color:#94a3b8;text-align:center;">Includes an AI-assist option to help write your comment based on your rating. Thank you!</p>
   </div>{{tracking_pixel}}</body></html>';

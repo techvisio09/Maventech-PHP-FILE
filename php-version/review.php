@@ -80,12 +80,16 @@ body { background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%); min-height:10
       <input type="hidden" name="ai_generated" id="aiFlag" value="0">
 
       <div class="stars" data-testid="star-rating">
+        <?php $preRating = max(1, min(5, (int)($_GET['rating'] ?? 5))); ?>
         <?php for ($i=5; $i>=1; $i--): ?>
-          <input type="radio" name="rating" id="r<?= $i ?>" value="<?= $i ?>" <?= $i==5?'checked':'' ?> onchange="onStarChange(<?= $i ?>)">
-          <label for="r<?= $i ?>" class="<?= $i<=5?'lit':'' ?>"><i class="bi bi-star-fill"></i></label>
+          <input type="radio" name="rating" id="r<?= $i ?>" value="<?= $i ?>" <?= $i==$preRating?'checked':'' ?> onchange="onStarChange(<?= $i ?>)">
+          <label for="r<?= $i ?>" class="<?= $i<=$preRating?'lit':'' ?>"><i class="bi bi-star-fill"></i></label>
         <?php endfor; ?>
       </div>
-      <div class="text-center small text-muted mb-3" id="ratingLabel">Excellent — 5 stars</div>
+      <div class="text-center small text-muted mb-3" id="ratingLabel"><?php
+        $labels = [1=>'Poor — 1 star',2=>'Fair — 2 stars',3=>'Good — 3 stars',4=>'Great — 4 stars',5=>'Excellent — 5 stars'];
+        echo $labels[$preRating];
+      ?></div>
 
       <label class="form-label small fw-semibold">Your comment</label>
       <textarea class="form-control" name="comment" id="cmt" rows="4" placeholder="Tell other customers what you liked…" required></textarea>
