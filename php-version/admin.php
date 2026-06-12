@@ -1569,7 +1569,7 @@ elseif ($tab === 'emails'):
 
   <div class="tbl-e">
     <table class="table mb-0" data-testid="email-activity">
-      <thead><tr><th>Customer</th><th>License Key</th><th>Email Subject</th><th>Order</th><th>Status</th><th>Sent</th><th class="text-end">Actions</th></tr></thead>
+      <thead><tr><th>Customer</th><th>Phone</th><th>License Key</th><th>Email Subject</th><th>Order</th><th>Email Status</th><th>Sent</th><th class="text-end">Actions</th></tr></thead>
       <tbody>
         <?php
         $emQuery = $pdo->query("SELECT em.*, o.order_number, o.first_name, o.last_name, o.phone,
@@ -1583,6 +1583,8 @@ elseif ($tab === 'emails'):
           $ds = $e['status'];
           $undelivered = in_array($ds, ['failed','queued'], true);
           $custName = trim(($e['first_name'] ?? '').' '.($e['last_name'] ?? ''));
+          $oid = (int)($e['order_id'] ?? 0);
+          $detailHref = $oid ? 'order-view.php?id='.$oid : '#';
           // Template label
           $tplLabels = [
             'order_delivery'  => ['label'=>'License delivery', 'color'=>'#2563eb', 'bg'=>'#dbeafe'],
@@ -1590,14 +1592,23 @@ elseif ($tab === 'emails'):
             'order_confirmation' => ['label'=>'Order confirm', 'color'=>'#10b981', 'bg'=>'#d1fae5'],
           ];
           $tpl = $tplLabels[$e['template_code']] ?? ['label'=>($e['template_code'] ?: 'inline'), 'color'=>'#475569', 'bg'=>'#f1f5f9'];
+          // Friendly status
+          $statusFriendly = $ds === 'sent' ? 'Success' : ($ds === 'failed' ? 'Failed' : ucfirst($ds));
         ?>
           <tr <?= $undelivered ? 'style="background:rgba(239,68,68,0.04);"' : '' ?>>
-            <!-- Customer: name / email / phone (only if present) -->
+            <!-- Customer: clickable name → full transaction detail -->
             <td style="min-width:180px;">
-              <?php if ($custName !== ''): ?><strong style="font-size:13px;"><?= esc($custName) ?></strong><br><?php endif; ?>
-              <small><?= esc($e['recipient']) ?></small>
-              <?php if (!empty($e['phone'])): ?><br><small class="text-muted"><i class="bi bi-telephone" style="font-size:10px;"></i> <?= esc($e['phone']) ?></small><?php endif; ?>
+              <?php if ($custName !== '' && $oid): ?>
+                <a href="<?= esc($detailHref) ?>" class="fw-bold text-decoration-none" style="font-size:13.5px;color:var(--brand-dk,#1d4ed8);" data-testid="customer-link-<?= (int)$e['id'] ?>" title="View full transaction detail">
+                  <?= esc($custName) ?> <i class="bi bi-box-arrow-up-right" style="font-size:10px;opacity:.6;"></i>
+                </a>
+              <?php elseif ($custName !== ''): ?>
+                <strong style="font-size:13.5px;"><?= esc($custName) ?></strong>
+              <?php endif; ?>
+              <div><small class="text-muted"><i class="bi bi-envelope" style="font-size:10px;"></i> <?= esc($e['recipient']) ?></small></div>
             </td>
+            <!-- Phone -->
+            <td><small><?= $e['phone'] ? '<i class="bi bi-telephone-fill text-success" style="font-size:10px;"></i> '.esc($e['phone']) : '<span class="text-muted">—</span>' ?></small></td>
             <!-- License Key (compact pills) -->
             <td>
               <?php if (!empty($e['keys_list'])): ?>
@@ -1614,15 +1625,19 @@ elseif ($tab === 'emails'):
               <span style="display:inline-block;font-size:10px;font-weight:600;color:<?= esc($tpl['color']) ?>;background:<?= esc($tpl['bg']) ?>;padding:2px 8px;border-radius:999px;margin-top:3px;"><i class="bi bi-tag-fill" style="font-size:9px;"></i> <?= esc($tpl['label']) ?></span>
             </td>
             <!-- Order link -->
-            <td><?= $e['order_number'] ? '<a href="order-view.php?id='.(int)$e['order_id'].'" class="fw-semibold" style="font-size:12.5px;"><code>#'.esc($e['order_number']).'</code></a>' : '<small class="text-muted">—</small>' ?></td>
-            <!-- Combined Status: delivery badge + engagement icons -->
-            <td style="min-width:120px;">
-              <span class="s-badge <?= esc($ds) ?>" data-testid="status-badge-<?= (int)$e['id'] ?>"><?= esc($ds) ?></span>
+            <td><?= $e['order_number'] ? '<a href="'.esc($detailHref).'" class="fw-semibold" style="font-size:12.5px;"><code>#'.esc($e['order_number']).'</code></a>' : '<small class="text-muted">—</small>' ?></td>
+            <!-- Email Status: Success / Failed (friendly) -->
+            <td style="min-width:140px;">
+              <?php if ($ds === 'sent'): ?>
+                <span class="s-badge paid" data-testid="status-badge-<?= (int)$e['id'] ?>" style="font-weight:600;"><i class="bi bi-check-circle-fill me-1"></i>Success</span>
+              <?php elseif ($ds === 'failed'): ?>
+                <span class="s-badge failed" data-testid="status-badge-<?= (int)$e['id'] ?>" style="font-weight:600;"><i class="bi bi-x-circle-fill me-1"></i>Failed</span>
+              <?php else: ?>
+                <span class="s-badge <?= esc($ds) ?>" data-testid="status-badge-<?= (int)$e['id'] ?>" style="font-weight:600;"><i class="bi bi-hourglass-split me-1"></i><?= esc(ucfirst($ds)) ?></span>
+              <?php endif; ?>
               <?php if ($e['opened_at']): ?>
-                <div class="mt-1"><i class="bi bi-eye-fill text-success" style="font-size:12px;" title="Opened <?= (int)$e['opened_count'] ?>× at <?= esc(date('M j H:i', strtotime($e['opened_at']))) ?>"></i>
-                <small class="text-success" style="font-size:10.5px;font-weight:600;"><?= (int)$e['opened_count'] ?> open<?= $e['opened_count']>1?'s':'' ?></small>
-                <?php if ($e['clicked_at']): ?><i class="bi bi-cursor-fill text-primary ms-1" style="font-size:12px;" title="Clicked <?= (int)$e['click_count'] ?>×"></i>
-                <small class="text-primary" style="font-size:10.5px;font-weight:600;"><?= (int)$e['click_count'] ?> click<?= $e['click_count']>1?'s':'' ?></small>
+                <div class="mt-1"><i class="bi bi-eye-fill text-success" style="font-size:12px;"></i> <small class="text-success" style="font-size:10.5px;font-weight:600;"><?= (int)$e['opened_count'] ?> open<?= $e['opened_count']>1?'s':'' ?></small>
+                <?php if ($e['clicked_at']): ?> · <i class="bi bi-cursor-fill text-primary" style="font-size:12px;"></i> <small class="text-primary" style="font-size:10.5px;font-weight:600;"><?= (int)$e['click_count'] ?> click<?= $e['click_count']>1?'s':'' ?></small>
                 <?php endif; ?>
                 </div>
               <?php endif; ?>
@@ -1655,7 +1670,7 @@ elseif ($tab === 'emails'):
           </tr>
         <?php endforeach; ?>
         <?php if ($rowCount === 0): ?>
-          <tr><td colspan="7" class="text-center text-muted py-5"><i class="bi bi-inbox" style="font-size:24px;"></i><br>No transactional emails yet. They'll appear here automatically after the first order.</td></tr>
+          <tr><td colspan="8" class="text-center text-muted py-5"><i class="bi bi-inbox" style="font-size:24px;"></i><br>No transactional emails yet. They'll appear here automatically after the first order.</td></tr>
         <?php endif; ?>
       </tbody>
     </table>
