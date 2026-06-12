@@ -2,9 +2,12 @@
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/email.php';
 require_once __DIR__ . '/includes/regions.php';
+require_once __DIR__ . '/includes/mailer.php';
 ensure_admin();
 $admin = require_admin();
 $pdo = db();
+// Drain the email queue on every admin page load (no cron required for low-volume sites)
+try { smtp_process_queue(3); } catch (Throwable $e) { /* never block the UI */ }
 $tab = $_GET['tab'] ?? 'dashboard';
 // Legacy `keys` tab merged into Products tab — keep URLs working
 if ($tab === 'keys') { header('Location: admin.php?tab=products'); exit; }
@@ -191,6 +194,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!empty($_POST['company_logo'])) setting_set('company_logo', trim($_POST['company_logo']));
         if (!empty($_POST['clear_logo']))    setting_set('company_logo', '');
         header('Location: admin.php?tab=company&msg=Saved'); exit;
+
+    } elseif ($action === 'save_smtp') {
+        require_once __DIR__ . '/includes/mailer.php';
+        smtp_set_config([
+            'enabled'      => !empty($_POST['enabled']),
+            'host'         => $_POST['host']       ?? '',
+            'port'         => $_POST['port']       ?? '587',
+            'username'     => $_POST['username']   ?? '',
+            // Empty password = keep existing (so admins can re-save without re-typing)
+            'password'     => ($_POST['password'] ?? '') !== '' ? $_POST['password'] : smtp_config()['password'],
+            'encryption'   => $_POST['encryption'] ?? 'tls',
+            'from_email'   => $_POST['from_email'] ?? '',
+            'from_name'    => $_POST['from_name']  ?? '',
+            'reply_to'     => $_POST['reply_to']   ?? '',
+            'max_retries'  => $_POST['max_retries']?? '3',
+            'rate_per_min' => $_POST['rate_per_min']?? '60',
+            'verify_peer'  => !empty($_POST['verify_peer']),
+            'debug_level'  => $_POST['debug_level']?? '0',
+        ]);
+        header('Location: admin.php?tab=smtp&msg=SMTP+saved'); exit;
 
     } elseif ($action === 'resend_outbox') {
         // Re-attempt sending an outbox email — UPDATE the existing row in place
@@ -2413,6 +2436,253 @@ elseif ($tab === 'templates'):
       <?php endif; ?>
     </div>
   </div>
+
+<?php
+// ============================================================================
+// SMTP / MAIL SERVER
+// ============================================================================
+elseif ($tab === 'smtp'):
+  require_once __DIR__ . '/includes/mailer.php';
+  $smtp = smtp_config();
+  // Auto-mint cron + API tokens once, so the admin can copy them from this page.
+  $cronToken = setting_get('cron_token', '');
+  if ($cronToken === '') { $cronToken = bin2hex(random_bytes(20)); setting_set('cron_token', $cronToken); }
+  $apiToken  = setting_get('api_token', '');
+  if ($apiToken === '')  { $apiToken  = bin2hex(random_bytes(24)); setting_set('api_token', $apiToken); }
+  // Queue stats
+  $st = db()->query("SELECT
+        COUNT(*) total,
+        SUM(status='sent') sent,
+        SUM(status='queued') queued,
+        SUM(status='retrying') retrying,
+        SUM(status='failed') failed,
+        SUM(status='bounced') bounced
+      FROM email_outbox")->fetch();
+  $siteHost = parse_url(rtrim(SITE_URL,'/'), PHP_URL_HOST) ?: 'your-domain.com';
+?>
+  <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+    <div>
+      <h1 class="h4 fw-bold mb-1"><i class="bi bi-envelope-paper-heart me-1 text-primary"></i> SMTP / Mail Server</h1>
+      <small class="text-muted">Configure your outgoing-mail server. Once enabled, every transactional email (orders, refunds, leads, reviews, OTPs) flows through your SMTP with full retry, queueing and bounce tracking.</small>
+    </div>
+    <?php if (!empty($_GET['msg'])): ?>
+      <span class="badge bg-success-subtle text-success" data-testid="smtp-saved-toast"><i class="bi bi-check2-circle me-1"></i><?= esc($_GET['msg']) ?></span>
+    <?php endif; ?>
+  </div>
+
+  <!-- Status / queue summary tiles -->
+  <div class="row g-2 mb-3">
+    <div class="col-md-2 col-6"><div class="card-e p-3"><div class="small text-muted">Status</div><div class="fw-bold mt-1" data-testid="smtp-status-pill"><?= $smtp['enabled'] ? '<span class="text-success"><i class="bi bi-check-circle-fill"></i> Live</span>' : '<span class="text-warning"><i class="bi bi-pause-circle-fill"></i> Disabled</span>' ?></div></div></div>
+    <div class="col-md-2 col-6"><div class="card-e p-3"><div class="small text-muted">Sent (all-time)</div><div class="h5 fw-bold mb-0 text-success" data-testid="smtp-stat-sent"><?= (int)($st['sent'] ?? 0) ?></div></div></div>
+    <div class="col-md-2 col-6"><div class="card-e p-3"><div class="small text-muted">Queued</div><div class="h5 fw-bold mb-0 text-primary" data-testid="smtp-stat-queued"><?= (int)($st['queued'] ?? 0) ?></div></div></div>
+    <div class="col-md-2 col-6"><div class="card-e p-3"><div class="small text-muted">Retrying</div><div class="h5 fw-bold mb-0 text-warning" data-testid="smtp-stat-retrying"><?= (int)($st['retrying'] ?? 0) ?></div></div></div>
+    <div class="col-md-2 col-6"><div class="card-e p-3"><div class="small text-muted">Failed</div><div class="h5 fw-bold mb-0 text-danger" data-testid="smtp-stat-failed"><?= (int)($st['failed'] ?? 0) ?></div></div></div>
+    <div class="col-md-2 col-6"><div class="card-e p-3"><div class="small text-muted">Bounced</div><div class="h5 fw-bold mb-0 text-secondary" data-testid="smtp-stat-bounced"><?= (int)($st['bounced'] ?? 0) ?></div></div></div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-7">
+      <div class="card-e p-4" data-testid="smtp-config-card">
+        <form method="post" id="smtpForm">
+          <input type="hidden" name="action" value="save_smtp">
+
+          <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2">
+              <h6 class="fw-bold mb-0"><i class="bi bi-server me-1 text-primary"></i> Server Configuration</h6>
+            </div>
+            <div class="form-check form-switch mb-0">
+              <input type="checkbox" class="form-check-input" name="enabled" id="smtpEnabled" <?= $smtp['enabled']?'checked':'' ?> data-testid="smtp-enabled">
+              <label class="form-check-label small fw-semibold" for="smtpEnabled">Enable SMTP</label>
+            </div>
+          </div>
+
+          <!-- Provider presets -->
+          <label class="form-label small fw-semibold mb-1">Quick preset</label>
+          <div class="d-flex flex-wrap gap-2 mb-3" data-testid="smtp-presets">
+            <button type="button" class="btn btn-soft-gray btn-sm" data-preset="cpanel">cPanel / Plesk</button>
+            <button type="button" class="btn btn-soft-gray btn-sm" data-preset="gmail">Gmail</button>
+            <button type="button" class="btn btn-soft-gray btn-sm" data-preset="o365">Office 365</button>
+            <button type="button" class="btn btn-soft-gray btn-sm" data-preset="sendgrid">SendGrid</button>
+            <button type="button" class="btn btn-soft-gray btn-sm" data-preset="ses">Amazon SES</button>
+            <button type="button" class="btn btn-soft-gray btn-sm" data-preset="custom">Custom</button>
+          </div>
+
+          <div class="row g-3">
+            <div class="col-md-8">
+              <label class="form-label small fw-semibold">SMTP Host</label>
+              <input class="form-control" name="host" id="smtpHost" value="<?= esc($smtp['host']) ?>" placeholder="mail.<?= esc($siteHost) ?>" required data-testid="smtp-host">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">Port</label>
+              <input class="form-control" name="port" id="smtpPort" type="number" value="<?= esc($smtp['port']) ?>" data-testid="smtp-port">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Username</label>
+              <input class="form-control" name="username" id="smtpUser" value="<?= esc($smtp['username']) ?>" placeholder="noreply@<?= esc($siteHost) ?>" autocomplete="off" data-testid="smtp-username">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Password <span class="text-muted fw-normal">(leave blank to keep current)</span></label>
+              <input class="form-control" name="password" type="password" placeholder="<?= $smtp['password'] !== '' ? '•••••••• (saved)' : 'Enter password' ?>" autocomplete="new-password" data-testid="smtp-password">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">Encryption</label>
+              <select class="form-select" name="encryption" id="smtpEnc" data-testid="smtp-encryption">
+                <option value="tls"  <?= $smtp['encryption']==='tls' ?'selected':'' ?>>TLS (STARTTLS · 587)</option>
+                <option value="ssl"  <?= $smtp['encryption']==='ssl' ?'selected':'' ?>>SSL (Implicit · 465)</option>
+                <option value="none" <?= $smtp['encryption']==='none'?'selected':'' ?>>None (plain · 25)</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">Max retries</label>
+              <input class="form-control" name="max_retries" type="number" min="0" max="10" value="<?= esc($smtp['max_retries']) ?>" data-testid="smtp-max-retries">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">Rate / minute</label>
+              <input class="form-control" name="rate_per_min" type="number" min="1" max="2000" value="<?= esc($smtp['rate_per_min']) ?>" data-testid="smtp-rate">
+            </div>
+          </div>
+
+          <hr class="my-3">
+          <h6 class="fw-bold mb-2"><i class="bi bi-person-badge me-1 text-primary"></i> Sender Identity</h6>
+          <div class="row g-3">
+            <div class="col-md-5">
+              <label class="form-label small fw-semibold">From Email</label>
+              <input class="form-control" name="from_email" type="email" value="<?= esc($smtp['from_email']) ?>" placeholder="noreply@<?= esc($siteHost) ?>" required data-testid="smtp-from-email">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">From Name</label>
+              <input class="form-control" name="from_name" value="<?= esc($smtp['from_name']) ?>" placeholder="<?= esc(setting_get('company_name','Your Brand')) ?>" data-testid="smtp-from-name">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small fw-semibold">Reply-To</label>
+              <input class="form-control" name="reply_to" type="email" value="<?= esc($smtp['reply_to']) ?>" placeholder="support@<?= esc($siteHost) ?>" data-testid="smtp-reply-to">
+            </div>
+          </div>
+
+          <div class="form-check mt-3">
+            <input type="checkbox" class="form-check-input" name="verify_peer" id="smtpVerify" <?= $smtp['verify_peer']?'checked':'' ?> data-testid="smtp-verify-peer">
+            <label class="form-check-label small" for="smtpVerify">Strict TLS peer verification <span class="text-muted">(uncheck only if your self-signed cert fails)</span></label>
+          </div>
+
+          <div class="d-flex gap-2 flex-wrap mt-3">
+            <button class="btn btn-soft-blue btn-sm" data-testid="smtp-save-btn"><i class="bi bi-check2 me-1"></i> Save Configuration</button>
+            <button type="button" class="btn btn-soft-gray btn-sm" id="smtpTestBtn" data-testid="smtp-test-btn"><i class="bi bi-send-check me-1"></i> Send Test Email</button>
+            <button type="button" class="btn btn-soft-gray btn-sm" id="smtpProcessBtn" data-testid="smtp-process-btn"><i class="bi bi-play-circle me-1"></i> Process Queue Now</button>
+          </div>
+
+          <div id="smtpResult" class="mt-3 d-none small"></div>
+        </form>
+      </div>
+    </div>
+
+    <div class="col-lg-5">
+      <!-- DNS deliverability card -->
+      <div class="card-e p-3 mb-3" data-testid="smtp-dns-card">
+        <h6 class="fw-bold mb-2"><i class="bi bi-shield-check me-1 text-success"></i> DNS records for inbox placement</h6>
+        <p class="small text-muted mb-3">Add these records at your DNS host to pass SPF / DKIM / DMARC and stop landing in spam folders.</p>
+        <div class="dns-row mb-2"><span class="dns-type">SPF</span><code>v=spf1 include:<?= esc($siteHost) ?> ~all</code></div>
+        <div class="dns-row mb-2"><span class="dns-type">DMARC</span><code>v=DMARC1; p=quarantine; rua=mailto:dmarc@<?= esc($siteHost) ?>; pct=100</code></div>
+        <div class="dns-row"><span class="dns-type">DKIM</span><code>Generated by your SMTP provider — copy the selector from the provider dashboard.</code></div>
+        <p class="small text-muted mt-2 mb-0">After adding records, use <a href="https://www.mail-tester.com" target="_blank" rel="noopener">mail-tester.com</a> to verify a perfect 10/10 score.</p>
+      </div>
+
+      <!-- Cron / API tokens card -->
+      <div class="card-e p-3 mb-3" data-testid="smtp-cron-card">
+        <h6 class="fw-bold mb-2"><i class="bi bi-clock me-1 text-primary"></i> Background queue worker</h6>
+        <p class="small text-muted mb-2">For bulk sending, add this cron job in cPanel / Plesk so the queue processes every minute:</p>
+        <div class="copy-row mb-2">
+          <code data-testid="smtp-cron-url"><?= esc(rtrim(SITE_URL,'/')) ?>/cron.php?token=<?= esc($cronToken) ?></code>
+          <button type="button" class="btn btn-sm btn-soft-gray" onclick="copyToClipboard(this, '<?= esc(rtrim(SITE_URL,'/')) ?>/cron.php?token=<?= esc($cronToken) ?>')"><i class="bi bi-clipboard"></i></button>
+        </div>
+        <p class="small text-muted mb-0">Without cron, the queue still drains incrementally on each admin page load.</p>
+      </div>
+
+      <!-- REST API card -->
+      <div class="card-e p-3" data-testid="smtp-api-card">
+        <h6 class="fw-bold mb-2"><i class="bi bi-plug me-1 text-primary"></i> REST API token</h6>
+        <p class="small text-muted mb-2">Use this Bearer token to send emails programmatically:</p>
+        <div class="copy-row mb-2">
+          <code data-testid="smtp-api-token" style="font-size:11px;"><?= esc($apiToken) ?></code>
+          <button type="button" class="btn btn-sm btn-soft-gray" onclick="copyToClipboard(this, '<?= esc($apiToken) ?>')"><i class="bi bi-clipboard"></i></button>
+        </div>
+        <details class="small">
+          <summary class="text-muted" style="cursor:pointer;">Endpoints</summary>
+          <ul class="mt-2 mb-0" style="font-size:12px;line-height:1.7;">
+            <li><code>POST /email-api.php?action=send</code> &mdash; render+send immediately</li>
+            <li><code>POST /email-api.php?action=queue</code> &mdash; queue only</li>
+            <li><code>GET  /email-api.php?action=status&amp;id=N</code></li>
+            <li><code>GET  /email-api.php?action=stats</code></li>
+            <li><code>POST /email-api.php?action=resend&amp;id=N</code></li>
+            <li><code>POST /email-api.php?action=process</code></li>
+          </ul>
+        </details>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    .dns-row { font-size:12px; }
+    .dns-row .dns-type { display:inline-block; min-width:56px; font-weight:700; color:#0f172a; background:#dbeafe; padding:2px 8px; border-radius:6px; margin-right:6px; }
+    .dns-row code { background:var(--bg); padding:4px 8px; border-radius:6px; border:1px solid var(--border); word-break:break-all; display:inline-block; }
+    .copy-row { display:flex; align-items:center; gap:6px; }
+    .copy-row code { flex:1; background:var(--bg); padding:6px 10px; border-radius:6px; border:1px solid var(--border); font-size:11.5px; word-break:break-all; }
+    #smtpResult.ok  { background:#ecfdf5; border:1px solid #a7f3d0; color:#065f46; padding:12px; border-radius:8px; }
+    #smtpResult.err { background:#fee2e2; border:1px solid #fecaca; color:#991b1b; padding:12px; border-radius:8px; }
+  </style>
+
+  <script>
+  function copyToClipboard(btn, text){
+    try { navigator.clipboard.writeText(text); btn.innerHTML = '<i class="bi bi-check2"></i>'; setTimeout(()=>btn.innerHTML='<i class="bi bi-clipboard"></i>', 1200); }
+    catch(e){ document.execCommand('copy'); }
+  }
+  (function(){
+    var presets = {
+      cpanel:   { host: 'mail.' + '<?= esc($siteHost) ?>', port: 465, enc: 'ssl' },
+      gmail:    { host: 'smtp.gmail.com',     port: 587, enc: 'tls' },
+      o365:     { host: 'smtp.office365.com', port: 587, enc: 'tls' },
+      sendgrid: { host: 'smtp.sendgrid.net',  port: 587, enc: 'tls', user: 'apikey' },
+      ses:      { host: 'email-smtp.us-east-1.amazonaws.com', port: 587, enc: 'tls' },
+      custom:   { host: '', port: 587, enc: 'tls' }
+    };
+    document.querySelectorAll('[data-preset]').forEach(function(b){
+      b.addEventListener('click', function(){
+        var p = presets[b.getAttribute('data-preset')];
+        if (!p) return;
+        document.getElementById('smtpHost').value = p.host;
+        document.getElementById('smtpPort').value = p.port;
+        document.getElementById('smtpEnc').value  = p.enc;
+        if (p.user) document.getElementById('smtpUser').value = p.user;
+      });
+    });
+
+    var result = document.getElementById('smtpResult');
+    function showResult(ok, msg){
+      result.classList.remove('d-none', 'ok', 'err');
+      result.classList.add(ok ? 'ok' : 'err');
+      result.innerHTML = (ok ? '<i class="bi bi-check2-circle me-1"></i>' : '<i class="bi bi-exclamation-triangle me-1"></i>') + msg;
+    }
+
+    document.getElementById('smtpTestBtn').addEventListener('click', function(){
+      var to = prompt('Send a test email to:', document.querySelector('[name=reply_to]').value || document.querySelector('[name=from_email]').value);
+      if (!to) return;
+      var b = this, orig = b.innerHTML; b.disabled=true; b.innerHTML='<span class="spinner-border spinner-border-sm me-1"></span>Sending…';
+      var fd = new FormData(); fd.append('to', to);
+      fetch('ajax/smtp-test.php', { method:'POST', body: fd })
+        .then(r => r.json())
+        .then(j => { b.disabled=false; b.innerHTML=orig; showResult(j.ok, j.message || (j.ok?'Sent':'Failed')); })
+        .catch(() => { b.disabled=false; b.innerHTML=orig; showResult(false, 'Network error'); });
+    });
+
+    document.getElementById('smtpProcessBtn').addEventListener('click', function(){
+      var b = this, orig = b.innerHTML; b.disabled=true; b.innerHTML='<span class="spinner-border spinner-border-sm me-1"></span>Processing…';
+      var fd = new FormData(); fd.append('batch', '25');
+      fetch('ajax/smtp-process.php', { method:'POST', body: fd })
+        .then(r => r.json())
+        .then(j => { b.disabled=false; b.innerHTML=orig; showResult(j.ok, 'Processed <strong>' + (j.processed||0) + '</strong> email(s) — refresh to see updated counts.'); })
+        .catch(() => { b.disabled=false; b.innerHTML=orig; showResult(false, 'Network error'); });
+    });
+  })();
+  </script>
 
 <?php
 // ============================================================================

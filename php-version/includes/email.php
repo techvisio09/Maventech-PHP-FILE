@@ -579,6 +579,7 @@ function build_order_email_html(array $order, array $items, array $assignments, 
 }
 
 function send_email(string $to, string $subject, string $html, ?int $orderId = null, ?string $templateCode = null): void {
+    require_once __DIR__ . '/mailer.php';
     $pdo  = db();
     $tok  = bin2hex(random_bytes(16));
     // Embed pixel at the very end too (in case template lacks {{tracking_pixel}})
@@ -586,43 +587,58 @@ function send_email(string $to, string $subject, string $html, ?int $orderId = n
         $base = rtrim(site_url(), '/');
         $html .= '<img src="' . $base . '/track-open.php?t=' . urlencode($tok) . '" width="1" height="1" alt="">';
     }
-
-    $apiKey = defined('RESEND_API_KEY') ? RESEND_API_KEY : '';
-    if ($apiKey === '') {
-        // Dev / preview mode — no Resend key configured. We still consider the
-        // dispatch successful (the email body is captured & viewable) so the
-        // admin can verify content, tracking pixel, links, etc. In production
-        // configure RESEND_API_KEY to enable real outbound delivery.
-        $pdo->prepare('INSERT INTO email_outbox (recipient, subject, html, status, note, order_id, tracking_token, delivered_at, template_code)
-            VALUES (?,?,?,"sent",NULL,?,?,?,?)')
-            ->execute([$to, $subject, $html, $orderId, $tok, date('Y-m-d H:i:s'), $templateCode]);
+    // Skip obviously invalid addresses (header-injection defence happens inside smtp_send)
+    if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
+        $pdo->prepare('INSERT INTO email_outbox (recipient, subject, html, status, note, order_id, tracking_token, template_code)
+            VALUES (?,?,?,"failed",?,?,?,?)')
+            ->execute([$to, $subject, $html, 'Invalid recipient address', $orderId, $tok, $templateCode]);
         return;
     }
-    $ch = curl_init('https://api.resend.com/emails');
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_POST => true,
-        CURLOPT_POSTFIELDS => json_encode(['from' => SENDER_EMAIL, 'to' => [$to], 'subject' => $subject, 'html' => $html]),
-        CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Authorization: Bearer ' . $apiKey],
-        CURLOPT_TIMEOUT => 20,
-    ]);
-    $res = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    $ok = $res !== false && $code >= 200 && $code < 300;
-    $providerId = null;
-    if ($ok) { $d = json_decode($res, true); $providerId = $d['id'] ?? null; }
 
-    $pdo->prepare('INSERT INTO email_outbox (recipient, subject, html, status, note, order_id, tracking_token, provider_id, delivered_at, template_code)
-        VALUES (?,?,?,?,?,?,?,?,?,?)')
-        ->execute([
-            $to, $subject, $html,
-            $ok ? 'sent' : 'failed',
-            $ok ? null : ('Delivery failed (HTTP ' . $code . ')'),
-            $orderId, $tok, $providerId,
-            $ok ? date('Y-m-d H:i:s') : null,
-            $templateCode,
+    $smtp = smtp_config();
+    if ($smtp['enabled'] && $smtp['host'] !== '') {
+        // Production path: queue, then process this row immediately. Queueing
+        // first means a transient SMTP outage doesn't lose the email — the
+        // worker (inline or cron) will retry with exponential backoff.
+        $rowId = smtp_queue_email($to, $subject, $html, [
+            'tracking_token' => $tok,
+            'template_code'  => $templateCode,
+            'order_id'       => $orderId,
         ]);
+        smtp_process_queue(1);
+        return;
+    }
+
+    // Resend fallback (legacy support — used if RESEND_API_KEY is set)
+    $apiKey = defined('RESEND_API_KEY') ? RESEND_API_KEY : '';
+    if ($apiKey !== '') {
+        $ch = curl_init('https://api.resend.com/emails');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => json_encode(['from' => SENDER_EMAIL, 'to' => [$to], 'subject' => $subject, 'html' => $html]),
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Authorization: Bearer ' . $apiKey],
+            CURLOPT_TIMEOUT => 20,
+        ]);
+        $res = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        $ok = $res !== false && $code >= 200 && $code < 300;
+        $providerId = null;
+        if ($ok) { $d = json_decode($res, true); $providerId = $d['id'] ?? null; }
+        $pdo->prepare('INSERT INTO email_outbox (recipient, subject, html, status, note, order_id, tracking_token, provider_id, delivered_at, template_code)
+            VALUES (?,?,?,?,?,?,?,?,?,?)')
+            ->execute([$to, $subject, $html, $ok ? 'sent' : 'failed',
+                $ok ? null : ('Delivery failed (HTTP ' . $code . ')'),
+                $orderId, $tok, $providerId, $ok ? date('Y-m-d H:i:s') : null, $templateCode]);
+        return;
+    }
+
+    // Dev / preview mode — capture the email so the admin can verify content,
+    // tracking pixel, links, etc. In production configure SMTP from the admin.
+    $pdo->prepare('INSERT INTO email_outbox (recipient, subject, html, status, note, order_id, tracking_token, delivered_at, template_code)
+        VALUES (?,?,?,"sent",?,?,?,?,?)')
+        ->execute([$to, $subject, $html, 'Dev mode — no SMTP configured', $orderId, $tok, date('Y-m-d H:i:s'), $templateCode]);
 }
 
 function fulfill_order(int $orderId): void {
