@@ -640,7 +640,7 @@ hr { border-color: var(--border); opacity:.5; }
 <div class="adm-shell">
   <aside class="adm-sidebar" data-testid="adm-sidebar">
     <div class="side-section">Overview</div>
-    <?php foreach (['dashboard','company','inventory'] as $k): $i = $navItems[$k]; ?>
+    <?php foreach (['dashboard','company','regions','inventory'] as $k): $i = $navItems[$k]; ?>
       <a class="item <?= $adminActive===$k?'active':'' ?>" href="<?= esc($i['href']) ?>" data-testid="adm-nav-<?= $k ?>">
         <i class="bi <?= esc($i['icon']) ?>"></i><?= esc($i['label']) ?>
       </a>
@@ -664,7 +664,7 @@ hr { border-color: var(--border); opacity:.5; }
       </a>
     <?php endforeach; ?>
     <div class="side-section">System</div>
-    <?php foreach (['api','regions'] as $k): $i = $navItems[$k]; ?>
+    <?php foreach (['api'] as $k): $i = $navItems[$k]; ?>
       <a class="item <?= $adminActive===$k?'active':'' ?>" href="<?= esc($i['href']) ?>" data-testid="adm-nav-<?= $k ?>">
         <i class="bi <?= esc($i['icon']) ?>"></i><?= esc($i['label']) ?>
       </a>
