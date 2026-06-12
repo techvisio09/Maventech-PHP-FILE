@@ -380,7 +380,8 @@ function render_product_row(array $p): string
           <div class="mb-2">' . render_stock_pill($p['slug']) . '</div>
           <div class="d-flex flex-sm-column gap-2">
             ' . (available_keys_count($p['slug']) > 0
-                ? '<button class="btn btn-sm btn-primary rounded-pill px-3 add-to-cart-btn" data-slug="' . esc($p['slug']) . '" data-testid="add-to-cart-' . esc($p['slug']) . '"><i class="bi bi-cart-plus me-1"></i>Add to Cart</button>'
+                ? '<button class="btn btn-sm btn-primary rounded-pill px-3 add-to-cart-btn" data-slug="' . esc($p['slug']) . '" data-testid="add-to-cart-' . esc($p['slug']) . '"><i class="bi bi-cart-plus me-1"></i>Add to Cart</button>
+                   <button class="btn btn-sm btn-outline-primary rounded-pill px-3 fw-bold buy-now-btn" data-slug="' . esc($p['slug']) . '" data-testid="buy-now-' . esc($p['slug']) . '"><i class="bi bi-lightning-charge me-1"></i>Buy Now</button>'
                 : '<button class="btn btn-sm btn-secondary rounded-pill px-3" disabled data-testid="out-of-stock-' . esc($p['slug']) . '"><i class="bi bi-bell me-1"></i>Notify Me</button>') . '
             <a href="product.php?slug=' . esc($p['slug']) . '" class="btn btn-sm btn-outline-secondary rounded-pill px-3" data-testid="view-details-' . esc($p['slug']) . '">Details</a>
           </div>
@@ -400,8 +401,9 @@ function render_product_card(array $p): string
     $stockN = available_keys_count($p['slug']);
     $stockPill = render_stock_pill($p['slug']);
     $cartBtn = $stockN > 0
-        ? '<button class="btn btn-sm btn-primary rounded-pill px-3 add-to-cart-btn" data-slug="' . esc($p['slug']) . '" data-testid="add-to-cart-' . esc($p['slug']) . '"><i class="bi bi-cart-plus me-1"></i>Add</button>'
-        : '<button class="btn btn-sm btn-secondary rounded-pill px-3" disabled data-testid="out-of-stock-' . esc($p['slug']) . '"><i class="bi bi-bell me-1"></i>Notify</button>';
+        ? '<button class="pc-btn pc-btn-cart add-to-cart-btn" data-slug="' . esc($p['slug']) . '" data-testid="add-to-cart-' . esc($p['slug']) . '" aria-label="Add to cart"><i class="bi bi-cart-plus"></i><span class="pc-btn-label">Add</span></button>
+           <button class="pc-btn pc-btn-buy buy-now-btn" data-slug="' . esc($p['slug']) . '" data-testid="buy-now-' . esc($p['slug']) . '" aria-label="Buy now"><i class="bi bi-lightning-charge-fill"></i><span class="pc-btn-label">Buy</span></button>'
+        : '<button class="pc-btn pc-btn-notify" disabled data-testid="out-of-stock-' . esc($p['slug']) . '"><i class="bi bi-bell"></i><span class="pc-btn-label">Notify</span></button>';
     return '
     <div class="card product-card tilt-3d h-100 position-relative ' . ($stockN <= 0 ? 'is-out-of-stock' : '') . '" data-testid="product-card-' . esc($p['slug']) . '">
       ' . $badge . $discount . '

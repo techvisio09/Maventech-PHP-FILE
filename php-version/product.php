@@ -125,8 +125,8 @@ include __DIR__ . '/includes/header.php';
           <button class="btn btn-outline-secondary" type="button" onclick="const q=document.getElementById('pd-qty'); q.value=Math.min(<?= max(1,$stockN) ?>, parseInt(q.value)+1)" <?= $stockN<=0?'disabled':'' ?>>+</button>
         </div>
         <?php if ($stockN > 0): ?>
-          <button class="btn btn-primary btn-lg rounded-pill px-4 add-to-cart-btn" data-slug="<?= esc($product['slug']) ?>" data-testid="pd-add-to-cart"><i class="bi bi-cart-plus me-2"></i>Add to Cart</button>
-          <button class="btn btn-outline-primary btn-lg rounded-pill px-4 fw-bold buy-now-btn" data-slug="<?= esc($product['slug']) ?>" data-testid="pd-buy-now"><i class="bi bi-lightning-charge me-1"></i>Buy Now</button>
+          <button class="btn btn-orange-solid btn-lg rounded-pill px-4 add-to-cart-btn" data-slug="<?= esc($product['slug']) ?>" data-testid="pd-add-to-cart"><i class="bi bi-cart-plus me-2"></i>Add to Cart</button>
+          <button class="btn btn-orange-outline btn-lg rounded-pill px-4 fw-bold buy-now-btn" data-slug="<?= esc($product['slug']) ?>" data-testid="pd-buy-now"><i class="bi bi-lightning-charge-fill me-1"></i>Buy Now</button>
         <?php else: ?>
           <button class="btn btn-secondary btn-lg rounded-pill px-4" disabled data-testid="pd-out-of-stock"><i class="bi bi-x-octagon me-2"></i>Out of Stock</button>
           <a href="mailto:<?= esc(setting_get('company_email', SITE_EMAIL)) ?>?subject=Notify%20me%20when%20<?= rawurlencode($product['name']) ?>%20is%20back%20in%20stock" class="btn btn-outline-primary btn-lg rounded-pill px-4 fw-bold" data-testid="pd-notify-me"><i class="bi bi-bell me-1"></i>Notify When Available</a>
