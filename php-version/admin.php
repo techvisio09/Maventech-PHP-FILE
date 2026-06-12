@@ -1569,45 +1569,70 @@ elseif ($tab === 'emails'):
 
   <div class="tbl-e">
     <table class="table mb-0" data-testid="email-activity">
-      <thead><tr><th>Customer</th><th>Phone</th><th>License Key</th><th>Subject</th><th>Template</th><th>Order</th><th>Delivery</th><th>Open</th><th>Click</th><th>Sent</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Customer</th><th>License Key</th><th>Email Subject</th><th>Order</th><th>Status</th><th>Sent</th><th class="text-end">Actions</th></tr></thead>
       <tbody>
         <?php
         $emQuery = $pdo->query("SELECT em.*, o.order_number, o.first_name, o.last_name, o.phone,
-                                  (SELECT GROUP_CONCAT(lk.license_key SEPARATOR ', ')
+                                  (SELECT GROUP_CONCAT(lk.license_key SEPARATOR '|')
                                      FROM license_keys lk WHERE lk.order_id=em.order_id) AS keys_list
                                 FROM email_outbox em LEFT JOIN orders o ON o.id=em.order_id
                                 ORDER BY em.created_at DESC LIMIT 200");
+        $rowCount = 0;
         foreach ($emQuery as $e):
+          $rowCount++;
           $ds = $e['status'];
-          $os = $e['opened_at'] ? 'opened' : ($e['status']==='sent' ? 'delivered' : 'not viewed');
           $undelivered = in_array($ds, ['failed','queued'], true);
           $custName = trim(($e['first_name'] ?? '').' '.($e['last_name'] ?? ''));
+          // Template label
+          $tplLabels = [
+            'order_delivery'  => ['label'=>'License delivery', 'color'=>'#2563eb', 'bg'=>'#dbeafe'],
+            'review_request'  => ['label'=>'Review request',   'color'=>'#7c3aed', 'bg'=>'#ede9fe'],
+            'order_confirmation' => ['label'=>'Order confirm', 'color'=>'#10b981', 'bg'=>'#d1fae5'],
+          ];
+          $tpl = $tplLabels[$e['template_code']] ?? ['label'=>($e['template_code'] ?: 'inline'), 'color'=>'#475569', 'bg'=>'#f1f5f9'];
         ?>
-          <tr <?= $undelivered ? 'style="background:rgba(239,68,68,0.05);"' : '' ?>>
-            <td>
+          <tr <?= $undelivered ? 'style="background:rgba(239,68,68,0.04);"' : '' ?>>
+            <!-- Customer: name / email / phone (only if present) -->
+            <td style="min-width:180px;">
               <?php if ($custName !== ''): ?><strong style="font-size:13px;"><?= esc($custName) ?></strong><br><?php endif; ?>
               <small><?= esc($e['recipient']) ?></small>
+              <?php if (!empty($e['phone'])): ?><br><small class="text-muted"><i class="bi bi-telephone" style="font-size:10px;"></i> <?= esc($e['phone']) ?></small><?php endif; ?>
             </td>
-            <td><small class="text-muted"><?= esc($e['phone'] ?: '—') ?></small></td>
+            <!-- License Key (compact pills) -->
             <td>
               <?php if (!empty($e['keys_list'])): ?>
-                <?php foreach (explode(', ', $e['keys_list']) as $lk): ?>
+                <?php foreach (explode('|', $e['keys_list']) as $lk): ?>
                   <code style="font-size:10.5px;background:#eff6ff;color:#1d4ed8;padding:2px 6px;border-radius:4px;display:inline-block;margin:1px 0;"><?= esc($lk) ?></code><br>
                 <?php endforeach; ?>
               <?php else: ?>
                 <small class="text-muted">—</small>
               <?php endif; ?>
             </td>
-            <td><small><?= esc(mb_strimwidth($e['subject'],0,36,'…')) ?></small></td>
-            <td><small><code style="font-size:11px;"><?= esc($e['template_code'] ?: 'inline') ?></code></small></td>
-            <td><?= $e['order_number'] ? '<a href="order-view.php?id='.(int)$e['order_id'].'"><code>#'.esc($e['order_number']).'</code></a>' : '—' ?></td>
-            <td><span class="s-badge <?= esc($ds) ?>"><?= esc($ds) ?></span><?php if ($e['delivered_at']): ?><br><small class="text-muted"><?= esc(date('M j H:i', strtotime($e['delivered_at']))) ?></small><?php endif; ?>
-              <?php if ($e['note']): ?><br><small class="text-danger" title="<?= esc($e['note']) ?>"><i class="bi bi-exclamation-triangle"></i> <?= esc(mb_strimwidth($e['note'],0,30,'…')) ?></small><?php endif; ?></td>
-            <td><?php if ($e['opened_at']): ?><span class="s-badge opened">Opened <?= (int)$e['opened_count'] ?>×</span><br><small class="text-muted"><?= esc(date('M j H:i', strtotime($e['opened_at']))) ?></small><?php else: ?><span class="text-muted small"><?= esc($os) ?></span><?php endif; ?></td>
-            <td><?php if ($e['clicked_at']): ?><span class="s-badge opened">Clicked <?= (int)$e['click_count'] ?>×</span><?php else: ?><span class="text-muted small">—</span><?php endif; ?></td>
-            <td><small class="text-muted"><?= esc(date('M j, Y H:i', strtotime($e['created_at']))) ?></small></td>
-            <td class="text-nowrap">
-              <a class="btn btn-soft-blue btn-sm py-0 px-2" href="email-view.php?id=<?= (int)$e['id'] ?>" target="_blank" data-testid="view-email-<?= (int)$e['id'] ?>" title="View exact email sent"><i class="bi bi-eye"></i></a>
+            <!-- Subject + template chip -->
+            <td style="min-width:220px;">
+              <div style="font-size:13px;"><?= esc(mb_strimwidth($e['subject'],0,48,'…')) ?></div>
+              <span style="display:inline-block;font-size:10px;font-weight:600;color:<?= esc($tpl['color']) ?>;background:<?= esc($tpl['bg']) ?>;padding:2px 8px;border-radius:999px;margin-top:3px;"><i class="bi bi-tag-fill" style="font-size:9px;"></i> <?= esc($tpl['label']) ?></span>
+            </td>
+            <!-- Order link -->
+            <td><?= $e['order_number'] ? '<a href="order-view.php?id='.(int)$e['order_id'].'" class="fw-semibold" style="font-size:12.5px;"><code>#'.esc($e['order_number']).'</code></a>' : '<small class="text-muted">—</small>' ?></td>
+            <!-- Combined Status: delivery badge + engagement icons -->
+            <td style="min-width:120px;">
+              <span class="s-badge <?= esc($ds) ?>" data-testid="status-badge-<?= (int)$e['id'] ?>"><?= esc($ds) ?></span>
+              <?php if ($e['opened_at']): ?>
+                <div class="mt-1"><i class="bi bi-eye-fill text-success" style="font-size:12px;" title="Opened <?= (int)$e['opened_count'] ?>× at <?= esc(date('M j H:i', strtotime($e['opened_at']))) ?>"></i>
+                <small class="text-success" style="font-size:10.5px;font-weight:600;"><?= (int)$e['opened_count'] ?> open<?= $e['opened_count']>1?'s':'' ?></small>
+                <?php if ($e['clicked_at']): ?><i class="bi bi-cursor-fill text-primary ms-1" style="font-size:12px;" title="Clicked <?= (int)$e['click_count'] ?>×"></i>
+                <small class="text-primary" style="font-size:10.5px;font-weight:600;"><?= (int)$e['click_count'] ?> click<?= $e['click_count']>1?'s':'' ?></small>
+                <?php endif; ?>
+                </div>
+              <?php endif; ?>
+              <?php if ($e['note']): ?><div class="mt-1"><small class="text-danger" title="<?= esc($e['note']) ?>" style="font-size:10.5px;"><i class="bi bi-exclamation-circle"></i> <?= esc(mb_strimwidth($e['note'],0,26,'…')) ?></small></div><?php endif; ?>
+            </td>
+            <!-- Sent timestamp -->
+            <td><small class="text-muted"><?= esc(date('M j, Y', strtotime($e['created_at']))) ?><br><?= esc(date('H:i', strtotime($e['created_at']))) ?></small></td>
+            <!-- Actions -->
+            <td class="text-end text-nowrap">
+              <a class="btn btn-soft-blue btn-sm py-0 px-2" href="email-view.php?id=<?= (int)$e['id'] ?>" target="_blank" data-testid="view-email-<?= (int)$e['id'] ?>" title="View email content"><i class="bi bi-eye"></i></a>
               <?php if ($undelivered): ?>
                 <form method="post" class="d-inline" onsubmit="return confirm('Resend this email to <?= esc($e['recipient']) ?>?');">
                   <input type="hidden" name="action" value="resend_outbox">
@@ -1616,18 +1641,22 @@ elseif ($tab === 'emails'):
                 </form>
                 <button type="button" class="btn btn-soft-gray btn-sm py-0 px-2" data-testid="edit-resend-<?= (int)$e['id'] ?>" title="Edit recipient & resend"
                         onclick="document.getElementById('editResend<?= (int)$e['id'] ?>').classList.toggle('d-none');"><i class="bi bi-pencil-square"></i></button>
-                <div id="editResend<?= (int)$e['id'] ?>" class="d-none mt-2 p-2 card-e" style="background:var(--card-bg);text-align:left;">
+                <div id="editResend<?= (int)$e['id'] ?>" class="d-none mt-2 p-2 card-e" style="background:var(--card-bg);text-align:left;position:absolute;right:14px;z-index:10;min-width:280px;box-shadow:0 8px 24px rgba(0,0,0,.12);">
+                  <small class="text-muted d-block mb-1">Resend to a different address:</small>
                   <form method="post" class="d-flex gap-1 align-items-center">
                     <input type="hidden" name="action" value="resend_outbox">
                     <input type="hidden" name="email_id" value="<?= (int)$e['id'] ?>">
-                    <input type="email" name="new_recipient" class="form-control form-control-sm" required placeholder="new@email.com" value="<?= esc($e['recipient']) ?>" style="min-width:200px;" data-testid="new-recipient-<?= (int)$e['id'] ?>">
-                    <button class="btn btn-soft-blue btn-sm py-0 px-2" data-testid="confirm-resend-<?= (int)$e['id'] ?>" title="Send to this address"><i class="bi bi-send"></i></button>
+                    <input type="email" name="new_recipient" class="form-control form-control-sm" required placeholder="new@email.com" value="<?= esc($e['recipient']) ?>" data-testid="new-recipient-<?= (int)$e['id'] ?>">
+                    <button class="btn btn-soft-blue btn-sm py-0 px-2" data-testid="confirm-resend-<?= (int)$e['id'] ?>" title="Send"><i class="bi bi-send"></i></button>
                   </form>
                 </div>
               <?php endif; ?>
             </td>
           </tr>
         <?php endforeach; ?>
+        <?php if ($rowCount === 0): ?>
+          <tr><td colspan="7" class="text-center text-muted py-5"><i class="bi bi-inbox" style="font-size:24px;"></i><br>No transactional emails yet. They'll appear here automatically after the first order.</td></tr>
+        <?php endif; ?>
       </tbody>
     </table>
   </div>
