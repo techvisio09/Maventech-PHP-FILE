@@ -68,6 +68,94 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->prepare('UPDATE products SET category=? WHERE slug=?')->execute([$_POST['category'], $_POST['slug']]);
         header('Location: admin.php?tab=products&msg=Moved'); exit;
 
+    } elseif ($action === 'ai_autofill_urls') {
+        // ---------------------------------------------------------------------
+        // AI Auto-fill activation_url + install_guide_url for ALL products with
+        // empty fields. Uses Emergent LLM key via OpenAI-compatible endpoint.
+        // Single batched prompt — gpt-4o for accuracy.
+        // ---------------------------------------------------------------------
+        $onlyMissing = !empty($_POST['only_missing']);
+        $wh = "WHERE region=?";
+        if ($onlyMissing) $wh .= " AND (activation_url IS NULL OR activation_url='' OR install_guide_url IS NULL OR install_guide_url='')";
+        $st = $pdo->prepare("SELECT slug, name, brand FROM products $wh ORDER BY id");
+        $st->execute([$region_code]);
+        $prods = $st->fetchAll();
+
+        if (empty($prods)) {
+            header('Location: admin.php?tab=products&msg=All+products+already+have+URLs+filled'); exit;
+        }
+        if (!OPENAI_API_KEY) {
+            header('Location: admin.php?tab=products&msg=AI+key+missing+%E2%80%94+configure+EMERGENT_LLM_KEY'); exit;
+        }
+
+        $items = [];
+        foreach ($prods as $p) {
+            $items[] = ['slug'=>$p['slug'], 'name'=>$p['name'], 'brand'=>$p['brand'] ?? ''];
+        }
+        $itemsJson = json_encode($items, JSON_UNESCAPED_SLASHES);
+
+        $prompt = "You are an expert in software licensing portals. For each product below, return the OFFICIAL vendor URLs:\n"
+                . "1. \"activation_url\" — the official sign-in / activation page where the customer enters their license key (e.g. https://setup.office.com for Microsoft Office, https://central.bitdefender.com for Bitdefender).\n"
+                . "2. \"install_guide_url\" — the official installation help / KB article URL from the vendor.\n\n"
+                . "RULES:\n"
+                . "- Only use real, current, vendor-official domains (microsoft.com, bitdefender.com, mcafee.com, norton.com, adobe.com, etc.). NO third-party sites.\n"
+                . "- If unsure, use the most authoritative vendor support landing page.\n"
+                . "- Return STRICT JSON only, no markdown, no preamble. Schema: {\"results\":[{\"slug\":\"...\",\"activation_url\":\"https://...\",\"install_guide_url\":\"https://...\"}]}\n\n"
+                . "PRODUCTS:\n" . $itemsJson;
+
+        $ch = curl_init(rtrim(OPENAI_BASE_URL, '/') . '/chat/completions');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Authorization: Bearer ' . OPENAI_API_KEY],
+            CURLOPT_POSTFIELDS => json_encode([
+                'model' => 'gpt-4o',
+                'messages' => [
+                    ['role'=>'system','content'=>'You return strict JSON only. Never use markdown. Never wrap output in code fences.'],
+                    ['role'=>'user','content'=>$prompt],
+                ],
+                'temperature' => 0.1,
+                'max_tokens' => 4096,
+                'response_format' => ['type' => 'json_object'],
+            ]),
+            CURLOPT_TIMEOUT => 90,
+        ]);
+        $resp = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        $updated = 0; $err = '';
+        if ($resp && $code >= 200 && $code < 300) {
+            $d = json_decode($resp, true);
+            $text = $d['choices'][0]['message']['content'] ?? '';
+            // Strip code fences if any
+            $text = trim(preg_replace('/^```(?:json)?|```$/m', '', $text));
+            $parsed = json_decode($text, true);
+            $results = $parsed['results'] ?? null;
+            if (is_array($results)) {
+                $upd = $pdo->prepare('UPDATE products SET
+                    activation_url    = CASE WHEN (activation_url IS NULL OR activation_url="")    THEN ? ELSE activation_url    END,
+                    install_guide_url = CASE WHEN (install_guide_url IS NULL OR install_guide_url="") THEN ? ELSE install_guide_url END
+                    WHERE slug=?');
+                foreach ($results as $r) {
+                    if (empty($r['slug'])) continue;
+                    $au = filter_var($r['activation_url'] ?? '', FILTER_VALIDATE_URL) ? $r['activation_url'] : null;
+                    $gu = filter_var($r['install_guide_url'] ?? '', FILTER_VALIDATE_URL) ? $r['install_guide_url'] : null;
+                    if ($au === null && $gu === null) continue;
+                    $upd->execute([$au, $gu, $r['slug']]);
+                    if ($upd->rowCount() > 0) $updated++;
+                }
+            } else {
+                $err = 'invalid+JSON+from+AI';
+            }
+        } else {
+            $err = 'AI+HTTP+'.$code;
+        }
+        $msg = $updated > 0
+            ? $updated.'+products+updated+with+AI+URLs'
+            : ($err ?: 'No+products+updated');
+        header('Location: admin.php?tab=products&msg='.$msg); exit;
+
     } elseif ($action === 'old_update_product') {
 
     } elseif ($action === 'update_order') {
@@ -566,7 +654,16 @@ elseif ($tab === 'products'):
       <h5 class="fw-bold mb-0" data-testid="products-title">All Products</h5>
       <small class="text-muted" data-testid="products-count"><strong><?= count($products) ?></strong> products available</small>
     </div>
-    <a href="?tab=products&add=1" class="btn-add-glow" data-testid="add-product-glow" title="Add new product"><i class="bi bi-plus-lg"></i></a>
+    <div class="d-flex gap-2 align-items-center">
+      <form method="post" class="d-inline" onsubmit="return confirm('Use AI (gpt-4o) to look up the official activation &amp; installation-guide URL for every product missing one? This may take 20-60 seconds.');">
+        <input type="hidden" name="action" value="ai_autofill_urls">
+        <input type="hidden" name="only_missing" value="1">
+        <button class="btn btn-soft-green btn-sm" data-testid="ai-autofill-urls" title="Auto-fill activation & installation URLs for all products with empty fields using AI">
+          <i class="bi bi-stars me-1"></i> Auto-fill URLs with AI
+        </button>
+      </form>
+      <a href="?tab=products&add=1" class="btn-add-glow" data-testid="add-product-glow" title="Add new product"><i class="bi bi-plus-lg"></i></a>
+    </div>
   </div>
 
   <!-- REDESIGNED FILTER BAR -->
@@ -1095,18 +1192,21 @@ elseif ($tab === 'orders'): ?>
   <h5 class="fw-bold mb-3">Orders <span class="text-muted fs-6">(<?= esc($rg['name']) ?>)</span></h5>
   <div class="tbl-e">
     <table class="table mb-0" data-testid="admin-orders-table">
-      <thead><tr><th>Order#</th><th>Customer</th><th>Total</th><th>Payment</th><th>Status</th><th>Fulfill</th><th></th></tr></thead>
+      <thead><tr><th>Order / Status</th><th>Customer</th><th>Total</th><th>Payment</th><th>Fulfill</th><th></th></tr></thead>
       <tbody>
         <?php
         $orderStmt = $pdo->prepare("SELECT * FROM orders WHERE region=? ORDER BY created_at DESC LIMIT 200");
         $orderStmt->execute([$region_code]);
         foreach ($orderStmt as $o): ?>
           <tr style="cursor:pointer;" onclick="location.href='order-view.php?id=<?= (int)$o['id'] ?>'">
-            <td><strong>#<?= esc($o['order_number']) ?></strong><br><small class="text-muted"><?= esc(date('M j, Y', strtotime($o['created_at']))) ?></small></td>
+            <td>
+              <strong>#<?= esc($o['order_number']) ?></strong>
+              <span class="s-badge <?= esc($o['status']) ?> text-capitalize ms-1" style="font-size:10px;"><?= esc($o['status']) ?></span>
+              <br><small class="text-muted"><?= esc(date('M j, Y · H:i', strtotime($o['created_at']))) ?></small>
+            </td>
             <td><?= esc($o['first_name'].' '.$o['last_name']) ?><br><small class="text-muted"><?= esc($o['email']) ?></small></td>
             <td class="fw-bold"><?= region_money((float)$o['total']) ?></td>
             <td><span class="s-badge sent text-capitalize"><?= esc($o['payment_method']) ?></span></td>
-            <td><span class="s-badge <?= esc($o['status']) ?> text-capitalize"><?= esc($o['status']) ?></span></td>
             <td><?= $o['fulfilled'] ? '<span class="s-badge delivered">Fulfilled</span>' : '<span class="s-badge queued">Pending</span>' ?></td>
             <td onclick="event.stopPropagation()"><a class="btn btn-soft-blue btn-sm py-0 px-2" href="order-view.php?id=<?= (int)$o['id'] ?>" data-testid="open-order-<?= (int)$o['id'] ?>"><i class="bi bi-eye"></i></a></td>
           </tr>
@@ -1469,16 +1569,36 @@ elseif ($tab === 'emails'):
 
   <div class="tbl-e">
     <table class="table mb-0" data-testid="email-activity">
-      <thead><tr><th>Recipient</th><th>Subject</th><th>Template</th><th>Order</th><th>Delivery</th><th>Open</th><th>Click</th><th>Sent</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Customer</th><th>Phone</th><th>License Key</th><th>Subject</th><th>Template</th><th>Order</th><th>Delivery</th><th>Open</th><th>Click</th><th>Sent</th><th>Actions</th></tr></thead>
       <tbody>
-        <?php foreach ($pdo->query("SELECT em.*, o.order_number FROM email_outbox em LEFT JOIN orders o ON o.id=em.order_id ORDER BY em.created_at DESC LIMIT 200") as $e):
+        <?php
+        $emQuery = $pdo->query("SELECT em.*, o.order_number, o.first_name, o.last_name, o.phone,
+                                  (SELECT GROUP_CONCAT(lk.license_key SEPARATOR ', ')
+                                     FROM license_keys lk WHERE lk.order_id=em.order_id) AS keys_list
+                                FROM email_outbox em LEFT JOIN orders o ON o.id=em.order_id
+                                ORDER BY em.created_at DESC LIMIT 200");
+        foreach ($emQuery as $e):
           $ds = $e['status'];
           $os = $e['opened_at'] ? 'opened' : ($e['status']==='sent' ? 'delivered' : 'not viewed');
           $undelivered = in_array($ds, ['failed','queued'], true);
+          $custName = trim(($e['first_name'] ?? '').' '.($e['last_name'] ?? ''));
         ?>
           <tr <?= $undelivered ? 'style="background:rgba(239,68,68,0.05);"' : '' ?>>
-            <td><small><?= esc($e['recipient']) ?></small></td>
-            <td><small><?= esc(mb_strimwidth($e['subject'],0,40,'…')) ?></small></td>
+            <td>
+              <?php if ($custName !== ''): ?><strong style="font-size:13px;"><?= esc($custName) ?></strong><br><?php endif; ?>
+              <small><?= esc($e['recipient']) ?></small>
+            </td>
+            <td><small class="text-muted"><?= esc($e['phone'] ?: '—') ?></small></td>
+            <td>
+              <?php if (!empty($e['keys_list'])): ?>
+                <?php foreach (explode(', ', $e['keys_list']) as $lk): ?>
+                  <code style="font-size:10.5px;background:#eff6ff;color:#1d4ed8;padding:2px 6px;border-radius:4px;display:inline-block;margin:1px 0;"><?= esc($lk) ?></code><br>
+                <?php endforeach; ?>
+              <?php else: ?>
+                <small class="text-muted">—</small>
+              <?php endif; ?>
+            </td>
+            <td><small><?= esc(mb_strimwidth($e['subject'],0,36,'…')) ?></small></td>
             <td><small><code style="font-size:11px;"><?= esc($e['template_code'] ?: 'inline') ?></code></small></td>
             <td><?= $e['order_number'] ? '<a href="order-view.php?id='.(int)$e['order_id'].'"><code>#'.esc($e['order_number']).'</code></a>' : '—' ?></td>
             <td><span class="s-badge <?= esc($ds) ?>"><?= esc($ds) ?></span><?php if ($e['delivered_at']): ?><br><small class="text-muted"><?= esc(date('M j H:i', strtotime($e['delivered_at']))) ?></small><?php endif; ?>
@@ -1618,12 +1738,12 @@ elseif ($tab === 'templates'):
             <div class="row g-2">
               <div class="col-md-6">
                 <label class="form-label small fw-semibold"><i class="bi bi-credit-card me-1"></i>Card / Stripe statement name</label>
-                <input class="form-control form-control-sm" name="merchant_name" value="<?= esc($bnCard) ?>" maxlength="22" required data-testid="bn-card-input">
+                <input class="form-control form-control-sm" name="merchant_name" id="bnCardInput" value="<?= esc($bnCard) ?>" maxlength="22" required data-testid="bn-card-input" oninput="bnUpdatePreview()">
                 <small class="text-muted">Max 22 chars · shown on the customer's bank statement.</small>
               </div>
               <div class="col-md-6">
                 <label class="form-label small fw-semibold"><i class="bi bi-paypal me-1"></i>PayPal merchant name</label>
-                <input class="form-control form-control-sm" name="account_name" value="<?= esc($bnPaypal) ?>" maxlength="60" required data-testid="bn-paypal-input">
+                <input class="form-control form-control-sm" name="account_name" id="bnPaypalInput" value="<?= esc($bnPaypal) ?>" maxlength="60" required data-testid="bn-paypal-input" oninput="bnUpdatePreview()">
                 <small class="text-muted">Shown when PayPal is used as the payment method.</small>
               </div>
             </div>
@@ -1635,9 +1755,25 @@ elseif ($tab === 'templates'):
           </form>
 
           <div class="mt-3 p-2 rounded" style="background:#f0fdf4;border:1px dashed #86efac;">
-            <small><i class="bi bi-eye me-1 text-success"></i><strong>Preview in email:</strong> "Billing note: this charge appears as <strong style="color:#047857;"><?= esc($bnCard) ?></strong> on your card statement."</small>
+            <small><i class="bi bi-eye me-1 text-success"></i><strong>Preview in email:</strong> "Billing note: this charge appears as <strong style="color:#047857;" id="bnPreview" data-testid="bn-preview"><?= esc($bnCard) ?></strong> on your card statement."</small>
           </div>
         </div>
+        <script>
+        function bnUpdatePreview() {
+          var c = document.getElementById('bnCardInput');
+          var p = document.getElementById('bnPreview');
+          var view = document.getElementById('bnView');
+          if (!c || !p) return;
+          var val = c.value.trim() || 'YOUR COMPANY';
+          p.textContent = val;
+          // Also update read-only tiles (in case user clicks Cancel later)
+          var cardTile = view ? view.querySelector('[data-testid="bn-card-current"]') : null;
+          if (cardTile) cardTile.textContent = val;
+          var pp = document.getElementById('bnPaypalInput');
+          var ppTile = view ? view.querySelector('[data-testid="bn-paypal-current"]') : null;
+          if (pp && ppTile) ppTile.textContent = pp.value.trim() || 'YOUR COMPANY LLC';
+        }
+        </script>
         <?php endif; ?>
 
         <?php if ($versions): ?>
@@ -1803,14 +1939,26 @@ elseif ($tab === 'api'):
   <div class="card-e p-3 mt-3">
     <h6 class="fw-bold mb-2"><i class="bi bi-list-ul me-1"></i> Recent Transaction Logs</h6>
     <div class="tbl-e">
-      <table class="table table-sm mb-0">
-        <thead><tr><th>Gateway</th><th>Transaction</th><th>Order</th><th>Amount</th><th>Status</th><th>When</th></tr></thead>
+      <table class="table table-sm mb-0" data-testid="tx-logs-table">
+        <thead><tr><th>Gateway</th><th>Payment Mode</th><th>Transaction</th><th>Order</th><th>Amount</th><th>Status</th><th>When</th></tr></thead>
         <tbody>
           <?php
           $logs = $pdo->query('SELECT tl.*, o.order_number FROM transaction_logs tl LEFT JOIN orders o ON o.id=tl.order_id ORDER BY tl.created_at DESC LIMIT 50');
-          $any=false; foreach ($logs as $tl): $any=true; ?>
+          $any=false; foreach ($logs as $tl):
+            $any=true;
+            $gw = strtolower((string)$tl['gateway']);
+            // Resolve human-friendly gateway name from API Management settings, then fall back.
+            if ($gw === 'paypal' || $gw === 'pp') {
+              $gwName = setting_get('gw_paypal_provider','PayPal') ?: 'PayPal';
+              $mode = 'paypal';
+            } else { // card / stripe / etc.
+              $gwName = setting_get('gw_card_provider','Stripe') ?: 'Stripe';
+              $mode = 'card';
+            }
+          ?>
             <tr>
-              <td><span class="s-badge sent"><?= esc($tl['gateway']) ?></span></td>
+              <td><span class="s-badge sent" data-testid="tx-gateway-<?= (int)$tl['id'] ?>"><i class="bi bi-<?= $mode==='paypal'?'paypal':'credit-card-2-front' ?> me-1"></i><?= esc($gwName) ?></span></td>
+              <td><span class="text-capitalize fw-semibold" data-testid="tx-mode-<?= (int)$tl['id'] ?>"><?= esc($mode) ?></span></td>
               <td><code style="font-size:11px;"><?= esc($tl['transaction_id']) ?></code></td>
               <td><?= $tl['order_number'] ? '<a href="order-view.php?id='.(int)$tl['order_id'].'"><code>#'.esc($tl['order_number']).'</code></a>' : '—' ?></td>
               <td><?= esc($tl['currency'].' '.number_format((float)$tl['amount'],2)) ?></td>
@@ -1818,7 +1966,7 @@ elseif ($tab === 'api'):
               <td><small class="text-muted"><?= esc(date('M j, Y H:i', strtotime($tl['created_at']))) ?></small></td>
             </tr>
           <?php endforeach; ?>
-          <?php if (!$any): ?><tr><td colspan="6" class="text-center text-muted py-3">No transactions logged yet — they'll appear here automatically as orders are processed.</td></tr><?php endif; ?>
+          <?php if (!$any): ?><tr><td colspan="7" class="text-center text-muted py-3">No transactions logged yet — they'll appear here automatically as orders are processed.</td></tr><?php endif; ?>
         </tbody>
       </table>
     </div>
