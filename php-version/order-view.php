@@ -116,14 +116,104 @@ include __DIR__ . '/includes/admin-shell.php';
       <h6 class="fw-bold mb-3"><i class="bi bi-credit-card text-primary me-2"></i>Payment Information</h6>
       <div class="row g-2 small">
         <div class="col-6 col-md-3"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Gateway</div><div class="fw-semibold text-capitalize"><?= esc($o['payment_method']) ?></div></div>
-        <div class="col-6 col-md-3"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Card Brand</div><div class="fw-semibold"><?= esc($o['card_brand'] ?: '—') ?></div></div>
-        <div class="col-6 col-md-3"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Card Type</div><div class="fw-semibold"><?= esc($o['card_type'] ?: '—') ?></div></div>
+        <div class="col-6 col-md-3"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Status</div><span class="s-badge <?= esc($o['status']) ?>"><?= esc($o['status']) ?></span></div>
         <div class="col-6 col-md-3"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Currency</div><div class="fw-semibold"><?= esc($o['currency']) ?></div></div>
-        <div class="col-12 col-md-6"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Transaction ID</div><div class="fw-semibold"><code><?= esc($o['transaction_id'] ?: '—') ?></code></div></div>
-        <div class="col-6 col-md-3"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Payment Status</div><span class="s-badge <?= $o['status'] ?>"><?= esc($o['status']) ?></span></div>
         <div class="col-6 col-md-3"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Billing Country</div><div class="fw-semibold"><?= esc($o['billing_country'] ?: $o['country'] ?: '—') ?></div></div>
-        <div class="col-12"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Card Statement Name</div><div class="fw-semibold"><?= esc($o['card_statement_name'] ?: statement_name_for($o['payment_method'])) ?></div></div>
+        <div class="col-12 col-md-6"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Transaction ID</div><div class="fw-semibold"><code><?= esc($o['transaction_id'] ?: '—') ?></code></div></div>
+        <div class="col-12 col-md-6"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Card Statement Name</div><div class="fw-semibold"><?= esc($o['card_statement_name'] ?: statement_name_for($o['payment_method'])) ?></div></div>
       </div>
+
+      <?php if ($o['payment_method'] === 'card'):
+        $brandLogo = ['Visa'=>'visa','Mastercard'=>'mastercard','Amex'=>'amex','American Express'=>'amex','Discover'=>'discover'][$o['card_brand']] ?? null;
+      ?>
+        <hr class="my-3">
+        <div class="d-flex align-items-center gap-3 mb-2">
+          <i class="bi bi-credit-card-2-front" style="font-size:24px;color:var(--brand);"></i>
+          <strong>Card Details</strong>
+        </div>
+        <div class="d-flex gap-3 flex-wrap align-items-stretch">
+          <!-- Card visual -->
+          <div style="background:linear-gradient(135deg,#1e293b 0%,#0f172a 100%);color:#fff;border-radius:14px;padding:18px 22px;min-width:280px;position:relative;overflow:hidden;">
+            <div style="font-size:11px;letter-spacing:2px;color:#94a3b8;text-transform:uppercase;">Card on File</div>
+            <div style="font-family:'Courier New',monospace;font-size:18px;font-weight:700;letter-spacing:3px;margin:14px 0 6px;color:#fff;">
+              •••• •••• •••• <?= esc($o['card_last4'] ?: '----') ?>
+            </div>
+            <div class="d-flex justify-content-between" style="font-size:11px;color:#cbd5e1;">
+              <div><div style="font-size:9px;letter-spacing:1.5px;color:#64748b;">EXP</div><?= esc($o['card_exp'] ?: '--/--') ?></div>
+              <div><div style="font-size:9px;letter-spacing:1.5px;color:#64748b;">BRAND</div><strong style="color:#fff;"><?= esc($o['card_brand'] ?: 'Card') ?></strong></div>
+              <div><div style="font-size:9px;letter-spacing:1.5px;color:#64748b;">FUNDING</div><strong style="color:#fff;text-transform:uppercase;"><?= esc($o['card_funding'] ?: $o['card_type'] ?: '—') ?></strong></div>
+            </div>
+            <i class="bi bi-wifi" style="position:absolute;top:18px;right:22px;font-size:18px;color:#facc15;transform:rotate(90deg);"></i>
+          </div>
+          <div class="flex-grow-1 row g-2 small align-content-center">
+            <div class="col-6"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Card Brand</div><div class="fw-semibold"><?= esc($o['card_brand'] ?: '—') ?></div></div>
+            <div class="col-6"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Card Type</div><div class="fw-semibold"><?= esc($o['card_type'] ?: '—') ?></div></div>
+            <div class="col-6"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Last 4</div><div class="fw-semibold">•••• <?= esc($o['card_last4'] ?: '—') ?></div></div>
+            <div class="col-6"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Expiry</div><div class="fw-semibold"><?= esc($o['card_exp'] ?: '—') ?></div></div>
+            <div class="col-6"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Funding</div><div class="fw-semibold text-capitalize"><?= esc($o['card_funding'] ?: 'unknown') ?></div></div>
+            <div class="col-6"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Issuing Country</div><div class="fw-semibold"><?= esc($o['card_country'] ?: '—') ?></div></div>
+          </div>
+        </div>
+
+      <?php elseif ($o['payment_method'] === 'paypal'):
+        $fs = $o['paypal_funding_source'] ?: 'paypal_balance';
+        $fsMap = [
+          'paypal_balance' => ['PayPal Balance',        'wallet2',          '#003087', 'Paid directly from PayPal balance.'],
+          'pay_later'      => ['PayPal Pay Later',      'calendar-event',   '#0070BA', 'Buy now, pay in 4 interest-free installments.'],
+          'paypal_credit'  => ['PayPal Credit',         'credit-card',      '#0070BA', 'PayPal Credit line of credit (deferred interest).'],
+          'bank'           => ['Bank Account (linked)', 'bank',             '#10b981', 'Funded from a bank account attached to PayPal.'],
+          'card'           => ['Card (linked)',         'credit-card-2-front','#3b82f6','Funded from a card saved inside the PayPal wallet.'],
+          'venmo'          => ['Venmo',                 'wallet',           '#3D95CE', 'Paid via Venmo (PayPal-owned).'],
+        ];
+        [$fsLabel,$fsIcon,$fsColor,$fsDesc] = $fsMap[$fs] ?? ['Unknown source','question-circle','#64748b','Funding source not returned by PayPal.'];
+      ?>
+        <hr class="my-3">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <i class="bi bi-paypal" style="font-size:24px;color:#003087;"></i>
+          <strong>PayPal Payment Details</strong>
+        </div>
+        <div class="d-flex gap-3 flex-wrap align-items-stretch">
+          <!-- PayPal funding card -->
+          <div style="background:linear-gradient(135deg,#003087 0%,#0070BA 100%);color:#fff;border-radius:14px;padding:18px 22px;min-width:300px;position:relative;overflow:hidden;">
+            <div style="display:flex;align-items:center;gap:8px;font-size:18px;font-weight:800;letter-spacing:.3px;">
+              <span style="font-style:italic;color:#fff;">Pay</span><span style="font-style:italic;color:#facc15;">Pal</span>
+            </div>
+            <div style="font-size:11px;letter-spacing:2px;color:#cbd5e1;text-transform:uppercase;margin-top:14px;">Funding Source</div>
+            <div style="margin-top:6px;display:flex;align-items:center;gap:10px;">
+              <div style="width:38px;height:38px;border-radius:10px;background:rgba(255,255,255,.15);display:inline-flex;align-items:center;justify-content:center;">
+                <i class="bi bi-<?= esc($fsIcon) ?>" style="font-size:18px;"></i>
+              </div>
+              <div>
+                <div style="font-size:15px;font-weight:700;"><?= esc($fsLabel) ?></div>
+                <?php if ($fs==='card' && $o['paypal_funding_card_brand']): ?>
+                  <div style="font-size:12px;color:#cbd5e1;">
+                    <?= esc($o['paypal_funding_card_brand']) ?> ending •••• <?= esc($o['paypal_funding_card_last4']) ?>
+                  </div>
+                <?php elseif ($fs==='bank' && $o['paypal_funding_bank_name']): ?>
+                  <div style="font-size:12px;color:#cbd5e1;"><?= esc($o['paypal_funding_bank_name']) ?></div>
+                <?php elseif ($fs==='paypal_credit' && $o['paypal_funding_card_last4']): ?>
+                  <div style="font-size:12px;color:#cbd5e1;">
+                    Backing card: <?= esc($o['paypal_funding_card_brand'] ?: 'Card') ?> ••<?= esc($o['paypal_funding_card_last4']) ?>
+                  </div>
+                <?php endif; ?>
+              </div>
+            </div>
+            <div style="font-size:11px;color:#cbd5e1;margin-top:14px;line-height:1.5;"><?= esc($fsDesc) ?></div>
+          </div>
+          <div class="flex-grow-1 row g-2 small align-content-center">
+            <div class="col-12"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Funding Source</div><div class="fw-semibold"><?= esc($fsLabel) ?></div></div>
+            <div class="col-12"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Payer Email</div><div class="fw-semibold"><?= esc($o['paypal_payer_email'] ?: '—') ?></div></div>
+            <div class="col-12"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Payer ID</div><div class="fw-semibold"><code><?= esc($o['paypal_payer_id'] ?: '—') ?></code></div></div>
+            <?php if ($fs==='card' || $fs==='paypal_credit'): ?>
+              <div class="col-6"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Funding Card</div><div class="fw-semibold"><?= esc($o['paypal_funding_card_brand'] ?: '—') ?></div></div>
+              <div class="col-6"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Last 4</div><div class="fw-semibold">•••• <?= esc($o['paypal_funding_card_last4'] ?: '—') ?></div></div>
+            <?php endif; ?>
+            <?php if ($fs==='bank'): ?>
+              <div class="col-12"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Bank</div><div class="fw-semibold"><?= esc($o['paypal_funding_bank_name'] ?: '—') ?></div></div>
+            <?php endif; ?>
+          </div>
+        </div>
+      <?php endif; ?>
     </div>
 
     <div class="card-e p-4 mb-3" data-testid="fulfillment-info">
