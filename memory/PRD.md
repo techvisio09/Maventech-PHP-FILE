@@ -187,6 +187,12 @@ Create a comprehensive and user-friendly Admin Panel for Maventech Software with
   - Removed the duplicate `pc-stock-pill is-out` element that was rendering below the price — the price area is now clean (price, qty selector, then the "Out of Stock" disabled CTA + Notify When Available card).
   - Status updates automatically based on live inventory (`available_keys_count(slug)`) — no caching, always accurate.
 
+- **[Feb 2026]** Buy Now no longer accumulates units (root-cause fix):
+  - **Bug**: Buy Now and Add to Cart both used the cart's `add` action, which increments the existing line. Customer clicked Buy Now twice → got 2 units instead of 1; clicked Buy Now on a product already in cart → silently added extra units.
+  - **Fix**: added a new `set` action to `/ajax/cart.php` that sets the cart line to EXACTLY the selected qty (capped at stock). Updated `main.js` Buy Now handler to call `set` instead of `add`. Add-to-Cart still uses `add` (intentional — clicking it repeatedly accumulates).
+  - Server still respects the in-stock cap and returns `{capped:true, message:"Only N units available — quantity set to N."}` if the qty exceeds inventory.
+  - Verified via curl: Buy Now twice → stays at 1; Buy Now then Add-to-Cart → 2; Buy Now again → resets to 1; Buy Now qty=3 on 2-stock product → capped to 2 with friendly message.
+
 ## Test Credentials
 See `/app/memory/test_credentials.md`.
 

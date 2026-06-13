@@ -113,8 +113,10 @@ document.addEventListener('click', async (e) => {
   const buy = e.target.closest('.buy-now-btn');
   if (buy) {
     e.preventDefault();
-    const qty = parseInt(document.getElementById('pd-qty')?.value || '1', 10);
-    await cartAction({ action: 'add', slug: buy.dataset.slug, qty });
+    // Buy Now semantics: set the cart line to EXACTLY the selected qty (1 by default).
+    // Clicking Buy Now repeatedly never accumulates extra units.
+    const qty = parseInt(buy.dataset.qty || document.getElementById('pd-qty')?.value || '1', 10);
+    await cartAction({ action: 'set', slug: buy.dataset.slug, qty });
     window.location.href = 'cart.php';
   }
 });

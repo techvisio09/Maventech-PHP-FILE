@@ -32,6 +32,28 @@ if ($action === 'add' && $slug && get_product($slug)) {
         ]);
         exit;
     }
+} elseif ($action === 'set' && $slug && get_product($slug)) {
+    // "Buy Now" semantics: set the line to EXACTLY the selected qty (1 by default).
+    // No accumulation — clicking Buy Now twice still means "I want N of this", not 2N.
+    $qty = max(1, (int)($in['qty'] ?? 1));
+    $stock = available_keys_count($slug);
+    if ($stock <= 0) {
+        echo json_encode(['ok' => false, 'error' => 'This product is currently out of stock.', 'count' => cart_count()]);
+        exit;
+    }
+    $capped = $qty > $stock;
+    $_SESSION['cart'][$slug] = min($stock, $qty);
+    if ($capped) {
+        echo json_encode([
+            'ok'      => true,
+            'capped'  => true,
+            'qty'     => $_SESSION['cart'][$slug],
+            'stock'   => $stock,
+            'message' => "Only {$stock} unit" . ($stock===1?'':'s') . " available — quantity set to {$stock}.",
+            'count'   => cart_count(),
+        ]);
+        exit;
+    }
 } elseif ($action === 'update' && $slug && isset($_SESSION['cart'][$slug])) {
     $qty = (int)($in['qty'] ?? 1);
     if ($qty <= 0) {
