@@ -142,6 +142,12 @@ Create a comprehensive and user-friendly Admin Panel for Maventech Software with
   - Success toast shown via the standard `?msg=…` flash → "Email resent to <addr> successfully" (when delivered) or "Email queued for delivery to <addr>" (when SMTP defers). Invalid email → "Invalid email address" flash.
   - Verified end-to-end via Playwright: modal opens, recipient is editable, subject is read-only, Resend Email submit successfully POSTs and redirects to the success flash banner.
 
+- **[Feb 2026]** Email Activity — **View Email** now always shows the styled email:
+  - `email-view.php` was previously showing the literal `html` column from `email_outbox`. For older demo/seed rows that contained sparse placeholder HTML (e.g. `<p>Hi</p>`), the iframe rendered just "Hi" — admins couldn't see what the customer would actually receive.
+  - Added a `regenerate_email_html_for_view()` helper: when the stored HTML is <500 chars and lacks `<table>` / `<div style>` (sparse heuristic), it **rebuilds the email** using the row's `template_code` (`order_delivery` → `build_order_email_html()`; everything else → `render_template()`), pulling the linked order + items + already-assigned license keys. When `order_id` is missing it falls back to a synthetic `PREVIEW` order so the template still renders fully-styled.
+  - When the rebuild kicks in, a small amber banner is shown above the preview: *"Preview rebuilt from the live <template> template + order data."* Real customer emails (full stored HTML) display unchanged with no banner.
+  - Verified via Playwright on both id=23 (rebuilt → full styled order-delivery email) and id=17 (real Jane order — shown exactly as sent).
+
 ## Test Credentials
 See `/app/memory/test_credentials.md`.
 
