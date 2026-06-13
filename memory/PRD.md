@@ -195,6 +195,12 @@ Create a comprehensive and user-friendly Admin Panel for Maventech Software with
 
 - **[Feb 2026]** **Critical fix**: Add to Cart / Buy Now were silently doubling the quantity. Root cause was duplicated stale content in `includes/footer.php` (leftover after a previous edit) which included a second `<script src="assets/js/main.js">` tag — so the click handler registered twice and fired two POSTs per click. Cleaned up the footer; every Add to Cart / Buy Now now fires exactly one POST and adds exactly the selected quantity (1 by default). Verified with a Playwright request-counter on both the product detail page and grid cards: ONE click → ONE call → cart shows 1 item.
 
+- **[Feb 2026]** Removed standalone "API Management" sidebar item — merged into the **"Payment Gateways"** flow:
+  - Sidebar System section now shows just **Payment Gateways** + **SMTP / Mail Server**. The old "API Management" entry is gone; "Update Gateway" was renamed to **Payment Gateways** (icon `bi-credit-card-2-front`).
+  - The credentials forms are still fully accessible — reached via the **"Edit Card Credentials"** / **"Edit PayPal Credentials"** buttons on each gateway card. Sub-page heading shows a breadcrumb-style **"← Payment Gateways › Card Payment Credentials"** with a back link.
+  - "Payment Gateways" sidebar item stays highlighted across both the toggles overview AND the credentials sub-pages — so the admin always knows where they are.
+  - Page copy reworded: overview now says *"Manage every payment method in one place — enable or disable each gateway with a single click, and edit its API credentials when you need to."* Credentials page says *"Toggle the gateway on/off from the Payment Gateways overview."*
+
 ## Test Credentials
 See `/app/memory/test_credentials.md`.
 
