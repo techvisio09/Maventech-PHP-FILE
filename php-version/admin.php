@@ -216,30 +216,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: admin.php?tab=smtp&msg=SMTP+saved'); exit;
 
     } elseif ($action === 'resend_outbox') {
-        // Edit & Resend — admins can change the recipient email and/or subject,
-        // then queue the email for fresh delivery via the SMTP worker.
+        // Edit & Resend — admins can change the recipient email address, then
+        // queue the email for fresh delivery via the SMTP worker.
         // We always CREATE A NEW ROW in email_outbox so the original is preserved
-        // as audit history (per product spec).
+        // as audit history. The subject + HTML body are copied verbatim from the
+        // original record (admins cannot edit the subject — it stays in the
+        // template's default language as defined by the email template).
         require_once __DIR__ . '/includes/mailer.php';
 
-        $emailId     = (int)($_POST['email_id'] ?? 0);
-        $newTo       = trim($_POST['new_recipient'] ?? '');
-        $newSubject  = trim($_POST['new_subject']   ?? '');
+        $emailId = (int)($_POST['email_id'] ?? 0);
+        $newTo   = trim($_POST['new_recipient'] ?? '');
 
         $row = $pdo->prepare('SELECT * FROM email_outbox WHERE id=?');
         $row->execute([$emailId]);
         $em = $row->fetch();
         if (!$em) { header('Location: admin.php?tab=emails&msg=Email+not+found'); exit; }
 
-        $to      = $newTo      !== '' ? $newTo      : $em['recipient'];
-        $subject = $newSubject !== '' ? $newSubject : $em['subject'];
+        $to      = $newTo !== '' ? $newTo : $em['recipient'];
+        $subject = $em['subject']; // always use the original/default subject
 
         if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
             header('Location: admin.php?tab=emails&msg=Invalid+email+address'); exit;
         }
 
         // Clone the email into a new outbox row (status = queued)
-        $tok       = bin2hex(random_bytes(16));
+        $tok        = bin2hex(random_bytes(16));
         $maxRetries = (int)(smtp_config()['max_retries'] ?? 3);
         $pdo->prepare("INSERT INTO email_outbox
             (recipient, subject, html, status, note, order_id, tracking_token, template_code, retry_count, max_retries, next_retry_at, priority)
@@ -248,7 +249,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $to,
                 $subject,
                 $em['html'],
-                'Edit & Resend of email #'.$emailId.($newTo!==''?' (to '.$newTo.')':'').($newSubject!==''?' (subject changed)':''),
+                'Edit & Resend of email #'.$emailId.($newTo!==''?' (to '.$newTo.')':''),
                 $em['order_id'],
                 $tok,
                 $em['template_code'],
@@ -2200,35 +2201,38 @@ elseif ($tab === 'emails'):
     [data-bs-theme="dark"] .email-card { background:#0f1729; }
   </style>
 
-  <!-- Edit & Resend Modal -->
-  <div class="modal fade" id="editResendModal" tabindex="-1" aria-hidden="true" data-testid="edit-resend-modal">
+  <!-- Edit & Resend Modal (uses admin's modal pattern — no Bootstrap backdrop conflicts) -->
+  <div class="modal" id="editResendModal" tabindex="-1" data-testid="edit-resend-modal" style="background:rgba(0,0,0,.55); display:none;">
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content card-e" style="background:var(--card-bg);">
-        <form method="post" id="editResendForm">
-          <input type="hidden" name="action" value="resend_outbox">
+        <form method="post" id="editResendForm" action="admin.php">
+          <input type="hidden" name="action"   value="resend_outbox">
           <input type="hidden" name="email_id" id="er_email_id" value="">
           <div class="modal-header" style="border-color:var(--border);">
             <h5 class="modal-title"><i class="bi bi-pencil-square me-2 text-warning"></i>Edit &amp; Resend Email</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            <button type="button" class="btn-close" onclick="closeEditResendModal()" aria-label="Close"></button>
           </div>
           <div class="modal-body">
-            <p class="text-muted small mb-3">Update the recipient or subject below, then re-send. A new entry will be created in Email Activity — the original record stays intact for audit.</p>
+            <p class="text-muted small mb-3">Update the recipient address below, then re-send. A new entry will be created in Email Activity — the original record stays intact for audit. <strong>Subject and email body are kept exactly as the template defines them.</strong></p>
+
             <div class="mb-3" id="er_customer_block" style="display:none;">
-              <label class="form-label small fw-semibold text-muted">Customer</label>
+              <label class="form-label small fw-semibold text-muted mb-1">Customer</label>
               <div id="er_customer_name" class="fw-semibold"></div>
             </div>
+
             <div class="mb-3">
               <label class="form-label small fw-semibold"><i class="bi bi-envelope-at me-1 text-primary"></i>Recipient email address</label>
-              <input type="email" class="form-control" name="new_recipient" id="er_recipient" required data-testid="er-recipient-input">
+              <input type="email" class="form-control" name="new_recipient" id="er_recipient" required data-testid="er-recipient-input" autocomplete="off">
               <div class="form-text">Use this to fix typos or send to a corrected address.</div>
             </div>
+
             <div class="mb-2">
-              <label class="form-label small fw-semibold"><i class="bi bi-card-heading me-1 text-primary"></i>Subject</label>
-              <input type="text" class="form-control" name="new_subject" id="er_subject" data-testid="er-subject-input">
+              <label class="form-label small fw-semibold text-muted mb-1"><i class="bi bi-card-heading me-1"></i>Subject <span class="text-muted">(default — not editable)</span></label>
+              <div id="er_subject_preview" class="border rounded px-3 py-2 bg-light small text-muted" style="font-style:italic;"></div>
             </div>
           </div>
           <div class="modal-footer" style="border-color:var(--border);">
-            <button type="button" class="btn btn-soft-gray btn-sm" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-soft-gray btn-sm" onclick="closeEditResendModal()">Cancel</button>
             <button type="submit" class="btn btn-warning btn-sm fw-semibold" data-testid="er-submit-btn">
               <i class="bi bi-send-check me-1"></i> Resend Email
             </button>
@@ -2242,13 +2246,15 @@ elseif ($tab === 'emails'):
     .btn-soft-amber { background:#fef3c7; color:#92400e; border:1px solid #fde68a; }
     .btn-soft-amber:hover { background:#fde68a; color:#78350f; }
     [data-bs-theme="dark"] .btn-soft-amber { background:#78350f; color:#fef3c7; border-color:#92400e; }
+    [data-bs-theme="dark"] #er_subject_preview { background:#1e293b !important; color:#cbd5e1 !important; border-color:#475569 !important; }
+    #editResendModal .modal-dialog { margin-top: 6vh; }
   </style>
 
   <script>
     function openEditResendModal(id, recipient, subject, customerName) {
       document.getElementById('er_email_id').value = id;
       document.getElementById('er_recipient').value = recipient || '';
-      document.getElementById('er_subject').value   = subject   || '';
+      document.getElementById('er_subject_preview').textContent = subject || '(no subject)';
       var cb = document.getElementById('er_customer_block');
       if (customerName && customerName.trim() !== '') {
         document.getElementById('er_customer_name').textContent = customerName;
@@ -2256,10 +2262,25 @@ elseif ($tab === 'emails'):
       } else {
         cb.style.display = 'none';
       }
-      var m = bootstrap.Modal.getOrCreateInstance(document.getElementById('editResendModal'));
-      m.show();
-      setTimeout(function(){ document.getElementById('er_recipient').focus(); }, 250);
+      var m = document.getElementById('editResendModal');
+      m.style.display = 'block';
+      m.classList.add('d-block');
+      document.body.style.overflow = 'hidden';
+      setTimeout(function(){ document.getElementById('er_recipient').focus(); }, 50);
     }
+    function closeEditResendModal() {
+      var m = document.getElementById('editResendModal');
+      m.style.display = 'none';
+      m.classList.remove('d-block');
+      document.body.style.overflow = '';
+    }
+    // Close on Esc + click on backdrop
+    document.addEventListener('keydown', function(e){
+      if (e.key === 'Escape') closeEditResendModal();
+    });
+    document.getElementById('editResendModal').addEventListener('click', function(e){
+      if (e.target === this) closeEditResendModal();
+    });
   </script>
 
 <?php

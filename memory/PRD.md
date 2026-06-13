@@ -137,10 +137,10 @@ Create a comprehensive and user-friendly Admin Panel for Maventech Software with
 
 - **[Feb 2026]** Email Activity — **Edit & Resend** action:
   - Every email card in `?tab=emails` now has an amber **"Edit & Resend"** button (in addition to "View Email" and "Order").
-  - Clicking opens a Bootstrap modal pre-filled with the current **recipient email** + **subject**. Admin can fix typos / change the destination address and click **Resend Email**.
-  - Backend (`action=resend_outbox` in `admin.php`) validates the new email, **creates a NEW row** in `email_outbox` (cloning the source email's html / order_id / template_code / tracking_token), then runs `smtp_process_queue(5)` for immediate delivery. Original record is preserved as audit history.
+  - Clicking opens a custom-overlay modal (uses admin's existing `.modal.d-block` pattern — avoids Bootstrap's modal-backdrop pointer-event interception) pre-filled with the current **recipient email**. The **subject is shown as a read-only italic preview** (default — not editable) so it always stays in the template's intended language.
+  - Backend (`action=resend_outbox` in `admin.php`) validates the new email, **creates a NEW row** in `email_outbox` (cloning the source email's subject/html/order_id/template_code; only the recipient changes), then runs `smtp_process_queue(5)` for immediate delivery. Original record is preserved as audit history.
   - Success toast shown via the standard `?msg=…` flash → "Email resent to <addr> successfully" (when delivered) or "Email queued for delivery to <addr>" (when SMTP defers). Invalid email → "Invalid email address" flash.
-  - Verified via curl end-to-end (new row created, recipient + subject persisted, validation works) and Playwright screenshot (modal pre-fills correctly, fields are editable).
+  - Verified end-to-end via Playwright: modal opens, recipient is editable, subject is read-only, Resend Email submit successfully POSTs and redirects to the success flash banner.
 
 ## Test Credentials
 See `/app/memory/test_credentials.md`.
