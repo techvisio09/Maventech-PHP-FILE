@@ -168,6 +168,12 @@ Create a comprehensive and user-friendly Admin Panel for Maventech Software with
   - Each gateway automatically uses the credentials configured in its existing **Card Payment API** / **PayPal API** tabs (no duplicate inputs).
   - **Synced across the website**: `card_enabled()` / `paypal_enabled()` in `includes/settings.php` read the same `gw_*_status` keys → `checkout.php` instantly hides or shows the matching payment tile on the next request. Verified end-to-end via curl: disabling Card removes the Card tile from checkout, re-enabling brings it back. Also Playwright-verified the sliding toggle + toast pop.
 
+- **[Feb 2026]** Update Gateway — moved to its own sidebar item + single-click switch:
+  - Added a new sidebar entry **"Update Gateway"** (icon `bi-toggles`) right under **API Management** in the System section (`includes/admin-shell.php`). Sidebar highlights correctly when the page is open. The standalone API Management entry now lands on the Card Payment API credentials tab (`?tab=api&gw=card`); the toggles view is reached only via the new sidebar item.
+  - Removed the pill-tab switcher at the top of the API page — the page header now shows the title contextually ("Update Gateway" on the toggles view, "API Management" + Card / PayPal pills on the credentials view).
+  - Replaced the dual Active/Deactive bar with a clean **iOS-style single switch** (`.gw-switch` 60×32 px, white thumb sliding between green-ON and grey-OFF). One click flips the state, AJAX saves to `/ajax/gateway-toggle.php`, switch + status pill (LIVE/PAUSED) + hint repaint instantly, and a green toast confirms the change.
+  - Verified visually: clicking the PayPal switch once flips ON → OFF (toast "PayPal disabled — hidden from checkout."); clicking again flips OFF → ON ("PayPal enabled — live on checkout."). Sidebar item stays highlighted blue while on the page.
+
 ## Test Credentials
 See `/app/memory/test_credentials.md`.
 
