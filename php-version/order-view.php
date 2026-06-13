@@ -79,9 +79,25 @@ include __DIR__ . '/includes/admin-shell.php';
         <div class="col-6 col-md-4"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Full Name</div><div class="fw-semibold"><?= esc($o['first_name'].' '.$o['last_name']) ?></div></div>
         <div class="col-6 col-md-4"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Email</div><div class="fw-semibold"><?= esc($o['email']) ?></div></div>
         <div class="col-6 col-md-4"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Phone</div><div class="fw-semibold"><?= esc($o['phone'] ?: '—') ?></div></div>
-        <div class="col-6 col-md-4"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Country</div><div class="fw-semibold"><?= esc($o['country'] ?: $o['billing_country'] ?: '—') ?></div></div>
-        <div class="col-6 col-md-4"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">City / State</div><div class="fw-semibold"><?= esc($o['city'].', '.$o['state']) ?></div></div>
-        <div class="col-6 col-md-4"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">IP Address</div><div class="fw-semibold"><?= esc($o['ip_address'] ?: '—') ?></div></div>
+        <?php if (!empty($o['company_name'])): ?>
+        <div class="col-12 col-md-4" data-testid="customer-company"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Company</div><div class="fw-semibold"><i class="bi bi-building me-1 text-secondary"></i><?= esc($o['company_name']) ?></div></div>
+        <?php endif; ?>
+        <div class="col-12 col-md-<?= !empty($o['company_name']) ? '8' : '12' ?>"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Billing Address</div>
+          <div class="fw-semibold"><?= esc($o['address']) ?><?= $o['address2'] ? ', ' . esc($o['address2']) : '' ?>, <?= esc($o['city']) ?>, <?= esc($o['state']) ?> <?= esc($o['zip']) ?> · <?= esc($o['country'] ?: $o['billing_country'] ?: '—') ?></div>
+        </div>
+        <div class="col-6 col-md-6"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">IP Address</div><div class="fw-semibold"><?= esc($o['ip_address'] ?: '—') ?></div></div>
+        <?php
+          // Render a clickable Stripe Dashboard link when we have a PI id.
+          // Honours STRIPE_LIVE_MODE (test PI ids start with pi_test_… on test mode).
+          $piId = (string)($o['payment_intent_id'] ?? '');
+          if ($piId !== '' && function_exists('stripe_enabled') && stripe_enabled()):
+            $isTest = strpos((string)STRIPE_SECRET_KEY, 'sk_test_') === 0;
+            $stripeUrl = 'https://dashboard.stripe.com/' . ($isTest ? 'test/' : '') . 'payments/' . urlencode($piId);
+        ?>
+        <div class="col-6 col-md-6"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Stripe Payment</div>
+          <a href="<?= esc($stripeUrl) ?>" target="_blank" rel="noopener" class="fw-semibold text-decoration-none" data-testid="stripe-dashboard-link"><i class="bi bi-box-arrow-up-right me-1"></i>View on Stripe Dashboard →</a>
+        </div>
+        <?php endif; ?>
       </div>
     </div>
 
@@ -125,33 +141,75 @@ include __DIR__ . '/includes/admin-shell.php';
 
       <?php if ($o['payment_method'] === 'card'):
         $brandLogo = ['Visa'=>'visa','Mastercard'=>'mastercard','Amex'=>'amex','American Express'=>'amex','Discover'=>'discover'][$o['card_brand']] ?? null;
+        // Friendly cardholder name (uppercase, embossed look like a real card)
+        $cardholder = trim(strtoupper($o['first_name'] . ' ' . $o['last_name']));
+        // Risk-level styling for Stripe Radar score.
+        $rLevel = (string)($o['risk_level'] ?? '');
+        $rScore = isset($o['risk_score']) && $o['risk_score'] !== null ? (int)$o['risk_score'] : null;
+        $riskColors = [
+          'normal'   => ['#d1fae5','#047857','Normal'],
+          'elevated' => ['#fef3c7','#92400e','Elevated'],
+          'highest'  => ['#fee2e2','#b91c1c','Highest'],
+          'not_assessed' => ['#e2e8f0','#475569','Not assessed'],
+        ];
+        [$rBg,$rFg,$rLabel] = $riskColors[$rLevel] ?? ['#e2e8f0','#475569', ($rLevel ?: '—')];
+        // ISO-2 → emoji flag for issuing country.
+        $flag = '';
+        if (!empty($o['card_country']) && strlen($o['card_country']) === 2) {
+            $cc = strtoupper($o['card_country']);
+            $flag = chr(0xF0) . chr(0x9F) . chr(0x87) . chr(0xA6 + ord($cc[0]) - ord('A'))
+                  . chr(0xF0) . chr(0x9F) . chr(0x87) . chr(0xA6 + ord($cc[1]) - ord('A'));
+        }
       ?>
         <hr class="my-3">
         <div class="d-flex align-items-center gap-3 mb-2">
           <i class="bi bi-credit-card-2-front" style="font-size:24px;color:var(--brand);"></i>
           <strong>Card Details</strong>
+          <span class="text-muted small ms-2" data-testid="card-pci-note"><i class="bi bi-shield-lock"></i> PCI-allowed subset · full PAN &amp; CVV are not stored</span>
+          <?php if ($rLevel !== ''): ?>
+            <span class="ms-auto px-2 py-1" style="background:<?= esc($rBg) ?>;color:<?= esc($rFg) ?>;border-radius:999px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;" data-testid="risk-badge" title="Stripe Radar risk assessment">
+              <i class="bi bi-shield-exclamation me-1"></i>Risk: <?= esc($rLabel) ?><?= $rScore !== null ? ' · ' . $rScore : '' ?>
+            </span>
+          <?php endif; ?>
         </div>
         <div class="d-flex gap-3 flex-wrap align-items-stretch">
-          <!-- Card visual -->
-          <div style="background:linear-gradient(135deg,#1e293b 0%,#0f172a 100%);color:#fff;border-radius:14px;padding:18px 22px;min-width:280px;position:relative;overflow:hidden;">
-            <div style="font-size:11px;letter-spacing:2px;color:#94a3b8;text-transform:uppercase;">Card on File</div>
-            <div style="font-family:'Courier New',monospace;font-size:18px;font-weight:700;letter-spacing:3px;margin:14px 0 6px;color:#fff;">
+          <!-- Card visual — embossed cardholder name, brand logo top-right -->
+          <div data-testid="card-visual" style="background:linear-gradient(135deg,#1e293b 0%,#0f172a 60%,#020617 100%);color:#fff;border-radius:14px;padding:18px 22px;min-width:320px;position:relative;overflow:hidden;box-shadow:0 8px 18px rgba(0,0,0,.18);">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div style="font-size:10px;letter-spacing:2px;color:#94a3b8;text-transform:uppercase;">Card on File</div>
+                <div style="font-size:10px;color:#64748b;margin-top:2px;"><?= esc(SITE_BRAND) ?></div>
+              </div>
+              <?php if ($brandLogo): ?>
+                <img src="assets/images/payments/<?= esc($brandLogo) ?>.svg" alt="<?= esc($o['card_brand']) ?>" style="height:24px;filter:brightness(0) invert(1);opacity:.95;">
+              <?php else: ?>
+                <div style="font-weight:700;color:#fff;letter-spacing:1px;"><?= esc($o['card_brand'] ?: 'CARD') ?></div>
+              <?php endif; ?>
+            </div>
+            <div style="font-family:'Courier New',monospace;font-size:18px;font-weight:700;letter-spacing:3px;margin:18px 0 8px;color:#fff;">
               •••• •••• •••• <?= esc($o['card_last4'] ?: '----') ?>
             </div>
-            <div class="d-flex justify-content-between" style="font-size:11px;color:#cbd5e1;">
-              <div><div style="font-size:9px;letter-spacing:1.5px;color:#64748b;">EXP</div><?= esc($o['card_exp'] ?: '--/--') ?></div>
-              <div><div style="font-size:9px;letter-spacing:1.5px;color:#64748b;">BRAND</div><strong style="color:#fff;"><?= esc($o['card_brand'] ?: 'Card') ?></strong></div>
-              <div><div style="font-size:9px;letter-spacing:1.5px;color:#64748b;">FUNDING</div><strong style="color:#fff;text-transform:uppercase;"><?= esc($o['card_funding'] ?: $o['card_type'] ?: '—') ?></strong></div>
+            <div class="d-flex justify-content-between align-items-end" style="font-size:11px;color:#cbd5e1;">
+              <div>
+                <div style="font-size:9px;letter-spacing:1.5px;color:#64748b;">CARDHOLDER</div>
+                <div style="font-family:'Courier New',monospace;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#fff;font-size:11px;"><?= esc($cardholder ?: 'NAME ON FILE') ?></div>
+              </div>
+              <div>
+                <div style="font-size:9px;letter-spacing:1.5px;color:#64748b;">EXP</div>
+                <div style="font-family:'Courier New',monospace;font-weight:700;color:#fff;font-size:12px;"><?= esc($o['card_exp'] ?: '--/--') ?></div>
+              </div>
             </div>
-            <i class="bi bi-wifi" style="position:absolute;top:18px;right:22px;font-size:18px;color:#facc15;transform:rotate(90deg);"></i>
+            <i class="bi bi-wifi" style="position:absolute;bottom:18px;right:22px;font-size:18px;color:#facc15;transform:rotate(90deg);"></i>
+            <!-- subtle chip rendering -->
+            <div style="position:absolute;top:46px;left:22px;width:30px;height:22px;background:linear-gradient(135deg,#fbbf24,#f59e0b);border-radius:4px;opacity:.9;"></div>
           </div>
           <div class="flex-grow-1 row g-2 small align-content-center">
             <div class="col-6"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Card Brand</div><div class="fw-semibold"><?= esc($o['card_brand'] ?: '—') ?></div></div>
-            <div class="col-6"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Card Type</div><div class="fw-semibold"><?= esc($o['card_type'] ?: '—') ?></div></div>
+            <div class="col-6"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Card Type</div><div class="fw-semibold text-capitalize"><?= esc($o['card_type'] ?: '—') ?></div></div>
             <div class="col-6"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Last 4</div><div class="fw-semibold">•••• <?= esc($o['card_last4'] ?: '—') ?></div></div>
             <div class="col-6"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Expiry</div><div class="fw-semibold"><?= esc($o['card_exp'] ?: '—') ?></div></div>
             <div class="col-6"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Funding</div><div class="fw-semibold text-capitalize"><?= esc($o['card_funding'] ?: 'unknown') ?></div></div>
-            <div class="col-6"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Issuing Country</div><div class="fw-semibold"><?= esc($o['card_country'] ?: '—') ?></div></div>
+            <div class="col-6"><div class="text-muted text-uppercase" style="font-size:10px;letter-spacing:1px;">Issuing Country</div><div class="fw-semibold"><?= $flag ?> <?= esc($o['card_country'] ?: '—') ?></div></div>
           </div>
         </div>
 

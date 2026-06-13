@@ -37,14 +37,44 @@ if ($order && !empty($order['pro_assist'])) {
     } catch (Throwable $e) { /* best-effort */ }
 }
 
-// Returning from Stripe: verify payment and fulfill (idempotent)
+// Returning from Stripe: verify payment, capture admin-safe card details
+// (brand, last4, expiry, funding, issuing country, risk score), then fulfill
+// (idempotent — fulfill_order is a no-op on already-fulfilled rows).
 if ($order && $sessionId && stripe_enabled() && $order['status'] !== 'paid') {
     try {
         $session = stripe_get_session($sessionId);
         if (($session['payment_status'] ?? '') === 'paid' && $order['stripe_session_id'] === $sessionId) {
-            db()->prepare('UPDATE orders SET status = "paid" WHERE id = ?')->execute([$order['id']]);
+            // Pull PCI-allowed card details from Stripe + Radar risk data.
+            $cd = stripe_extract_card_details($session);
+            $upd = db()->prepare("UPDATE orders SET
+                status='paid',
+                card_brand=?,    card_last4=?,    card_exp=?,
+                card_funding=?,  card_country=?,  card_type=?,
+                risk_score=?,    risk_level=?,
+                payment_intent_id=?, transaction_id=?,
+                billing_country=COALESCE(NULLIF(?, ''), billing_country)
+                WHERE id=?");
+            $upd->execute([
+                $cd['card_brand']        ?: $order['card_brand'],
+                $cd['card_last4']        ?: $order['card_last4'],
+                $cd['card_exp']          ?: $order['card_exp'],
+                $cd['card_funding']      ?: $order['card_funding'],
+                $cd['card_country']      ?: $order['card_country'],
+                $cd['card_type']         ?: $order['card_type'],
+                $cd['risk_score'],
+                $cd['risk_level'],
+                $cd['payment_intent_id'],
+                $cd['transaction_id'],
+                $cd['billing_country'],
+                $order['id'],
+            ]);
             fulfill_order((int)$order['id']);
             $order['status'] = 'paid';
+            // Refresh the local row so the post-paid template renders the
+            // newly-captured card details if needed.
+            $stmt = db()->prepare('SELECT * FROM orders WHERE id = ?');
+            $stmt->execute([$order['id']]);
+            $order = $stmt->fetch() ?: $order;
         }
     } catch (RuntimeException $e) {
         // Show the pending state below; log for diagnostics.

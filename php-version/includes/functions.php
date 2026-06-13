@@ -138,6 +138,13 @@ function ensure_db_schema(): void
             // customer_reviews — admin_seen_at lets the topbar star-bell badge
             // tell which low-rating submissions are still unacknowledged.
             "ALTER TABLE customer_reviews ADD COLUMN admin_seen_at DATETIME NULL DEFAULT NULL",
+            // orders — capture Stripe Radar risk score / level + an optional
+            // company name on the checkout form.  These are added late so
+            // existing installs need an idempotent ALTER.
+            "ALTER TABLE orders ADD COLUMN risk_score   SMALLINT  NULL DEFAULT NULL",
+            "ALTER TABLE orders ADD COLUMN risk_level   VARCHAR(20) NOT NULL DEFAULT ''",
+            "ALTER TABLE orders ADD COLUMN company_name VARCHAR(120) NOT NULL DEFAULT ''",
+            "ALTER TABLE orders ADD COLUMN payment_intent_id VARCHAR(120) NOT NULL DEFAULT ''",
         ] as $sql) {
             try { $pdo->exec($sql); } catch (Throwable $e) { /* column already exists */ }
         }

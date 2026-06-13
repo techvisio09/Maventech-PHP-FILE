@@ -42,10 +42,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $orderNumber = generate_order_number();
         $user = current_user();
         $phoneFull = trim(($_POST['phone_code'] ?? '+1') . ' ' . trim($_POST['phone']));
-        $stmt = $pdo->prepare('INSERT INTO orders (order_number, email, first_name, last_name, phone, address, address2, country, city, state, zip, payment_method, currency, subtotal, total, pro_assist, user_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+        $stmt = $pdo->prepare('INSERT INTO orders (order_number, email, first_name, last_name, phone, company_name, address, address2, country, city, state, zip, payment_method, currency, subtotal, total, pro_assist, user_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
         $stmt->execute([
             $orderNumber, trim($_POST['email']), trim($_POST['first_name']), trim($_POST['last_name']),
-            $phoneFull, trim($_POST['address']), trim($_POST['address2'] ?? ''),
+            $phoneFull, trim($_POST['company_name'] ?? ''), trim($_POST['address']), trim($_POST['address2'] ?? ''),
             substr(trim($_POST['country'] ?? 'US'), 0, 5), trim($_POST['city']), trim($_POST['state']), trim($_POST['zip']),
             $method, current_currency()['code'], $subtotal, $total, $proAssist ? 1 : 0, $user['id'] ?? null,
         ]);
@@ -268,6 +268,7 @@ include __DIR__ . '/includes/header.php';
         </div>
         <div class="col-md-6"><label class="form-label">First Name *</label><input name="first_name" required class="form-control" value="<?= esc($_POST['first_name'] ?? '') ?>"></div>
         <div class="col-md-6"><label class="form-label">Last Name *</label><input name="last_name" required class="form-control" value="<?= esc($_POST['last_name'] ?? '') ?>"></div>
+        <div class="col-12"><label class="form-label">Company <span class="text-secondary" style="font-size:.7rem;font-weight:400;">(optional — for business invoices)</span></label><input name="company_name" class="form-control" placeholder="e.g. Acme Inc." value="<?= esc($_POST['company_name'] ?? '') ?>" data-testid="checkout-company"></div>
         <div class="col-md-8"><label class="form-label">Address *</label><input name="address" required class="form-control" value="<?= esc($_POST['address'] ?? '') ?>"></div>
         <div class="col-md-4"><label class="form-label">Address Line 2</label><input name="address2" class="form-control" value="<?= esc($_POST['address2'] ?? '') ?>"></div>
         <div class="col-md-3 col-6">
