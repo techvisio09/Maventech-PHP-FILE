@@ -348,6 +348,17 @@ See `/app/memory/test_credentials.md`.
 - **New POST actions** in `admin.php`: `add_vibe_schedule` (validates vibe whitelist + datetime parsing + end-after-start) and `delete_vibe_schedule`.
 - Verified end-to-end: added a "live now" Playful schedule via curl → next page request auto-applied it, set `applied_at`, switched the storefront to Playful, and the public site immediately rendered `data-brand-vibe="playful"`. Cleared the demo entry afterwards so the storefront returned to Classic baseline. Two demo schedules (one Past, one Upcoming) left in the table so admins see all three visual states.
 
+## [June 2026] Vibe Performance — turn cosmetics into growth insight
+- **New `vibe_history` table** (`id, vibe, source, started_at`) — append-only log of every vibe switch (manual or scheduled). Migrated live + populated with 6 demo rows so the timeline has content out of the box.
+- **`log_vibe_change()`** helper writes a row whenever the active vibe actually changes; called from both the manual `save_company_info` action and `apply_vibe_schedule()` (the cron-less scheduler). Idempotent — same-vibe re-saves don't pollute the log.
+- **Dashboard widget** ("Vibe Performance") under the existing Recent Orders block. Three layers:
+  1. **Coloured timeline** — one bar per day across the selected range, bar height = daily orders, bar gradient = the vibe live that day.  Hover any bar for date / vibe / visitors / orders / revenue / conversion.
+  2. **"Best vibe" insight pill** at the top — picks the vibe with the highest conversion in the window (min 10 visitor sessions) and announces it on a gradient banner in that vibe's colours.
+  3. **Per-vibe stat cards** — each of the 4 vibes gets a card with days-live count, total visitors, total orders, conversion %, total revenue.  Unused vibes dim to 45% opacity.
+- **Date-range filter** with `From`/`To` HTML5 `<input type="date">` (auto-submits on change) + 4 quick pills (Last 7 d / 30 d / 90 d / 1 y).  Drives the timeline + bar chart + summary cards in a single GET request.
+- Demo data seeded: 600 visitor sessions + 25 paid orders + 6 vibe transitions spread across last 30 days so the widget shows real numbers immediately.
+- Verified end-to-end via screenshot: Classic dominates 17 days with 4.32% conv, Playful (3 days) edges out at 4.69%, Bold and Premium underperform — exactly the "Black Friday was 18% better in Playful" insight the feature was built to surface.
+
 ## Roadmap / Backlog (P2)
 - Split `admin.php` (>3700 lines) into per-tab partials under `includes/tabs/`
 - Add bulk-paste key validation (deduplicate vs. existing)

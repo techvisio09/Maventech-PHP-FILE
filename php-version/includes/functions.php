@@ -150,6 +150,17 @@ function ensure_db_schema(): void
             KEY idx_starts (starts_at),
             KEY idx_ends (ends_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        // Brand-vibe history — append-only log of every vibe switch (manual
+        // or scheduled).  Powers the "Vibe Performance" dashboard widget
+        // that shows which vibe was live each day + per-vibe conversion.
+        $pdo->exec("CREATE TABLE IF NOT EXISTS vibe_history (
+            id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            vibe       VARCHAR(20) NOT NULL,
+            source     VARCHAR(20) NOT NULL DEFAULT 'manual',
+            started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            KEY idx_started (started_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     } catch (Throwable $e) {
         @error_log('[ensure_db_schema] ' . $e->getMessage());
     }
@@ -458,10 +469,26 @@ function apply_vibe_schedule(): void
         if (setting_get('company_brand_vibe', 'classic') !== $row['vibe']) {
             setting_set('company_brand_vibe', $row['vibe']);
             setting_set('company_logo_motion', $vibes[$row['vibe']]['motion']);
+            log_vibe_change($row['vibe'], 'scheduled');
             db()->prepare('UPDATE vibe_schedule SET applied_at=NOW() WHERE id=? AND applied_at IS NULL')
                 ->execute([$row['id']]);
         }
     } catch (Throwable $e) { /* table missing on a fresh install — ignore */ }
+}
+
+/**
+ * Append a row to `vibe_history` so the Dashboard's "Vibe Performance"
+ * widget can show which vibe was live each day.  Idempotent: skips when
+ * the requested vibe is the same as the last-recorded one (prevents log
+ * spam if the same vibe gets re-saved).
+ */
+function log_vibe_change(string $vibe, string $source = 'manual'): void
+{
+    try {
+        $last = db()->query('SELECT vibe FROM vibe_history ORDER BY id DESC LIMIT 1')->fetchColumn();
+        if ($last === $vibe) return; // no actual change — don't log
+        db()->prepare('INSERT INTO vibe_history (vibe, source) VALUES (?,?)')->execute([$vibe, $source]);
+    } catch (Throwable $e) { /* table missing — ignore */ }
 }
 
 // Brand logo — rounded gradient square with the FIRST LETTER of the company

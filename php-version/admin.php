@@ -228,6 +228,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $vibes = brand_vibes();
         if (!isset($vibes[$vibe])) $vibe = 'classic';
         setting_set('company_brand_vibe', $vibe);
+        // Append to vibe_history so the dashboard performance widget can
+        // attribute conversion to the time-windows each vibe was live.
+        log_vibe_change($vibe, 'manual');
         // Allow explicit motion override (user can still customise after picking a vibe).
         $motion = strtolower(trim($_POST['company_logo_motion'] ?? $vibes[$vibe]['motion']));
         if (!in_array($motion, ['bounce','spin','pulse','static'], true)) $motion = $vibes[$vibe]['motion'];
@@ -566,6 +569,85 @@ if ($tab === 'dashboard'):
         HAVING avail > 0 AND avail < 5 ORDER BY avail ASC LIMIT 5");
     $lowStock->execute([$region_code]);
     $lowStock = $lowStock->fetchAll();
+
+    // -------- VIBE PERFORMANCE (date-range filter) --------
+    // Correlates conversion + revenue with each Brand Vibe so admins can see
+    // "Playful drove 4.8% conversion vs Classic's 3.1% during Black Friday".
+    // Range is admin-controlled via the From/To calendar inputs (defaults to
+    // last 30 days).  All segments are computed from the `vibe_history` log.
+    $vhFrom = $_GET['vh_from'] ?? date('Y-m-d', strtotime('-29 days'));
+    $vhTo   = $_GET['vh_to']   ?? date('Y-m-d');
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $vhFrom)) $vhFrom = date('Y-m-d', strtotime('-29 days'));
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $vhTo))   $vhTo   = date('Y-m-d');
+    if ($vhFrom > $vhTo) { $tmp=$vhFrom; $vhFrom=$vhTo; $vhTo=$tmp; }
+    $vhRangeStartTs = strtotime($vhFrom . ' 00:00:00');
+    $vhRangeEndTs   = strtotime($vhTo   . ' 23:59:59');
+
+    // Pull every vibe transition in (or just before) the window so we can
+    // determine which vibe was live at the start of each day.
+    $vhRowsStmt = $pdo->prepare(
+        "SELECT vibe, source, started_at FROM vibe_history
+         WHERE started_at <= ? ORDER BY started_at ASC"
+    );
+    $vhRowsStmt->execute([date('Y-m-d H:i:s', $vhRangeEndTs)]);
+    $vhRows = $vhRowsStmt->fetchAll();
+
+    // Daily orders + revenue and daily unique visitor sessions inside the window.
+    $vhOrdersStmt = $pdo->prepare(
+        "SELECT DATE(created_at) d, COUNT(*) n, SUM(total) r
+         FROM orders WHERE status IN ('paid','delivered')
+           AND created_at BETWEEN ? AND ?
+         GROUP BY DATE(created_at)"
+    );
+    $vhOrdersStmt->execute([$vhFrom . ' 00:00:00', $vhTo . ' 23:59:59']);
+    $vhOrdersByDay = []; foreach ($vhOrdersStmt as $r) { $vhOrdersByDay[$r['d']] = ['n'=>(int)$r['n'], 'r'=>(float)$r['r']]; }
+
+    $vhVisitorsStmt = $pdo->prepare(
+        "SELECT DATE(visited_at) d, COUNT(DISTINCT session_id) v
+         FROM visitor_log WHERE visited_at BETWEEN ? AND ?
+         GROUP BY DATE(visited_at)"
+    );
+    $vhVisitorsStmt->execute([$vhFrom . ' 00:00:00', $vhTo . ' 23:59:59']);
+    $vhVisitorsByDay = []; foreach ($vhVisitorsStmt as $r) { $vhVisitorsByDay[$r['d']] = (int)$r['v']; }
+
+    // Walk each day in the range, decide which vibe was live, and aggregate
+    // per-day numbers into per-vibe totals.  Default vibe = 'classic' before
+    // any history rows exist.
+    $vhDays = [];
+    $vhStats = []; // [vibeKey => ['days'=>n, 'visitors'=>n, 'orders'=>n, 'revenue'=>n]]
+    $vhPointer = 'classic';
+    foreach ($vhRows as $tr) { if (strtotime($tr['started_at']) <= $vhRangeStartTs) $vhPointer = $tr['vibe']; }
+    $vhFutureRows = array_values(array_filter($vhRows, fn($r) => strtotime($r['started_at']) > $vhRangeStartTs));
+    $vhDayCount = (int)max(1, ($vhRangeEndTs - $vhRangeStartTs) / 86400 + 1);
+    for ($i = 0; $i < $vhDayCount; $i++) {
+        $dayTs = $vhRangeStartTs + $i * 86400;
+        $dayEndTs = $dayTs + 86400;
+        // Advance the pointer past any transitions that happened on/before today.
+        while (!empty($vhFutureRows) && strtotime($vhFutureRows[0]['started_at']) < $dayEndTs) {
+            $vhPointer = $vhFutureRows[0]['vibe'];
+            array_shift($vhFutureRows);
+        }
+        $vibeKey = isset(brand_vibes()[$vhPointer]) ? $vhPointer : 'classic';
+        $dKey = date('Y-m-d', $dayTs);
+        $orders   = $vhOrdersByDay[$dKey]['n']  ?? 0;
+        $revenue  = $vhOrdersByDay[$dKey]['r']  ?? 0;
+        $visitors = $vhVisitorsByDay[$dKey]      ?? 0;
+        $vhDays[] = ['date'=>$dKey, 'vibe'=>$vibeKey, 'orders'=>$orders, 'revenue'=>$revenue, 'visitors'=>$visitors];
+        if (!isset($vhStats[$vibeKey])) $vhStats[$vibeKey] = ['days'=>0,'visitors'=>0,'orders'=>0,'revenue'=>0.0];
+        $vhStats[$vibeKey]['days']     += 1;
+        $vhStats[$vibeKey]['visitors'] += $visitors;
+        $vhStats[$vibeKey]['orders']   += $orders;
+        $vhStats[$vibeKey]['revenue']  += $revenue;
+    }
+    // Sort per-vibe stats by conversion rate (best vibe first).
+    uasort($vhStats, function($a, $b){
+        $cA = $a['visitors'] > 0 ? $a['orders']/$a['visitors'] : 0;
+        $cB = $b['visitors'] > 0 ? $b['orders']/$b['visitors'] : 0;
+        return $cB <=> $cA;
+    });
+    // Best-performing vibe (for the insight pill at the top of the widget).
+    $vhBest = null;
+    foreach ($vhStats as $k => $s) { if ($s['visitors'] >= 10) { $vhBest = ['vibe'=>$k] + $s; break; } }
 
     // Funnel
     $leadsTotal = (int)$pdo->query("SELECT COUNT(*) FROM chat_leads")->fetchColumn();
@@ -938,6 +1020,110 @@ if ($tab === 'dashboard'):
           <?php endforeach; ?>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       Vibe Performance — coloured timeline of which Brand Vibe was live
+       each day overlaid on daily orders + visitors, with per-vibe
+       conversion stats.  Date range is admin-controlled (From / To
+       calendar) and drives the timeline, the bar chart and the stats.
+       ==================================================================== -->
+  <?php $vhAllVibes = brand_vibes(); ?>
+  <div class="card-e p-3 mb-3" data-testid="vibe-performance-widget">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+      <div>
+        <h2 class="h6 fw-bold mb-1"><i class="bi bi-graph-up-arrow me-1 text-primary"></i> Vibe Performance</h2>
+        <small class="text-muted">Coloured bars = which Brand Vibe was live each day. Hover a bar to see that day's orders + revenue.</small>
+      </div>
+      <form method="get" class="d-flex gap-2 align-items-end vh-range-bar" data-testid="vh-range-form">
+        <input type="hidden" name="tab" value="dashboard">
+        <div>
+          <label class="form-label small fw-semibold mb-1"><i class="bi bi-calendar3 me-1"></i>From</label>
+          <input type="date" name="vh_from" value="<?= esc($vhFrom) ?>" class="form-control form-control-sm" data-testid="vh-from" onchange="this.form.submit()">
+        </div>
+        <div>
+          <label class="form-label small fw-semibold mb-1">To</label>
+          <input type="date" name="vh_to" value="<?= esc($vhTo) ?>" class="form-control form-control-sm" data-testid="vh-to" onchange="this.form.submit()">
+        </div>
+        <div class="vh-quick">
+          <?php foreach ([
+            '7d'   => ['Last 7 d',  '-6 days'],
+            '30d'  => ['Last 30 d', '-29 days'],
+            '90d'  => ['Last 90 d', '-89 days'],
+            '1y'   => ['Last year', '-364 days'],
+          ] as $qk => [$qLab, $qOff]):
+            $qFrom = date('Y-m-d', strtotime($qOff));
+            $qTo   = date('Y-m-d');
+            $isActive = ($vhFrom === $qFrom && $vhTo === $qTo);
+          ?>
+            <a class="vh-quick-pill <?= $isActive?'active':'' ?>"
+               href="admin.php?tab=dashboard&vh_from=<?= $qFrom ?>&vh_to=<?= $qTo ?>"
+               data-testid="vh-quick-<?= $qk ?>"><?= esc($qLab) ?></a>
+          <?php endforeach; ?>
+        </div>
+      </form>
+    </div>
+
+    <?php if ($vhBest): $bestVibeMeta = $vhAllVibes[$vhBest['vibe']]; $bestConv = $vhBest['visitors']>0 ? $vhBest['orders']/$vhBest['visitors']*100 : 0; ?>
+      <div class="vh-insight mb-3" data-testid="vh-insight-pill"
+           style="--vibe-g0: <?= $bestVibeMeta['gradient'][0] ?>; --vibe-g1: <?= $bestVibeMeta['gradient'][1] ?>; --vibe-g2: <?= $bestVibeMeta['gradient'][2] ?>; --vibe-accent: <?= $bestVibeMeta['accent'] ?>;">
+        <i class="bi bi-trophy-fill"></i>
+        <span><strong><?= esc($bestVibeMeta['label']) ?></strong> drove the best conversion in this window — <strong><?= number_format($bestConv, 2) ?>%</strong> across <?= number_format($vhBest['visitors']) ?> visitor sessions.</span>
+      </div>
+    <?php endif; ?>
+
+    <!-- Daily timeline + bar chart (bars stacked on the same row) -->
+    <?php
+      $maxOrders = 0; foreach ($vhDays as $d) $maxOrders = max($maxOrders, $d['orders']);
+      $maxOrders = max($maxOrders, 1);
+    ?>
+    <div class="vh-bars" data-testid="vh-timeline">
+      <?php foreach ($vhDays as $d):
+        $vMeta = $vhAllVibes[$d['vibe']] ?? $vhAllVibes['classic'];
+        $heightPct = ($d['orders'] / $maxOrders) * 100;
+        $heightPct = $d['orders'] > 0 ? max(8, $heightPct) : 3; // give "empty" days a thin sliver
+        $conv = $d['visitors'] > 0 ? $d['orders']/$d['visitors']*100 : 0;
+        $tip = date('M j, Y', strtotime($d['date'])) . ' · '
+             . $vMeta['label'] . ' vibe · '
+             . $d['visitors'] . ' visitors · '
+             . $d['orders'] . ' orders ($' . number_format($d['revenue'], 0) . ') · '
+             . number_format($conv, 1) . '% conv';
+      ?>
+        <div class="vh-bar-wrap" title="<?= esc($tip) ?>" data-vibe="<?= $d['vibe'] ?>" data-testid="vh-bar-<?= $d['date'] ?>">
+          <div class="vh-bar"
+               style="height: <?= number_format($heightPct, 1) ?>%; background: linear-gradient(180deg, <?= $vMeta['gradient'][1] ?>, <?= $vMeta['gradient'][2] ?>);"></div>
+        </div>
+      <?php endforeach; ?>
+    </div>
+    <div class="vh-axis text-muted">
+      <span><?= esc(date('M j', strtotime($vhFrom))) ?></span>
+      <span class="ms-auto"><?= esc(date('M j, Y', strtotime($vhTo))) ?></span>
+    </div>
+
+    <!-- Per-vibe summary tiles -->
+    <div class="vh-vibe-cards mt-3">
+      <?php foreach ($vhAllVibes as $vKey => $v):
+        $s = $vhStats[$vKey] ?? ['days'=>0,'visitors'=>0,'orders'=>0,'revenue'=>0];
+        $conv = $s['visitors'] > 0 ? $s['orders']/$s['visitors']*100 : 0;
+        $dim = $s['days'] === 0 ? 'is-dim' : '';
+      ?>
+        <div class="vh-vibe-card <?= $dim ?>"
+             style="--vibe-g0: <?= $v['gradient'][0] ?>; --vibe-g1: <?= $v['gradient'][1] ?>; --vibe-g2: <?= $v['gradient'][2] ?>; --vibe-accent: <?= $v['accent'] ?>;"
+             data-testid="vh-vibe-card-<?= $vKey ?>">
+          <div class="vh-vibe-card-head">
+            <span class="vh-vibe-dot"></span>
+            <strong><?= esc($v['label']) ?></strong>
+            <small class="text-muted ms-auto"><?= (int)$s['days'] ?>d live</small>
+          </div>
+          <div class="vh-vibe-stats">
+            <div><span class="vh-stat-n"><?= number_format($s['visitors']) ?></span><small>visitors</small></div>
+            <div><span class="vh-stat-n"><?= number_format($s['orders']) ?></span><small>orders</small></div>
+            <div><span class="vh-stat-n vh-stat-accent"><?= number_format($conv, 2) ?>%</span><small>conv</small></div>
+            <div><span class="vh-stat-n">$<?= number_format($s['revenue'], 0) ?></span><small>revenue</small></div>
+          </div>
+        </div>
+      <?php endforeach; ?>
     </div>
   </div>
 
