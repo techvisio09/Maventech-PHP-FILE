@@ -629,6 +629,13 @@ body.has-deal-bar #chat-panel { bottom: 155px; }
   border: 0; color: #fff; font-weight: 500;
 }
 .chat-lead-cta:hover { background: linear-gradient(135deg, var(--chat-navy-1), var(--chat-navy-2)); color: #fff; }
+.chat-lead-cta-chat {
+  width: 100%; margin-top: .35rem; border-radius: 8px;
+  background: linear-gradient(135deg, var(--chat-accent), var(--chat-accent-2));
+  border: 0; color: #fff; font-weight: 500;
+  box-shadow: 0 3px 10px rgba(59,130,246,.25);
+}
+.chat-lead-cta-chat:hover { background: linear-gradient(135deg, var(--chat-accent-2), var(--chat-accent)); color: #fff; }
 .chat-lead-cta-alt {
   width: 100%; margin-top: .35rem; border-radius: 8px;
   background: var(--chat-surface); color: var(--chat-navy-3);

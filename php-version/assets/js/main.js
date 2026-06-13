@@ -266,7 +266,10 @@ async function submitLead(callback) {
   localStorage.setItem('uc_lead_done', '1');
   document.getElementById('chat-lead-form').style.display = 'none';
   const firstName = (v.name.split(' ')[0] || '').trim();
-  if (callback) {
+  if (callback === 'chat') {
+    chatAppend('user', v.name + ' · ' + v.email + ' · ' + v.phone);
+    chatAppend('bot', 'Thanks for your information' + (firstName ? ', ' + firstName : '') + '. I\'ve saved your details — go ahead and type your question below and I\'ll help you right away. If we need a human agent, I\'ll loop one in.');
+  } else if (callback) {
     chatAppend('user', v.name + ' · ' + v.email + ' · ' + v.phone + '  (requested a callback)');
     chatAppend('bot', 'Thanks for your information' + (firstName ? ', ' + firstName : '') + '. Let me connect you with one of our agents now — they\'ll call you shortly on ' + v.phone + '. While you wait, feel free to ask me anything about products, pricing or activation.');
   } else {
