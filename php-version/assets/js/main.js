@@ -258,6 +258,41 @@ function clearChatBell() {
   _chatBellCount = 0;
   const bell = document.getElementById('chat-bell');
   if (bell) bell.style.display = 'none';
+  hideChatMsgPreview();
+}
+
+/* ---------- Messenger-style admin-reply preview ---------- */
+let _msgPreviewTimer = null;
+function showChatMsgPreview(text) {
+  const card = document.getElementById('chat-msg-preview');
+  const body = document.getElementById('chat-msg-preview-body');
+  if (!card || !body) return;
+  // Trim to a friendly preview length (CSS line-clamp handles the visual
+  // truncation but a server-side cap keeps DOM lean for long messages).
+  let preview = String(text || '').trim();
+  if (preview.length > 180) preview = preview.slice(0, 177) + '…';
+  body.textContent = preview;
+  card.style.display = 'block';
+  card.classList.remove('is-hiding');
+  // Auto-hide after 12s if the customer doesn't interact (the chat panel
+  // would have auto-opened by then anyway).
+  if (_msgPreviewTimer) clearTimeout(_msgPreviewTimer);
+  _msgPreviewTimer = setTimeout(hideChatMsgPreview, 12000);
+}
+function hideChatMsgPreview() {
+  const card = document.getElementById('chat-msg-preview');
+  if (!card) return;
+  card.classList.add('is-hiding');
+  if (_msgPreviewTimer) { clearTimeout(_msgPreviewTimer); _msgPreviewTimer = null; }
+  // Hide after the CSS transition finishes.
+  setTimeout(() => { if (card.classList.contains('is-hiding')) card.style.display = 'none'; }, 220);
+}
+function openChatFromPreview() {
+  hideChatMsgPreview();
+  const panel = document.getElementById('chat-panel');
+  if (panel && !panel.classList.contains('open')) {
+    if (typeof toggleChat === 'function') toggleChat();
+  }
 }
 // Tiny WebAudio chime — same approach as the admin shell so we don't ship
 // an asset.  Plays a soft 2-note bell when an admin message arrives.
@@ -373,12 +408,19 @@ async function adminPollOnce() {
       }
       // New admin reply arrived while the customer's chat panel is closed:
       // (a) auto-open the panel so they can read + reply immediately,
-      // (b) light up the bell with the unread count + soft chime.
+      // (b) light up the bell with the unread count + soft chime,
+      // (c) show a Messenger-style preview bubble with the latest message
+      //     so the customer sees WHAT the agent said before the panel slides
+      //     over.
       if (!panelOpen) {
         showChatBell(j.messages.length);
         _chatChime();
-        // Auto-open the panel itself — guarded by a tiny delay so the
-        // bell visibly "lands" first before the panel slides over it.
+        // Preview shows the most recent admin message (last in the batch).
+        const latest = j.messages[j.messages.length - 1];
+        showChatMsgPreview(latest && latest.message ? latest.message : '');
+        // Auto-open the panel after ~3.5s so the customer has time to read
+        // the preview first.  If they click the preview / bubble sooner,
+        // the chat opens immediately and we clear the timer.
         setTimeout(function(){
           const p = document.getElementById('chat-panel');
           if (p && !p.classList.contains('open')) {
@@ -390,7 +432,7 @@ async function adminPollOnce() {
               if (form) form.style.display = 'block';
             }
           }
-        }, 250);
+        }, 3500);
       }
     }
     // Show "Live agent is typing…" indicator while the admin's beacon

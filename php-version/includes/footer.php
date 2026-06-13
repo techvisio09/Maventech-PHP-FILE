@@ -161,6 +161,23 @@
     <span id="chat-bell-count" class="chat-bell-count" data-testid="chat-bell-count">1</span>
   </span>
 </button>
+<!-- Messenger-style admin-reply preview — slides in to the LEFT of the
+     chat bubble whenever an admin reply lands while the panel is closed,
+     so the customer can see what the agent said before opening chat.
+     Clicking it opens the chat immediately.  Auto-fades when the chat
+     opens or the customer starts replying. -->
+<div id="chat-msg-preview" class="chat-msg-preview" style="display:none;" onclick="openChatFromPreview()" data-testid="chat-msg-preview" role="button" tabindex="0">
+  <div class="chat-msg-preview-head">
+    <span class="chat-msg-preview-avatar"><i class="bi bi-headset"></i></span>
+    <div class="chat-msg-preview-meta">
+      <div class="chat-msg-preview-name">Maventech Support</div>
+      <div class="chat-msg-preview-sub"><span class="chat-online-dot"></span>just now</div>
+    </div>
+    <button class="chat-msg-preview-close" type="button" onclick="event.stopPropagation(); hideChatMsgPreview();" aria-label="Dismiss preview" data-testid="chat-msg-preview-close"><i class="bi bi-x"></i></button>
+  </div>
+  <div class="chat-msg-preview-body" id="chat-msg-preview-body" data-testid="chat-msg-preview-body">—</div>
+  <div class="chat-msg-preview-cta">Tap to reply →</div>
+</div>
 <div id="chat-panel" data-testid="chat-panel">
   <div id="chat-head" class="d-flex justify-content-between align-items-center">
     <div class="d-flex align-items-center gap-2">
