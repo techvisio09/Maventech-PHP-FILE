@@ -1920,17 +1920,17 @@ elseif ($tab === 'leads'):
                 <td><small class="text-muted"><?= esc(date('M j, Y', strtotime($l['created_at']))) ?></small></td>
                 <td class="text-end" onclick="event.stopPropagation();">
                   <button type="button"
-                          class="btn btn-sm <?= $unread>0 ? 'btn-primary' : ($isOnline ? 'btn-soft-blue' : 'btn-soft-gray') ?> position-relative chat-open-btn"
+                          class="btn btn-sm chat-open-btn chat-pill <?= $isOnline ? 'is-online' : 'is-offline' ?> <?= $unread>0 ? 'has-unread' : '' ?>"
                           data-lead-id="<?= (int)$l['id'] ?>"
                           data-lead-name="<?= esc($l['name'] ?: 'Anonymous') ?>"
                           data-lead-email="<?= esc($l['email'] ?: '') ?>"
                           data-lead-phone="<?= esc($l['phone'] ?: '') ?>"
                           data-testid="chat-open-<?= (int)$l['id'] ?>"
-                          title="<?= $isOnline ? 'Customer is online' : 'Customer is offline' ?>">
+                          title="<?= $isOnline ? 'Customer is online' : 'Customer is offline' ?><?= $unread>0 ? ' · '.$unread.' new' : '' ?>">
                     <i class="bi bi-chat-dots-fill"></i>
-                    <span class="ms-1 d-none d-md-inline">Chat<?php if ($msgCount>0): ?> <small>(<?= $msgCount ?>)</small><?php endif; ?></span>
+                    <span class="ms-1 d-none d-md-inline">Chat</span>
                     <?php if ($unread>0): ?>
-                      <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size:10px;"><?= $unread ?></span>
+                      <span class="chat-pill-dot" data-testid="chat-unread-<?= (int)$l['id'] ?>"></span>
                     <?php endif; ?>
                   </button>
                 </td>
@@ -2008,35 +2008,35 @@ elseif ($tab === 'leads'):
         <div class="d-flex align-items-center gap-2 min-w-0">
           <div class="adm-chat-avatar"><i class="bi bi-person-fill"></i></div>
           <div class="min-w-0">
-            <div class="fw-bold text-truncate" id="adm-chat-name" style="font-size:15px;">Customer</div>
-            <div class="d-flex align-items-center gap-2 small" id="adm-chat-meta">
-              <span id="adm-chat-status" class="adm-chat-status-pill offline">
+            <div class="fw-semibold text-truncate" id="adm-chat-name" style="font-size:13.5px; color:#0f172a;">Customer</div>
+            <div class="d-flex align-items-center gap-2" id="adm-chat-meta">
+              <span id="adm-chat-status" class="adm-chat-status-pill">
                 <span class="dot"></span> <span class="lbl">Checking…</span>
               </span>
-              <span class="text-muted text-truncate" id="adm-chat-contact"></span>
+              <span class="text-truncate" id="adm-chat-contact"></span>
             </div>
           </div>
         </div>
-        <button type="button" class="btn-close" aria-label="Close" onclick="admChatClose()" data-testid="chat-close"></button>
+        <button type="button" class="btn-close" aria-label="Close" onclick="admChatClose()" data-testid="chat-close" style="font-size:11px;"></button>
       </header>
 
       <div id="adm-chat-banner" class="adm-chat-banner" style="display:none;">
         <i class="bi bi-info-circle me-1"></i>
-        <span class="lbl">Customer offline — your message will be visible when they reopen chat.</span>
+        <span class="lbl">Customer offline — message will be visible when they reopen chat.</span>
       </div>
 
       <div id="adm-chat-body" class="adm-chat-body" data-testid="chat-body">
         <div class="adm-chat-empty">
-          <i class="bi bi-chat-square-dots" style="font-size:40px;opacity:.4;"></i>
-          <div class="mt-2 small text-muted">No messages yet. Say hello 👋</div>
+          <i class="bi bi-chat-square-dots" style="font-size:36px;opacity:.35;"></i>
+          <div class="mt-2 small text-muted">No messages yet.</div>
         </div>
       </div>
 
       <form id="adm-chat-form" class="adm-chat-foot" onsubmit="return admChatSend(event)">
-        <textarea id="adm-chat-input" class="form-control" rows="2" maxlength="2000"
-                  placeholder="Type a reply… (Enter to send, Shift+Enter for new line)"
+        <textarea id="adm-chat-input" rows="1" maxlength="2000"
+                  placeholder="Type a message…"
                   data-testid="chat-input" required></textarea>
-        <button type="submit" class="btn btn-primary" data-testid="chat-send" title="Send (Enter)">
+        <button type="submit" class="send-btn" data-testid="chat-send" title="Send">
           <i class="bi bi-send-fill"></i>
         </button>
       </form>
@@ -2046,36 +2046,76 @@ elseif ($tab === 'leads'):
   <style>
     .online-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#10b981; box-shadow:0 0 0 3px rgba(16,185,129,.18); margin-left:6px; vertical-align:middle; animation:adm-pulse 1.8s ease-in-out infinite; }
     @keyframes adm-pulse { 0%,100%{box-shadow:0 0 0 3px rgba(16,185,129,.18);} 50%{box-shadow:0 0 0 6px rgba(16,185,129,.05);} }
+
+    /* ------- Chat pill button on each lead row ------- */
+    .chat-pill { position:relative; display:inline-flex; align-items:center; gap:4px; border:0; padding:5px 12px; border-radius:999px; font-size:12.5px; font-weight:600; transition:transform .15s ease, box-shadow .15s ease, filter .15s ease; }
+    .chat-pill:hover { transform: translateY(-1px); filter: brightness(1.05); }
+    .chat-pill.is-online   { background:#10b981; color:#fff; box-shadow:0 1px 2px rgba(16,185,129,.35); }
+    .chat-pill.is-online:hover { background:#059669; color:#fff; }
+    .chat-pill.is-offline  { background:#4b5563; color:#fff; box-shadow:0 1px 2px rgba(75,85,99,.25); }
+    .chat-pill.is-offline:hover { background:#374151; color:#fff; }
+    .chat-pill .bi { font-size:13px; }
+    /* Red notification dot when there are unread customer messages */
+    .chat-pill-dot { position:absolute; top:-3px; right:-3px; width:10px; height:10px; border-radius:50%; background:#ef4444; border:2px solid #fff; box-shadow:0 0 0 2px rgba(239,68,68,.35); animation:adm-dot-pulse 1.5s ease-in-out infinite; }
+    @keyframes adm-dot-pulse { 0%,100%{box-shadow:0 0 0 2px rgba(239,68,68,.35);} 50%{box-shadow:0 0 0 5px rgba(239,68,68,.0);} }
+    [data-bs-theme="dark"] .chat-pill-dot { border-color:#0f1729; }
+
+    /* ------- Slide-over chat drawer ------- */
     .adm-chat-overlay { position:fixed; inset:0; background:rgba(15,23,42,.45); z-index:3000; display:flex; justify-content:flex-end; animation:adm-fade .18s ease-out; }
     @keyframes adm-fade { from{opacity:0;} to{opacity:1;} }
-    .adm-chat-panel { width:min(440px, 100vw); height:100vh; background:#fff; display:flex; flex-direction:column; box-shadow:-12px 0 32px rgba(15,23,42,.18); animation:adm-slide .25s cubic-bezier(.16,1,.3,1); }
+    .adm-chat-panel { width:min(400px, 100vw); height:100vh; background:#fff; display:flex; flex-direction:column; box-shadow:-12px 0 32px rgba(15,23,42,.18); animation:adm-slide .25s cubic-bezier(.16,1,.3,1); }
     @keyframes adm-slide { from{transform:translateX(100%);} to{transform:translateX(0);} }
     [data-bs-theme="dark"] .adm-chat-panel { background:#0f1729; color:#e2e8f0; }
-    .adm-chat-head { padding:14px 16px; border-bottom:1px solid var(--border, #e5e7eb); display:flex; align-items:center; justify-content:space-between; gap:8px; background:linear-gradient(135deg,#1e3a8a,#1e40af); color:#fff; }
-    .adm-chat-head .btn-close { filter:invert(1) brightness(2); opacity:.9; }
-    .adm-chat-avatar { width:36px; height:36px; border-radius:50%; background:rgba(255,255,255,.15); display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; }
-    .adm-chat-status-pill { display:inline-flex; align-items:center; gap:5px; background:rgba(255,255,255,.18); padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; }
+
+    /* Compact header */
+    .adm-chat-head { padding:10px 14px; border-bottom:1px solid #e5e7eb; display:flex; align-items:center; justify-content:space-between; gap:8px; background:#f8fafc; }
+    [data-bs-theme="dark"] .adm-chat-head { background:#0a1020; border-bottom-color:#1f2a44; }
+    .adm-chat-avatar { width:32px; height:32px; border-radius:50%; background:#e5e7eb; color:#475569; display:flex; align-items:center; justify-content:center; font-size:15px; flex-shrink:0; }
+    [data-bs-theme="dark"] .adm-chat-avatar { background:#1f2a44; color:#cbd5e1; }
+    .adm-chat-status-pill { display:inline-flex; align-items:center; gap:5px; padding:1px 7px; border-radius:999px; font-size:10.5px; font-weight:600; background:#e5e7eb; color:#475569; }
     .adm-chat-status-pill .dot { width:6px; height:6px; border-radius:50%; background:#9ca3af; }
-    .adm-chat-status-pill.online .dot { background:#10b981; box-shadow:0 0 0 3px rgba(16,185,129,.3); }
-    .adm-chat-status-pill.offline { opacity:.85; }
-    #adm-chat-contact { font-size:11px; opacity:.85; max-width:200px; }
-    .adm-chat-banner { padding:10px 14px; background:#fef3c7; color:#92400e; font-size:12.5px; border-bottom:1px solid #fde68a; }
-    [data-bs-theme="dark"] .adm-chat-banner { background:#3a2c0a; color:#fde68a; border-bottom-color:#5a4214; }
-    .adm-chat-body { flex:1 1 auto; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:8px; background:#f8fafc; }
+    .adm-chat-status-pill.online { background:#dcfce7; color:#15803d; }
+    .adm-chat-status-pill.online .dot { background:#10b981; box-shadow:0 0 0 3px rgba(16,185,129,.25); }
+    [data-bs-theme="dark"] .adm-chat-status-pill { background:#1f2a44; color:#cbd5e1; }
+    [data-bs-theme="dark"] .adm-chat-status-pill.online { background:rgba(16,185,129,.18); color:#86efac; }
+    #adm-chat-contact { font-size:10.5px; color:#64748b; max-width:200px; }
+    [data-bs-theme="dark"] #adm-chat-contact { color:#94a3b8; }
+
+    /* Gray offline banner */
+    .adm-chat-banner { padding:8px 14px; background:#f3f4f6; color:#6b7280; font-size:12px; border-bottom:1px solid #e5e7eb; }
+    [data-bs-theme="dark"] .adm-chat-banner { background:#1a2335; color:#94a3b8; border-bottom-color:#2a3550; }
+
+    /* Conversation body */
+    .adm-chat-body { flex:1 1 auto; overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:6px; background:#f8fafc; }
     [data-bs-theme="dark"] .adm-chat-body { background:#0a1020; }
     .adm-chat-empty { margin:auto; text-align:center; }
-    .adm-msg { max-width:78%; padding:9px 13px; border-radius:14px; font-size:13.5px; line-height:1.45; word-wrap:break-word; white-space:pre-wrap; box-shadow:0 1px 2px rgba(15,23,42,.06); animation:adm-msg-in .2s ease-out; }
+
+    /* Message bubbles
+       NOTE: per request — customer messages appear on RIGHT, admin (me) on LEFT.
+       Both use LIGHT background colors, distinct from each other. */
+    .adm-msg { max-width:78%; padding:8px 12px; border-radius:14px; font-size:13px; line-height:1.45; word-wrap:break-word; white-space:pre-wrap; box-shadow:0 1px 2px rgba(15,23,42,.05); animation:adm-msg-in .2s ease-out; }
     @keyframes adm-msg-in { from{opacity:0;transform:translateY(4px);} to{opacity:1;transform:translateY(0);} }
-    .adm-msg .ts { display:block; font-size:10.5px; opacity:.6; margin-top:3px; }
-    .adm-msg.customer { align-self:flex-start; background:#fff; color:#1e293b; border:1px solid #e5e7eb; border-bottom-left-radius:4px; }
-    [data-bs-theme="dark"] .adm-msg.customer { background:#1a2335; color:#e2e8f0; border-color:#2a3550; }
-    .adm-msg.admin { align-self:flex-end; background:linear-gradient(135deg,#1e3a8a,#2563eb); color:#fff; border-bottom-right-radius:4px; }
-    .adm-msg.admin .ts { color:rgba(255,255,255,.75); }
-    .adm-chat-day { align-self:center; font-size:11px; color:#94a3b8; margin:6px 0; background:rgba(148,163,184,.15); padding:2px 10px; border-radius:999px; }
-    .adm-chat-foot { padding:10px 12px; border-top:1px solid var(--border,#e5e7eb); display:flex; gap:8px; background:#fff; }
+    .adm-msg .ts { display:block; font-size:10px; opacity:.55; margin-top:2px; }
+    /* Customer (right side) — light blue */
+    .adm-msg.customer { align-self:flex-end; background:#dbeafe; color:#1e3a8a; border-bottom-right-radius:4px; }
+    [data-bs-theme="dark"] .adm-msg.customer { background:rgba(59,130,246,.18); color:#bfdbfe; }
+    /* Admin / "me" (left side) — light green */
+    .adm-msg.admin { align-self:flex-start; background:#dcfce7; color:#14532d; border-bottom-left-radius:4px; }
+    [data-bs-theme="dark"] .adm-msg.admin { background:rgba(16,185,129,.16); color:#86efac; }
+
+    .adm-chat-day { align-self:center; font-size:10.5px; color:#94a3b8; margin:4px 0; background:rgba(148,163,184,.15); padding:2px 10px; border-radius:999px; }
+
+    /* Simple footer — just textarea + send button */
+    .adm-chat-foot { padding:8px 10px; border-top:1px solid #e5e7eb; display:flex; gap:6px; align-items:flex-end; background:#fff; }
     [data-bs-theme="dark"] .adm-chat-foot { background:#0f1729; border-top-color:#1f2a44; }
-    .adm-chat-foot textarea { resize:none; font-size:13.5px; }
-    .adm-chat-foot button { align-self:stretch; padding:0 16px; }
+    .adm-chat-foot textarea { flex:1; resize:none; font-size:13px; padding:8px 12px; border-radius:18px; border:1px solid #d1d5db; background:#f9fafb; min-height:36px; max-height:90px; line-height:1.4; }
+    .adm-chat-foot textarea:focus { outline:none; background:#fff; border-color:#9ca3af; box-shadow:none; }
+    [data-bs-theme="dark"] .adm-chat-foot textarea { background:#0a1020; border-color:#1f2a44; color:#e2e8f0; }
+    [data-bs-theme="dark"] .adm-chat-foot textarea:focus { background:#0f1729; border-color:#334155; }
+    .adm-chat-foot .send-btn { background:#2563eb; border:0; color:#fff; width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; padding:0; font-size:14px; flex-shrink:0; transition:background .15s ease; }
+    .adm-chat-foot .send-btn:hover { background:#1d4ed8; }
+    .adm-chat-foot .send-btn:disabled { background:#cbd5e1; cursor:not-allowed; }
+
     @media (max-width:576px) { .adm-chat-panel { width:100vw; } }
   </style>
 
@@ -2100,7 +2140,7 @@ elseif ($tab === 'leads'):
 
     function renderMessages(messages){
       if (!messages || !messages.length) {
-        $body.innerHTML = '<div class="adm-chat-empty"><i class="bi bi-chat-square-dots" style="font-size:40px;opacity:.4;"></i><div class="mt-2 small text-muted">No messages yet. Say hello 👋</div></div>';
+        $body.innerHTML = '<div class="adm-chat-empty"><i class="bi bi-chat-square-dots" style="font-size:36px;opacity:.35;"></i><div class="mt-2 small text-muted">No messages yet.</div></div>';
         lastIds = new Set();
         return;
       }
@@ -2239,6 +2279,11 @@ elseif ($tab === 'leads'):
         e.preventDefault();
         document.getElementById('adm-chat-form').requestSubmit();
       }
+    });
+    // Auto-grow the input as user types (capped via max-height in CSS)
+    $input.addEventListener('input', function(){
+      $input.style.height = 'auto';
+      $input.style.height = Math.min($input.scrollHeight, 90) + 'px';
     });
 
     // ESC closes
