@@ -193,6 +193,8 @@ Create a comprehensive and user-friendly Admin Panel for Maventech Software with
   - Server still respects the in-stock cap and returns `{capped:true, message:"Only N units available — quantity set to N."}` if the qty exceeds inventory.
   - Verified via curl: Buy Now twice → stays at 1; Buy Now then Add-to-Cart → 2; Buy Now again → resets to 1; Buy Now qty=3 on 2-stock product → capped to 2 with friendly message.
 
+- **[Feb 2026]** **Critical fix**: Add to Cart / Buy Now were silently doubling the quantity. Root cause was duplicated stale content in `includes/footer.php` (leftover after a previous edit) which included a second `<script src="assets/js/main.js">` tag — so the click handler registered twice and fired two POSTs per click. Cleaned up the footer; every Add to Cart / Buy Now now fires exactly one POST and adds exactly the selected quantity (1 by default). Verified with a Playwright request-counter on both the product detail page and grid cards: ONE click → ONE call → cart shows 1 item.
+
 ## Test Credentials
 See `/app/memory/test_credentials.md`.
 
