@@ -50,6 +50,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $method, current_currency()['code'], $subtotal, $total, $proAssist ? 1 : 0, $user['id'] ?? null,
         ]);
         $orderId = (int)$pdo->lastInsertId();
+        // Capture session metadata for the Sales Detail view (IP, user-agent → device)
+        try {
+            $clientIp = $_SERVER['HTTP_CF_CONNECTING_IP'] ?? $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? '';
+            if (strpos($clientIp, ',') !== false) $clientIp = trim(explode(',', $clientIp)[0]);
+            $ua = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 400);
+            $pdo->prepare("UPDATE orders SET ip_address = ?, timeline = ?, region = ? WHERE id = ?")
+                ->execute([$clientIp, json_encode(['user_agent' => $ua, 'placed_at' => date('c')]), active_region_code(), $orderId]);
+        } catch (Throwable $e) { /* metadata is best-effort */ }
         $itemStmt = $pdo->prepare('INSERT INTO order_items (order_id, product_slug, name, price, qty) VALUES (?,?,?,?,?)');
         foreach ($items as $i) {
             $itemStmt->execute([$orderId, $i['slug'], $i['name'], $i['price'], $i['qty']]);

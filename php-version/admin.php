@@ -1605,42 +1605,175 @@ elseif ($tab === 'orders'): ?>
 // SALES DETAIL (full with email status)
 // ============================================================================
 elseif ($tab === 'sales'):
-  $sales = $pdo->prepare("SELECT o.*, oi.name AS product_name, oi.product_slug, oi.price AS unit_price, oi.qty,
-      lk.license_key, lk.assigned_at,
-      em.status AS email_status, em.opened_at, em.opened_count, em.id AS email_id, em.delivered_at
+  // One row per ORDER (fixes the multiplicative duplicate-rows bug). Multi-line orders
+  // get their line items + license keys aggregated into a single comma list.
+  $sales = $pdo->prepare("
+    SELECT o.*,
+           (SELECT GROUP_CONCAT(CONCAT(oi.name, ' ×', oi.qty) SEPARATOR ', ')
+              FROM order_items oi WHERE oi.order_id = o.id) AS products,
+           (SELECT GROUP_CONCAT(lk.license_key SEPARATOR '|')
+              FROM license_keys lk WHERE lk.order_id = o.id) AS keys_list,
+           (SELECT em.status FROM email_outbox em
+              WHERE em.order_id = o.id AND em.template_code = 'order_delivery'
+              ORDER BY em.id DESC LIMIT 1) AS email_status,
+           (SELECT em.opened_at FROM email_outbox em
+              WHERE em.order_id = o.id AND em.template_code = 'order_delivery'
+              ORDER BY em.id DESC LIMIT 1) AS email_opened_at,
+           (SELECT em.id FROM email_outbox em
+              WHERE em.order_id = o.id AND em.template_code = 'order_delivery'
+              ORDER BY em.id DESC LIMIT 1) AS email_id
     FROM orders o
-    JOIN order_items oi ON oi.order_id=o.id
-    LEFT JOIN license_keys lk ON lk.order_id=o.id AND lk.product_slug=oi.product_slug
-    LEFT JOIN email_outbox em ON em.order_id=o.id
     WHERE o.status IN ('paid','delivered') AND o.region=?
+    GROUP BY o.id
     ORDER BY o.created_at DESC LIMIT 500");
   $sales->execute([$region_code]);
 ?>
-  <h5 class="fw-bold mb-3">Sales Detail — <?= esc($rg['name']) ?></h5>
+  <h5 class="fw-bold mb-1">Sales Detail — <?= esc($rg['name']) ?></h5>
+  <p class="text-muted small mb-3">Click any row to expand the full customer + payment + device detail.</p>
   <div class="tbl-e">
-    <table class="table mb-0">
-      <thead><tr><th>Date</th><th>Order#</th><th>Customer</th><th>Country</th><th>Product</th><th>Amount</th><th>License Key Sent</th><th>Email</th><th></th></tr></thead>
+    <table class="table mb-0 sales-table">
+      <thead><tr><th>Date</th><th>Order#</th><th>Customer</th><th>Country</th><th>Products</th><th>Amount</th><th>Method</th><th>License Keys</th><th>Email</th><th></th></tr></thead>
       <tbody>
         <?php foreach ($sales as $s):
-          $emStatus = $s['opened_at'] ? 'opened' : ($s['email_status'] ?: 'pending'); ?>
-          <tr>
-            <td><small><?= esc(date('M j, Y', strtotime($s['created_at']))) ?></small></td>
+          $emStatus = $s['email_opened_at'] ? 'opened' : ($s['email_status'] ?: 'pending');
+          $rowId    = 'sale-detail-'.(int)$s['id'];
+          $method   = $s['payment_method'] ?: 'card';
+          $cardMask = $s['card_last4'] ? '•••• •••• •••• ' . esc($s['card_last4']) : '';
+          $ua       = $s['timeline'] ? json_decode($s['timeline'], true) : null;          // optional
+          $userAgent = is_array($ua) && isset($ua['user_agent']) ? $ua['user_agent'] : '';
+          // Quick device sniff
+          $device = '—';
+          if ($userAgent !== '') {
+              if (stripos($userAgent,'iPhone')!==false||stripos($userAgent,'Android')!==false) $device = 'Mobile';
+              elseif (stripos($userAgent,'iPad')!==false||stripos($userAgent,'Tablet')!==false) $device = 'Tablet';
+              else $device = 'Desktop';
+          }
+        ?>
+          <tr class="sales-row" data-bs-toggle="collapse" data-bs-target="#<?= $rowId ?>" aria-expanded="false" style="cursor:pointer;">
+            <td><small><?= esc(date('M j, Y H:i', strtotime($s['created_at']))) ?></small></td>
             <td><strong>#<?= esc($s['order_number']) ?></strong></td>
-            <td><small><?= esc($s['first_name'].' '.$s['last_name']) ?><br><span class="text-muted"><?= esc($s['email']) ?></span></small></td>
+            <td><small><strong><?= esc($s['first_name'].' '.$s['last_name']) ?></strong><br><span class="text-muted"><?= esc($s['email']) ?></span></small></td>
             <td><small><?= esc($s['country'] ?: '—') ?></small></td>
-            <td><small><?= esc($s['product_name']) ?> ×<?= (int)$s['qty'] ?></small></td>
-            <td><strong><?= region_money((float)$s['unit_price']*(int)$s['qty']) ?></strong></td>
-            <td><?php if ($s['license_key']): ?><code style="background:var(--blue-soft);color:var(--brand-dk);padding:3px 8px;border-radius:6px;font-size:12px;"><?= esc($s['license_key']) ?></code><?php else: ?><span class="text-muted small">—</span><?php endif; ?></td>
-            <td><span class="s-badge <?= $emStatus ?>"><?= esc($emStatus) ?></span><?php if ($s['opened_at']): ?><br><small class="text-muted">opened <?= (int)$s['opened_count'] ?>×</small><?php endif; ?></td>
+            <td><small><?= esc(mb_strimwidth($s['products'] ?? '—', 0, 60, '…')) ?></small></td>
+            <td><strong><?= region_money((float)$s['total']) ?></strong></td>
+            <td><small>
+              <?php if ($method === 'paypal'): ?>
+                <i class="bi bi-paypal" style="color:#003087"></i> PayPal
+              <?php else: ?>
+                <i class="bi bi-credit-card-2-front text-primary"></i> <?= esc(ucfirst($s['card_brand'] ?: 'Card')) ?>
+                <?php if ($s['card_last4']): ?> ••<?= esc($s['card_last4']) ?><?php endif; ?>
+              <?php endif; ?>
+            </small></td>
             <td>
-              <a href="order-view.php?id=<?= (int)$s['id'] ?>" class="btn btn-soft-blue btn-sm py-0 px-2" title="Open order"><i class="bi bi-eye"></i></a>
-              <?php if ($s['email_id']): ?><a href="email-view.php?id=<?= (int)$s['email_id'] ?>" target="_blank" class="btn btn-soft-gray btn-sm py-0 px-2" title="View email"><i class="bi bi-envelope"></i></a><?php endif; ?>
+              <?php if ($s['keys_list']): foreach (explode('|', $s['keys_list']) as $lk): ?>
+                <code style="background:var(--blue-soft);color:var(--brand-dk);padding:2px 7px;border-radius:5px;font-size:11px;display:block;margin-bottom:2px;"><?= esc($lk) ?></code>
+              <?php endforeach; else: ?><span class="text-muted small">—</span><?php endif; ?>
+            </td>
+            <td><span class="s-badge <?= $emStatus ?>"><?= esc($emStatus) ?></span></td>
+            <td class="text-end">
+              <a href="order-view.php?id=<?= (int)$s['id'] ?>" class="btn btn-soft-blue btn-sm py-0 px-2" title="Full order" onclick="event.stopPropagation()"><i class="bi bi-arrow-up-right-square"></i></a>
+              <i class="bi bi-chevron-down sales-chev"></i>
             </td>
           </tr>
+          <!-- Expandable detail card -->
+          <tr class="sales-detail-row"><td colspan="10" class="p-0 border-0">
+            <div id="<?= $rowId ?>" class="collapse">
+              <div class="sales-detail-card">
+                <div class="row g-3">
+                  <div class="col-md-4">
+                    <div class="sd-block">
+                      <div class="sd-h"><i class="bi bi-person-fill"></i> Customer</div>
+                      <div class="sd-row"><span class="sd-k">Name</span><span class="sd-v"><?= esc($s['first_name'].' '.$s['last_name']) ?></span></div>
+                      <div class="sd-row"><span class="sd-k">Email</span><span class="sd-v"><a href="mailto:<?= esc($s['email']) ?>"><?= esc($s['email']) ?></a></span></div>
+                      <div class="sd-row"><span class="sd-k">Phone</span><span class="sd-v"><?= esc($s['phone'] ?: '—') ?></span></div>
+                      <div class="sd-row"><span class="sd-k">Address</span><span class="sd-v"><?= esc(trim(($s['address'] ?: '').' '.($s['address2'] ?: ''))) ?: '—' ?></span></div>
+                      <div class="sd-row"><span class="sd-k">City</span><span class="sd-v"><?= esc(trim(($s['city'] ?: '').' '.($s['state'] ?: '').' '.($s['zip'] ?: ''))) ?: '—' ?></span></div>
+                      <div class="sd-row"><span class="sd-k">Country</span><span class="sd-v"><?= esc($s['country'] ?: '—') ?></span></div>
+                    </div>
+                  </div>
+                  <div class="col-md-4">
+                    <div class="sd-block">
+                      <div class="sd-h"><i class="bi bi-credit-card-2-front"></i> Payment</div>
+                      <?php if ($method === 'paypal'): ?>
+                        <div class="sd-row"><span class="sd-k">Method</span><span class="sd-v"><span class="sd-pill sd-pill-blue">PayPal</span></span></div>
+                        <div class="sd-row"><span class="sd-k">PayPal email</span><span class="sd-v"><?= esc($s['paypal_payer_email'] ?: '—') ?></span></div>
+                        <?php if ($s['paypal_funding_card_brand']): ?>
+                          <div class="sd-row"><span class="sd-k">Funded by</span><span class="sd-v"><?= esc(ucfirst($s['paypal_funding_card_brand'])) ?> ••<?= esc($s['paypal_funding_card_last4']) ?></span></div>
+                        <?php endif; ?>
+                        <?php if ($s['paypal_payer_id']): ?>
+                          <div class="sd-row"><span class="sd-k">Payer ID</span><span class="sd-v small text-muted"><?= esc($s['paypal_payer_id']) ?></span></div>
+                        <?php endif; ?>
+                      <?php else: ?>
+                        <div class="sd-row"><span class="sd-k">Method</span><span class="sd-v"><span class="sd-pill sd-pill-blue">Card</span></span></div>
+                        <div class="sd-row"><span class="sd-k">Card brand</span><span class="sd-v"><?= esc(ucfirst($s['card_brand'] ?: '—')) ?></span></div>
+                        <div class="sd-row"><span class="sd-k">Cardholder</span><span class="sd-v"><?= esc($s['first_name'].' '.$s['last_name']) ?></span></div>
+                        <div class="sd-row sd-card-num"><span class="sd-k">Card #</span>
+                          <span class="sd-v">
+                            <span class="sd-card-masked">•••• •••• •••• <?= esc($s['card_last4'] ?: '—') ?></span>
+                            <span class="sd-card-full d-none">[full card number not stored — only last 4 digits retained per PCI-DSS]</span>
+                            <?php if ($s['card_last4']): ?>
+                              <button type="button" class="btn-link btn-sm sd-eye" onclick="this.previousElementSibling.previousElementSibling.classList.toggle('d-none'); this.previousElementSibling.classList.toggle('d-none'); this.querySelector('i').classList.toggle('bi-eye'); this.querySelector('i').classList.toggle('bi-eye-slash');" title="Reveal / hide"><i class="bi bi-eye"></i></button>
+                            <?php endif; ?>
+                          </span>
+                        </div>
+                        <?php if ($s['card_exp']): ?>
+                          <div class="sd-row"><span class="sd-k">Expires</span><span class="sd-v"><?= esc($s['card_exp']) ?></span></div>
+                        <?php endif; ?>
+                        <?php if ($s['card_country']): ?>
+                          <div class="sd-row"><span class="sd-k">Issued in</span><span class="sd-v"><?= esc($s['card_country']) ?></span></div>
+                        <?php endif; ?>
+                      <?php endif; ?>
+                      <div class="sd-row"><span class="sd-k">Total</span><span class="sd-v"><strong><?= region_money((float)$s['total']) ?></strong></span></div>
+                      <?php if (!empty($s['stripe_session_id'])): ?>
+                        <div class="sd-row"><span class="sd-k">Transaction</span><span class="sd-v small text-muted"><?= esc($s['stripe_session_id']) ?></span></div>
+                      <?php endif; ?>
+                    </div>
+                  </div>
+                  <div class="col-md-4">
+                    <div class="sd-block">
+                      <div class="sd-h"><i class="bi bi-shield-shaded"></i> Session &amp; Device</div>
+                      <div class="sd-row"><span class="sd-k">IP address</span><span class="sd-v font-monospace small"><?= esc($s['ip_address'] ?: '—') ?></span></div>
+                      <?php if ($s['ip_address']): ?>
+                        <div class="sd-row"><span class="sd-k">Geolocation</span><span class="sd-v"><a href="https://ipinfo.io/<?= esc($s['ip_address']) ?>" target="_blank" rel="noopener" class="small">Look up on ipinfo.io <i class="bi bi-box-arrow-up-right" style="font-size:9px;"></i></a></span></div>
+                      <?php endif; ?>
+                      <div class="sd-row"><span class="sd-k">Device</span><span class="sd-v"><?= esc($device) ?></span></div>
+                      <?php if ($userAgent): ?>
+                        <div class="sd-row"><span class="sd-k">User agent</span><span class="sd-v small text-muted"><?= esc(mb_strimwidth($userAgent, 0, 90, '…')) ?></span></div>
+                      <?php endif; ?>
+                      <?php if ($s['billing_country']): ?>
+                        <div class="sd-row"><span class="sd-k">Billing country</span><span class="sd-v"><?= esc($s['billing_country']) ?></span></div>
+                      <?php endif; ?>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </td></tr>
         <?php endforeach; ?>
       </tbody>
     </table>
   </div>
+
+  <style>
+    .sales-table tbody tr.sales-row { transition: background .15s; }
+    .sales-table tbody tr.sales-row:hover { background: var(--bg); }
+    .sales-table tr.sales-row[aria-expanded="true"] .sales-chev { transform: rotate(180deg); }
+    .sales-chev { transition: transform .25s; opacity: .55; margin-left: 6px; }
+    .sales-detail-row td { padding: 0; }
+    .sales-detail-card { padding: 18px 20px; background: var(--bg); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+    .sd-block { background: var(--card-bg,#fff); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; height: 100%; }
+    .sd-h { font-weight: 700; color: var(--text); font-size: 13px; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px dashed var(--border); }
+    .sd-h .bi { color: var(--brand); margin-right: 6px; }
+    .sd-row { display: flex; justify-content: space-between; gap: 8px; padding: 5px 0; font-size: 13px; border-bottom: 1px dotted var(--border); }
+    .sd-row:last-child { border-bottom: 0; }
+    .sd-k { color: var(--text-muted,#64748b); font-weight: 600; min-width: 90px; flex-shrink: 0; }
+    .sd-v { color: var(--text); text-align: right; word-break: break-word; }
+    .sd-pill { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px; }
+    .sd-pill-blue { background: #dbeafe; color: #1d4ed8; }
+    .sd-eye { background: transparent; border: 0; padding: 2px 6px; color: var(--brand); cursor: pointer; }
+    [data-bs-theme="dark"] .sd-block { background: #0f1729; }
+    [data-bs-theme="dark"] .sd-pill-blue { background: rgba(59,130,246,.2); color: #93c5fd; }
+  </style>
 
 <?php
 // ============================================================================
@@ -1952,112 +2085,105 @@ elseif ($tab === 'emails'):
     <div class="col-6 col-md-3"><div class="card-e p-3"><small class="text-muted text-uppercase fw-semibold" style="font-size:10px;letter-spacing:1px;">Failed</small><div class="fs-4 fw-bold text-danger"><?= (int)$c['f'] ?></div></div></div>
   </div>
 
-  <div class="tbl-e">
-    <table class="table mb-0" data-testid="email-activity">
-      <thead><tr><th>Customer</th><th>Phone</th><th>License Key</th><th>Email Subject</th><th>Order</th><th>Sent &amp; Status</th><th class="text-end">Actions</th></tr></thead>
-      <tbody>
-        <?php
-        $emQuery = $pdo->query("SELECT em.*, o.order_number, o.first_name, o.last_name, o.phone,
-                                  (SELECT GROUP_CONCAT(lk.license_key SEPARATOR '|')
-                                     FROM license_keys lk WHERE lk.order_id=em.order_id) AS keys_list
-                                FROM email_outbox em LEFT JOIN orders o ON o.id=em.order_id
-                                ORDER BY em.created_at DESC LIMIT 200");
-        $rowCount = 0;
-        foreach ($emQuery as $e):
-          $rowCount++;
-          $ds = $e['status'];
-          $custName = trim(($e['first_name'] ?? '').' '.($e['last_name'] ?? ''));
-          $oid = (int)($e['order_id'] ?? 0);
-          $detailHref = $oid ? 'order-view.php?id='.$oid : '#';
-          // Template label
-          $tplLabels = [
-            'order_delivery'  => ['label'=>'License delivery', 'color'=>'#2563eb', 'bg'=>'#dbeafe'],
-            'review_request'  => ['label'=>'Review request',   'color'=>'#7c3aed', 'bg'=>'#ede9fe'],
-            'order_confirmation' => ['label'=>'Order confirm', 'color'=>'#10b981', 'bg'=>'#d1fae5'],
-          ];
-          $tpl = $tplLabels[$e['template_code']] ?? ['label'=>($e['template_code'] ?: 'inline'), 'color'=>'#475569', 'bg'=>'#f1f5f9'];
-        ?>
-          <tr>
-            <!-- Customer: clickable name -->
-            <td style="min-width:180px;">
-              <?php if ($custName !== '' && $oid): ?>
-                <a href="<?= esc($detailHref) ?>" class="fw-bold text-decoration-none" style="font-size:13.5px;color:var(--brand-dk,#1d4ed8);" data-testid="customer-link-<?= (int)$e['id'] ?>" title="View full transaction detail">
-                  <?= esc($custName) ?> <i class="bi bi-box-arrow-up-right" style="font-size:10px;opacity:.6;"></i>
-                </a>
-              <?php elseif ($custName !== ''): ?>
-                <strong style="font-size:13.5px;"><?= esc($custName) ?></strong>
-              <?php endif; ?>
-              <div><small class="text-muted"><i class="bi bi-envelope" style="font-size:10px;"></i> <?= esc($e['recipient']) ?></small></div>
-            </td>
-            <!-- Phone -->
-            <td><small><?= $e['phone'] ? '<i class="bi bi-telephone-fill text-success" style="font-size:10px;"></i> '.esc($e['phone']) : '<span class="text-muted">—</span>' ?></small></td>
-            <!-- License Key + "sold" tag inline -->
-            <td>
-              <?php if (!empty($e['keys_list'])): ?>
-                <?php foreach (explode('|', $e['keys_list']) as $lk): ?>
-                  <div class="lk-row">
-                    <code class="lk-pill"><?= esc($lk) ?></code>
-                    <span class="sold-tag" title="License key has been sold &amp; assigned">SOLD</span>
-                  </div>
-                <?php endforeach; ?>
-              <?php else: ?>
-                <small class="text-muted">—</small>
-              <?php endif; ?>
-            </td>
-            <!-- Subject + template chip -->
-            <td style="min-width:220px;">
-              <div style="font-size:13px;"><?= esc(mb_strimwidth($e['subject'],0,48,'…')) ?></div>
-              <span class="tpl-chip" data-tpl="<?= esc($e['template_code'] ?: 'inline') ?>"><i class="bi bi-tag-fill" style="font-size:9px;"></i> <?= esc($tpl['label']) ?></span>
-            </td>
-            <!-- Order link -->
-            <td><?= $e['order_number'] ? '<a href="'.esc($detailHref).'" class="fw-semibold" style="font-size:12.5px;"><code>#'.esc($e['order_number']).'</code></a>' : '<small class="text-muted">—</small>' ?></td>
-            <!-- Sent timestamp + status INLINE in same cell -->
-            <td style="min-width:170px;">
-              <div class="d-flex align-items-center gap-2">
-                <?php if ($ds === 'sent'): ?>
-                  <span class="s-badge paid" data-testid="status-badge-<?= (int)$e['id'] ?>" style="font-weight:600;font-size:10.5px;"><i class="bi bi-check-circle-fill me-1"></i>Success</span>
-                <?php elseif ($ds === 'failed'): ?>
-                  <span class="s-badge failed" data-testid="status-badge-<?= (int)$e['id'] ?>" style="font-weight:600;font-size:10.5px;"><i class="bi bi-x-circle-fill me-1"></i>Failed</span>
-                <?php else: ?>
-                  <span class="s-badge <?= esc($ds) ?>" data-testid="status-badge-<?= (int)$e['id'] ?>" style="font-weight:600;font-size:10.5px;"><i class="bi bi-hourglass-split me-1"></i><?= esc(ucfirst($ds)) ?></span>
-                <?php endif; ?>
-                <small class="text-muted" style="line-height:1.2;"><?= esc(date('M j', strtotime($e['created_at']))) ?><br><?= esc(date('H:i', strtotime($e['created_at']))) ?></small>
+  <div data-testid="email-activity-list">
+    <?php
+    $emQuery = $pdo->query("SELECT em.*, o.order_number, o.first_name, o.last_name, o.phone,
+                              (SELECT GROUP_CONCAT(lk.license_key SEPARATOR '|')
+                                 FROM license_keys lk WHERE lk.order_id=em.order_id) AS keys_list
+                            FROM email_outbox em LEFT JOIN orders o ON o.id=em.order_id
+                            ORDER BY em.created_at DESC LIMIT 200");
+    $rowCount = 0;
+    foreach ($emQuery as $e):
+      $rowCount++;
+      $custName = trim(($e['first_name'] ?? '').' '.($e['last_name'] ?? ''));
+      $oid      = (int)($e['order_id'] ?? 0);
+      $tplLabels = [
+        'order_delivery'    => 'License delivery',
+        'review_request'    => 'Review request',
+        'order_confirmation'=> 'Order confirm',
+        'order_pending'     => 'Payment pending',
+        'refund_confirm'    => 'Refund',
+        'lead_followup'     => 'Lead follow-up',
+      ];
+      $tplLabel = $tplLabels[$e['template_code']] ?? ($e['template_code'] ?: 'inline');
+      $statusClass = $e['opened_at'] ? 'opened' : ($e['status'] === 'sent' ? 'sent' : ($e['status'] === 'failed' || $e['status']==='bounced' ? 'failed' : 'queued'));
+    ?>
+      <div class="email-card" data-testid="email-card-<?= (int)$e['id'] ?>">
+        <div class="ec-head">
+          <div class="ec-head-l">
+            <div class="ec-status-dot ec-<?= $statusClass ?>" title="<?= esc(ucfirst($statusClass)) ?>"></div>
+            <div>
+              <div class="ec-subject"><?= esc(mb_strimwidth($e['subject'], 0, 90, '…')) ?></div>
+              <div class="ec-meta">
+                <span class="ec-tpl-chip"><i class="bi bi-tag-fill"></i> <?= esc($tplLabel) ?></span>
+                <span><i class="bi bi-clock"></i> <?= esc(date('M j, Y · H:i', strtotime($e['created_at']))) ?></span>
               </div>
-              <?php if ($e['opened_at']): ?>
-                <div class="mt-1"><i class="bi bi-eye-fill text-success" style="font-size:11px;"></i> <small class="text-success" style="font-size:10px;font-weight:600;"><?= (int)$e['opened_count'] ?> open<?= $e['opened_count']>1?'s':'' ?></small>
-                <?php if ($e['clicked_at']): ?> · <i class="bi bi-cursor-fill text-primary" style="font-size:11px;"></i> <small class="text-primary" style="font-size:10px;font-weight:600;"><?= (int)$e['click_count'] ?> click<?= $e['click_count']>1?'s':'' ?></small><?php endif; ?>
-                </div>
-              <?php endif; ?>
-              <?php if ($e['note']): ?><div class="mt-1"><small class="text-danger" title="<?= esc($e['note']) ?>" style="font-size:10px;"><i class="bi bi-exclamation-circle"></i> <?= esc(mb_strimwidth($e['note'],0,30,'…')) ?></small></div><?php endif; ?>
-            </td>
-            <!-- Actions -->
-            <td class="text-end text-nowrap">
-              <a class="btn btn-soft-blue btn-sm py-0 px-2" href="email-view.php?id=<?= (int)$e['id'] ?>" target="_blank" data-testid="view-email-<?= (int)$e['id'] ?>" title="View email content"><i class="bi bi-eye"></i></a>
-              <form method="post" class="d-inline" onsubmit="return confirm('Resend this email to <?= esc($e['recipient']) ?>?');">
-                <input type="hidden" name="action" value="resend_outbox">
-                <input type="hidden" name="email_id" value="<?= (int)$e['id'] ?>">
-                <button class="btn btn-soft-green btn-sm py-0 px-2" data-testid="resend-email-<?= (int)$e['id'] ?>" title="Resend to same recipient"><i class="bi bi-arrow-clockwise"></i></button>
-              </form>
-              <button type="button" class="btn btn-soft-gray btn-sm py-0 px-2" data-testid="edit-resend-<?= (int)$e['id'] ?>" title="Edit recipient &amp; resend"
-                      onclick="document.getElementById('editResend<?= (int)$e['id'] ?>').classList.toggle('d-none');"><i class="bi bi-pencil-square"></i></button>
-              <div id="editResend<?= (int)$e['id'] ?>" class="d-none mt-2 p-2 card-e" style="background:var(--card-bg);text-align:left;position:absolute;right:14px;z-index:10;min-width:280px;box-shadow:0 8px 24px rgba(0,0,0,.12);">
-                <small class="text-muted d-block mb-1">Resend to a different address:</small>
-                <form method="post" class="d-flex gap-1 align-items-center">
-                  <input type="hidden" name="action" value="resend_outbox">
-                  <input type="hidden" name="email_id" value="<?= (int)$e['id'] ?>">
-                  <input type="email" name="new_recipient" class="form-control form-control-sm" required placeholder="new@email.com" value="<?= esc($e['recipient']) ?>" data-testid="new-recipient-<?= (int)$e['id'] ?>">
-                  <button class="btn btn-soft-blue btn-sm py-0 px-2" data-testid="confirm-resend-<?= (int)$e['id'] ?>" title="Send"><i class="bi bi-send"></i></button>
-                </form>
-              </div>
-            </td>
-          </tr>
-        <?php endforeach; ?>
-        <?php if ($rowCount === 0): ?>
-          <tr><td colspan="7" class="text-center text-muted py-5"><i class="bi bi-inbox" style="font-size:24px;"></i><br>No transactional emails yet. They'll appear here automatically after the first order.</td></tr>
-        <?php endif; ?>
-      </tbody>
-    </table>
+            </div>
+          </div>
+          <div class="ec-head-r">
+            <span class="s-badge <?= $statusClass ?>"><?= esc($statusClass) ?></span>
+            <?php if ((int)$e['opened_count'] > 0): ?><span class="ec-opens"><i class="bi bi-eye-fill"></i> <?= (int)$e['opened_count'] ?>×</span><?php endif; ?>
+          </div>
+        </div>
+        <div class="ec-body">
+          <div class="ec-field"><span class="ec-k"><i class="bi bi-person-circle"></i> Recipient</span><span class="ec-v"><?php if ($custName && $oid): ?><a href="order-view.php?id=<?= $oid ?>" class="text-decoration-none fw-semibold"><?= esc($custName) ?></a> · <?php elseif ($custName): ?><strong><?= esc($custName) ?></strong> · <?php endif; ?><span class="text-muted"><?= esc($e['recipient']) ?></span></span></div>
+          <?php if (!empty($e['phone'])): ?><div class="ec-field"><span class="ec-k"><i class="bi bi-telephone-fill"></i> Phone</span><span class="ec-v"><?= esc($e['phone']) ?></span></div><?php endif; ?>
+          <?php if (!empty($e['order_number'])): ?><div class="ec-field"><span class="ec-k"><i class="bi bi-bag-check"></i> Order</span><span class="ec-v"><strong>#<?= esc($e['order_number']) ?></strong></span></div><?php endif; ?>
+          <?php if (!empty($e['keys_list'])): ?>
+            <div class="ec-field ec-field-keys"><span class="ec-k"><i class="bi bi-key-fill"></i> License Key</span><span class="ec-v"><?php foreach (explode('|', $e['keys_list']) as $lk): ?><code class="ec-key"><?= esc($lk) ?></code><?php endforeach; ?></span></div>
+          <?php endif; ?>
+          <?php if (!empty($e['delivered_at'])): ?><div class="ec-field"><span class="ec-k"><i class="bi bi-send-check"></i> Delivered</span><span class="ec-v small text-muted"><?= esc(date('M j, Y H:i', strtotime($e['delivered_at']))) ?></span></div><?php endif; ?>
+          <?php if (!empty($e['opened_at'])): ?><div class="ec-field"><span class="ec-k"><i class="bi bi-envelope-open"></i> Opened</span><span class="ec-v small text-success"><?= esc(date('M j, Y H:i', strtotime($e['opened_at']))) ?></span></div><?php endif; ?>
+          <?php if (!empty($e['last_error'])): ?><div class="ec-field"><span class="ec-k"><i class="bi bi-exclamation-triangle-fill text-danger"></i> Error</span><span class="ec-v small text-danger"><?= esc(mb_strimwidth($e['last_error'], 0, 200, '…')) ?></span></div><?php endif; ?>
+        </div>
+        <div class="ec-actions">
+          <a href="email-view.php?id=<?= (int)$e['id'] ?>" target="_blank" class="btn btn-soft-blue btn-sm"><i class="bi bi-eye"></i> View Email</a>
+          <?php if ($e['status'] === 'failed' || $e['status'] === 'bounced'): ?>
+            <form method="post" class="d-inline" onsubmit="return confirm('Re-queue this email for delivery?')">
+              <input type="hidden" name="action" value="resend_outbox">
+              <input type="hidden" name="id" value="<?= (int)$e['id'] ?>">
+              <button class="btn btn-soft-gray btn-sm"><i class="bi bi-arrow-clockwise"></i> Resend</button>
+            </form>
+          <?php endif; ?>
+          <?php if ($oid): ?><a href="order-view.php?id=<?= $oid ?>" class="btn btn-soft-gray btn-sm"><i class="bi bi-box-arrow-up-right"></i> Order</a><?php endif; ?>
+        </div>
+      </div>
+    <?php endforeach; ?>
+    <?php if ($rowCount === 0): ?>
+      <div class="text-center text-muted py-5"><i class="bi bi-inbox" style="font-size:32px;"></i><div class="mt-2">No transactional emails yet. They'll appear here automatically after the first order.</div></div>
+    <?php endif; ?>
   </div>
+
+  <style>
+    .email-card { background: var(--card-bg,#fff); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 14px; overflow: hidden; transition: box-shadow .15s, border-color .15s; }
+    .email-card:hover { box-shadow: 0 4px 16px rgba(15,23,42,.06); border-color: rgba(59,130,246,.3); }
+    .ec-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; padding:14px 18px; background:var(--bg); border-bottom:1px solid var(--border); }
+    .ec-head-l { display:flex; gap:12px; align-items:flex-start; flex:1; min-width:0; }
+    .ec-head-r { display:flex; gap:8px; align-items:center; flex-shrink:0; }
+    .ec-status-dot { width:10px; height:10px; border-radius:50%; margin-top:7px; box-shadow:0 0 0 3px rgba(255,255,255,.6); flex-shrink:0; }
+    .ec-opened { background:#22c55e; } .ec-sent { background:#3b82f6; } .ec-failed { background:#ef4444; } .ec-queued { background:#f59e0b; }
+    .ec-subject { font-weight:700; color:var(--text); font-size:14px; line-height:1.4; }
+    .ec-meta { display:flex; flex-wrap:wrap; gap:12px; font-size:11.5px; color:var(--text-muted,#64748b); margin-top:4px; }
+    .ec-meta .bi { margin-right:3px; }
+    .ec-tpl-chip { background:var(--blue-soft,#dbeafe); color:var(--brand-dk,#1d4ed8); font-weight:600; padding:2px 8px; border-radius:999px; }
+    .ec-opens { font-size:11px; color:#16a34a; font-weight:700; background:#dcfce7; padding:3px 9px; border-radius:999px; }
+    .ec-body { padding:14px 18px; }
+    .ec-field { display:flex; gap:14px; padding:7px 0; font-size:13px; border-bottom:1px dotted var(--border); }
+    .ec-field:last-child { border-bottom:0; }
+    .ec-k { color:var(--text-muted,#64748b); font-weight:600; min-width:130px; flex-shrink:0; }
+    .ec-k .bi { color:var(--brand); margin-right:5px; }
+    .ec-v { color:var(--text); flex:1; word-break:break-word; }
+    .ec-v a { color:var(--brand-dk,#1d4ed8); }
+    .ec-key { display:inline-block; background:var(--blue-soft,#dbeafe); color:var(--brand-dk,#1d4ed8); padding:3px 8px; border-radius:6px; font-size:11.5px; font-family:'SF Mono',Menlo,monospace; margin-right:6px; margin-bottom:4px; }
+    .ec-actions { padding:10px 18px; background:var(--bg); border-top:1px solid var(--border); display:flex; gap:8px; flex-wrap:wrap; }
+    @media (max-width: 640px) {
+      .ec-head { flex-direction:column; align-items:stretch; }
+      .ec-head-r { align-self:flex-start; }
+      .ec-field { flex-direction:column; gap:2px; padding:6px 0; }
+      .ec-k { min-width:0; font-size:11px; }
+    }
+    [data-bs-theme="dark"] .email-card { background:#0f1729; }
+  </style>
 
 <?php
 // ============================================================================
