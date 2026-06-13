@@ -177,7 +177,7 @@
     <input id="chat-input" class="form-control form-control-sm chat-input" placeholder="Type a message…" autocomplete="off" data-testid="chat-input">
     <button class="btn chat-send-btn" type="submit" aria-label="Send" data-testid="chat-send"><i class="bi bi-send-fill"></i></button>
   </form>
-  <div class="chat-talk-band px-3 py-2 small text-center" data-testid="chat-talk-band"><i class="bi bi-headset me-1"></i>Prefer to talk? <?= esc(SITE_HOURS) ?> · <a href="tel:<?= esc($brandPhone) ?>"><?= esc($brandPhone) ?></a></div>
+  <div class="chat-talk-band" data-testid="chat-talk-band"><i class="bi bi-headset me-1"></i>Prefer to talk?<span class="ttf-sep">·</span><?= esc(SITE_HOURS) ?><span class="ttf-sep">·</span><a href="tel:<?= esc($brandPhone) ?>"><?= esc($brandPhone) ?></a></div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>

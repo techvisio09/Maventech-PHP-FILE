@@ -673,8 +673,18 @@ body.has-deal-bar #chat-panel { bottom: 155px; }
   border-top: 1px solid var(--chat-border);
   background: var(--chat-surface-soft);
   color: var(--chat-text-soft); font-weight: 400;
+  font-size: .72rem;
+  line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+  padding: .55rem .9rem !important;
 }
-.chat-talk-band a { color: var(--chat-navy-3); text-decoration: none; font-weight: 500; }
+.chat-talk-band a {
+  color: var(--chat-navy-3); text-decoration: none;
+  font-weight: 600; font-size: .78rem;
+  white-space: nowrap;
+}
+.chat-talk-band .ttf-sep { margin: 0 .35rem; opacity: .45; }
 [data-bs-theme="dark"] .chat-talk-band a { color: #93c5fd; }
 
 /* Bubble itself — match navy */
