@@ -651,9 +651,15 @@ function send_email(string $to, string $subject, string $html, ?int $orderId = n
 
     // Dev / preview mode — capture the email so the admin can verify content,
     // tracking pixel, links, etc. In production configure SMTP from the admin.
+    // IMPORTANT: We deliberately mark these as `status='sent'` so the admin
+    // sees how the system WOULD behave in production, but the `note` makes
+    // it unmistakable that nothing actually left the building.  The Email
+    // Activity tab also shows a banner pointing the admin at the SMTP setup.
     $pdo->prepare('INSERT INTO email_outbox (recipient, subject, html, status, note, order_id, tracking_token, delivered_at, template_code)
         VALUES (?,?,?,"sent",?,?,?,?,?)')
-        ->execute([$to, $subject, $html, 'Dev mode — no SMTP configured', $orderId, $tok, date('Y-m-d H:i:s'), $templateCode]);
+        ->execute([$to, $subject, $html,
+            '⚠ Captured in dev mode — SMTP disabled, NOT delivered to customer',
+            $orderId, $tok, date('Y-m-d H:i:s'), $templateCode]);
 }
 
 function fulfill_order(int $orderId, bool $forceAdminOverride = false): void {

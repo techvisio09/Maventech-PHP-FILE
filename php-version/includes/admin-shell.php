@@ -42,6 +42,11 @@ $navItems = [
 $adminActive = $adminActive ?? '';
 $pageTitle   = $pageTitle ?? 'Admin Panel';
 $admin       = $admin ?? current_admin();
+// Pull the brand letter for the topbar monogram (and the email "M" badge).
+$adm_brand_name   = function_exists('company_info') ? (company_info()['name'] ?? '') : '';
+if ($adm_brand_name === '' && defined('SITE_BRAND')) $adm_brand_name = SITE_BRAND;
+$adm_brand_letter = mb_strtoupper(mb_substr(preg_replace('/^[^A-Za-z0-9]+/', '', $adm_brand_name) ?: 'M', 0, 1));
+$adm_brand_logo   = function_exists('company_info') ? (company_info()['logo'] ?? '') : '';
 ?>
 <!doctype html>
 <html lang="en" data-bs-theme="<?= $adminMode === 'dark' ? 'dark' : 'light' ?>">
@@ -91,14 +96,38 @@ $admin       = $admin ?? current_admin();
 [data-bs-theme="dark"] a:hover { color:#bfdbfe; }
 [data-bs-theme="dark"] .text-muted { color:#cbd5e1 !important; }
 [data-bs-theme="dark"] .s-badge { color:#f1f5f9; }
-[data-bs-theme="dark"] .s-badge.paid, [data-bs-theme="dark"] .s-badge.delivered, [data-bs-theme="dark"] .s-badge.sent {
+/* ---- Status badges: complete dark-mode palette (every keyword present in
+   admin.php).  Without these, statuses like "new" / "contacted" / "qualified"
+   inherited light-mode `color:#92400e` against the now-dark `--amber-soft`
+   variable and rendered as invisible text-on-text. ---- */
+[data-bs-theme="dark"] .s-badge.paid,
+[data-bs-theme="dark"] .s-badge.delivered,
+[data-bs-theme="dark"] .s-badge.sent {
   background:#065f46; color:#a7f3d0;
 }
-[data-bs-theme="dark"] .s-badge.failed, [data-bs-theme="dark"] .s-badge.refunded {
+[data-bs-theme="dark"] .s-badge.failed,
+[data-bs-theme="dark"] .s-badge.refunded,
+[data-bs-theme="dark"] .s-badge.lost,
+[data-bs-theme="dark"] .s-badge.cancelled {
   background:#991b1b; color:#fecaca;
 }
-[data-bs-theme="dark"] .s-badge.queued, [data-bs-theme="dark"] .s-badge.pending {
+[data-bs-theme="dark"] .s-badge.queued,
+[data-bs-theme="dark"] .s-badge.pending,
+[data-bs-theme="dark"] .s-badge.new {
   background:#92400e; color:#fde68a;
+}
+[data-bs-theme="dark"] .s-badge.contacted {
+  background:#1e3a8a; color:#bfdbfe;
+}
+[data-bs-theme="dark"] .s-badge.qualified,
+[data-bs-theme="dark"] .s-badge.active {
+  background:#065f46; color:#86efac;
+}
+[data-bs-theme="dark"] .s-badge.converted {
+  background:#155e75; color:#a5f3fc;
+}
+[data-bs-theme="dark"] .s-badge.inactive {
+  background:#475569; color:#e2e8f0;
 }
 [data-bs-theme="dark"] .s-badge.opened { background:#1e40af; color:#bfdbfe; }
 [data-bs-theme="dark"] .btn-soft-blue { background:#1e3a8a; color:#bfdbfe; }
@@ -474,7 +503,18 @@ body::before { content: none; }
   border:1px solid var(--border); border-radius: 14px;
   padding: 12px 0;
   position: sticky; top: 84px;
+  /* Cap the sidebar at viewport height and give it an isolated scroll —
+     when the sidebar's own content overflows it scrolls internally,
+     and `overscroll-behavior: contain` keeps the wheel/touch gesture
+     from bubbling up to scroll the whole page behind it. */
+  max-height: calc(100vh - 104px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
+.adm-sidebar::-webkit-scrollbar { width: 6px; }
+.adm-sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+.adm-sidebar::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 .adm-sidebar .side-section {
   padding:8px 18px 6px;
   font-size:10px;letter-spacing:1.5px;color: var(--muted);
@@ -810,7 +850,11 @@ hr { border-color: var(--border); opacity:.5; }
   </div>
 
   <div class="brand-center" data-testid="adm-brand">
-    <span class="m-logo">M</span>
+    <?php if ($adm_brand_logo !== ''): ?>
+      <img src="<?= esc($adm_brand_logo) ?>" alt="<?= esc($adm_brand_name) ?>" class="m-logo-img" style="height:34px;width:auto;max-width:120px;object-fit:contain;border-radius:9px;">
+    <?php else: ?>
+      <span class="m-logo" data-testid="adm-brand-letter"><?= esc($adm_brand_letter) ?></span>
+    <?php endif; ?>
     <div>
       <small class="adm-brand-cp">ADMIN CONTROL PANEL</small>
     </div>

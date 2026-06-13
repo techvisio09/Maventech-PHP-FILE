@@ -289,6 +289,24 @@ See `/app/memory/test_credentials.md`.
 - **"5 → 2 year" header copy fix** — trustbar "YRS" badge (header.php) and footer "Authorized Reseller • 2+ Years" line updated per user request.
 - **Deceptive site warning hardening** — added a security-header block to `includes/functions.php` that ships `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=()…`, and `Strict-Transport-Security` (HTTPS-only).  These reduce Google Safe Browsing's "deceptive site" signal weight, alongside the existing Microsoft-trademark disclaimer in the footer.
 
+## [June 2026] Initial-letter logo + dark-mode audit + SMTP visibility
+- **Auto-generated initial logo** — `render_logo()` in `includes/functions.php` now produces a clean teal/blue gradient SVG with the company name's first letter (white, font-size 58% of the box) and a small mint-green status dot. Used in navbar (header.php), footer.php, admin topbar (`adm-shell.php`), and the Company Info card's preview. If the admin uploads a custom logo (JPG · PNG · **GIF** · WebP · SVG) that image takes precedence everywhere — the auto-monogram is the fallback, never an override.
+- **Admin Company Info — upload label updated** to "JPG · PNG · GIF · WebP · SVG · max 3 MB" (the server already accepted GIF, only the visible hint was missing).
+- **Dark-mode `.s-badge` completed** — previously `.s-badge.new` / `.s-badge.contacted` / `.s-badge.qualified` / `.s-badge.converted` / `.s-badge.lost` / `.s-badge.cancelled` / `.s-badge.active` / `.s-badge.inactive` inherited the light-mode `color:#92400e` against the dark `--amber-soft` background, rendering as invisible text-on-text inside the Lead Management table (and elsewhere). Added explicit dark-mode colour pairs for **every** status keyword used in `admin.php`. Verified end-to-end via screenshots — Lead Management, Email Activity, Customer Reviews and Orders tabs all readable in dark mode now.
+- **Admin sidebar — isolated scroll** — `.adm-sidebar` now uses `max-height: calc(100vh - 104px)`, `overflow-y: auto`, `overscroll-behavior: contain` so when the menu overflows the viewport it scrolls inside itself without bubbling to the body. Verified: `sb.scrollHeight=715, clientHeight=494, isolated=true`.
+- **Admin login watermark** — `login.php` now renders the same `.adm-floats` style animated floating-tech-icons layer as the admin shell (Windows, Office, Apple, key, shield, cloud, etc. drifting across the background, 12-20s loops, respects `prefers-reduced-motion`, dimmer on mobile + dark mode). Login card is lifted on `z-index:1` so it stays crisp above the watermark.
+
+### SMTP "sent but not received" — root cause + UX fix
+**Diagnosis**: The `settings` table contained zero `smtp_*` rows on this install. With `smtp_enabled = 0`, `send_email()` in `includes/email.php` (lines ~650-660) falls through to the dev-mode INSERT that marks the row `status='sent'` with note `"Dev mode — no SMTP configured"`.  Nothing ever leaves the server, but the admin sees the row as "sent" in the Email Activity table.  This is the root cause of the user's "emails say sent but not arriving" reports.
+
+**Fixes applied**:
+- Dev-mode note rewritten to `⚠ Captured in dev mode — SMTP disabled, NOT delivered to customer` so any future investigator immediately understands what happened.
+- Two big banners added (`data-testid="emails-smtp-disabled-banner"` on the Email Activity tab and `data-testid="smtp-not-configured-banner"` on the SMTP tab) that say "SMTP is OFF. Emails show 'sent' here but are NOT reaching your customers" with a direct "Configure SMTP" CTA.
+- New **SPF/DMARC alignment check** on the SMTP tab — once SMTP is enabled, if the `From:` address's domain doesn't match the SMTP username's domain we render an amber `data-testid="smtp-alignment-warning"` banner explaining that most receivers will silently drop the misaligned message to spam, and tells the admin how to fix it (match the From domain to the auth domain or publish an SPF entry that authorises the auth domain).
+
+### Security headers (carry-over from prior batch)
+- `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=()…`, HSTS — all emitted by `includes/functions.php`.
+
 ## Roadmap / Backlog (P2)
 - Split `admin.php` (>3700 lines) into per-tab partials under `includes/tabs/`
 - Add bulk-paste key validation (deduplicate vs. existing)

@@ -1160,13 +1160,14 @@ elseif ($tab === 'company'):
           <textarea class="form-control" name="company_address" rows="2" placeholder="Street, City, State ZIP, Country" data-testid="ci-address-input"><?= esc($co['address']) ?></textarea>
         </div>
         <div class="col-12">
-          <label class="form-label small fw-semibold"><i class="bi bi-image me-1"></i>Company Logo <span class="text-muted fw-normal">— shows at the top of every email</span></label>
+          <label class="form-label small fw-semibold"><i class="bi bi-image me-1"></i>Company Logo <span class="text-muted fw-normal">— shows at the top of every email. Leave empty to auto-generate a clean monogram from your company name's first letter.</span></label>
           <div class="d-flex align-items-center gap-3 flex-wrap p-3 rounded" style="background:var(--bg);border:1px dashed var(--border);">
             <div class="ci-logo-preview-lg" id="ciLogoPreviewLg">
               <?php if ($co['logo']): ?>
                 <img src="<?= esc($co['logo']) ?>" alt="Logo" data-testid="ci-logo-preview-img">
               <?php else: ?>
-                <span class="text-muted small"><i class="bi bi-image"></i> No logo yet</span>
+                <?= render_logo(56) ?>
+                <small class="text-muted d-block mt-1" style="font-size:11px;">Auto-generated from "<?= esc($co['name'] ?: 'Your Brand') ?>"</small>
               <?php endif; ?>
             </div>
             <div class="flex-grow-1 d-flex gap-2 flex-wrap align-items-center">
@@ -1175,7 +1176,7 @@ elseif ($tab === 'company'):
               <?php if ($co['logo']): ?>
                 <button type="button" class="btn btn-soft-gray btn-sm" id="ciLogoRemoveBtn" data-testid="ci-logo-remove-btn"><i class="bi bi-x-circle me-1"></i> Remove</button>
               <?php endif; ?>
-              <span class="text-muted small">JPG · PNG · SVG · max 3 MB</span>
+              <span class="text-muted small">JPG · PNG · GIF · WebP · SVG · max 3 MB</span>
             </div>
           </div>
           <div id="ciLogoErr" class="small text-danger mt-2 d-none"></div>
@@ -2768,6 +2769,8 @@ elseif ($tab === 'keys'):
 // EMAIL ACTIVITY CENTER
 // ============================================================================
 elseif ($tab === 'emails'):
+  require_once __DIR__ . '/includes/mailer.php';
+  $emailsSmtp = smtp_config();
   $c = $pdo->query("SELECT
         SUM(status IN ('queued','retrying'))            q,
         SUM(status = 'sent')                            s,
@@ -2778,6 +2781,22 @@ elseif ($tab === 'emails'):
 ?>
   <h5 class="fw-bold mb-1">Email Activity Center</h5>
   <p class="text-muted small mb-3">Every transactional email — with delivery, open and click tracking. Click <i class="bi bi-eye"></i> to view the exact email the customer received.</p>
+
+  <?php if (!$emailsSmtp['enabled'] || $emailsSmtp['host'] === ''): ?>
+  <!-- ==== Critical "SMTP not configured" banner — explains why "sent" emails aren't arriving ==== -->
+  <div class="card-e p-3 mb-3" data-testid="emails-smtp-disabled-banner"
+       style="border-left:5px solid #ef4444;background:linear-gradient(90deg,#fee2e2 0%,#fef3c7 100%);">
+    <div class="d-flex gap-3 align-items-start">
+      <i class="bi bi-exclamation-octagon-fill" style="font-size:26px;line-height:1;color:#b91c1c;"></i>
+      <div class="small flex-grow-1" style="color:#7f1d1d;">
+        <strong class="d-block mb-1" style="font-size:14px;">Heads up — SMTP is OFF. Emails show "sent" here but are NOT reaching your customers.</strong>
+        Every row below was captured in dev-mode for preview only. To actually deliver these emails, head to
+        <a href="admin.php?tab=smtp" class="fw-bold" style="color:#7c2d12;text-decoration:underline;">SMTP / Mail Server</a> and turn SMTP on.
+      </div>
+      <a href="admin.php?tab=smtp" class="btn btn-sm btn-soft-red flex-shrink-0" data-testid="emails-fix-smtp-btn"><i class="bi bi-tools me-1"></i> Configure SMTP</a>
+    </div>
+  </div>
+  <?php endif; ?>
 
   <?php $emailFilter = $_GET['filter'] ?? 'all'; ?>
 
@@ -3715,6 +3734,39 @@ elseif ($tab === 'smtp'):
       <span class="badge bg-success-subtle text-success" data-testid="smtp-saved-toast"><i class="bi bi-check2-circle me-1"></i><?= esc($_GET['msg']) ?></span>
     <?php endif; ?>
   </div>
+
+  <?php if (!$smtp['enabled'] || $smtp['host'] === ''): ?>
+  <!-- ==== Critical "SMTP not configured" banner ==== -->
+  <div class="card-e p-3 mb-3" data-testid="smtp-not-configured-banner"
+       style="border-left:5px solid #ef4444;background:linear-gradient(90deg,#fee2e2 0%,#fef3c7 100%);">
+    <div class="d-flex gap-3 align-items-start">
+      <i class="bi bi-exclamation-octagon-fill" style="font-size:28px;line-height:1;color:#b91c1c;"></i>
+      <div class="small" style="color:#7f1d1d;">
+        <strong class="d-block mb-1" style="font-size:14px;">SMTP is not configured — your customers are NOT receiving emails.</strong>
+        While SMTP is disabled, every outgoing email (order confirmations, license keys, review requests, support replies) is silently captured in the <em>Email Activity</em> log with status <code>sent</code>, but no message actually leaves the server. To start delivering for real, fill in the form below and toggle <strong>Enable SMTP</strong> on.
+      </div>
+    </div>
+  </div>
+  <?php else: ?>
+    <?php
+      // Check From-vs-Username domain alignment — the #1 cause of SPF/DMARC drops
+      $fromDomain = strtolower(substr(strrchr($smtp['from_email'] ?? '', '@'), 1) ?: '');
+      $userDomain = strtolower(substr(strrchr($smtp['username']  ?? '', '@'), 1) ?: '');
+      $alignmentOk = ($fromDomain !== '' && $userDomain !== '' && $fromDomain === $userDomain);
+    ?>
+    <?php if (!$alignmentOk && $smtp['username'] !== ''): ?>
+    <div class="card-e p-3 mb-3" data-testid="smtp-alignment-warning"
+         style="border-left:5px solid #f59e0b;background:linear-gradient(90deg,#fef3c7 0%,#fefce8 100%);">
+      <div class="d-flex gap-3 align-items-start">
+        <i class="bi bi-shield-exclamation" style="font-size:24px;line-height:1;color:#92400e;"></i>
+        <div class="small" style="color:#78350f;">
+          <strong class="d-block mb-1" style="font-size:13px;">Deliverability warning — From-address and SMTP login are on different domains.</strong>
+          Your "From:" address (<code><?= esc($smtp['from_email']) ?></code>) sends from domain <strong><?= esc($fromDomain) ?></strong>, but you log in to SMTP as <code><?= esc($smtp['username']) ?></code> on <strong><?= esc($userDomain) ?></strong>. Most receivers will silently drop these to spam (SPF/DMARC misalignment). <strong>Fix:</strong> set the From-email so its domain matches the SMTP username domain, OR ensure the From-domain's DNS contains an SPF record that authorises <strong><?= esc($userDomain) ?></strong>.
+        </div>
+      </div>
+    </div>
+    <?php endif; ?>
+  <?php endif; ?>
 
   <!-- Status / queue summary tiles -->
   <div class="row g-2 mb-3">

@@ -347,17 +347,35 @@ function nav_microsoft(): array
     ];
 }
 
-// Brand logo — gradient rounded square with twin-peak "M" monogram + code-cursor accent
-function render_logo(int $size = 40): string
+// Brand logo — clean rounded gradient square with the FIRST LETTER of the
+// company name as a white monogram.  Falls back to "M" if the company name
+// is empty.  When the admin uploads a custom logo via the Company Info tab,
+// `$brandLogo` is used directly (see header.php / footer.php) and this SVG
+// is never rendered.  Keeping the gradient + corner-radius identical to the
+// uploaded preview keeps the visual transition seamless when admins swap
+// between a custom file and the auto-generated mark.
+function render_logo(int $size = 40, ?string $letter = null): string
 {
-    $id = 'lgrad' . $size;
-    return '<svg class="brand-mark" width="' . $size . '" height="' . $size . '" viewBox="0 0 48 48" fill="none" aria-hidden="true">'
+    if ($letter === null || $letter === '') {
+        $name = function_exists('company_info') ? (company_info()['name'] ?? '') : '';
+        if ($name === '' && defined('SITE_BRAND')) $name = SITE_BRAND;
+        // strip any leading punctuation / whitespace, then grab the first alphanumeric character
+        $name = preg_replace('/^[^A-Za-z0-9]+/', '', trim($name));
+        $letter = $name !== '' ? mb_strtoupper(mb_substr($name, 0, 1)) : 'M';
+    } else {
+        $letter = mb_strtoupper(mb_substr($letter, 0, 1));
+    }
+    $id = 'lgrad' . $size . '_' . md5($letter);
+    // Font-size scales with the SVG box (54% works for both narrow & wide letters).
+    $fontSize = (int)round($size * 0.58);
+    return '<svg class="brand-mark" width="' . $size . '" height="' . $size . '" viewBox="0 0 48 48" fill="none" aria-hidden="true" role="img" data-brand-mark="1">'
         . '<defs><linearGradient id="' . $id . '" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">'
-        . '<stop stop-color="#43224d"/><stop offset="1" stop-color="#06b6d4"/></linearGradient></defs>'
+        . '<stop stop-color="#0d9488"/><stop offset=".55" stop-color="#0ea5e9"/><stop offset="1" stop-color="#1d4ed8"/></linearGradient>'
+        . '<filter id="' . $id . '_g" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation=".4"/></filter></defs>'
         . '<rect x="1.5" y="1.5" width="45" height="45" rx="13" fill="url(#' . $id . ')"/>'
-        . '<path d="M14 8c6-3.5 14-3.5 20 0" stroke="rgba(255,255,255,.30)" stroke-width="2" stroke-linecap="round" fill="none"/>'
-        . '<path d="M13 36 20 14l6 13 6-13 7 22" stroke="#fff" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>'
-        . '<circle cx="40" cy="38" r="2.7" fill="#2dd4bf"/>'
+        . '<rect x="1.5" y="1.5" width="45" height="45" rx="13" fill="rgba(255,255,255,.05)"/>'
+        . '<text x="24" y="24" text-anchor="middle" dominant-baseline="central" font-family="Manrope,Segoe UI,Arial,sans-serif" font-weight="800" font-size="' . $fontSize . '" fill="#fff" letter-spacing="-1">' . esc($letter) . '</text>'
+        . '<circle cx="40" cy="38" r="2.4" fill="#34d399" opacity=".9"/>'
         . '</svg>';
 }
 
