@@ -320,6 +320,27 @@ body::before {
   .adm-top .brand-center .m-logo { animation: none; }
 }
 .adm-top .brand-center small { font-size:9px;letter-spacing:1.8px;color:var(--muted);font-weight:600;}
+.adm-top .brand-center .adm-brand-cp {
+  display: inline-block;
+  font-size: 13px;
+  letter-spacing: 3px;
+  font-weight: 800;
+  text-transform: uppercase;
+  background: linear-gradient(90deg, #3b82f6 0%, #06b6d4 25%, #8b5cf6 50%, #ec4899 75%, #f59e0b 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+          background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 1px 0 rgba(255,255,255,.05);
+  animation: adm-brand-cp-shimmer 6s linear infinite;
+}
+@keyframes adm-brand-cp-shimmer {
+  0%   { background-position:   0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .adm-top .brand-center .adm-brand-cp { animation: none; }
+}
 .adm-top .left, .adm-top .right { display:flex;align-items:center;gap:10px; z-index:2; }
 
 .adm-pill {
@@ -632,8 +653,7 @@ hr { border-color: var(--border); opacity:.5; }
   <div class="brand-center" data-testid="adm-brand">
     <span class="m-logo">M</span>
     <div>
-      <div class="adm-brand-label" style="font-size:11px;letter-spacing:2px;font-weight:700;color:var(--text-muted,#64748b);text-transform:uppercase;">Authorized Reseller</div>
-      <small>ADMIN CONTROL PANEL</small>
+      <small class="adm-brand-cp">ADMIN CONTROL PANEL</small>
     </div>
   </div>
 
