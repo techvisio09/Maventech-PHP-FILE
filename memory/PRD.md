@@ -280,6 +280,15 @@ Create a comprehensive and user-friendly Admin Panel for Maventech Software with
 ## Test Credentials
 See `/app/memory/test_credentials.md`.
 
+## [June 2026] Brand-sync, low-rating alert & mobile polish
+- **Live company-info sync to public site** — `header.php` + `footer.php` no longer hardcode the brand. The navbar logo, brand text ("Maventech Software"), footer copyright, trademark disclaimer, Google-Maps button, dropdown menu phone number and chat-CTA call buttons now all read from `company_info()` (Admin → Company Info card). Uploading a new logo or renaming the company immediately reflects on every public page. `index.php` "Ask {brand} AI" pill picks up the same source. The `render_menu_promo()` helper in `includes/functions.php` was updated similarly.
+- **Unhappy-customer alert (Bell badge)** — new yellow ★ bell in admin topbar (`data-testid="adm-bell-rating"`) counts customer reviews with `rating <= 3` and `admin_seen_at IS NULL`. Clicks deep-link to `admin.php?tab=reviews&status=hidden`, which automatically marks all hidden low-rating reviews as seen so the badge clears on next page-load. Migration adds `customer_reviews.admin_seen_at` via `ensure_db_schema()` + a one-shot `ALTER TABLE` in MariaDB.
+- **Customer-service email timing differentiation** — new `send_customer_service_ack()` helper in `includes/email.php` queues an HTML acknowledgement to the visitor that submitted `contact.php` / `support.php`, with a hard-wired **5-minute delay** (`send_email(..., 'customer_service_ack', 5)`). Purchase / order-delivery emails continue to go out instantly (0-min delay).  Verified via `email_outbox.next_retry_at - created_at = 300 sec` on new rows.
+- **Mobile dashboard scroll bug** — added `overflow-x: hidden` on `body`, plus `max-width:100%`, `box-sizing:border-box` on `.adm-content` and tightened row gutters to 6px on screens below 992px so KPI tiles never clip past the viewport edge.
+- **Mobile dark-mode visibility** — bumped dark-mode `.adm-top`, `.adm-sidebar`, `.adm-iconbtn`, `.adm-pill`, `.text-muted` and `.kpi-tile .kpi-label` contrast under 768px; toned the floating-tech-icon layer from 22% → 12% opacity on small screens so cards stay legible on OLED phones.
+- **"5 → 2 year" header copy fix** — trustbar "YRS" badge (header.php) and footer "Authorized Reseller • 2+ Years" line updated per user request.
+- **Deceptive site warning hardening** — added a security-header block to `includes/functions.php` that ships `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=()…`, and `Strict-Transport-Security` (HTTPS-only).  These reduce Google Safe Browsing's "deceptive site" signal weight, alongside the existing Microsoft-trademark disclaimer in the footer.
+
 ## Roadmap / Backlog (P2)
 - Split `admin.php` (>3700 lines) into per-tab partials under `includes/tabs/`
 - Add bulk-paste key validation (deduplicate vs. existing)

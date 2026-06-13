@@ -13,6 +13,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $formError = 'Please fill in all fields with a valid email.';
     } else {
         save_support_message(['name' => $name, 'email' => strtolower($email), 'subject' => $subject, 'message' => $message, 'source' => 'support']);
+        // Customer-service auto-acknowledgement (5-minute delayed delivery)
+        require_once __DIR__ . '/includes/email.php';
+        send_customer_service_ack(strtolower($email), $name, $subject, $message, 'support');
         $sent = true;
     }
 }

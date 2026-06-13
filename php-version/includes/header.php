@@ -9,6 +9,7 @@ $brandName  = $co['name']  ?: (defined('SITE_BRAND') ? SITE_BRAND : 'Maventech S
 $brandEmail = $co['email'] ?: (defined('SITE_EMAIL') ? SITE_EMAIL : '');
 $brandPhone = $co['phone'] ?: (defined('SITE_PHONE') ? SITE_PHONE : '');
 $brandLogo  = $co['logo']  ?: '';
+$brandAddress = $co['address'] ?: (defined('SITE_ADDRESS') ? SITE_ADDRESS : '');
 $pageTitle = $pageTitle ?? ($brandName . ' | Genuine Microsoft Software');
 $cur = current_currency();
 $checkoutHeader = $checkoutHeader ?? false;
@@ -83,7 +84,7 @@ $ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.sv
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="assets/css/style.css" rel="stylesheet">
-  <script>window.SITE_PHONE = '<?= SITE_PHONE ?>'; window.CART_SLUGS = <?= json_encode(array_keys(cart())) ?>;</script>
+  <script>window.SITE_PHONE = '<?= esc($brandPhone) ?>'; window.CART_SLUGS = <?= json_encode(array_keys(cart())) ?>;</script>
 </head>
 <body>
 
@@ -120,7 +121,7 @@ $ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.sv
     </div>
     <div class="d-flex gap-3 align-items-center">
       <span class="badge text-bg-warning text-dark">★ Trusted Software Store</span>
-      <span class="badge bg-white text-dark border">5 <small>YRS</small></span>
+      <span class="badge bg-white text-dark border">2 <small>YRS</small></span>
       <a href="tel:<?= esc($brandPhone) ?>" class="text-decoration-none text-white trustbar-phone"><i class="bi bi-telephone-fill me-1"></i><?= esc($brandPhone) ?></a>
     </div>
   </div>
@@ -130,9 +131,19 @@ $ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.sv
 <nav class="navbar navbar-expand-lg bg-body border-bottom sticky-top">
   <div class="container position-relative">
     <a class="navbar-brand logo-3d d-flex align-items-center gap-2" href="index.php" data-testid="brand-logo">
-      <?= render_logo(42) ?>
+      <?php if ($brandLogo !== ''): ?>
+        <img src="<?= esc($brandLogo) ?>" alt="<?= esc($brandName) ?>" style="height:42px;width:auto;max-width:140px;object-fit:contain;">
+      <?php else: ?>
+        <?= render_logo(42) ?>
+      <?php endif; ?>
       <span>
-        <span class="brand-text d-block lh-1">Maventech <span class="brand-grad">Software</span></span>
+        <?php
+          // Split brand name so the LAST word picks up the gradient accent.
+          $bnParts = preg_split('/\s+/', trim($brandName));
+          $bnLast  = array_pop($bnParts) ?: '';
+          $bnHead  = implode(' ', $bnParts);
+        ?>
+        <span class="brand-text d-block lh-1"><?= esc($bnHead) ?><?php if ($bnHead !== ''): ?> <?php endif; ?><span class="brand-grad"><?= esc($bnLast) ?></span></span>
         <small class="brand-tag">AUTHORIZED RESELLER</small>
       </span>
     </a>

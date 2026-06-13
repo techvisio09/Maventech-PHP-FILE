@@ -124,7 +124,7 @@ include __DIR__ . '/includes/header.php';
     <div class="ask-ai-pill d-inline-flex align-items-center gap-3 px-4 py-2" data-testid="ask-ai-teaser">
       <span class="logo-mark ask-ai-mark"><i class="bi bi-stars"></i></span>
       <div class="text-start lh-sm">
-        <div class="fw-bold small">Ask <?= SITE_BRAND ?> AI</div>
+        <div class="fw-bold small">Ask <?= esc($brandName ?? SITE_BRAND) ?> AI</div>
         <small class="text-secondary fst-italic" style="font-size:.74rem;">"Which Office is right for my Mac?"</small>
       </div>
       <button class="btn btn-primary btn-sm rounded-pill px-3" onclick="toggleChat()" data-testid="ask-ai-try-btn">Try it <i class="bi bi-arrow-right ms-1"></i></button>

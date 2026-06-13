@@ -772,3 +772,58 @@ function fulfill_order(int $orderId, bool $forceAdminOverride = false): void {
         send_email($order['email'], $subj, $reviewHtml, $orderId, 'review_request', 10);
     }
 }
+
+
+/**
+ * Customer service auto-acknowledgement email.
+ *
+ * Sent when a visitor submits the Contact or Support form.  Purchase emails
+ * (`send_email(...)` with default 0-min delay) leave the queue immediately so
+ * the customer gets their license key within seconds.  Customer-service
+ * acknowledgements deliberately wait 5 minutes via the queue worker — this
+ * mirrors the human cadence ("we received your note, here's what to expect")
+ * and prevents the mailbox from being flagged as a robotic instant-bounce.
+ */
+function send_customer_service_ack(string $to, string $name, string $subjectLine, string $userMessage, string $source = 'contact'): void {
+    $co = company_info();
+    $brand   = $co['name']  ?: (defined('SITE_BRAND') ? SITE_BRAND : 'Maventech Software');
+    $support = $co['email'] ?: (defined('SITE_EMAIL') ? SITE_EMAIL : '');
+    $phone   = $co['phone'] ?: (defined('SITE_PHONE') ? SITE_PHONE : '');
+    $hours   = defined('SITE_HOURS') ? SITE_HOURS : 'Mon-Sat, 9 AM - 6 PM EST';
+    $first   = trim(strtok($name, ' ')) ?: $name ?: 'there';
+    $excerpt = trim(mb_substr($userMessage, 0, 320));
+    if (mb_strlen($userMessage) > 320) $excerpt .= '…';
+
+    $subject = '[' . $brand . '] We received your message — '. mb_substr($subjectLine, 0, 80);
+    $logoBlock = '<div style="font-size:22px;font-weight:800;letter-spacing:.3px;color:#fff;">'
+               . '<span style="display:inline-block;width:32px;height:32px;background:#fff;color:#2563eb;border-radius:8px;text-align:center;line-height:32px;font-weight:900;margin-right:8px;vertical-align:-9px;">M</span>'
+               . esc($brand) . '</div>';
+
+    $html = '<!doctype html><html><body style="margin:0;padding:0;background:#f3f4f6;font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#1f2937;">'
+          . '<div style="max-width:620px;margin:0 auto;padding:30px 16px;">'
+          . '<div style="background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 6px 28px rgba(15,23,42,.06);">'
+          . '<div style="background:linear-gradient(135deg,#2563eb,#1e40af);padding:26px 32px;text-align:center;">'
+          . $logoBlock
+          . '<div style="font-size:11px;letter-spacing:1.8px;font-weight:600;margin-top:8px;color:rgba(255,255,255,.92);">CUSTOMER SUPPORT</div>'
+          . '</div>'
+          . '<div style="padding:30px 32px;">'
+          . '<h1 style="margin:0 0 8px;font-size:22px;color:#0f172a;font-weight:700;">Hi ' . esc($first) . ', we got your message!</h1>'
+          . '<p style="margin:0 0 16px;font-size:14px;color:#475569;line-height:1.65;">Thanks for reaching out to ' . esc($brand) . '. A member of our support team has been notified and will reply to <strong style="color:#0f172a;">' . esc($to) . '</strong> within one business day (typically much faster during ' . esc($hours) . ').</p>'
+          . '<div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:14px 16px;margin:0 0 18px;">'
+          . '<div style="font-size:11px;color:#64748b;letter-spacing:1px;font-weight:700;text-transform:uppercase;margin-bottom:4px;">Your message</div>'
+          . '<div style="font-size:13.5px;color:#1f2937;line-height:1.6;"><strong>' . esc($subjectLine) . '</strong><br>' . nl2br(esc($excerpt)) . '</div>'
+          . '</div>'
+          . '<div style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1px solid #bfdbfe;border-radius:12px;padding:14px 16px;margin:0 0 22px;font-size:13px;color:#1e3a8a;">'
+          . '<strong>Need a faster answer?</strong> Call us at <a href="tel:' . esc($phone) . '" style="color:#1d4ed8;font-weight:700;">' . esc($phone) . '</a> during ' . esc($hours) . ', or reply to this email directly.'
+          . '</div>'
+          . '<p style="margin:0;font-size:12.5px;color:#64748b;">— The ' . esc($brand) . ' team</p>'
+          . '</div>'
+          . '<div style="background:#f8fafc;padding:16px 32px;border-top:1px solid #f1f3f5;font-size:11.5px;color:#64748b;text-align:center;">'
+          . '<a href="mailto:' . esc($support) . '" style="color:#2563eb;text-decoration:none;">' . esc($support) . '</a> · ' . esc($phone) . '<br>'
+          . '<span style="font-size:11px;color:#94a3b8;">© ' . date('Y') . ' ' . esc($brand) . '. Source: ' . esc($source) . '</span>'
+          . '</div></div></div></body></html>';
+
+    // 5-minute delay (purchase emails go instantly with the default 0-min
+    // delay; this mirrors what the user requested in handoff message 539).
+    send_email($to, $subject, $html, null, 'customer_service_ack', 5);
+}

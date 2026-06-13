@@ -7,6 +7,36 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+/**
+ * Security headers — sent on every page-load via functions.php.
+ *
+ * These reduce the chance of Google Safe Browsing flagging the domain
+ * as "deceptive" by signalling clear intent to browsers + crawlers:
+ *   - X-Content-Type-Options: blocks MIME sniffing (prevents arbitrary
+ *     uploaded files from being executed as scripts).
+ *   - X-Frame-Options: disallows iframe embedding so a phishing page
+ *     cannot wrap our checkout/login in a deceptive overlay.
+ *   - Referrer-Policy: trims leaked URLs to third parties.
+ *   - Permissions-Policy: tells browsers we don't request camera/mic/
+ *     geolocation — Safe Browsing weighs this when scoring trust.
+ *   - Strict-Transport-Security: only added when the request is HTTPS
+ *     so dev/local installs still work over plain HTTP.
+ * `headers_sent()` guards against the rare case where output started
+ * before this file was loaded (e.g. cron scripts).
+ */
+if (!headers_sent() && PHP_SAPI !== 'cli') {
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: SAMEORIGIN');
+    header('Referrer-Policy: strict-origin-when-cross-origin');
+    header('Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()');
+    $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https')
+            || (($_SERVER['SERVER_PORT'] ?? '') === '443');
+    if ($isHttps) {
+        header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+    }
+}
+
 // Regions are a core dependency: public queries must hide products from
 // regions that an admin has toggled off. Loaded here so it is available
 // in scripts that call db() before including the page header.
@@ -91,6 +121,9 @@ function ensure_db_schema(): void
         foreach ([
             "ALTER TABLE chat_leads ADD COLUMN last_seen DATETIME NULL DEFAULT NULL",
             "ALTER TABLE chat_leads ADD COLUMN chat_token VARCHAR(40) NOT NULL DEFAULT ''",
+            // customer_reviews — admin_seen_at lets the topbar star-bell badge
+            // tell which low-rating submissions are still unacknowledged.
+            "ALTER TABLE customer_reviews ADD COLUMN admin_seen_at DATETIME NULL DEFAULT NULL",
         ] as $sql) {
             try { $pdo->exec($sql); } catch (Throwable $e) { /* column already exists */ }
         }
@@ -338,12 +371,13 @@ function save_support_message(array $d): void
 // Volume-pricing / support promo band (nav dropdowns + Disclaimer page)
 function render_menu_promo(bool $compact = false): string
 {
+    $phone = company_info()['phone'] ?: (defined('SITE_PHONE') ? SITE_PHONE : '');
     $volume = '<div class="d-flex align-items-center gap-2 mb-1"><i class="bi bi-boxes text-primary fs-5"></i><span class="fw-bold">Volume Pricing</span></div>'
             . '<small class="text-secondary d-block mb-2">Exclusive discounts on bulk licenses for teams and businesses.</small>'
             . '<a href="contact.php" class="btn btn-sm btn-primary rounded-pill px-3" data-testid="menu-request-quote">Request a Quote</a>';
     $question = '<div class="fw-bold small">Have a Question?</div>'
               . '<small class="text-secondary d-block">Call Mon–Fri 9 AM–6 PM EST</small>'
-              . '<a href="tel:' . SITE_PHONE . '" class="fw-bold text-decoration-none">' . SITE_PHONE . '</a> '
+              . '<a href="tel:' . esc($phone) . '" class="fw-bold text-decoration-none">' . esc($phone) . '</a> '
               . '<small class="text-secondary">or</small> '
               . '<a href="#" onclick="toggleChat();return false;" class="fw-bold text-decoration-none text-primary">chat with a sales expert</a>';
     if ($compact) {

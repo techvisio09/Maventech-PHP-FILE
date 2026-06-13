@@ -84,6 +84,9 @@ function _geo_country(string $ip): string
         return 'Local';
     }
     $ctx = stream_context_create(['http' => ['timeout' => 1, 'ignore_errors' => true]]);
+    // ip-api.com's free tier requires plain HTTP.  This is a server-side
+    // PHP fetch (never exposed to the browser) so it cannot trigger Google
+    // Safe Browsing's "mixed content" / "deceptive site" warnings on its own.
     $j = @file_get_contents("http://ip-api.com/json/{$ip}?fields=countryCode,status", false, $ctx);
     $code = '';
     if ($j) { $d = json_decode($j, true); if (!empty($d['countryCode']) && ($d['status'] ?? '') === 'success') $code = strtoupper((string)$d['countryCode']); }

@@ -266,7 +266,7 @@ $admin       = $admin ?? current_admin();
    their accent colour but lighten the value text in dark mode */
 [data-bs-theme="dark"] .kpi-tile .kpi-value { color: #f8fafc; }
 
-body { background: var(--bg); color: var(--text); font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; font-size: 14px; position:relative; }
+body { background: var(--bg); color: var(--text); font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; font-size: 14px; position:relative; overflow-x: hidden; }
 
 /* Watermark removed per user request — only the animated floating-icons
    layer below provides background ambience.  body::before still exists
@@ -426,6 +426,12 @@ body::before { content: none; }
   letter-spacing: .2px;
 }
 .adm-bell:has(.adm-bell-badge) .bi { color: #ef4444; animation: adm-bell-shake 1.6s ease-in-out infinite; transform-origin: top center; }
+/* Star bell uses amber for "review needs attention" semantics */
+.adm-bell-rating:has(.adm-bell-badge) .bi { color: #f59e0b; }
+.adm-bell-rating .adm-bell-badge {
+  background: linear-gradient(135deg,#f59e0b,#d97706);
+  box-shadow: 0 2px 6px rgba(245,158,11,.45);
+}
 .adm-nav-badge { margin-left:auto; background:#ef4444; color:#fff; font-size:10px; font-weight:700; padding:2px 7px; border-radius:999px; line-height:1.4; min-width:18px; text-align:center; box-shadow:0 0 0 3px rgba(239,68,68,.18); animation: adm-bell-shake 1.6s ease-in-out infinite; transform-origin: center; }
 .adm-sidebar .item { position: relative; display: flex; align-items: center; }
 .adm-chat-toast { position:fixed; top:80px; right:22px; background:linear-gradient(135deg,#1e3a8a,#2563eb); color:#fff; padding:14px 18px; border-radius:12px; box-shadow:0 14px 30px rgba(15,23,42,.30); z-index:4000; max-width:340px; cursor:pointer; animation:adm-toast-in .25s cubic-bezier(.16,1,.3,1); }
@@ -728,6 +734,45 @@ hr { border-color: var(--border); opacity:.5; }
   .vis-flag-chip { font-size: 11px; padding: 4px 8px; }
   .ec-actions .btn span:not(.spinner-border) { display:inline; }
 }
+
+/* ============ MOBILE OVERFLOW + DARK-MODE READABILITY ============
+   Fixes the "background scrolls instead of menu" bug + ensures all
+   text in dark-mode stays high-contrast on phones.
+*/
+@media (max-width: 991px) {
+  /* Cards never push past the viewport.  Forces .row.g-3 children to
+     respect the screen width so KPI tiles no longer clip on the right. */
+  .adm-content { max-width: 100%; box-sizing: border-box; }
+  .adm-content .row { margin-left: 0 !important; margin-right: 0 !important; }
+  .adm-content .row > [class^="col-"], .adm-content .row > [class*=" col-"] { padding-left: 6px; padding-right: 6px; }
+  .card-e, .kpi-tile { max-width: 100%; box-sizing: border-box; }
+
+  /* The .adm-shell + .adm-content are inside body which already has
+     overflow-x:hidden, but explicitly clip here for safety so admins
+     don't see the empty horizontal gutter on iOS Safari. */
+  .adm-shell { overflow-x: clip; width: 100%; }
+}
+@media (max-width: 768px) {
+  /* Background floating-icon layer becomes too noisy on small screens
+     in dark mode — keep it subtle for better content readability. */
+  .adm-floats i { font-size: 38px; opacity: 0.10; }
+  [data-bs-theme="dark"] .adm-floats i { opacity: 0.12; }
+
+  /* Dark-mode high-contrast text on phones (the KPI label & sub-headings
+     previously appeared washed-out on small AMOLED panels). */
+  [data-bs-theme="dark"] .kpi-tile .kpi-label,
+  [data-bs-theme="dark"] .text-muted,
+  [data-bs-theme="dark"] small.text-muted { color: #e2e8f0 !important; }
+  [data-bs-theme="dark"] .card-e { background: #1f2a3d; }
+  [data-bs-theme="dark"] .adm-top { background: #1e293b; }
+  [data-bs-theme="dark"] .adm-sidebar { background: #1f2a3d; }
+
+  /* Topbar pills/icons get bigger tap targets and clear background fills
+     so they don't blend into the navy bar on mobile dark mode. */
+  [data-bs-theme="dark"] .adm-iconbtn { background: #334155; border-color:#475569; color:#f1f5f9; }
+  [data-bs-theme="dark"] .adm-iconbtn:hover { background:#475569; }
+  [data-bs-theme="dark"] .adm-pill { background:#334155; border-color:#475569; color:#f1f5f9; }
+}
 </style>
 </head>
 <body>
@@ -795,7 +840,18 @@ hr { border-color: var(--border); opacity:.5; }
     try {
         $chatUnread = (int)db()->query("SELECT COUNT(*) FROM chat_messages WHERE sender='customer' AND read_at IS NULL")->fetchColumn();
     } catch (Throwable $e) { $chatUnread = 0; }
+    // Unhappy-customer alerts — reviews of 3 stars or less that the admin
+    // hasn't acknowledged yet.  Drives the star-shaped notification bell.
+    try {
+        $lowRatingUnread = (int)db()->query("SELECT COUNT(*) FROM customer_reviews WHERE rating IS NOT NULL AND rating <= 3 AND admin_seen_at IS NULL")->fetchColumn();
+    } catch (Throwable $e) { $lowRatingUnread = 0; }
     ?>
+    <a class="adm-iconbtn adm-bell adm-bell-rating" href="admin.php?tab=reviews&status=hidden" title="<?= $lowRatingUnread?($lowRatingUnread.' new low-rating review(s) — needs attention'):'No new low-rating reviews' ?>" data-testid="adm-bell-rating">
+      <i class="bi bi-star<?= $lowRatingUnread?'-fill':'' ?>"></i>
+      <?php if ($lowRatingUnread > 0): ?>
+        <span class="adm-bell-badge" data-testid="adm-bell-rating-badge"><?= $lowRatingUnread > 99 ? '99+' : $lowRatingUnread ?></span>
+      <?php endif; ?>
+    </a>
     <a class="adm-iconbtn adm-bell" href="admin.php?tab=emails&filter=failed" title="<?= $failedCount?($failedCount.' failed email(s) need attention'):'No failed emails' ?>" data-testid="adm-bell">
       <i class="bi bi-bell<?= $failedCount?'-fill':'' ?>"></i>
       <?php if ($failedCount > 0): ?>

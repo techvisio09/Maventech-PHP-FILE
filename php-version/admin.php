@@ -4502,6 +4502,14 @@ elseif ($tab === 'regions'):
 // ============================================================================
 elseif ($tab === 'reviews'):
   $sf = $_GET['status'] ?? '';
+  // Acknowledge the low-rating bell badge when the admin views the Hidden
+  // filter (where 1-3 star reviews land automatically).  This clears the
+  // topbar star-bell count immediately for the next page load.
+  if ($sf === 'hidden') {
+      try {
+          $pdo->exec("UPDATE customer_reviews SET admin_seen_at=NOW() WHERE rating IS NOT NULL AND rating <= 3 AND admin_seen_at IS NULL");
+      } catch (Throwable $e) { /* table may not exist on fresh installs */ }
+  }
   $w='WHERE cr.rating IS NOT NULL'; $args=[];
   if (in_array($sf,['published','hidden'],true)) { $w.=' AND cr.status=?'; $args[]=$sf; }
   $st = $pdo->prepare("SELECT cr.*, p.name AS product_name, p.image AS product_image, o.order_number

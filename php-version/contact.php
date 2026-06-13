@@ -17,6 +17,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'phone' => trim($_POST['phone'] ?? ''), 'order_number' => trim($_POST['order_number'] ?? ''),
             'subject' => $subject, 'message' => $message, 'source' => 'contact',
         ]);
+        // Customer-service auto-acknowledgement (5-minute delayed delivery)
+        require_once __DIR__ . '/includes/email.php';
+        send_customer_service_ack(strtolower($email), $name, $subject, $message, 'contact');
         $sent = true;
     }
 }

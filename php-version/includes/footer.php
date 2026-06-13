@@ -24,9 +24,18 @@
       <!-- Brand column -->
       <div class="col-lg-4">
         <div class="d-flex align-items-center gap-2 mb-2">
-          <?= render_logo(42) ?>
+          <?php if (!empty($brandLogo)): ?>
+            <img src="<?= esc($brandLogo) ?>" alt="<?= esc($brandName) ?>" style="height:42px;width:auto;max-width:140px;object-fit:contain;">
+          <?php else: ?>
+            <?= render_logo(42) ?>
+          <?php endif; ?>
           <span>
-            <span class="brand-text d-block lh-1 text-white">Maventech <span class="brand-grad">Software</span></span>
+            <?php
+              $bnParts = preg_split('/\s+/', trim($brandName));
+              $bnLast  = array_pop($bnParts) ?: '';
+              $bnHead  = implode(' ', $bnParts);
+            ?>
+            <span class="brand-text d-block lh-1 text-white"><?= esc($bnHead) ?><?php if ($bnHead !== ''): ?> <?php endif; ?><span class="brand-grad"><?= esc($bnLast) ?></span></span>
             <small class="brand-tag">AUTHORIZED RESELLER</small>
           </span>
         </div>
@@ -40,8 +49,8 @@
 
         <p class="small mb-1"><i class="bi bi-telephone me-2 text-info"></i><a href="tel:<?= esc($brandPhone) ?>"><?= esc($brandPhone) ?></a></p>
         <p class="small mb-1"><i class="bi bi-envelope me-2 text-info"></i><a href="mailto:<?= esc($brandEmail) ?>"><?= esc($brandEmail) ?></a></p>
-        <p class="small mb-2"><i class="bi bi-geo-alt me-2 text-info"></i><?= SITE_ADDRESS ?></p>
-        <a href="https://www.google.com/maps/search/?api=1&query=<?= urlencode(SITE_ADDRESS) ?>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-light rounded-pill mb-2 gmap-btn" data-testid="footer-gmap-btn">
+        <p class="small mb-2"><i class="bi bi-geo-alt me-2 text-info"></i><?= esc($brandAddress) ?></p>
+        <a href="https://www.google.com/maps/search/?api=1&query=<?= urlencode($brandAddress) ?>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-light rounded-pill mb-2 gmap-btn" data-testid="footer-gmap-btn">
           <span class="gmap-pin"><i class="bi bi-geo-alt-fill"></i></span>View on Google Maps
         </a>
         <p class="small mb-3"><i class="bi bi-clock me-2 text-info"></i><?= SITE_HOURS ?></p>
@@ -118,13 +127,13 @@
           <img src="assets/images/badges/microsoft-verified.svg" alt="Microsoft Verified" class="trust-badge-img" loading="lazy">
           <img src="assets/images/badges/pci-compliant.svg" alt="PCI Compliant" class="trust-badge-img" loading="lazy">
         </div>
-        <small><i class="bi bi-award-fill text-warning me-1"></i>Authorized Reseller • 5+ Years</small>
+        <small><i class="bi bi-award-fill text-warning me-1"></i>Authorized Reseller • 2+ Years</small>
       </div>
     </div>
 
     <!-- Trademark + legal -->
     <hr class="border-secondary my-4">
-    <p class="small text-center mx-auto" style="max-width: 760px;">Microsoft®, Office®, and Windows® are trademarks of Microsoft Corporation. <?= SITE_LEGAL ?> is independent of and not affiliated with Microsoft Corporation.</p>
+    <p class="small text-center mx-auto" style="max-width: 760px;">Microsoft®, Office®, and Windows® are trademarks of Microsoft Corporation. <?= esc($brandName) ?> is independent of and not affiliated with Microsoft Corporation.</p>
     <div class="d-flex justify-content-center flex-wrap gap-2 small mb-3">
       <?php
       $legal = [
@@ -137,7 +146,7 @@
         <a href="<?= $lh ?>"><?= $ll ?></a><?= $idx < count($legal) - 1 ? '<span class="text-secondary">|</span>' : '' ?>
       <?php endforeach; ?>
     </div>
-    <div class="text-center small">© <?= date('Y') ?> <?= SITE_LEGAL ?>. All rights reserved.</div>
+    <div class="text-center small">© <?= date('Y') ?> <?= esc($brandName) ?>. All rights reserved.</div>
   </div>
 </footer>
 
@@ -169,7 +178,7 @@
       <input id="lead-phone" class="form-control form-control-sm chat-lead-input" placeholder="Phone number"   data-testid="lead-phone">
       <button class="btn btn-sm chat-lead-cta" onclick="submitLead(true)" data-testid="lead-callback-btn"><i class="bi bi-telephone-outbound me-1"></i>Request a callback</button>
       <button type="button" class="btn btn-sm chat-lead-cta-chat" onclick="submitLead('chat')" data-testid="lead-chat-btn"><i class="bi bi-chat-dots-fill me-1"></i>Chat Now</button>
-      <a href="tel:<?= SITE_PHONE ?>" class="btn btn-sm chat-lead-cta-alt" onclick="submitLead(false)" data-testid="lead-call-btn"><i class="bi bi-telephone me-1"></i>Call <?= SITE_PHONE ?></a>
+      <a href="tel:<?= esc($brandPhone) ?>" class="btn btn-sm chat-lead-cta-alt" onclick="submitLead(false)" data-testid="lead-call-btn"><i class="bi bi-telephone me-1"></i>Call <?= esc($brandPhone) ?></a>
       <button class="btn btn-link chat-lead-skip" onclick="skipLead()" data-testid="lead-skip-btn">Skip — I just want to ask a question</button>
     </div>
   </div>
