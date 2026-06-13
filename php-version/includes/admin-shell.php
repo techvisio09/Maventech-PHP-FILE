@@ -298,6 +298,26 @@ body::before {
   width:34px; height:34px; border-radius:9px;
   background:linear-gradient(135deg,#3b82f6,#1d4ed8);
   display:inline-flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:18px;
+  /* Continuous 360° spin + gentle vertical bounce, combined in one keyframe
+     so both transforms apply without overriding each other. */
+  transform-style: preserve-3d;
+  animation: m-logo-spin-bounce 3s ease-in-out infinite;
+  box-shadow: 0 6px 18px rgba(29,78,216,.35);
+  will-change: transform;
+}
+.adm-top .brand-center .m-logo:hover {
+  animation-play-state: paused;
+  cursor: pointer;
+}
+@keyframes m-logo-spin-bounce {
+  0%   { transform: translateY(0)    rotateY(0deg)   scale(1); }
+  25%  { transform: translateY(-6px) rotateY(90deg)  scale(1.05); }
+  50%  { transform: translateY(0)    rotateY(180deg) scale(1); }
+  75%  { transform: translateY(-6px) rotateY(270deg) scale(1.05); }
+  100% { transform: translateY(0)    rotateY(360deg) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .adm-top .brand-center .m-logo { animation: none; }
 }
 .adm-top .brand-center small { font-size:9px;letter-spacing:1.8px;color:var(--muted);font-weight:600;}
 .adm-top .left, .adm-top .right { display:flex;align-items:center;gap:10px; z-index:2; }
