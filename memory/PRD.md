@@ -201,6 +201,10 @@ Create a comprehensive and user-friendly Admin Panel for Maventech Software with
   - "Payment Gateways" sidebar item stays highlighted across both the toggles overview AND the credentials sub-pages — so the admin always knows where they are.
   - Page copy reworded: overview now says *"Manage every payment method in one place — enable or disable each gateway with a single click, and edit its API credentials when you need to."* Credentials page says *"Toggle the gateway on/off from the Payment Gateways overview."*
 
+- **[Feb 2026]** Separated credentials pages — no cross-tab switcher:
+  - The Card / PayPal pill switcher at the top of the credentials view was removed. The **Card Credentials page now shows only Card fields**; the **PayPal Credentials page now shows only PayPal fields**. Each gateway is fully isolated — admin reaches each via the "Edit Card Credentials" / "Edit PayPal Credentials" button on the Payment Gateways overview.
+  - Breadcrumb header (`← Payment Gateways › Card Payment Credentials`) remains so navigation stays clear; the back link returns to the overview where both gateways live side-by-side as toggle cards.
+
 ## Test Credentials
 See `/app/memory/test_credentials.md`.
 

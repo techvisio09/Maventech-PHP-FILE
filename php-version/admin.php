@@ -3099,12 +3099,6 @@ elseif ($tab === 'api'):
       <h5 class="fw-bold mb-0">› <?= $apiTab === 'paypal' ? 'PayPal Credentials' : 'Card Payment Credentials' ?></h5>
     </div>
     <p class="text-muted small mb-3">Configure the API credentials this gateway uses. Changes apply instantly. Toggle the gateway on/off from the <a href="?tab=api&gw=toggles">Payment Gateways</a> overview.</p>
-
-    <!-- Card / PayPal credentials switcher (sub-tabs only — no separate API Management page anymore) -->
-    <ul class="nav nav-pills mb-3" role="tablist" data-testid="api-tab-switcher">
-      <li class="nav-item"><a class="nav-link <?= $apiTab==='card'?'active':'' ?>" href="?tab=api&gw=card" data-testid="api-tab-card"><i class="bi bi-credit-card-2-front me-1"></i> Card Payment API <span class="badge bg-light text-dark ms-1"><?= $txCard ?></span></a></li>
-      <li class="nav-item"><a class="nav-link <?= $apiTab==='paypal'?'active':'' ?>" href="?tab=api&gw=paypal" data-testid="api-tab-paypal"><i class="bi bi-paypal me-1"></i> PayPal API <span class="badge bg-light text-dark ms-1"><?= $txPp ?></span></a></li>
-    </ul>
   <?php endif; ?>
 
   <?php if ($isToggles):
