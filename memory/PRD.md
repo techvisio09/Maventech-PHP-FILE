@@ -174,6 +174,14 @@ Create a comprehensive and user-friendly Admin Panel for Maventech Software with
   - Replaced the dual Active/Deactive bar with a clean **iOS-style single switch** (`.gw-switch` 60×32 px, white thumb sliding between green-ON and grey-OFF). One click flips the state, AJAX saves to `/ajax/gateway-toggle.php`, switch + status pill (LIVE/PAUSED) + hint repaint instantly, and a green toast confirms the change.
   - Verified visually: clicking the PayPal switch once flips ON → OFF (toast "PayPal disabled — hidden from checkout."); clicking again flips OFF → ON ("PayPal enabled — live on checkout."). Sidebar item stays highlighted blue while on the page.
 
+- **[Feb 2026]** Email Activity improvements + nav-hover bug fix + Notify When Available navy theme:
+  - **Bell notification icon** added to the admin header (next to theme toggle). Shows a red badge with the count of failed/bounced emails and shakes via CSS animation when there are any. Clicking it jumps to `?tab=emails&filter=failed`.
+  - **Failed banner + filter pills** on Email Activity: top-of-page red alert "N email(s) failed to send. Customers may not have received their license keys…" with a "Show failed only" shortcut. New pill row All / Failed / Sent / Queued (each with live counts).
+  - **Failed cards visually highlighted**: `.email-card.is-failed` class adds a red border, red glow shadow, soft pink gradient background, and a darker `.ec-head` so failed rows stand out instantly even when scrolling.
+  - **One-click "Resend Email" button** (red, with `bi-arrow-clockwise` icon) shown only on failed/bounced rows — submits the existing `resend_outbox` POST handler with the same recipient, so admins don't have to open the Edit & Resend modal for a simple retry. Edit & Resend remains available for typo fixes.
+  - **Hover-gap bug fixed** on the public site nav. The `Microsoft Products` and `Antivirus` mega-menus were closing mid-traversal because the cursor briefly fell into the navbar's bottom padding (≈3 px gap) between the trigger and the dropdown. Added a transparent `::before` pseudo-element on each open mega-menu (`top: -16px; height: 16px`) that bridges the gap, plus `padding-bottom: 1rem` on the trigger to extend the hover hit-area. The menu now stays open through the entire diagonal traversal.
+  - **Notify When Available** restyled with a rich navy gradient (`#0b1d4f → #172554 → #1e3a8a`) matching the premium brand. White heading, indigo body text, blue-gradient bell badge with glow, blue-gradient Notify-Me button, light input on a translucent overlay. Success / error messages use `#86efac` / `#fca5a5` so they remain readable on dark navy.
+
 ## Test Credentials
 See `/app/memory/test_credentials.md`.
 

@@ -322,6 +322,26 @@ body::before {
   color: var(--text); cursor:pointer; text-decoration:none;
 }
 .adm-iconbtn:hover { background: var(--gray-soft); color: var(--text); }
+.adm-bell { position: relative; }
+.adm-bell .adm-bell-badge {
+  position: absolute;
+  top: -4px; right: -4px;
+  min-width: 18px; height: 18px; padding: 0 5px;
+  background: linear-gradient(135deg,#ef4444,#b91c1c);
+  color: #fff;
+  font-size: 10px; font-weight: 800;
+  line-height: 18px; text-align: center;
+  border-radius: 999px;
+  border: 2px solid var(--card-bg, #fff);
+  box-shadow: 0 2px 6px rgba(239,68,68,.45);
+  letter-spacing: .2px;
+}
+.adm-bell:has(.adm-bell-badge) .bi { color: #ef4444; animation: adm-bell-shake 1.6s ease-in-out infinite; transform-origin: top center; }
+@keyframes adm-bell-shake {
+  0%, 90%, 100% { transform: rotate(0); }
+  92%, 96% { transform: rotate(-12deg); }
+  94%, 98% { transform: rotate(12deg); }
+}
 
 .adm-dropdown { position:relative; }
 .adm-dropdown-menu {
@@ -613,6 +633,18 @@ hr { border-color: var(--border); opacity:.5; }
         <?php endforeach; ?>
       </div>
     </div>
+    <?php
+    // Compute failed email count for the notification bell (cheap query, cached per-request)
+    try {
+        $failedCount = (int)db()->query("SELECT COUNT(*) FROM email_outbox WHERE status IN ('failed','bounced')")->fetchColumn();
+    } catch (Throwable $e) { $failedCount = 0; }
+    ?>
+    <a class="adm-iconbtn adm-bell" href="admin.php?tab=emails&filter=failed" title="<?= $failedCount?($failedCount.' failed email(s) need attention'):'No failed emails' ?>" data-testid="adm-bell">
+      <i class="bi bi-bell<?= $failedCount?'-fill':'' ?>"></i>
+      <?php if ($failedCount > 0): ?>
+        <span class="adm-bell-badge" data-testid="adm-bell-badge"><?= $failedCount > 99 ? '99+' : $failedCount ?></span>
+      <?php endif; ?>
+    </a>
     <a class="adm-iconbtn" href="#" title="Toggle theme" data-testid="theme-toggle" onclick="toggleAdmTheme(event)">
       <i id="admThemeIcon" class="bi <?= $adminMode==='dark'?'bi-sun':'bi-moon-stars' ?>"></i>
     </a>

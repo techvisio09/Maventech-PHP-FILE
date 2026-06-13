@@ -2161,6 +2161,22 @@ elseif ($tab === 'emails'):
   <h5 class="fw-bold mb-1">Email Activity Center</h5>
   <p class="text-muted small mb-3">Every transactional email — with delivery, open and click tracking. Click <i class="bi bi-eye"></i> to view the exact email the customer received.</p>
 
+  <?php $emailFilter = $_GET['filter'] ?? 'all'; ?>
+  <?php if ((int)$c['f'] > 0 && $emailFilter !== 'failed'): ?>
+    <div class="alert alert-danger d-flex align-items-center gap-2 py-2 mb-3" data-testid="failed-banner">
+      <i class="bi bi-exclamation-triangle-fill"></i>
+      <div class="flex-grow-1 small"><strong><?= (int)$c['f'] ?> email<?= $c['f']==1?'':'s' ?> failed to send.</strong> Customers may not have received their license keys or other product communication.</div>
+      <a href="?tab=emails&filter=failed" class="btn btn-sm btn-danger" data-testid="filter-failed-only">Show failed only</a>
+    </div>
+  <?php endif; ?>
+
+  <ul class="nav nav-pills nav-pills-sm mb-3" data-testid="email-filter-pills">
+    <li class="nav-item"><a class="nav-link <?= $emailFilter==='all'?'active':'' ?> py-1 px-3" href="?tab=emails" data-testid="filter-all">All <span class="badge bg-light text-dark ms-1"><?= (int)$c['t'] ?></span></a></li>
+    <li class="nav-item"><a class="nav-link <?= $emailFilter==='failed'?'active':'' ?> py-1 px-3" href="?tab=emails&filter=failed" data-testid="filter-failed"><i class="bi bi-exclamation-triangle me-1"></i>Failed <span class="badge bg-danger text-white ms-1"><?= (int)$c['f'] ?></span></a></li>
+    <li class="nav-item"><a class="nav-link <?= $emailFilter==='sent'?'active':'' ?> py-1 px-3" href="?tab=emails&filter=sent" data-testid="filter-sent">Sent <span class="badge bg-light text-dark ms-1"><?= (int)$c['s'] ?></span></a></li>
+    <li class="nav-item"><a class="nav-link <?= $emailFilter==='queued'?'active':'' ?> py-1 px-3" href="?tab=emails&filter=queued" data-testid="filter-queued">Queued <span class="badge bg-light text-dark ms-1"><?= (int)$c['q'] ?></span></a></li>
+  </ul>
+
   <div class="row g-3 mb-3">
     <div class="col-6 col-md-3"><div class="card-e p-3"><small class="text-muted text-uppercase fw-semibold" style="font-size:10px;letter-spacing:1px;">Sent</small><div class="fs-4 fw-bold" style="color:#3b82f6;"><?= (int)$c['s'] ?></div></div></div>
     <div class="col-6 col-md-3"><div class="card-e p-3"><small class="text-muted text-uppercase fw-semibold" style="font-size:10px;letter-spacing:1px;">Opened</small><div class="fs-4 fw-bold text-success"><?= (int)$c['o'] ?></div></div></div>
@@ -2170,10 +2186,15 @@ elseif ($tab === 'emails'):
 
   <div data-testid="email-activity-list">
     <?php
+    $whereSql = '';
+    if      ($emailFilter === 'failed') $whereSql = "WHERE em.status IN ('failed','bounced')";
+    elseif  ($emailFilter === 'sent')   $whereSql = "WHERE em.status = 'sent'";
+    elseif  ($emailFilter === 'queued') $whereSql = "WHERE em.status IN ('queued','retrying')";
     $emQuery = $pdo->query("SELECT em.*, o.order_number, o.first_name, o.last_name, o.phone,
                               (SELECT GROUP_CONCAT(lk.license_key SEPARATOR '|')
                                  FROM license_keys lk WHERE lk.order_id=em.order_id) AS keys_list
                             FROM email_outbox em LEFT JOIN orders o ON o.id=em.order_id
+                            $whereSql
                             ORDER BY em.created_at DESC LIMIT 200");
     $rowCount = 0;
     foreach ($emQuery as $e):
@@ -2191,7 +2212,7 @@ elseif ($tab === 'emails'):
       $tplLabel = $tplLabels[$e['template_code']] ?? ($e['template_code'] ?: 'inline');
       $statusClass = $e['opened_at'] ? 'opened' : ($e['status'] === 'sent' ? 'sent' : ($e['status'] === 'failed' || $e['status']==='bounced' ? 'failed' : 'queued'));
     ?>
-      <div class="email-card" data-testid="email-card-<?= (int)$e['id'] ?>">
+      <div class="email-card <?= ($e['status']==='failed' || $e['status']==='bounced') ? 'is-failed' : '' ?>" data-testid="email-card-<?= (int)$e['id'] ?>">
         <div class="ec-head">
           <div class="ec-head-l">
             <div class="ec-status-dot ec-<?= $statusClass ?>" title="<?= esc(ucfirst($statusClass)) ?>"></div>
@@ -2221,6 +2242,15 @@ elseif ($tab === 'emails'):
         </div>
         <div class="ec-actions">
           <a href="email-view.php?id=<?= (int)$e['id'] ?>" target="_blank" class="btn btn-soft-blue btn-sm"><i class="bi bi-eye"></i> View Email</a>
+          <?php if ($e['status'] === 'failed' || $e['status'] === 'bounced'): ?>
+            <form method="post" class="d-inline" onsubmit="return confirm('Resend this email to '+<?= json_encode($e['recipient'], JSON_HEX_QUOT|JSON_HEX_APOS) ?>+'?');">
+              <input type="hidden" name="action" value="resend_outbox">
+              <input type="hidden" name="email_id" value="<?= (int)$e['id'] ?>">
+              <button type="submit" class="btn btn-danger btn-sm fw-semibold" data-testid="resend-failed-btn-<?= (int)$e['id'] ?>">
+                <i class="bi bi-arrow-clockwise me-1"></i> Resend Email
+              </button>
+            </form>
+          <?php endif; ?>
           <button type="button"
                   class="btn btn-soft-amber btn-sm"
                   data-testid="edit-resend-btn-<?= (int)$e['id'] ?>"
@@ -2239,6 +2269,11 @@ elseif ($tab === 'emails'):
   <style>
     .email-card { background: var(--card-bg,#fff); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 14px; overflow: hidden; transition: box-shadow .15s, border-color .15s; }
     .email-card:hover { box-shadow: 0 4px 16px rgba(15,23,42,.06); border-color: rgba(59,130,246,.3); }
+    .email-card.is-failed { border-color: #ef4444; box-shadow: 0 0 0 1px #ef4444, 0 4px 14px rgba(239,68,68,.12); background: linear-gradient(180deg, #fef2f2 0%, var(--card-bg,#fff) 60%); }
+    .email-card.is-failed:hover { box-shadow: 0 0 0 1px #b91c1c, 0 6px 18px rgba(239,68,68,.18); }
+    [data-bs-theme="dark"] .email-card.is-failed { background: linear-gradient(180deg, rgba(127,29,29,.35) 0%, var(--card-bg) 60%); border-color: #b91c1c; }
+    .email-card.is-failed .ec-head { background: rgba(254,226,226,.5); }
+    [data-bs-theme="dark"] .email-card.is-failed .ec-head { background: rgba(127,29,29,.2); }
     .ec-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; padding:14px 18px; background:var(--bg); border-bottom:1px solid var(--border); }
     .ec-head-l { display:flex; gap:12px; align-items:flex-start; flex:1; min-width:0; }
     .ec-head-r { display:flex; gap:8px; align-items:center; flex-shrink:0; }

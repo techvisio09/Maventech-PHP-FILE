@@ -142,6 +142,18 @@ h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6, .display-4, .display-5, .d
 .dropdown-menu .mega-promo { border-top: 1px solid var(--bs-border-color); }
 @media (min-width: 992px) {
   .navbar .dropdown:hover > .dropdown-menu { display: block; margin-top: 0; }
+  /* Hover-gap bridge: pseudo-strip above each open dropdown so the cursor
+     can travel from the nav trigger down into the menu without the
+     :hover state being lost in the navbar's bottom padding. */
+  .navbar .dropdown-menu.mega::before,
+  .navbar .dropdown-menu.antivirus-menu::before {
+    content: '';
+    position: absolute;
+    top: -16px; left: 0; right: 0; height: 16px;
+    background: transparent;
+  }
+  /* Give the nav-link a slightly larger hit area downward */
+  .navbar .nav-item.dropdown > .nav-link.dropdown-toggle { padding-bottom: 1rem; }
 }
 
 /* ---------- Cards (clean minimal layer) ---------- */

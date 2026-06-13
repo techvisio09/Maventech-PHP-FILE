@@ -139,15 +139,17 @@ include __DIR__ . '/includes/header.php';
       <?php if ($stockN <= 0): ?>
         <!-- Notify When Available -->
         <div class="card border-0 shadow-sm mb-4" id="notify-card" data-testid="notify-card"
-             style="background:linear-gradient(135deg,#fff7ed 0%,#fef3c7 100%); border-radius:14px;">
-          <div class="card-body p-3 p-md-4">
+             style="background:linear-gradient(135deg,#0b1d4f 0%,#172554 55%,#1e3a8a 100%); color:#e0e7ff; border-radius:16px; position:relative; overflow:hidden;">
+          <!-- Subtle radial accent -->
+          <div style="position:absolute;top:-40px;right:-40px;width:180px;height:180px;background:radial-gradient(circle,rgba(96,165,250,.25) 0%,transparent 70%);pointer-events:none;"></div>
+          <div class="card-body p-3 p-md-4 position-relative">
             <div class="d-flex align-items-start gap-3 mb-3">
-              <div style="background:#f59e0b;color:#fff;width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <div style="background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;width:44px;height:44px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 6px 18px rgba(59,130,246,.45);">
                 <i class="bi bi-bell-fill" style="font-size:20px;"></i>
               </div>
               <div>
-                <h5 class="fw-bold mb-1" style="color:#92400e;">Notify When Available</h5>
-                <p class="text-muted small mb-0">Drop your email — we'll alert you the instant <strong><?= esc($product['name']) ?></strong> is restocked. No spam, just one quick email.</p>
+                <h5 class="fw-bold mb-1" style="color:#ffffff;letter-spacing:.2px;">Notify When Available</h5>
+                <p class="mb-0" style="color:#cbd5e1;font-size:13px;line-height:1.55;">Drop your email — we'll alert you the instant <strong style="color:#ffffff;"><?= esc($product['name']) ?></strong> is restocked. No spam, just one quick email.</p>
               </div>
             </div>
             <form id="notify-form" class="d-flex gap-2 flex-wrap" data-testid="notify-form" novalidate>
@@ -155,12 +157,13 @@ include __DIR__ . '/includes/header.php';
               <input type="email" class="form-control rounded-pill px-3" name="email"
                      placeholder="your@email.com" required
                      data-testid="notify-email-input"
-                     style="flex:1; min-width:220px; border:1px solid #fed7aa; background:#fff;">
-              <button type="submit" class="btn btn-warning rounded-pill px-4 fw-bold" data-testid="notify-submit-btn" style="background:#f59e0b; border-color:#f59e0b; color:#fff;">
+                     style="flex:1; min-width:220px; border:1px solid rgba(148,163,184,.35); background:rgba(255,255,255,.95); color:#0f172a; font-weight:500;">
+              <button type="submit" class="btn rounded-pill px-4 fw-bold" data-testid="notify-submit-btn"
+                      style="background:linear-gradient(135deg,#3b82f6,#1d4ed8); border:0; color:#fff; box-shadow:0 6px 18px rgba(29,78,216,.45);">
                 <i class="bi bi-envelope-check me-1"></i> Notify Me
               </button>
             </form>
-            <div id="notify-msg" class="small mt-2" data-testid="notify-msg" style="display:none;"></div>
+            <div id="notify-msg" class="small mt-2" data-testid="notify-msg" style="display:none;color:#cbd5e1;"></div>
           </div>
         </div>
         <script>
@@ -176,7 +179,8 @@ include __DIR__ . '/includes/header.php';
             msg.style.display = 'none';
             if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
               msg.style.display = 'block';
-              msg.className = 'small mt-2 text-danger';
+              msg.className = 'small mt-2';
+              msg.style.color = '#fca5a5';
               msg.textContent = 'Please enter a valid email address.';
               return;
             }
@@ -195,16 +199,19 @@ include __DIR__ . '/includes/header.php';
               var data = await res.json();
               msg.style.display = 'block';
               if (data.ok) {
-                msg.className = 'small mt-2 text-success fw-semibold';
+                msg.className = 'small mt-2 fw-semibold';
+                msg.style.color = '#86efac';
                 msg.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i>' + (data.message || "You're on the list!");
                 form.reset();
               } else {
-                msg.className = 'small mt-2 text-danger';
+                msg.className = 'small mt-2';
+                msg.style.color = '#fca5a5';
                 msg.textContent = data.error || 'Something went wrong. Please try again.';
               }
             } catch (err) {
               msg.style.display = 'block';
-              msg.className = 'small mt-2 text-danger';
+              msg.className = 'small mt-2';
+              msg.style.color = '#fca5a5';
               msg.textContent = 'Network error. Please try again.';
             } finally {
               btn.disabled = false;
