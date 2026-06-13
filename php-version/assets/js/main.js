@@ -213,6 +213,11 @@ function selectPayMethod(method) {
   document.querySelectorAll('.pay-option').forEach((o) => o.classList.remove('active'));
   const opt = document.getElementById('pay-' + method);
   if (opt) opt.classList.add('active');
+  // Move the radio checkmark to match the selected tile
+  const radios = document.querySelectorAll('input[name="pm_radio"]');
+  radios.forEach((r) => { r.checked = false; });
+  const sel = document.querySelector('#pay-' + method + ' input[name="pm_radio"]');
+  if (sel) sel.checked = true;
   const cardForm = document.getElementById('card-form');
   const paypalInfo = document.getElementById('paypal-info');
   const cardBtn = document.getElementById('btn-pay-card');

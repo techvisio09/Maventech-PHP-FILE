@@ -2882,14 +2882,43 @@ elseif ($tab === 'smtp'):
 
           <!-- Provider presets -->
           <label class="form-label small fw-semibold mb-1">Quick preset</label>
-          <div class="d-flex flex-wrap gap-2 mb-3" data-testid="smtp-presets">
-            <button type="button" class="btn btn-soft-gray btn-sm" data-preset="cpanel">cPanel / Plesk</button>
-            <button type="button" class="btn btn-soft-gray btn-sm" data-preset="gmail">Gmail</button>
-            <button type="button" class="btn btn-soft-gray btn-sm" data-preset="o365">Office 365</button>
-            <button type="button" class="btn btn-soft-gray btn-sm" data-preset="sendgrid">SendGrid</button>
-            <button type="button" class="btn btn-soft-gray btn-sm" data-preset="ses">Amazon SES</button>
-            <button type="button" class="btn btn-soft-gray btn-sm" data-preset="custom">Custom</button>
+          <div class="d-flex flex-wrap gap-2 mb-3 smtp-presets-row" data-testid="smtp-presets">
+            <button type="button" class="btn smtp-preset-btn" data-preset="cpanel">cPanel / Plesk</button>
+            <button type="button" class="btn smtp-preset-btn" data-preset="gmail">Gmail</button>
+            <button type="button" class="btn smtp-preset-btn" data-preset="o365">Office 365</button>
+            <button type="button" class="btn smtp-preset-btn" data-preset="sendgrid">SendGrid</button>
+            <button type="button" class="btn smtp-preset-btn" data-preset="ses">Amazon SES</button>
+            <button type="button" class="btn smtp-preset-btn" data-preset="custom">Custom</button>
           </div>
+          <style>
+            .smtp-preset-btn {
+              font-size: 13px; font-weight: 600; padding: 6px 14px;
+              border-radius: 999px;
+              background: var(--gray-soft, #f1f5f9);
+              border: 1.5px solid transparent;
+              color: var(--text-muted, #64748b);
+              transition: all .18s ease;
+            }
+            .smtp-preset-btn:hover { background: #e2e8f0; color: #0f172a; }
+            [data-bs-theme="dark"] .smtp-preset-btn:hover { background:#334155; color:#e2e8f0; }
+            .smtp-preset-btn.is-active {
+              background: linear-gradient(135deg,#3b82f6,#1d4ed8);
+              color: #fff;
+              border-color: #1d4ed8;
+              box-shadow: 0 4px 14px rgba(29,78,216,.35);
+              transform: translateY(-1px);
+            }
+            .smtp-preset-btn.is-active:hover { color: #fff; }
+            /* Unified action-button font for the SMTP form */
+            .smtp-actions .btn {
+              font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+              font-size: 14px;
+              font-weight: 700;
+              letter-spacing: .15px;
+              padding: 9px 18px;
+              border-radius: 10px;
+            }
+          </style>
 
           <div class="row g-3">
             <div class="col-md-8">
@@ -2948,10 +2977,10 @@ elseif ($tab === 'smtp'):
             <label class="form-check-label small" for="smtpVerify">Strict TLS peer verification <span class="text-muted">(uncheck only if your self-signed cert fails)</span></label>
           </div>
 
-          <div class="d-flex gap-2 flex-wrap mt-3">
-            <button class="btn btn-soft-blue btn-sm" data-testid="smtp-save-btn"><i class="bi bi-check2 me-1"></i> Save Configuration</button>
-            <button type="button" class="btn btn-soft-gray btn-sm" id="smtpTestBtn" data-testid="smtp-test-btn"><i class="bi bi-send-check me-1"></i> Send Test Email</button>
-            <button type="button" class="btn btn-soft-gray btn-sm" id="smtpProcessBtn" data-testid="smtp-process-btn"><i class="bi bi-play-circle me-1"></i> Process Queue Now</button>
+          <div class="d-flex gap-2 flex-wrap mt-3 smtp-actions">
+            <button class="btn btn-soft-blue" data-testid="smtp-save-btn"><i class="bi bi-check2 me-1"></i> Save Configuration</button>
+            <button type="button" class="btn btn-soft-gray" id="smtpTestBtn" data-testid="smtp-test-btn"><i class="bi bi-send-check me-1"></i> Send Test Email</button>
+            <button type="button" class="btn btn-soft-gray" id="smtpProcessBtn" data-testid="smtp-process-btn"><i class="bi bi-play-circle me-1"></i> Process Queue Now</button>
           </div>
 
           <div id="smtpResult" class="mt-3 d-none small"></div>
@@ -3030,14 +3059,29 @@ elseif ($tab === 'smtp'):
     };
     document.querySelectorAll('[data-preset]').forEach(function(b){
       b.addEventListener('click', function(){
-        var p = presets[b.getAttribute('data-preset')];
+        var key = b.getAttribute('data-preset');
+        var p = presets[key];
         if (!p) return;
         document.getElementById('smtpHost').value = p.host;
         document.getElementById('smtpPort').value = p.port;
         document.getElementById('smtpEnc').value  = p.enc;
         if (p.user) document.getElementById('smtpUser').value = p.user;
+        // Highlight the active preset
+        document.querySelectorAll('[data-preset]').forEach(function(x){ x.classList.remove('is-active'); });
+        b.classList.add('is-active');
       });
     });
+
+    // Auto-detect & highlight the currently-saved preset on page load
+    (function detectPreset(){
+      var host = (document.getElementById('smtpHost').value || '').toLowerCase();
+      var matched = 'custom';
+      for (var k in presets) {
+        if (presets[k].host && presets[k].host !== '' && host === presets[k].host.toLowerCase()) { matched = k; break; }
+      }
+      var btn = document.querySelector('[data-preset="' + matched + '"]');
+      if (btn) btn.classList.add('is-active');
+    })();
 
     var result = document.getElementById('smtpResult');
     function showResult(ok, msg){
