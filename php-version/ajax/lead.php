@@ -18,4 +18,8 @@ if ($name === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($phone)
 
 $stmt = db()->prepare('INSERT INTO chat_leads (session_id, name, email, phone, callback_requested, message) VALUES (?, ?, ?, ?, ?, ?)');
 $stmt->execute([$sessionId, $name, $email, $phone, $callback ? 1 : 0, $callback ? 'Callback requested via chat form' : 'Chat form contact']);
-echo json_encode(['ok' => true]);
+$leadId = (int)db()->lastInsertId();
+$token  = bin2hex(random_bytes(16));
+db()->prepare('UPDATE chat_leads SET chat_token=?, last_seen=NOW() WHERE id=?')->execute([$token, $leadId]);
+$_SESSION['lead_id'] = $leadId;
+echo json_encode(['ok' => true, 'lead_id' => $leadId, 'chat_token' => $token]);

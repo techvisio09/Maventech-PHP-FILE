@@ -1872,7 +1872,12 @@ elseif ($tab === 'leads'):
   $statusFilter = $_GET['status'] ?? '';
   $w=''; $args=[];
   if ($statusFilter) { $w = ' WHERE status=?'; $args[]=$statusFilter; }
-  $st = $pdo->prepare("SELECT * FROM chat_leads $w ORDER BY created_at DESC LIMIT 200");
+  // Join unread customer-message counts and last message timestamp so we can render
+  // a "Chat" button with a live unread badge + online status pill per lead.
+  $st = $pdo->prepare("SELECT cl.*,
+            (SELECT COUNT(*) FROM chat_messages cm WHERE cm.lead_id=cl.id AND cm.sender='customer' AND cm.read_at IS NULL) AS unread_count,
+            (SELECT COUNT(*) FROM chat_messages cm WHERE cm.lead_id=cl.id) AS msg_count
+          FROM chat_leads cl $w ORDER BY cl.created_at DESC LIMIT 200");
   $st->execute($args);
   $leads = $st->fetchAll();
   $admins = $pdo->query("SELECT id, email FROM users WHERE role='admin'")->fetchAll();
@@ -1890,22 +1895,45 @@ elseif ($tab === 'leads'):
     <div class="col-lg-<?= $open?'7':'12' ?>">
       <div class="tbl-e">
         <table class="table mb-0" data-testid="leads-table">
-          <thead><tr><th>Name</th><th>Contact</th><th>Product</th><th>Status</th><th>Assigned</th><th>Date</th></tr></thead>
+          <thead><tr><th>Name</th><th>Contact</th><th>Product</th><th>Status</th><th>Assigned</th><th>Date</th><th class="text-end">Chat</th></tr></thead>
           <tbody>
-            <?php if (empty($leads)): ?><tr><td colspan="6" class="text-center text-muted py-4">No leads found.</td></tr><?php endif; ?>
+            <?php if (empty($leads)): ?><tr><td colspan="7" class="text-center text-muted py-4">No leads found.</td></tr><?php endif; ?>
             <?php foreach ($leads as $l):
               $assignEmail = '';
               if ($l['assigned_to']) {
                 foreach ($admins as $a) if ($a['id']==$l['assigned_to']) $assignEmail = $a['email'];
               }
+              $isOnline = $l['last_seen'] && (time() - strtotime($l['last_seen'])) <= 120;
+              $unread = (int)($l['unread_count'] ?? 0);
+              $msgCount = (int)($l['msg_count'] ?? 0);
             ?>
               <tr style="cursor:pointer;<?= $open==$l['id']?'background:var(--blue-soft);':'' ?>" onclick="location.href='?tab=leads&open=<?= $l['id'] ?>'">
-                <td class="fw-semibold"><?= esc($l['name'] ?: 'Anonymous') ?><?php if ($l['callback_requested']): ?> <i class="bi bi-telephone-fill text-warning ms-1" title="Callback requested"></i><?php endif; ?></td>
+                <td class="fw-semibold">
+                  <?= esc($l['name'] ?: 'Anonymous') ?>
+                  <?php if ($l['callback_requested']): ?> <i class="bi bi-telephone-fill text-warning ms-1" title="Callback requested"></i><?php endif; ?>
+                  <?php if ($isOnline): ?><span class="online-dot" title="Online now"></span><?php endif; ?>
+                </td>
                 <td><small><?= esc($l['email'] ?: '—') ?><br><?= esc($l['phone'] ?: '') ?></small></td>
                 <td><small><?= esc($l['requested_product'] ?: '—') ?></small></td>
                 <td><span class="s-badge <?= esc($l['status']) ?>"><?= esc($l['status']) ?></span></td>
                 <td><small><?= esc($assignEmail ?: '—') ?></small></td>
                 <td><small class="text-muted"><?= esc(date('M j, Y', strtotime($l['created_at']))) ?></small></td>
+                <td class="text-end" onclick="event.stopPropagation();">
+                  <button type="button"
+                          class="btn btn-sm <?= $unread>0 ? 'btn-primary' : ($isOnline ? 'btn-soft-blue' : 'btn-soft-gray') ?> position-relative chat-open-btn"
+                          data-lead-id="<?= (int)$l['id'] ?>"
+                          data-lead-name="<?= esc($l['name'] ?: 'Anonymous') ?>"
+                          data-lead-email="<?= esc($l['email'] ?: '') ?>"
+                          data-lead-phone="<?= esc($l['phone'] ?: '') ?>"
+                          data-testid="chat-open-<?= (int)$l['id'] ?>"
+                          title="<?= $isOnline ? 'Customer is online' : 'Customer is offline' ?>">
+                    <i class="bi bi-chat-dots-fill"></i>
+                    <span class="ms-1 d-none d-md-inline">Chat<?php if ($msgCount>0): ?> <small>(<?= $msgCount ?>)</small><?php endif; ?></span>
+                    <?php if ($unread>0): ?>
+                      <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size:10px;"><?= $unread ?></span>
+                    <?php endif; ?>
+                  </button>
+                </td>
               </tr>
             <?php endforeach; ?>
           </tbody>
@@ -1972,6 +2000,253 @@ elseif ($tab === 'leads'):
     </div>
     <?php endif; ?>
   </div>
+
+  <!-- ====================== LIVE CHAT SLIDE-OVER DRAWER ====================== -->
+  <div id="adm-chat-overlay" class="adm-chat-overlay" data-testid="chat-overlay" onclick="if(event.target===this)admChatClose()" style="display:none;">
+    <aside class="adm-chat-panel" data-testid="chat-panel">
+      <header class="adm-chat-head">
+        <div class="d-flex align-items-center gap-2 min-w-0">
+          <div class="adm-chat-avatar"><i class="bi bi-person-fill"></i></div>
+          <div class="min-w-0">
+            <div class="fw-bold text-truncate" id="adm-chat-name" style="font-size:15px;">Customer</div>
+            <div class="d-flex align-items-center gap-2 small" id="adm-chat-meta">
+              <span id="adm-chat-status" class="adm-chat-status-pill offline">
+                <span class="dot"></span> <span class="lbl">Checking…</span>
+              </span>
+              <span class="text-muted text-truncate" id="adm-chat-contact"></span>
+            </div>
+          </div>
+        </div>
+        <button type="button" class="btn-close" aria-label="Close" onclick="admChatClose()" data-testid="chat-close"></button>
+      </header>
+
+      <div id="adm-chat-banner" class="adm-chat-banner" style="display:none;">
+        <i class="bi bi-info-circle me-1"></i>
+        <span class="lbl">Customer offline — your message will be visible when they reopen chat.</span>
+      </div>
+
+      <div id="adm-chat-body" class="adm-chat-body" data-testid="chat-body">
+        <div class="adm-chat-empty">
+          <i class="bi bi-chat-square-dots" style="font-size:40px;opacity:.4;"></i>
+          <div class="mt-2 small text-muted">No messages yet. Say hello 👋</div>
+        </div>
+      </div>
+
+      <form id="adm-chat-form" class="adm-chat-foot" onsubmit="return admChatSend(event)">
+        <textarea id="adm-chat-input" class="form-control" rows="2" maxlength="2000"
+                  placeholder="Type a reply… (Enter to send, Shift+Enter for new line)"
+                  data-testid="chat-input" required></textarea>
+        <button type="submit" class="btn btn-primary" data-testid="chat-send" title="Send (Enter)">
+          <i class="bi bi-send-fill"></i>
+        </button>
+      </form>
+    </aside>
+  </div>
+
+  <style>
+    .online-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#10b981; box-shadow:0 0 0 3px rgba(16,185,129,.18); margin-left:6px; vertical-align:middle; animation:adm-pulse 1.8s ease-in-out infinite; }
+    @keyframes adm-pulse { 0%,100%{box-shadow:0 0 0 3px rgba(16,185,129,.18);} 50%{box-shadow:0 0 0 6px rgba(16,185,129,.05);} }
+    .adm-chat-overlay { position:fixed; inset:0; background:rgba(15,23,42,.45); z-index:3000; display:flex; justify-content:flex-end; animation:adm-fade .18s ease-out; }
+    @keyframes adm-fade { from{opacity:0;} to{opacity:1;} }
+    .adm-chat-panel { width:min(440px, 100vw); height:100vh; background:#fff; display:flex; flex-direction:column; box-shadow:-12px 0 32px rgba(15,23,42,.18); animation:adm-slide .25s cubic-bezier(.16,1,.3,1); }
+    @keyframes adm-slide { from{transform:translateX(100%);} to{transform:translateX(0);} }
+    [data-bs-theme="dark"] .adm-chat-panel { background:#0f1729; color:#e2e8f0; }
+    .adm-chat-head { padding:14px 16px; border-bottom:1px solid var(--border, #e5e7eb); display:flex; align-items:center; justify-content:space-between; gap:8px; background:linear-gradient(135deg,#1e3a8a,#1e40af); color:#fff; }
+    .adm-chat-head .btn-close { filter:invert(1) brightness(2); opacity:.9; }
+    .adm-chat-avatar { width:36px; height:36px; border-radius:50%; background:rgba(255,255,255,.15); display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; }
+    .adm-chat-status-pill { display:inline-flex; align-items:center; gap:5px; background:rgba(255,255,255,.18); padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; }
+    .adm-chat-status-pill .dot { width:6px; height:6px; border-radius:50%; background:#9ca3af; }
+    .adm-chat-status-pill.online .dot { background:#10b981; box-shadow:0 0 0 3px rgba(16,185,129,.3); }
+    .adm-chat-status-pill.offline { opacity:.85; }
+    #adm-chat-contact { font-size:11px; opacity:.85; max-width:200px; }
+    .adm-chat-banner { padding:10px 14px; background:#fef3c7; color:#92400e; font-size:12.5px; border-bottom:1px solid #fde68a; }
+    [data-bs-theme="dark"] .adm-chat-banner { background:#3a2c0a; color:#fde68a; border-bottom-color:#5a4214; }
+    .adm-chat-body { flex:1 1 auto; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:8px; background:#f8fafc; }
+    [data-bs-theme="dark"] .adm-chat-body { background:#0a1020; }
+    .adm-chat-empty { margin:auto; text-align:center; }
+    .adm-msg { max-width:78%; padding:9px 13px; border-radius:14px; font-size:13.5px; line-height:1.45; word-wrap:break-word; white-space:pre-wrap; box-shadow:0 1px 2px rgba(15,23,42,.06); animation:adm-msg-in .2s ease-out; }
+    @keyframes adm-msg-in { from{opacity:0;transform:translateY(4px);} to{opacity:1;transform:translateY(0);} }
+    .adm-msg .ts { display:block; font-size:10.5px; opacity:.6; margin-top:3px; }
+    .adm-msg.customer { align-self:flex-start; background:#fff; color:#1e293b; border:1px solid #e5e7eb; border-bottom-left-radius:4px; }
+    [data-bs-theme="dark"] .adm-msg.customer { background:#1a2335; color:#e2e8f0; border-color:#2a3550; }
+    .adm-msg.admin { align-self:flex-end; background:linear-gradient(135deg,#1e3a8a,#2563eb); color:#fff; border-bottom-right-radius:4px; }
+    .adm-msg.admin .ts { color:rgba(255,255,255,.75); }
+    .adm-chat-day { align-self:center; font-size:11px; color:#94a3b8; margin:6px 0; background:rgba(148,163,184,.15); padding:2px 10px; border-radius:999px; }
+    .adm-chat-foot { padding:10px 12px; border-top:1px solid var(--border,#e5e7eb); display:flex; gap:8px; background:#fff; }
+    [data-bs-theme="dark"] .adm-chat-foot { background:#0f1729; border-top-color:#1f2a44; }
+    .adm-chat-foot textarea { resize:none; font-size:13.5px; }
+    .adm-chat-foot button { align-self:stretch; padding:0 16px; }
+    @media (max-width:576px) { .adm-chat-panel { width:100vw; } }
+  </style>
+
+  <script>
+  (function(){
+    const overlay = document.getElementById('adm-chat-overlay');
+    // Move overlay to <body> so it escapes the admin-content stacking context
+    // (admin-content has z-index:1 which traps fixed children below admin-top z-index:1030)
+    if (overlay && overlay.parentNode !== document.body) document.body.appendChild(overlay);
+    const $body   = document.getElementById('adm-chat-body');
+    const $input  = document.getElementById('adm-chat-input');
+    const $name   = document.getElementById('adm-chat-name');
+    const $status = document.getElementById('adm-chat-status');
+    const $contact= document.getElementById('adm-chat-contact');
+    const $banner = document.getElementById('adm-chat-banner');
+    let currentLeadId = 0, pollTimer = null, lastIds = new Set();
+
+    function fmtTime(s){
+      try { const d = new Date((s||'').replace(' ','T')+'Z'); if (isNaN(d)) return ''; const t = d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); const today = new Date(); const isToday = d.toDateString() === today.toDateString(); return isToday ? t : (d.toLocaleDateString([], {month:'short', day:'numeric'}) + ' ' + t); } catch(e){ return ''; }
+    }
+    function esc(s){ const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+
+    function renderMessages(messages){
+      if (!messages || !messages.length) {
+        $body.innerHTML = '<div class="adm-chat-empty"><i class="bi bi-chat-square-dots" style="font-size:40px;opacity:.4;"></i><div class="mt-2 small text-muted">No messages yet. Say hello 👋</div></div>';
+        lastIds = new Set();
+        return;
+      }
+      let html = '';
+      let lastDay = '';
+      messages.forEach(m => {
+        const dt = new Date((m.sent_at||'').replace(' ','T')+'Z');
+        const dayKey = isNaN(dt) ? '' : dt.toDateString();
+        if (dayKey && dayKey !== lastDay) {
+          const today = new Date().toDateString();
+          const yest  = new Date(Date.now()-86400000).toDateString();
+          const lbl = dayKey===today ? 'Today' : (dayKey===yest ? 'Yesterday' : dt.toLocaleDateString([], {weekday:'short', month:'short', day:'numeric'}));
+          html += '<div class="adm-chat-day">'+esc(lbl)+'</div>';
+          lastDay = dayKey;
+        }
+        html += '<div class="adm-msg '+(m.sender==='admin'?'admin':'customer')+'">'+esc(m.message)+'<span class="ts">'+fmtTime(m.sent_at)+'</span></div>';
+      });
+      const wasAtBottom = ($body.scrollHeight - $body.scrollTop - $body.clientHeight) < 80;
+      $body.innerHTML = html;
+      const newIds = new Set(messages.map(m => m.id));
+      if (wasAtBottom || newIds.size !== lastIds.size) {
+        $body.scrollTop = $body.scrollHeight;
+      }
+      lastIds = newIds;
+    }
+
+    function updateStatus(online, lastSeen){
+      if (online) {
+        $status.className = 'adm-chat-status-pill online';
+        $status.querySelector('.lbl').textContent = 'Online';
+        $banner.style.display = 'none';
+      } else {
+        $status.className = 'adm-chat-status-pill offline';
+        let lbl = 'Offline';
+        if (lastSeen) {
+          try { const d = new Date((lastSeen||'').replace(' ','T')+'Z'); if (!isNaN(d)) { const mins = Math.floor((Date.now()-d.getTime())/60000); if (mins < 60) lbl = 'Last seen '+mins+'m ago'; else if (mins < 1440) lbl = 'Last seen '+Math.floor(mins/60)+'h ago'; else lbl = 'Last seen '+d.toLocaleDateString([], {month:'short', day:'numeric'}); } } catch(e){}
+        } else { lbl = 'Never seen'; }
+        $status.querySelector('.lbl').textContent = lbl;
+        $banner.style.display = 'block';
+      }
+    }
+
+    async function poll(){
+      if (!currentLeadId) return;
+      try {
+        const r = await fetch('/ajax/chat-admin.php', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({action:'thread', lead_id: currentLeadId})
+        });
+        const j = await r.json();
+        if (!j.ok) return;
+        renderMessages(j.messages || []);
+        if (j.lead) updateStatus(!!j.lead.online, j.lead.last_seen);
+      } catch(e){ /* network hiccup, retry next tick */ }
+    }
+
+    window.admChatOpen = function(leadId, name, email, phone){
+      currentLeadId = parseInt(leadId, 10) || 0;
+      if (!currentLeadId) return;
+      $name.textContent = name || 'Customer';
+      $contact.textContent = [email, phone].filter(Boolean).join(' · ');
+      $body.innerHTML = '<div class="adm-chat-empty"><div class="spinner-border spinner-border-sm text-muted"></div><div class="mt-2 small text-muted">Loading conversation…</div></div>';
+      $banner.style.display = 'none';
+      $status.className = 'adm-chat-status-pill offline';
+      $status.querySelector('.lbl').textContent = 'Checking…';
+      $input.value = ''; lastIds = new Set();
+      overlay.style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+      poll();
+      clearInterval(pollTimer);
+      pollTimer = setInterval(poll, 3000);
+      setTimeout(()=>$input.focus(), 250);
+      // Also clear unread badge on the button + refresh listing badge next time
+      const btn = document.querySelector('.chat-open-btn[data-lead-id="'+currentLeadId+'"]');
+      if (btn) { const badge = btn.querySelector('.badge.bg-danger'); if (badge) badge.remove(); }
+    };
+
+    window.admChatClose = function(){
+      overlay.style.display = 'none';
+      document.body.style.overflow = '';
+      clearInterval(pollTimer); pollTimer = null;
+      currentLeadId = 0;
+    };
+
+    window.admChatSend = async function(ev){
+      ev.preventDefault();
+      const msg = ($input.value || '').trim();
+      if (!msg || !currentLeadId) return false;
+      const btn = ev.target.querySelector('button[type=submit]');
+      btn.disabled = true; $input.disabled = true;
+      try {
+        const r = await fetch('/ajax/chat-admin.php', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({action:'send', lead_id: currentLeadId, message: msg})
+        });
+        const j = await r.json();
+        if (j && j.ok) { $input.value = ''; await poll(); }
+        else { alert((j && j.error) || 'Failed to send message.'); }
+      } catch(e){ alert('Network error — please try again.'); }
+      finally { btn.disabled = false; $input.disabled = false; $input.focus(); }
+      return false;
+    };
+
+    window.admChatCurrentLeadId = function(){ return currentLeadId; };
+
+    // Wire up buttons (direct binding — needs to bypass parent <td>'s stopPropagation)
+    function wireChatButtons(){
+      document.querySelectorAll('.chat-open-btn').forEach(function(btn){
+        if (btn.__chatWired) return; btn.__chatWired = true;
+        btn.addEventListener('click', function(e){
+          e.preventDefault(); e.stopPropagation();
+          window.admChatOpen(btn.dataset.leadId, btn.dataset.leadName, btn.dataset.leadEmail, btn.dataset.leadPhone);
+        });
+      });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireChatButtons);
+    else wireChatButtons();
+
+    // Auto-open chat if URL has ?autochat=<lead_id> (used by toast click-through)
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const auto = parseInt(params.get('autochat') || '0', 10);
+      if (auto > 0) {
+        const btn = document.querySelector('.chat-open-btn[data-lead-id="'+auto+'"]');
+        if (btn) {
+          setTimeout(() => window.admChatOpen(auto, btn.dataset.leadName, btn.dataset.leadEmail, btn.dataset.leadPhone), 250);
+        } else {
+          setTimeout(() => window.admChatOpen(auto, 'Customer', '', ''), 250);
+        }
+      }
+    } catch(e){}
+
+    // Enter to send, Shift+Enter for newline
+    $input.addEventListener('keydown', function(e){
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        document.getElementById('adm-chat-form').requestSubmit();
+      }
+    });
+
+    // ESC closes
+    document.addEventListener('keydown', function(e){
+      if (e.key === 'Escape' && overlay.style.display === 'flex') window.admChatClose();
+    });
+  })();
+  </script>
 
 <?php
 // ============================================================================

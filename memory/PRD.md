@@ -218,11 +218,21 @@ Create a comprehensive and user-friendly Admin Panel for Maventech Software with
   - In `smtp_process_queue()`, after each failure: if the new error's shape matches the previous `last_error`'s shape AND `retry_count >= 3`, the row is immediately bounced regardless of `max_retries`. The `last_error` is annotated **"Auto-bounced — same error repeated N times. <original>"** so admins can tell at a glance why it bounced.
   - Verified: row with `retry_count=2 + max_retries=5 + last_error matching what SMTP returns next` → 3rd failure flips to `bounced` (not max-retried — the early-bounce branch fired). Helper test cases pass: SMTP 550 with different timestamps, connection-timed-out with different ms, identical recipient-rejected, TLS handshake with different request IDs all match; unrelated errors (550 spam vs network unreachable) correctly stay different.
 
+- **[Feb 2026]** Admin-side Live Chat in Lead Management — two-way real-time conversation between admin and website visitors:
+  - **Per-lead Chat column** added to the leads table. Each row gets a `Chat` button (blue when there's any conversation, primary-fill when there are unread customer messages) with two badges: (a) an inline `(N)` total-message count for context, (b) a red pill showing unread customer messages. Online customers (last_seen within 2 min) also get a small pulsing green dot next to their name.
+  - **Slide-over drawer** opens from the right edge (`width:440px, height:100vh`, z-index `3000` — moved to `<body>` at runtime so it escapes the `.adm-content` stacking context that traps fixed children below the sticky topbar at z=1030). Header shows the customer's name, an Online/Offline status pill (green pulsing dot when online, otherwise "Last seen Xm ago"), and contact info. WhatsApp-style message bubbles (admin = right-aligned navy gradient, customer = left-aligned white) with "Today/Yesterday" date dividers, message timestamps, smooth `adm-msg-in` fade-in animation, and `Enter` to send / `Shift+Enter` for newline.
+  - **Offline banner** — when `(NOW() − last_seen) > 120s` (or `last_seen IS NULL`), an amber banner appears above the conversation: *"Customer offline — your message will be visible when they reopen chat."*
+  - **Polling** — drawer polls `/ajax/chat-admin.php?action=thread` every 3s while open (auto-stops on close); messages auto-scroll to bottom only if admin was already near the bottom (so reading older history isn't disrupted). Auto-marks customer messages as read on open via SQL update inside the thread endpoint.
+  - **Global poller + toast** — `includes/admin-shell.php` runs `/ajax/chat-admin.php?action=unread` every 8s on every admin page. Updates a red unread badge on the "Lead Management" sidebar item (with the same `adm-bell-shake` attention animation as the email failures bell) and pops a `<div class="adm-chat-toast">` in the top-right with the customer's name + first line of the message (auto-dismisses in 8s, click navigates to `?tab=leads&autochat=<lead_id>` which auto-opens the drawer on landing). A subtle WebAudio ping (~880Hz → 1320Hz, 250ms) plays on each new message without needing a static audio asset. Toast is suppressed if the admin already has that lead's chat drawer open.
+  - **DB schema** — `chat_messages (id, lead_id, sender enum('customer','admin'), message TEXT, sent_at TIMESTAMP, read_at DATETIME)` + `chat_leads.last_seen` + `chat_leads.chat_token`. Endpoints: `ajax/chat-admin.php` (actions: `thread`, `send`, `unread`) and `ajax/chat-customer.php` (actions: `send`, `poll`).
+  - **Verified end-to-end** via screenshot tool: customer message inserted → admin sidebar badge appears (`1`), row online-dot lights up, row Chat button shows red `1` badge. Admin opens drawer → "Online" green pill, customer bubble renders with timestamp, banner hidden. Admin types reply → admin bubble appears with smooth animation. After open, `read_at` is set on all customer messages and the badge clears on next poll.
+
 ## Test Credentials
 See `/app/memory/test_credentials.md`.
 
 ## Roadmap / Backlog (P2)
-- Split `admin.php` (>1500 lines) into per-tab partials under `includes/tabs/`
+- Split `admin.php` (>3700 lines) into per-tab partials under `includes/tabs/`
 - Add bulk-paste key validation (deduplicate vs. existing)
 - Add CSV export for sold keys per product
 - Email template A/B test variants
+- Live Chat: typing indicator + push notifications via WebSockets (currently polling)

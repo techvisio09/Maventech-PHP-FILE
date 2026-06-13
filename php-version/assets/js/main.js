@@ -257,11 +257,17 @@ async function submitLead(callback) {
   let sid = localStorage.getItem('uc_chat_session');
   if (!sid) { sid = 's' + Date.now() + Math.random().toString(36).slice(2, 8); localStorage.setItem('uc_chat_session', sid); }
   try {
-    await fetch('ajax/lead.php', {
+    const r = await fetch('ajax/lead.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_id: sid, callback_requested: !!callback, ...v }),
     });
+    const j = await r.json().catch(() => ({}));
+    if (j && j.chat_token) {
+      localStorage.setItem('uc_chat_token', j.chat_token);
+      localStorage.setItem('uc_lead_id', String(j.lead_id || ''));
+      startAdminPolling();
+    }
   } catch (e) { /* best-effort */ }
   localStorage.setItem('uc_lead_done', '1');
   document.getElementById('chat-lead-form').style.display = 'none';
@@ -294,6 +300,50 @@ function chatAppend(role, text) {
   return div;
 }
 
+// ===== Live admin chat polling (after lead is captured) =====
+let _adminPollTimer = null;
+let _adminLastMsgId = 0;
+async function startAdminPolling() {
+  if (_adminPollTimer) return;
+  const token = localStorage.getItem('uc_chat_token');
+  if (!token) return;
+  _adminPollTimer = setInterval(adminPollOnce, 5000);
+  adminPollOnce();
+}
+async function adminPollOnce() {
+  const token = localStorage.getItem('uc_chat_token');
+  if (!token) return;
+  try {
+    const r = await fetch('ajax/chat-customer.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'poll', token: token, since: _adminLastMsgId }),
+    });
+    const j = await r.json();
+    if (j && j.ok && Array.isArray(j.messages)) {
+      for (const m of j.messages) {
+        chatAppend('bot', m.message);
+        if (m.id > _adminLastMsgId) _adminLastMsgId = m.id;
+      }
+    }
+  } catch (e) { /* keep retrying silently */ }
+}
+async function relayCustomerMessageToAdmin(text) {
+  const token = localStorage.getItem('uc_chat_token');
+  if (!token) return;
+  try {
+    await fetch('ajax/chat-customer.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'send', token: token, message: text }),
+    });
+  } catch (e) {}
+}
+// Resume polling on page load if a token is already saved
+if (typeof window !== 'undefined' && localStorage.getItem('uc_chat_token')) {
+  document.addEventListener('DOMContentLoaded', () => startAdminPolling());
+}
+
 function quickAsk(text) {
   const chips = document.getElementById('chat-chips');
   if (chips) chips.remove();
@@ -309,6 +359,8 @@ async function sendChat(ev) {
   if (!msg) return;
   input.value = '';
   chatAppend('user', msg);
+  // Also forward the customer's message to the admin chat thread (best-effort)
+  relayCustomerMessageToAdmin(msg);
   const typing = chatAppend('bot', '');
   typing.classList.add('typing');
   typing.innerHTML = '<span></span><span></span><span></span>';

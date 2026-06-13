@@ -377,6 +377,13 @@ body::before {
   letter-spacing: .2px;
 }
 .adm-bell:has(.adm-bell-badge) .bi { color: #ef4444; animation: adm-bell-shake 1.6s ease-in-out infinite; transform-origin: top center; }
+.adm-nav-badge { margin-left:auto; background:#ef4444; color:#fff; font-size:10px; font-weight:700; padding:2px 7px; border-radius:999px; line-height:1.4; min-width:18px; text-align:center; box-shadow:0 0 0 3px rgba(239,68,68,.18); animation: adm-bell-shake 1.6s ease-in-out infinite; transform-origin: center; }
+.adm-sidebar .item { position: relative; display: flex; align-items: center; }
+.adm-chat-toast { position:fixed; top:80px; right:22px; background:linear-gradient(135deg,#1e3a8a,#2563eb); color:#fff; padding:14px 18px; border-radius:12px; box-shadow:0 14px 30px rgba(15,23,42,.30); z-index:4000; max-width:340px; cursor:pointer; animation:adm-toast-in .25s cubic-bezier(.16,1,.3,1); }
+.adm-chat-toast .ttl { font-weight:700; font-size:13px; margin-bottom:3px; display:flex; align-items:center; gap:6px; }
+.adm-chat-toast .msg { font-size:12.5px; opacity:.95; line-height:1.4; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+.adm-chat-toast .close { position:absolute; top:6px; right:8px; color:rgba(255,255,255,.7); cursor:pointer; font-size:14px; line-height:1; }
+@keyframes adm-toast-in { from{opacity:0; transform:translateX(20px);} to{opacity:1; transform:translateX(0);} }
 @keyframes adm-bell-shake {
   0%, 90%, 100% { transform: rotate(0); }
   92%, 96% { transform: rotate(-12deg); }
@@ -677,6 +684,10 @@ hr { border-color: var(--border); opacity:.5; }
     try {
         $failedCount = (int)db()->query("SELECT COUNT(*) FROM email_outbox WHERE status IN ('failed','bounced')")->fetchColumn();
     } catch (Throwable $e) { $failedCount = 0; }
+    // Compute unread customer chat messages (drives the Lead Management sidebar badge + bell)
+    try {
+        $chatUnread = (int)db()->query("SELECT COUNT(*) FROM chat_messages WHERE sender='customer' AND read_at IS NULL")->fetchColumn();
+    } catch (Throwable $e) { $chatUnread = 0; }
     ?>
     <a class="adm-iconbtn adm-bell" href="admin.php?tab=emails&filter=failed" title="<?= $failedCount?($failedCount.' failed email(s) need attention'):'No failed emails' ?>" data-testid="adm-bell">
       <i class="bi bi-bell<?= $failedCount?'-fill':'' ?>"></i>
@@ -728,6 +739,11 @@ hr { border-color: var(--border); opacity:.5; }
     <?php foreach (['orders','sales','leads'] as $k): $i = $navItems[$k]; ?>
       <a class="item <?= $adminActive===$k?'active':'' ?>" href="<?= esc($i['href']) ?>" data-testid="adm-nav-<?= $k ?>">
         <i class="bi <?= esc($i['icon']) ?>"></i><?= esc($i['label']) ?>
+        <?php if ($k==='leads' && $chatUnread > 0): ?>
+          <span class="adm-nav-badge" id="navChatBadge" data-testid="adm-nav-leads-badge"><?= $chatUnread > 99 ? '99+' : $chatUnread ?></span>
+        <?php elseif ($k==='leads'): ?>
+          <span class="adm-nav-badge" id="navChatBadge" data-testid="adm-nav-leads-badge" style="display:none;">0</span>
+        <?php endif; ?>
       </a>
     <?php endforeach; ?>
     <div class="side-section">Communication</div>
@@ -753,4 +769,74 @@ document.addEventListener('click', function(e){
     if (!d.contains(e.target)) d.classList.remove('open');
   });
 });
+
+// ============================================================================
+// LIVE CHAT GLOBAL POLLER
+// Polls /ajax/chat-admin.php?action=unread every 8s.  Updates the sidebar
+// "Lead Management" badge and pops a toast when a new customer message arrives.
+// ============================================================================
+(function(){
+  if (window.__admChatPollerStarted) return; window.__admChatPollerStarted = true;
+  let prev = parseInt(document.getElementById('navChatBadge')?.textContent || '0', 10) || 0;
+  let prevLatestId = 0;
+
+  function updateBadge(n){
+    const b = document.getElementById('navChatBadge'); if (!b) return;
+    if (n > 0) { b.textContent = n > 99 ? '99+' : n; b.style.display = ''; }
+    else { b.style.display = 'none'; }
+  }
+
+  function showToast(latest){
+    if (!latest) return;
+    // Don't double-toast the same message
+    if (latest.lead_id && latest.message && prevLatestId === (latest.lead_id+'|'+latest.message)) return;
+    prevLatestId = latest.lead_id+'|'+latest.message;
+    // Suppress toast if the admin already has that lead's chat open
+    if (typeof window.admChatCurrentLeadId === 'function' && window.admChatCurrentLeadId() === parseInt(latest.lead_id,10)) return;
+    const old = document.querySelector('.adm-chat-toast'); if (old) old.remove();
+    const t = document.createElement('div');
+    t.className = 'adm-chat-toast';
+    t.setAttribute('data-testid', 'chat-toast');
+    const safe = (s) => String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    t.innerHTML = '<span class="close">&times;</span>'
+      + '<div class="ttl"><i class="bi bi-chat-dots-fill"></i> New message · '+safe(latest.name||'Customer')+'</div>'
+      + '<div class="msg">'+safe(latest.message)+'</div>';
+    t.addEventListener('click', function(e){
+      if (e.target.classList.contains('close')) { t.remove(); return; }
+      // Navigate to leads + auto-open chat
+      window.location.href = 'admin.php?tab=leads&autochat=' + encodeURIComponent(latest.lead_id);
+    });
+    document.body.appendChild(t);
+    setTimeout(()=> t.remove(), 8000);
+    // Subtle ping sound via WebAudio (no external asset)
+    try {
+      const ac = new (window.AudioContext||window.webkitAudioContext)();
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.connect(g); g.connect(ac.destination);
+      o.frequency.value = 880; g.gain.value = 0.04;
+      o.start(); o.frequency.exponentialRampToValueAtTime(1320, ac.currentTime + 0.12);
+      g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + 0.25);
+      setTimeout(()=> { o.stop(); ac.close(); }, 300);
+    } catch(e){}
+  }
+
+  async function tick(){
+    try {
+      const r = await fetch('/ajax/chat-admin.php', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({action:'unread'})
+      });
+      if (!r.ok) return;
+      const j = await r.json();
+      if (!j || !j.ok) return;
+      const n = parseInt(j.unread||0, 10);
+      updateBadge(n);
+      if (n > prev && j.latest) showToast(j.latest);
+      prev = n;
+    } catch(e){ /* offline; try later */ }
+  }
+  // Kick off after a small delay; then every 8s
+  setTimeout(tick, 1500);
+  setInterval(tick, 8000);
+})();
 </script>
