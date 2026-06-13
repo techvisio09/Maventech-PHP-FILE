@@ -213,6 +213,11 @@ Create a comprehensive and user-friendly Admin Panel for Maventech Software with
   - Verified end-to-end: fulfill on pending order → blocked + stock unchanged (2 → 2). Mark paid → fulfill → stock decremented (2 → 1). All audit-log entries match expectations.
   - Also fixed a related `last_error VARCHAR(255)` truncation in `includes/mailer.php` (long SMTP errors could throw a fatal exception inside the retry loop and break the queue) — error messages are now safely truncated to 250 chars before write.
 
+- **[Feb 2026]** Auto-bounce on stuck-retry pattern (admin no longer needs to babysit the queue):
+  - Added `_smtp_error_shape()` helper in `includes/mailer.php` that normalizes an SMTP error message (strips timestamps, IPv4, hex IDs, port numbers, `Nms`/`Nkb` units, punctuation) so two errors with variable parts but the same root cause are recognised as identical.
+  - In `smtp_process_queue()`, after each failure: if the new error's shape matches the previous `last_error`'s shape AND `retry_count >= 3`, the row is immediately bounced regardless of `max_retries`. The `last_error` is annotated **"Auto-bounced — same error repeated N times. <original>"** so admins can tell at a glance why it bounced.
+  - Verified: row with `retry_count=2 + max_retries=5 + last_error matching what SMTP returns next` → 3rd failure flips to `bounced` (not max-retried — the early-bounce branch fired). Helper test cases pass: SMTP 550 with different timestamps, connection-timed-out with different ms, identical recipient-rejected, TLS handshake with different request IDs all match; unrelated errors (550 spam vs network unreachable) correctly stay different.
+
 ## Test Credentials
 See `/app/memory/test_credentials.md`.
 

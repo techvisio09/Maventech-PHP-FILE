@@ -305,6 +305,26 @@ function smtp_queue_email(string $to, string $subject, string $html, array $opts
 /* ------------------------------------------------------------------------- */
 /* Worker — process N due rows from email_outbox                             */
 /* ------------------------------------------------------------------------- */
+
+/**
+ * Reduce an SMTP error message to a comparable "shape" so two errors with
+ * variable parts (timestamps, request IDs, port numbers, ms, IPs) are
+ * recognised as the same root cause. Used by smtp_process_queue() to detect
+ * a stuck-retry pattern and auto-bounce after the same error repeats.
+ */
+function _smtp_error_shape(string $msg): string {
+    $s = strtolower(trim($msg));
+    if ($s === '') return '';
+    // Strip variable / noisy parts
+    $s = preg_replace('/\b\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}:\d{2}\b/', '', $s); // timestamps
+    $s = preg_replace('/\b\d{1,3}(\.\d{1,3}){3}\b/', '', $s);                    // IPv4
+    $s = preg_replace('/\b[a-f0-9]{16,}\b/', '', $s);                            // hex IDs
+    $s = preg_replace('/\d+\s*(ms|s|kb|mb|gb|bytes?)\b/', '', $s);               // numeric durations / sizes
+    $s = preg_replace('/\b\d{3,}\b/', '', $s);                                   // big numbers (ports, IDs)
+    $s = preg_replace('/[\s,;:]+/', ' ', $s);                                    // collapse punctuation/whitespace
+    return trim(substr($s, 0, 120));
+}
+
 function smtp_process_queue(int $maxBatch = 5): int {
     mailer_bootstrap();
     $c = smtp_config();
@@ -343,11 +363,24 @@ function smtp_process_queue(int $maxBatch = 5): int {
             // last_error is VARCHAR(255) — truncate long SMTP error messages so
             // a verbose failure can never break the retry pipeline.
             $errMsg = mb_substr((string)$result['error'], 0, 250, 'UTF-8');
-            if ($newCount > $maxRetries) {
+
+            // Hard-bounce early when the SAME error has repeated 3+ times — no
+            // point grinding through 10× retries against a recipient the server
+            // keeps refusing. We compare error "shapes" (strip variable parts
+            // like timestamps, IDs, port numbers) so the same root cause is
+            // recognised even when the wording differs slightly.
+            $errShape  = _smtp_error_shape($errMsg);
+            $prevShape = _smtp_error_shape((string)($row['last_error'] ?? ''));
+            $sameErrorStreak = ($prevShape !== '' && $errShape === $prevShape && $newCount >= 3);
+
+            if ($newCount > $maxRetries || $sameErrorStreak) {
+                $reason = $sameErrorStreak
+                    ? "Auto-bounced — same error repeated {$newCount} times. " . $errMsg
+                    : $errMsg;
                 $pdo->prepare("UPDATE email_outbox
                     SET status='bounced', bounced_at=NOW(), retry_count=?, last_error=?, next_retry_at=NULL
                     WHERE id=?")
-                    ->execute([$newCount, $errMsg, $row['id']]);
+                    ->execute([$newCount, mb_substr($reason, 0, 250, 'UTF-8'), $row['id']]);
             } else {
                 $pdo->prepare("UPDATE email_outbox
                     SET status='retrying', retry_count=?, last_error=?, next_retry_at=DATE_ADD(NOW(), INTERVAL $delay MINUTE)
