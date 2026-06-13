@@ -39,8 +39,37 @@ include __DIR__ . '/includes/header.php';
     <?php if ($error): ?><div class="alert alert-danger py-2 small" data-testid="login-error"><?= esc($error) ?></div><?php endif; ?>
     <form method="post">
       <input type="hidden" name="next" value="<?= esc($next) ?>">
-      <div class="mb-3"><label class="form-label">Email Address</label><input name="email" type="email" required class="form-control" placeholder="your@email.com" data-testid="login-email"></div>
-      <div class="mb-4"><label class="form-label">Password</label><input name="password" type="password" required class="form-control" placeholder="••••••••" data-testid="login-password"></div>
+      <div class="mb-3">
+        <label class="form-label">Email Address</label>
+        <input name="email" type="email" required class="form-control login-plain" placeholder="your@email.com" data-testid="login-email" autocomplete="username">
+      </div>
+      <div class="mb-4">
+        <label class="form-label">Password</label>
+        <div class="position-relative">
+          <input name="password" type="password" id="login-pass" required class="form-control login-plain" placeholder="••••••••" data-testid="login-password" autocomplete="current-password" style="padding-right:42px;">
+          <button type="button" id="pass-eye" class="btn btn-link p-0 text-secondary"
+                  onclick="(function(){var i=document.getElementById('login-pass');var on=i.type==='password';i.type=on?'text':'password';document.getElementById('pass-eye-icon').className=on?'bi bi-eye-slash':'bi bi-eye';})()"
+                  data-testid="login-pass-toggle"
+                  style="position:absolute;top:50%;right:10px;transform:translateY(-50%);text-decoration:none;line-height:1;">
+            <i id="pass-eye-icon" class="bi bi-eye" style="font-size:18px;"></i>
+          </button>
+        </div>
+      </div>
+      <style>
+        /* Plain, neutral login inputs — no theme-tinted backgrounds */
+        .login-plain {
+          background: #ffffff !important;
+          border: 1px solid #d1d5db !important;
+          color: #0f172a !important;
+          border-radius: 8px !important;
+          box-shadow: none !important;
+        }
+        .login-plain:focus {
+          border-color: #2563eb !important;
+          box-shadow: 0 0 0 3px rgba(37,99,235,.18) !important;
+        }
+        #pass-eye:hover { color:#2563eb !important; }
+      </style>
       <button class="btn btn-primary w-100 rounded-pill" data-testid="login-submit">Sign In</button>
     </form>
     <p class="small text-secondary text-center mt-4 mb-0">New here? <a href="register.php" class="fw-semibold">Create an account</a></p>

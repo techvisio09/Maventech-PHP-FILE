@@ -609,10 +609,10 @@ hr { border-color: var(--border); opacity:.5; }
     </button>
   </div>
 
-  <div class="brand-center">
+  <div class="brand-center" data-testid="adm-brand">
     <span class="m-logo">M</span>
     <div>
-      <div><?= esc(defined('SITE_BRAND') ? SITE_BRAND : 'Maventech Software') ?></div>
+      <div class="adm-brand-label" style="font-size:11px;letter-spacing:2px;font-weight:700;color:var(--text-muted,#64748b);text-transform:uppercase;">Authorized Reseller</div>
       <small>ADMIN CONTROL PANEL</small>
     </div>
   </div>
