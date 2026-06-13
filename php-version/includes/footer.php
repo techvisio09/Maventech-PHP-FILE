@@ -151,7 +151,16 @@
 </footer>
 
 <!-- AI chat widget -->
-<button id="chat-bubble" onclick="toggleChat()" aria-label="Open chat" data-testid="chat-bubble"><i class="bi bi-chat-dots"></i></button>
+<button id="chat-bubble" onclick="toggleChat()" aria-label="Open chat" data-testid="chat-bubble">
+  <i class="bi bi-chat-dots"></i>
+  <!-- Tiny bell + unread count overlay; surfaces the moment an admin replies
+       while the panel is closed.  Disappears once the customer opens chat
+       or starts typing a reply. -->
+  <span id="chat-bell" class="chat-bell" style="display:none;" data-testid="chat-bell" aria-hidden="true">
+    <i class="bi bi-bell-fill"></i>
+    <span id="chat-bell-count" class="chat-bell-count" data-testid="chat-bell-count">1</span>
+  </span>
+</button>
 <div id="chat-panel" data-testid="chat-panel">
   <div id="chat-head" class="d-flex justify-content-between align-items-center">
     <div class="d-flex align-items-center gap-2">

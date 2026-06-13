@@ -234,10 +234,51 @@ function selectPayMethod(method) {
 function toggleChat() {
   const panel = document.getElementById('chat-panel');
   panel.classList.toggle('open');
-  if (panel.classList.contains('open') && !localStorage.getItem('uc_lead_done')) {
-    const form = document.getElementById('chat-lead-form');
-    if (form) form.style.display = 'block';
+  if (panel.classList.contains('open')) {
+    // Customer opened the chat → clear the unread bell.
+    clearChatBell();
+    if (!localStorage.getItem('uc_lead_done')) {
+      const form = document.getElementById('chat-lead-form');
+      if (form) form.style.display = 'block';
+    }
   }
+}
+
+/* ---------- Chat unread bell helpers (customer side) ---------- */
+let _chatBellCount = 0;
+function showChatBell(addCount) {
+  _chatBellCount = (typeof addCount === 'number' ? _chatBellCount + addCount : _chatBellCount + 1);
+  const bell = document.getElementById('chat-bell');
+  const cnt  = document.getElementById('chat-bell-count');
+  if (!bell || !cnt) return;
+  bell.style.display = 'inline-flex';
+  cnt.textContent = _chatBellCount > 9 ? '9+' : String(_chatBellCount);
+}
+function clearChatBell() {
+  _chatBellCount = 0;
+  const bell = document.getElementById('chat-bell');
+  if (bell) bell.style.display = 'none';
+}
+// Tiny WebAudio chime — same approach as the admin shell so we don't ship
+// an asset.  Plays a soft 2-note bell when an admin message arrives.
+function _chatChime() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const now = ctx.currentTime;
+    const tone = (freq, start, dur) => {
+      const o = ctx.createOscillator(); const g = ctx.createGain();
+      o.type = 'sine'; o.frequency.value = freq;
+      g.gain.setValueAtTime(0.0001, start);
+      g.gain.exponentialRampToValueAtTime(0.18, start + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+      o.connect(g); g.connect(ctx.destination);
+      o.start(start); o.stop(start + dur + 0.05);
+    };
+    tone(880, now, 0.18); tone(1320, now + 0.12, 0.22);
+    setTimeout(() => ctx.close && ctx.close(), 800);
+  } catch (_) {}
 }
 
 function leadValues() {
@@ -323,10 +364,33 @@ async function adminPollOnce() {
       body: JSON.stringify({ action: 'poll', token: token, since: _adminLastMsgId }),
     });
     const j = await r.json();
-    if (j && j.ok && Array.isArray(j.messages)) {
+    if (j && j.ok && Array.isArray(j.messages) && j.messages.length) {
+      const panel = document.getElementById('chat-panel');
+      const panelOpen = panel && panel.classList.contains('open');
       for (const m of j.messages) {
         chatAppend('bot', m.message);
         if (m.id > _adminLastMsgId) _adminLastMsgId = m.id;
+      }
+      // New admin reply arrived while the customer's chat panel is closed:
+      // (a) auto-open the panel so they can read + reply immediately,
+      // (b) light up the bell with the unread count + soft chime.
+      if (!panelOpen) {
+        showChatBell(j.messages.length);
+        _chatChime();
+        // Auto-open the panel itself — guarded by a tiny delay so the
+        // bell visibly "lands" first before the panel slides over it.
+        setTimeout(function(){
+          const p = document.getElementById('chat-panel');
+          if (p && !p.classList.contains('open')) {
+            p.classList.add('open');
+            clearChatBell();
+            // If the lead form is still pending, re-surface it now.
+            if (!localStorage.getItem('uc_lead_done')) {
+              const form = document.getElementById('chat-lead-form');
+              if (form) form.style.display = 'block';
+            }
+          }
+        }, 250);
       }
     }
     // Show "Live agent is typing…" indicator while the admin's beacon
@@ -361,15 +425,17 @@ function pingCustomerTyping(on){
 }
 // Hook the public chat input — fires on every keystroke, with "off"
 // pings on blur / message-send so the admin's indicator disappears
-// quickly when the customer stops typing.
+// quickly when the customer stops typing.  Also clears the unread bell
+// the moment the customer starts replying.
 document.addEventListener('DOMContentLoaded', () => {
   const i = document.getElementById('chat-input');
   if (!i) return;
   i.addEventListener('input', () => {
+    if (i.value.trim().length > 0) clearChatBell();
     pingCustomerTyping(i.value.trim().length > 0);
     maybeShowLeadNudge();
   });
-  i.addEventListener('focus', maybeShowLeadNudge);
+  i.addEventListener('focus', () => { clearChatBell(); maybeShowLeadNudge(); });
   i.addEventListener('blur',  () => pingCustomerTyping(false));
 });
 
