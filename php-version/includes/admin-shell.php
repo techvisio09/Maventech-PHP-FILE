@@ -373,16 +373,26 @@ body::before { content: none; }
   display:flex; align-items:center; gap:10px;
 }
 .adm-top .brand-center .m-logo {
-  width:34px; height:34px; border-radius:9px;
-  background:linear-gradient(135deg,#3b82f6,#1d4ed8);
-  display:inline-flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:18px;
+  width:34px; height:34px;
+  border-radius: var(--vibe-radius, 9px);
+  background: linear-gradient(135deg, var(--vibe-g0, #312e81), var(--vibe-g1, #1e40af) 55%, var(--vibe-g2, #06b6d4));
+  display:inline-flex;align-items:center;justify-content:center;color:#fff;
+  font-weight: var(--vibe-fontw, 800);
+  font-size:18px;
   /* Animation driven by `body[data-brand-motion]` so admins can swap
      Bounce / Spin / Pulse / Static from Company Info → Brand Motion. */
   transform-style: preserve-3d;
   box-shadow: 0 6px 18px rgba(29,78,216,.35);
   will-change: transform;
 }
-.adm-top .brand-center .m-logo-img { box-shadow: 0 6px 18px rgba(29,78,216,.35); }
+.adm-top .brand-center .m-logo-img { border-radius: var(--vibe-radius, 9px) !important; box-shadow: 0 6px 18px rgba(29,78,216,.35); }
+/* Vibe CSS variables — mirror style.css so the admin topbar logo + nav
+   buttons inherit the chosen vibe.  Keep these in sync with brand_vibes()
+   in includes/functions.php. */
+body[data-brand-vibe="premium"] { --vibe-g0:#0c0a09; --vibe-g1:#3f3f46; --vibe-g2:#facc15; --vibe-accent:#facc15; --vibe-radius:6px;  --vibe-fontw:800; }
+body[data-brand-vibe="classic"] { --vibe-g0:#312e81; --vibe-g1:#1e40af; --vibe-g2:#06b6d4; --vibe-accent:#06b6d4; --vibe-radius:14px; --vibe-fontw:700; }
+body[data-brand-vibe="playful"] { --vibe-g0:#f97316; --vibe-g1:#ec4899; --vibe-g2:#a855f7; --vibe-accent:#f97316; --vibe-radius:22px; --vibe-fontw:800; }
+body[data-brand-vibe="bold"]    { --vibe-g0:#7c3aed; --vibe-g1:#ec4899; --vibe-g2:#0ea5e9; --vibe-accent:#7c3aed; --vibe-radius:10px; --vibe-fontw:900; }
 body[data-brand-motion="bounce"] .adm-top .brand-center .m-logo,
 body[data-brand-motion="bounce"] .adm-top .brand-center .m-logo-img {
   animation: m-logo-spin-bounce 3s ease-in-out infinite;
@@ -991,7 +1001,7 @@ hr { border-color: var(--border); opacity:.5; }
 }
 </style>
 </head>
-<body data-brand-motion="<?= esc(setting_get('company_logo_motion', 'bounce')) ?>">
+<body data-brand-motion="<?= esc(setting_get('company_logo_motion', 'bounce')) ?>" data-brand-vibe="<?= esc(setting_get('company_brand_vibe', 'classic')) ?>">
 
 <!-- ============================================================
      Floating tech icons — real product-style icons drift across

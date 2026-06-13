@@ -194,9 +194,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         setting_set('company_email',   trim($_POST['company_email']   ?? ''));
         setting_set('company_phone',   trim($_POST['company_phone']   ?? ''));
         setting_set('company_address', trim($_POST['company_address'] ?? ''));
-        // Brand motion preset (drives logo animation on public navbar + admin topbar).
-        $motion = strtolower(trim($_POST['company_logo_motion'] ?? 'bounce'));
-        if (!in_array($motion, ['bounce','spin','pulse','static'], true)) $motion = 'bounce';
+        // Brand vibe — bundles motion + gradient + corners + font-weight.
+        // When the admin picks a vibe we ALSO write its bundled motion so
+        // the navbar bounce/spin/pulse/static reflects the chosen vibe.
+        $vibe = strtolower(trim($_POST['company_brand_vibe'] ?? 'classic'));
+        $vibes = brand_vibes();
+        if (!isset($vibes[$vibe])) $vibe = 'classic';
+        setting_set('company_brand_vibe', $vibe);
+        // Allow explicit motion override (user can still customise after picking a vibe).
+        $motion = strtolower(trim($_POST['company_logo_motion'] ?? $vibes[$vibe]['motion']));
+        if (!in_array($motion, ['bounce','spin','pulse','static'], true)) $motion = $vibes[$vibe]['motion'];
         setting_set('company_logo_motion', $motion);
         if (!empty($_POST['company_logo'])) setting_set('company_logo', trim($_POST['company_logo']));
         if (!empty($_POST['clear_logo']))    setting_set('company_logo', '');
@@ -1164,6 +1171,39 @@ elseif ($tab === 'company'):
           <textarea class="form-control" name="company_address" rows="2" placeholder="Street, City, State ZIP, Country" data-testid="ci-address-input"><?= esc($co['address']) ?></textarea>
         </div>
         <div class="col-12">
+          <label class="form-label small fw-semibold"><i class="bi bi-palette me-1"></i>Brand Vibe <span class="text-muted fw-normal">— one-click preset that bundles motion, logo gradient, font weight &amp; corner radius across the whole storefront</span></label>
+          <?php $curVibe = setting_get('company_brand_vibe', 'classic'); $allVibes = brand_vibes(); ?>
+          <input type="hidden" name="company_brand_vibe" id="ciVibeInput" value="<?= esc($curVibe) ?>" data-testid="ci-vibe-input">
+          <div class="vibe-picker" id="ciVibePicker" data-testid="ci-vibe-picker">
+            <?php foreach ($allVibes as $key => $v): ?>
+              <button type="button"
+                      class="vibe-card vibe-<?= $key ?> <?= $curVibe===$key?'active':'' ?>"
+                      data-vibe="<?= $key ?>"
+                      data-motion="<?= $v['motion'] ?>"
+                      data-testid="ci-vibe-<?= $key ?>"
+                      title="<?= esc($v['desc']) ?>"
+                      style="--vibe-g0: <?= $v['gradient'][0] ?>; --vibe-g1: <?= $v['gradient'][1] ?>; --vibe-g2: <?= $v['gradient'][2] ?>; --vibe-radius: <?= $v['radius'] ?>px; --vibe-fontw: <?= $v['fontw'] ?>; --vibe-accent: <?= $v['accent'] ?>;">
+                <span class="vibe-swatch">
+                  <span class="vibe-letter"><?= esc(strtoupper(substr(setting_get('company_name', 'M'), 0, 1) ?: 'M')) ?></span>
+                  <span class="vibe-dot"></span>
+                </span>
+                <span class="vibe-meta">
+                  <span class="vibe-title">
+                    <i class="bi <?= $v['icon'] ?>"></i>
+                    <strong><?= esc($v['label']) ?></strong>
+                  </span>
+                  <small class="vibe-desc"><?= esc($v['desc']) ?></small>
+                  <span class="vibe-chips">
+                    <span class="vibe-chip" title="Motion"><i class="bi bi-magic"></i> <?= esc($v['motion']) ?></span>
+                    <span class="vibe-chip" title="Corners"><i class="bi bi-bounding-box-circles"></i> <?= (int)$v['radius'] ?>px</span>
+                    <span class="vibe-chip" title="Weight"><i class="bi bi-type-bold"></i> <?= (int)$v['fontw'] ?></span>
+                  </span>
+                </span>
+              </button>
+            <?php endforeach; ?>
+          </div>
+        </div>
+        <div class="col-12">
           <label class="form-label small fw-semibold"><i class="bi bi-magic me-1"></i>Brand Motion <span class="text-muted fw-normal">— how the logo animates on the navbar &amp; admin topbar</span></label>
           <?php $curMotion = setting_get('company_logo_motion', 'bounce'); ?>
           <input type="hidden" name="company_logo_motion" id="ciMotionInput" value="<?= esc($curMotion) ?>" data-testid="ci-motion-input">
@@ -1328,6 +1368,76 @@ elseif ($tab === 'company'):
       50%      { transform: scale(1.10); }
     }
     @media (prefers-reduced-motion: reduce) { .motion-preview { animation: none !important; } }
+
+    /* ---- Brand Vibe picker (Premium / Classic / Playful / Bold) ---- */
+    .vibe-picker {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      width: 100%;
+    }
+    .vibe-card {
+      display: flex; gap: 14px; align-items: flex-start;
+      padding: 14px;
+      background: var(--bg);
+      border: 1.5px solid var(--border);
+      border-radius: var(--vibe-radius, 14px);
+      cursor: pointer;
+      text-align: left;
+      position: relative;
+      transition: transform .2s ease, border-color .2s ease, box-shadow .25s ease;
+      overflow: hidden;
+    }
+    .vibe-card::before {
+      content: "";
+      position: absolute; inset: 0;
+      background: linear-gradient(135deg, var(--vibe-g0), var(--vibe-g1) 55%, var(--vibe-g2));
+      opacity: .04;
+      pointer-events: none;
+      transition: opacity .25s ease;
+    }
+    .vibe-card:hover { transform: translateY(-2px); border-color: var(--vibe-accent); box-shadow: 0 10px 28px rgba(15,23,42,.10); }
+    .vibe-card:hover::before { opacity: .10; }
+    .vibe-card.active {
+      border-color: transparent;
+      box-shadow:
+        0 0 0 2px var(--vibe-accent),
+        0 12px 32px rgba(15,23,42,.12);
+    }
+    .vibe-card.active::before { opacity: .18; }
+    [data-bs-theme="dark"] .vibe-card { background: #1e293b; }
+    [data-bs-theme="dark"] .vibe-card.active::before { opacity: .28; }
+    .vibe-swatch {
+      width: 58px; height: 58px;
+      border-radius: var(--vibe-radius, 14px);
+      background: linear-gradient(135deg, var(--vibe-g0), var(--vibe-g1) 55%, var(--vibe-g2));
+      box-shadow: 0 6px 18px rgba(15,23,42,.18), inset 0 1px 0 rgba(255,255,255,.18);
+      flex-shrink: 0;
+      display: inline-flex; align-items: center; justify-content: center;
+      color: #fff; font-weight: var(--vibe-fontw, 800); font-size: 26px;
+      position: relative;
+      letter-spacing: -1px;
+    }
+    .vibe-swatch .vibe-dot {
+      position: absolute; right: 6px; bottom: 6px;
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--vibe-accent);
+      box-shadow: 0 0 0 2px rgba(255,255,255,.25);
+    }
+    .vibe-meta { flex: 1; min-width: 0; line-height: 1.3; }
+    .vibe-title { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--text); font-weight: 700; }
+    .vibe-title .bi { color: var(--vibe-accent); }
+    .vibe-desc { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+    .vibe-chips { display: inline-flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
+    .vibe-chip {
+      font-size: 10.5px; padding: 2px 8px;
+      background: rgba(15,23,42,.06);
+      color: var(--text);
+      border-radius: 999px;
+      display: inline-flex; align-items: center; gap: 3px;
+    }
+    [data-bs-theme="dark"] .vibe-chip { background: rgba(255,255,255,.10); }
+    .vibe-chip .bi { font-size: 11px; opacity: .7; }
   </style>
 
   <script>
@@ -1425,12 +1535,43 @@ elseif ($tab === 'company'):
     // admin topbar by the `body[data-brand-motion]` selectors in CSS.
     var picker = document.getElementById('ciMotionPicker');
     var motionInput = document.getElementById('ciMotionInput');
+    function selectMotion(value){
+      if (!picker || !motionInput) return;
+      motionInput.value = value;
+      picker.querySelectorAll('.motion-pill').forEach(function(b){
+        b.classList.toggle('active', b.getAttribute('data-motion') === value);
+      });
+    }
     if (picker && motionInput) {
       picker.querySelectorAll('.motion-pill').forEach(function(btn){
         btn.addEventListener('click', function(){
-          picker.querySelectorAll('.motion-pill').forEach(function(b){ b.classList.remove('active'); });
-          btn.classList.add('active');
-          motionInput.value = btn.getAttribute('data-motion') || 'bounce';
+          selectMotion(btn.getAttribute('data-motion') || 'bounce');
+        });
+      });
+    }
+
+    // Brand vibe picker — clicking a vibe card highlights it, writes the
+    // hidden vibe input, AND auto-selects the bundled motion so the two
+    // settings stay visually consistent.  The vibe also applies live to
+    // the body via the `data-brand-vibe` attribute, so admins see the
+    // new gradient + corner radius + font weight immediately (before save).
+    var vibePicker = document.getElementById('ciVibePicker');
+    var vibeInput  = document.getElementById('ciVibeInput');
+    if (vibePicker && vibeInput) {
+      vibePicker.querySelectorAll('.vibe-card').forEach(function(card){
+        card.addEventListener('click', function(){
+          var key = card.getAttribute('data-vibe') || 'classic';
+          var motion = card.getAttribute('data-motion') || 'bounce';
+          vibeInput.value = key;
+          vibePicker.querySelectorAll('.vibe-card').forEach(function(c){ c.classList.remove('active'); });
+          card.classList.add('active');
+          // Cascade: also activate the bundled motion preset so the two
+          // pickers visually agree.
+          selectMotion(motion);
+          // Live preview on the live body so the admin sees the vibe applied
+          // instantly (this only affects THIS page until they hit Save).
+          document.body.setAttribute('data-brand-vibe', key);
+          document.body.setAttribute('data-brand-motion', motion);
         });
       });
     }

@@ -96,6 +96,49 @@ h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6, .display-4, .display-5, .d
   will-change: transform;
   border-radius: 12px;
 }
+
+/* ============ BRAND VIBE PRESETS ============
+   Each vibe key (premium / classic / playful / bold) sets CSS variables
+   that cascade across the layout.  Currently consumed by:
+     • .brand-text font-weight
+     • .brand-grad gradient colours
+     • .logo-3d > img border-radius (uploaded logo corner radius)
+     • .navbar-brand .badge-vibe (subtle accent next to the brand)
+   Add more places by reading `var(--vibe-*)` anywhere in this stylesheet. */
+body[data-brand-vibe="premium"] {
+  --vibe-g0: #0c0a09; --vibe-g1: #3f3f46; --vibe-g2: #facc15;
+  --vibe-accent: #facc15;
+  --vibe-radius: 6px;
+  --vibe-fontw: 800;
+}
+body[data-brand-vibe="classic"] {
+  --vibe-g0: #312e81; --vibe-g1: #1e40af; --vibe-g2: #06b6d4;
+  --vibe-accent: #06b6d4;
+  --vibe-radius: 14px;
+  --vibe-fontw: 700;
+}
+body[data-brand-vibe="playful"] {
+  --vibe-g0: #f97316; --vibe-g1: #ec4899; --vibe-g2: #a855f7;
+  --vibe-accent: #f97316;
+  --vibe-radius: 22px;
+  --vibe-fontw: 800;
+}
+body[data-brand-vibe="bold"] {
+  --vibe-g0: #7c3aed; --vibe-g1: #ec4899; --vibe-g2: #0ea5e9;
+  --vibe-accent: #7c3aed;
+  --vibe-radius: 10px;
+  --vibe-fontw: 900;
+}
+.logo-3d > img:first-of-type { border-radius: var(--vibe-radius, 12px) !important; }
+body .brand-text { font-weight: var(--vibe-fontw, 700) !important; }
+body .brand-grad {
+  background: linear-gradient(90deg, var(--vibe-g0, #06b6d4), var(--vibe-g1, #2dd4bf) 50%, var(--vibe-g2, #06b6d4));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+/* Bigger primary CTAs follow the active vibe colour, so the entire
+   storefront feels coherent without per-button overrides. */
+body .btn-primary { background: linear-gradient(135deg, var(--vibe-g1, #1d4ed8), var(--vibe-g2, #06b6d4)) !important; border-color: transparent !important; }
+body .btn-primary:hover { filter: brightness(1.06); }
 body[data-brand-motion="bounce"] .logo-3d .brand-mark,
 body[data-brand-motion="bounce"] .logo-3d > img:first-of-type {
   animation: logo-spin-bounce 3s ease-in-out infinite;

@@ -347,9 +347,68 @@ function nav_microsoft(): array
     ];
 }
 
+// Brand Vibe — bundles motion + gradient + font-weight + corner-radius.
+// Admin selects one of these in Company Info → "Brand Vibe"; the chosen
+// preset cascades across the entire storefront (navbar, admin topbar,
+// auto-generated logo gradient, body buttons, card radii).  A custom
+// per-field override is intentionally NOT exposed — the whole point of a
+// "vibe" is one-click visual cohesion.
+function brand_vibes(): array
+{
+    return [
+        'premium' => [
+            'label'    => 'Premium',
+            'desc'     => 'Static · charcoal + gold · sharp corners',
+            'icon'     => 'bi-gem',
+            'motion'   => 'static',
+            'gradient' => ['#0c0a09', '#3f3f46', '#facc15'],
+            'fontw'    => 800,
+            'radius'   => 6,
+            'accent'   => '#facc15',
+        ],
+        'classic' => [
+            'label'    => 'Classic',
+            'desc'     => 'Bounce · navy + teal · balanced radius',
+            'icon'     => 'bi-stars',
+            'motion'   => 'bounce',
+            'gradient' => ['#312e81', '#1e40af', '#06b6d4'],
+            'fontw'    => 700,
+            'radius'   => 14,
+            'accent'   => '#06b6d4',
+        ],
+        'playful' => [
+            'label'    => 'Playful',
+            'desc'     => 'Bounce · sunset gradient · super-round',
+            'icon'     => 'bi-emoji-smile',
+            'motion'   => 'bounce',
+            'gradient' => ['#f97316', '#ec4899', '#a855f7'],
+            'fontw'    => 800,
+            'radius'   => 22,
+            'accent'   => '#f97316',
+        ],
+        'bold' => [
+            'label'    => 'Bold',
+            'desc'     => 'Spin · electric purple + cyan · heavy weight',
+            'icon'     => 'bi-lightning-charge',
+            'motion'   => 'spin',
+            'gradient' => ['#7c3aed', '#ec4899', '#0ea5e9'],
+            'fontw'    => 900,
+            'radius'   => 10,
+            'accent'   => '#7c3aed',
+        ],
+    ];
+}
+
+function current_vibe(): array
+{
+    $key = setting_get('company_brand_vibe', 'classic');
+    $all = brand_vibes();
+    return $all[$key] ?? $all['classic'];
+}
+
 // Brand logo — rounded gradient square with the FIRST LETTER of the company
-// name as a white monogram.  Uses the original Maventech navy→teal palette so
-// the auto-generated mark feels consistent with the brand identity.
+// name as a white monogram.  Gradient colours follow the active Brand Vibe
+// so the auto-generated mark always matches the storefront aesthetic.
 // Falls back to "M" if the company name is empty.  When the admin uploads a
 // custom logo via the Company Info tab, `$brandLogo` takes precedence in
 // header.php / footer.php and this SVG is never rendered.
@@ -363,25 +422,27 @@ function render_logo(int $size = 40, ?string $letter = null): string
     } else {
         $letter = mb_strtoupper(mb_substr($letter, 0, 1));
     }
-    $id = 'lgrad' . $size . '_' . md5($letter);
-    // Letter font-size scales with the SVG box.
+    $vibe = current_vibe();
+    [$g0, $g1, $g2] = $vibe['gradient'];
+    $radius = max(4, (int)round($vibe['radius'] / 14 * 13)); // scale 4-22px → SVG units
+    $id = 'lgrad' . $size . '_' . md5($letter . $g0 . $g1 . $g2);
     $fontSize = (int)round($size * 0.58);
     return '<svg class="brand-mark" width="' . $size . '" height="' . $size . '" viewBox="0 0 48 48" fill="none" aria-hidden="true" role="img" data-brand-mark="1">'
         . '<defs>'
         .   '<linearGradient id="' . $id . '" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">'
-        .     '<stop offset="0"   stop-color="#312e81"/>'
-        .     '<stop offset=".45" stop-color="#1e40af"/>'
-        .     '<stop offset="1"   stop-color="#06b6d4"/>'
+        .     '<stop offset="0"   stop-color="' . esc($g0) . '"/>'
+        .     '<stop offset=".45" stop-color="' . esc($g1) . '"/>'
+        .     '<stop offset="1"   stop-color="' . esc($g2) . '"/>'
         .   '</linearGradient>'
         .   '<radialGradient id="' . $id . '_hl" cx=".25" cy=".15" r=".75">'
         .     '<stop offset="0" stop-color="rgba(255,255,255,.32)"/>'
         .     '<stop offset="1" stop-color="rgba(255,255,255,0)"/>'
         .   '</radialGradient>'
         . '</defs>'
-        . '<rect x="1.5" y="1.5" width="45" height="45" rx="13" fill="url(#' . $id . ')"/>'
-        . '<rect x="1.5" y="1.5" width="45" height="45" rx="13" fill="url(#' . $id . '_hl)"/>'
+        . '<rect x="1.5" y="1.5" width="45" height="45" rx="' . $radius . '" fill="url(#' . $id . ')"/>'
+        . '<rect x="1.5" y="1.5" width="45" height="45" rx="' . $radius . '" fill="url(#' . $id . '_hl)"/>'
         . '<text x="24" y="24" text-anchor="middle" dominant-baseline="central" font-family="Manrope,Segoe UI,Arial,sans-serif" font-weight="800" font-size="' . $fontSize . '" fill="#fff" letter-spacing="-1">' . esc($letter) . '</text>'
-        . '<circle cx="40" cy="38" r="2.4" fill="#2dd4bf" opacity=".92"/>'
+        . '<circle cx="40" cy="38" r="2.4" fill="' . esc($vibe['accent']) . '" opacity=".92"/>'
         . '</svg>';
 }
 

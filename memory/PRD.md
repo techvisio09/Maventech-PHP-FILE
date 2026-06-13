@@ -328,6 +328,18 @@ See `/app/memory/test_credentials.md`.
 - **`prefers-reduced-motion`** honoured on all four animations.
 - Verified end-to-end: clicking a pill → saving → admin topbar AND public navbar both react with the new motion, with no page reload needed for downstream visitors.
 
+## [June 2026] Brand Vibe — one-click storefront rebrand presets
+- **4 vibes**: Premium (static · charcoal+gold · 6px), Classic (bounce · navy+teal · 14px), Playful (bounce · sunset · 22px), Bold (spin · purple+cyan · 10px). Defined in `brand_vibes()` in `includes/functions.php` so any new presets are a one-line addition.
+- **Setting**: `company_brand_vibe` (default `classic`).  Saved through the existing `save_company_info` POST handler with whitelist validation.  The chosen vibe's bundled motion is auto-applied at the same time (so `company_logo_motion` always matches the vibe unless the admin overrides the Motion picker afterwards).
+- **Cascades site-wide** via `body[data-brand-vibe="..."]` CSS variables: `--vibe-g0/g1/g2` (gradient stops), `--vibe-accent`, `--vibe-radius`, `--vibe-fontw`.  Consumed by:
+  • `render_logo()` SVG (gradient + corner radius + status-dot colour)
+  • `.brand-text` font-weight on the public navbar
+  • `.brand-grad` (heading shimmer text colours)
+  • `.btn-primary` background gradient (every primary CTA across the storefront)
+  • `.adm-top .brand-center .m-logo` (admin topbar)
+- **Picker UI** — 4 vibe cards inside Admin → Company Info → "Brand Vibe", each with a live mini-logo preview, motion/radius/weight chips and dark-mode-aware active state.  Clicking a card cascades to the Motion picker so both stay visually consistent.  Body data attributes update live for an instant on-page preview (final SVG gradient re-renders after save).
+- Verified end-to-end: clicking **Playful** → Save → the storefront's M logo gradient, brand text gradient, and the "Shop Now" primary button all instantly switch to the orange→pink→purple palette.
+
 ## Roadmap / Backlog (P2)
 - Split `admin.php` (>3700 lines) into per-tab partials under `includes/tabs/`
 - Add bulk-paste key validation (deduplicate vs. existing)
