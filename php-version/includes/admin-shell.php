@@ -16,6 +16,10 @@ if (isset($_GET['theme']) && in_array($_GET['theme'], ['dark','light'], true)) {
 
 $adminMode = $_COOKIE['adm_mode'] ?? 'light';
 $rg = active_region();
+// Ensure all auxiliary tables exist on first admin page-load.  This makes
+// the panel self-healing when uploaded to a fresh server where start.sh's
+// migrations were never executed.
+ensure_db_schema();
 if (!function_exists('current_admin')) {
     function current_admin(): ?array { return function_exists('current_user') ? current_user() : null; }
 }
@@ -47,6 +51,11 @@ $admin       = $admin ?? current_admin();
 <title><?= esc($pageTitle) ?></title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+<script>
+  // Base URL the panel was loaded from — every fetch() to ajax/... uses this
+  // so the admin works whether installed at "/" or in a subfolder like "/admin/".
+  window.MAVEN_BASE = <?= json_encode(base_url()) ?>;
+</script>
 <style>
 :root {
   --bg: #f7f8fa;
@@ -920,7 +929,7 @@ document.addEventListener('click', function(e){
 
   async function tick(){
     try {
-      const r = await fetch('/ajax/chat-admin.php', {
+      const r = await fetch((window.MAVEN_BASE||'/') + 'ajax/chat-admin.php', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({action:'unread'})
       });

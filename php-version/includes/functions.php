@@ -17,6 +17,88 @@ function esc($s): string
     return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 }
 
+/**
+ * Returns the base URL path the application is installed under, always with
+ * a trailing slash.  Works whether the project lives at the domain root
+ * ("/") or inside a subfolder ("/admin/", "/my-shop/").
+ *
+ * Used by the JS layer (window.MAVEN_BASE) so all fetch() URLs to
+ * /ajax/... endpoints stay correct regardless of where the app is deployed.
+ *
+ * Example:
+ *   https://example.com/admin.php          → base_url() = "/"
+ *   https://example.com/shop/admin.php     → base_url() = "/shop/"
+ *   https://example.com/foo/bar/admin.php  → base_url() = "/foo/bar/"
+ */
+function base_url(): string
+{
+    static $cached = null;
+    if ($cached !== null) return $cached;
+    $script = (string)($_SERVER['SCRIPT_NAME'] ?? '/');
+    $dir = rtrim(str_replace('\\', '/', dirname($script)), '/');
+    if ($dir === '' || $dir === '.') $dir = '';
+    return $cached = $dir . '/';
+}
+
+/**
+ * Self-healing schema migration.  Idempotent — safe to call on every
+ * admin page-load.  Adds any new tables / columns required by features
+ * that were introduced after a fresh server install (visitor analytics,
+ * live chat, chat tokens, etc.).  Failures are logged but never thrown
+ * so a transient DB error doesn't take down the admin panel.
+ */
+function ensure_db_schema(): void
+{
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    try {
+        $pdo = db();
+        // Visitor analytics
+        $pdo->exec("CREATE TABLE IF NOT EXISTS visitor_log (
+            id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            session_id VARCHAR(64) NOT NULL DEFAULT '',
+            ip_hash VARCHAR(64) NOT NULL DEFAULT '',
+            user_agent VARCHAR(500) NOT NULL DEFAULT '',
+            os VARCHAR(40) NOT NULL DEFAULT 'Unknown',
+            browser VARCHAR(40) NOT NULL DEFAULT 'Unknown',
+            device VARCHAR(20) NOT NULL DEFAULT 'Desktop',
+            country VARCHAR(8) NOT NULL DEFAULT '',
+            page_url VARCHAR(255) NOT NULL DEFAULT '',
+            referer VARCHAR(255) NOT NULL DEFAULT '',
+            visited_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            KEY idx_visited (visited_at),
+            KEY idx_session (session_id),
+            KEY idx_os (os),
+            KEY idx_device (device)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        // Live chat — admin ↔ visitor messages
+        $pdo->exec("CREATE TABLE IF NOT EXISTS chat_messages (
+            id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            lead_id INT NOT NULL,
+            sender ENUM('customer','admin') NOT NULL DEFAULT 'customer',
+            message TEXT NOT NULL,
+            sent_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            read_at DATETIME NULL DEFAULT NULL,
+            KEY idx_lead (lead_id),
+            KEY idx_sent (sent_at),
+            KEY idx_unread (sender, read_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        // chat_leads — ensure last_seen + chat_token columns exist (added later
+        // than the original schema, may be missing on older installs).
+        foreach ([
+            "ALTER TABLE chat_leads ADD COLUMN last_seen DATETIME NULL DEFAULT NULL",
+            "ALTER TABLE chat_leads ADD COLUMN chat_token VARCHAR(40) NOT NULL DEFAULT ''",
+        ] as $sql) {
+            try { $pdo->exec($sql); } catch (Throwable $e) { /* column already exists */ }
+        }
+    } catch (Throwable $e) {
+        @error_log('[ensure_db_schema] ' . $e->getMessage());
+    }
+}
+
 /* ---------------- Currency ---------------- */
 if (isset($_GET['cur']) && isset($GLOBALS['CURRENCIES'][$_GET['cur']])) {
     $_SESSION['currency'] = $_GET['cur'];

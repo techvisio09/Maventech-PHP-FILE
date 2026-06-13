@@ -933,7 +933,7 @@ if ($tab === 'dashboard'):
       try {
         const qs = new URLSearchParams({from: filters.from, to: filters.to,
                                         os: filters.os, device: filters.device, country: filters.country});
-        const r = await fetch('/ajax/visitor-stats.php?' + qs.toString());
+        const r = await fetch((window.MAVEN_BASE||'/') + 'ajax/visitor-stats.php?' + qs.toString());
         if (!r.ok) throw new Error('HTTP ' + r.status);
         $body.innerHTML = await r.text();
         wireBodyEvents();
@@ -2440,7 +2440,7 @@ elseif ($tab === 'leads'):
     async function poll(){
       if (!currentLeadId) return;
       try {
-        const r = await fetch('/ajax/chat-admin.php', {
+        const r = await fetch((window.MAVEN_BASE||'/') + 'ajax/chat-admin.php', {
           method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({action:'thread', lead_id: currentLeadId})
         });
@@ -2486,7 +2486,7 @@ elseif ($tab === 'leads'):
       const btn = ev.target.querySelector('button[type=submit]');
       btn.disabled = true; $input.disabled = true;
       try {
-        const r = await fetch('/ajax/chat-admin.php', {
+        const r = await fetch((window.MAVEN_BASE||'/') + 'ajax/chat-admin.php', {
           method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({action:'send', lead_id: currentLeadId, message: msg})
         });
@@ -2948,7 +2948,7 @@ elseif ($tab === 'emails'):
     async function doEmailResend(emailId, newRecipient) {
       const body = { email_id: emailId };
       if (newRecipient) body.new_recipient = newRecipient;
-      const r = await fetch('/ajax/email-resend.php', {
+      const r = await fetch((window.MAVEN_BASE||'/') + 'ajax/email-resend.php', {
         method: 'POST', headers: {'Content-Type':'application/json'},
         body: JSON.stringify(body),
       });
@@ -3066,7 +3066,7 @@ elseif ($tab === 'emails'):
         btn.disabled = true; const oldHtml = btn.innerHTML;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Testing…';
         try {
-          const r = await fetch('/ajax/smtp-test-recipient.php', {
+          const r = await fetch((window.MAVEN_BASE||'/') + 'ajax/smtp-test-recipient.php', {
             method:'POST', headers:{'Content-Type':'application/json'},
             body: JSON.stringify({email: recipient})
           });
