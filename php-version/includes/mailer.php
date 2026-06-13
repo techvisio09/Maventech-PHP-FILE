@@ -340,16 +340,19 @@ function smtp_process_queue(int $maxBatch = 5): int {
             // Exponential backoff: 2, 10, 60 minutes (then bounce)
             $delays = [2, 10, 60, 240];
             $delay  = $delays[min($newCount - 1, count($delays) - 1)];
+            // last_error is VARCHAR(255) — truncate long SMTP error messages so
+            // a verbose failure can never break the retry pipeline.
+            $errMsg = mb_substr((string)$result['error'], 0, 250, 'UTF-8');
             if ($newCount > $maxRetries) {
                 $pdo->prepare("UPDATE email_outbox
                     SET status='bounced', bounced_at=NOW(), retry_count=?, last_error=?, next_retry_at=NULL
                     WHERE id=?")
-                    ->execute([$newCount, $result['error'], $row['id']]);
+                    ->execute([$newCount, $errMsg, $row['id']]);
             } else {
                 $pdo->prepare("UPDATE email_outbox
                     SET status='retrying', retry_count=?, last_error=?, next_retry_at=DATE_ADD(NOW(), INTERVAL $delay MINUTE)
                     WHERE id=?")
-                    ->execute([$newCount, $result['error'], $row['id']]);
+                    ->execute([$newCount, $errMsg, $row['id']]);
             }
         }
         $processed++;

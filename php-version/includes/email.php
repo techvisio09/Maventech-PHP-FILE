@@ -653,12 +653,31 @@ function send_email(string $to, string $subject, string $html, ?int $orderId = n
         ->execute([$to, $subject, $html, 'Dev mode — no SMTP configured', $orderId, $tok, date('Y-m-d H:i:s'), $templateCode]);
 }
 
-function fulfill_order(int $orderId): void {
+function fulfill_order(int $orderId, bool $forceAdminOverride = false): void {
     $pdo = db();
     $stmt = $pdo->prepare('SELECT * FROM orders WHERE id = ?');
     $stmt->execute([$orderId]);
     $order = $stmt->fetch();
     if (!$order || $order['fulfilled']) return;
+
+    // CRITICAL: never consume license keys (decrement stock) before the
+    // customer's payment is confirmed. `status='paid'` is set by:
+    //   - the Stripe return handler in order-success.php (after verifying
+    //     `payment_status === paid`),
+    //   - the demo / dev checkout path which short-circuits to 'paid' when
+    //     no real gateway is configured,
+    //   - the admin manually flipping order status to 'paid'.
+    // Admin can still trigger a manual fulfilment for legitimate edge cases
+    // (e.g. bank-transfer orders) by passing $forceAdminOverride=true; in
+    // that case we also mark the order paid so the books stay consistent.
+    if ($order['status'] !== 'paid') {
+        if (!$forceAdminOverride) {
+            error_log("fulfill_order: refusing to consume stock for order #{$orderId} — status='{$order['status']}' (payment not confirmed).");
+            return;
+        }
+        $pdo->prepare('UPDATE orders SET status="paid" WHERE id=?')->execute([$orderId]);
+        $order['status'] = 'paid';
+    }
 
     // Persist card statement name based on payment method
     if (empty($order['card_statement_name'])) {

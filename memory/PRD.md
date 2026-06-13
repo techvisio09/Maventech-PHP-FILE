@@ -205,6 +205,14 @@ Create a comprehensive and user-friendly Admin Panel for Maventech Software with
   - The Card / PayPal pill switcher at the top of the credentials view was removed. The **Card Credentials page now shows only Card fields**; the **PayPal Credentials page now shows only PayPal fields**. Each gateway is fully isolated — admin reaches each via the "Edit Card Credentials" / "Edit PayPal Credentials" button on the Payment Gateways overview.
   - Breadcrumb header (`← Payment Gateways › Card Payment Credentials`) remains so navigation stays clear; the back link returns to the overview where both gateways live side-by-side as toggle cards.
 
+- **[Feb 2026]** Stock-decrement hardening — keys are only consumed AFTER successful payment:
+  - Added an explicit guard at the top of `fulfill_order()` in `includes/email.php`: if the order's `status !== 'paid'`, the function logs *"refusing to consume stock for order #N — status='pending' (payment not confirmed)"* and returns without touching `license_keys`. Stock can never decrement without a confirmed payment, even if `fulfill_order` is accidentally called from somewhere else.
+  - Existing paid-flow paths already mark `status='paid'` BEFORE calling fulfill_order — the Stripe return handler in `order-success.php` verifies `payment_status === 'paid'` from Stripe, the demo checkout short-circuits to paid (since there's no real gateway), and admin manual status changes set paid first. All continue to work.
+  - For legitimate manual fulfillment (e.g. bank-transfer / wire-paid orders, or admin "Resend product email" which needs to re-trigger the flow), `fulfill_order()` now takes an optional `$forceAdminOverride=true` parameter that bypasses the guard AND auto-flips status to paid so the books stay consistent. Wired into `admin.php` resend_email handler.
+  - Public site stock indicator (`available_keys_count($slug)`) and admin "live stock count" both query the same `license_keys` table — single source of truth — so the indicator updates in real time the moment a key is marked sold.
+  - Verified end-to-end: fulfill on pending order → blocked + stock unchanged (2 → 2). Mark paid → fulfill → stock decremented (2 → 1). All audit-log entries match expectations.
+  - Also fixed a related `last_error VARCHAR(255)` truncation in `includes/mailer.php` (long SMTP errors could throw a fatal exception inside the retry loop and break the queue) — error messages are now safely truncated to 250 chars before write.
+
 ## Test Credentials
 See `/app/memory/test_credentials.md`.
 

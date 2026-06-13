@@ -167,8 +167,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: admin.php?tab=orders&msg=Order+updated'); exit;
 
     } elseif ($action === 'resend_email') {
+        // Admin "Resend product email" — bypass the status check so the email
+        // can be re-fired for legitimate edge cases (bank transfer, manual
+        // delivery). This will also mark the order paid if it isn't already.
         $pdo->prepare('UPDATE orders SET fulfilled=0 WHERE id=?')->execute([(int)$_POST['order_id']]);
-        fulfill_order((int)$_POST['order_id']);
+        fulfill_order((int)$_POST['order_id'], true);
         header('Location: admin.php?tab=orders&msg=Email+resent'); exit;
 
     } elseif ($action === 'save_billing_note') {
