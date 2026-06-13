@@ -2892,23 +2892,25 @@ elseif ($tab === 'smtp'):
           </div>
           <style>
             .smtp-preset-btn {
-              font-size: 13px; font-weight: 600; padding: 6px 14px;
+              font-size: 13px; font-weight: 600; padding: 7px 16px;
               border-radius: 999px;
-              background: var(--gray-soft, #f1f5f9);
-              border: 1.5px solid transparent;
-              color: var(--text-muted, #64748b);
+              background: var(--gray-soft, #f1f5f9) !important;
+              border: 2px solid transparent !important;
+              color: var(--text-muted, #64748b) !important;
               transition: all .18s ease;
             }
-            .smtp-preset-btn:hover { background: #e2e8f0; color: #0f172a; }
-            [data-bs-theme="dark"] .smtp-preset-btn:hover { background:#334155; color:#e2e8f0; }
-            .smtp-preset-btn.is-active {
-              background: linear-gradient(135deg,#3b82f6,#1d4ed8);
-              color: #fff;
-              border-color: #1d4ed8;
-              box-shadow: 0 4px 14px rgba(29,78,216,.35);
+            .smtp-preset-btn:hover { background: #e2e8f0 !important; color: #0f172a !important; }
+            [data-bs-theme="dark"] .smtp-preset-btn { background:#1e293b !important; color:#94a3b8 !important; }
+            [data-bs-theme="dark"] .smtp-preset-btn:hover { background:#334155 !important; color:#e2e8f0 !important; }
+            .smtp-preset-btn.is-active,
+            .smtp-preset-btn.is-active:hover,
+            .smtp-preset-btn.is-active:focus {
+              background: linear-gradient(135deg,#3b82f6,#1d4ed8) !important;
+              color: #ffffff !important;
+              border: 2px solid #1d4ed8 !important;
+              box-shadow: 0 6px 18px rgba(29,78,216,.45) !important;
               transform: translateY(-1px);
             }
-            .smtp-preset-btn.is-active:hover { color: #fff; }
             /* Unified action-button font for the SMTP form */
             .smtp-actions .btn {
               font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
