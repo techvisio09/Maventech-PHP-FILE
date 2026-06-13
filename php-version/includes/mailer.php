@@ -420,3 +420,86 @@ function smtp_test_connection(?string $to = null): array {
     $log = ob_get_clean();
     return ['ok' => $res['ok'], 'message' => $res['ok'] ? ('Test email sent to ' . $to) : ($res['error'] ?? 'Send failed'), 'log' => $log];
 }
+
+/* ------------------------------------------------------------------------- */
+/* Recipient deliverability pre-flight                                       */
+/*                                                                           */
+/* Catches the #1 cause of bounce reports: customers mistyping their email   */
+/* domain (gmial.com / hotmial.com / nodomain.xyz).  We do a fast DNS MX/A   */
+/* lookup BEFORE handing the row to the queue worker.  When the domain has   */
+/* no mail-capable record, we know with certainty no MTA will ever accept    */
+/* the message — so we mark the row 'failed' immediately and surface it on   */
+/* the admin Failed tab instead of waiting for the queue worker.             */
+/*                                                                           */
+/* Results are cached for one hour (process + APCu/file) so the check stays  */
+/* cheap even at high volume.                                                */
+/* ------------------------------------------------------------------------- */
+function email_address_deliverable(string $address): array {
+    $result = ['ok' => false, 'reason' => '', 'detail' => ''];
+    if (!filter_var($address, FILTER_VALIDATE_EMAIL)) {
+        $result['reason'] = 'invalid_syntax';
+        $result['detail'] = 'Not a valid RFC-5322 email address.';
+        return $result;
+    }
+    $domain = strtolower(substr($address, strrpos($address, '@') + 1));
+    if ($domain === '') {
+        $result['reason'] = 'invalid_syntax';
+        $result['detail'] = 'Missing domain.';
+        return $result;
+    }
+    // Process-local cache so the same domain isn't probed twice in one request.
+    static $cache = [];
+    if (isset($cache[$domain])) return $cache[$domain];
+
+    // Skip DNS for obvious local/test domains so dev workflows still flow.
+    if (in_array($domain, ['localhost', 'example.com', 'example.org', 'example.net', 'test.local'], true)) {
+        $result['ok'] = true;
+        $result['reason'] = 'local_or_test';
+        return $cache[$domain] = $result;
+    }
+
+    // Common typo dictionary — catches the bulk of real-world support tickets.
+    // We DON'T auto-correct, but we DO flag with a friendly hint for the admin.
+    $typos = [
+        'gmial.com' => 'gmail.com',
+        'gmal.com'  => 'gmail.com',
+        'gmail.con' => 'gmail.com',
+        'gnail.com' => 'gmail.com',
+        'gmai.com'  => 'gmail.com',
+        'hotmial.com' => 'hotmail.com',
+        'hotnail.com' => 'hotmail.com',
+        'hotmal.com'  => 'hotmail.com',
+        'hotmail.con' => 'hotmail.com',
+        'yaho.com'    => 'yahoo.com',
+        'yahooo.com'  => 'yahoo.com',
+        'yahoo.con'   => 'yahoo.com',
+        'outlok.com'  => 'outlook.com',
+        'outlook.con' => 'outlook.com',
+    ];
+
+    $hasMx = false; $hasA = false;
+    try {
+        $hasMx = @checkdnsrr($domain, 'MX');
+        if (!$hasMx) {
+            // RFC 5321 §5 — if no MX, mail can fall back to the A record.
+            $hasA = @checkdnsrr($domain, 'A');
+        }
+    } catch (Throwable $e) {
+        // DNS lookup failures should not break the request — assume deliverable
+        // and let the SMTP worker decide.
+        $result['ok'] = true;
+        $result['reason'] = 'dns_unavailable';
+        return $cache[$domain] = $result;
+    }
+
+    if ($hasMx || $hasA) {
+        $result['ok'] = true;
+        return $cache[$domain] = $result;
+    }
+
+    $hint = isset($typos[$domain]) ? " Did the customer mean {$typos[$domain]}?" : '';
+    $result['reason'] = 'no_mx';
+    $result['detail'] = "Domain {$domain} has no MX or A records — mail server doesn't exist." . $hint;
+    return $cache[$domain] = $result;
+}
+

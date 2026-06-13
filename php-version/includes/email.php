@@ -598,6 +598,20 @@ function send_email(string $to, string $subject, string $html, ?int $orderId = n
         return;
     }
 
+    // Deliverability pre-flight — DNS MX/A lookup catches typo'd domains
+    // (gmial.com / hotmial.com / nodomain.xyz) before they hit the queue.
+    // Marking these "failed" immediately surfaces them on the admin's
+    // Failed tab + bell counter so the customer can be reached out to.
+    $deliv = email_address_deliverable($to);
+    if (!$deliv['ok'] && in_array($deliv['reason'], ['no_mx','invalid_syntax'], true)) {
+        $pdo->prepare('INSERT INTO email_outbox (recipient, subject, html, status, note, order_id, tracking_token, template_code, bounced_at)
+            VALUES (?,?,?,"failed",?,?,?,?,NOW())')
+            ->execute([$to, $subject, $html,
+                'Undeliverable: ' . ($deliv['detail'] ?: $deliv['reason']),
+                $orderId, $tok, $templateCode]);
+        return;
+    }
+
     $smtp = smtp_config();
     if ($smtp['enabled'] && $smtp['host'] !== '') {
         // Production path: queue, then process this row immediately (unless
