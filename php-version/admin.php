@@ -872,22 +872,33 @@ if ($tab === 'dashboard'):
 
   <!-- ====================================================================
        Visitors — daily/weekly/monthly report of real human traffic with
-       OS, device and country breakdown.  Bots and the admin session are
-       filtered out at the tracker level (includes/visitor_track.php).
+       OS, device and country breakdown.  Pill clicks load via AJAX so the
+       page doesn't scroll to top; the content swap stays anchored where
+       the admin clicked.
        ==================================================================== -->
-  <div class="row g-3 mt-1" data-testid="visitors-section">
+  <div class="row g-3 mt-1" data-testid="visitors-section" id="visitors-section">
     <div class="col-12">
-      <div class="card-e">
-        <div class="card-head">
-          <div class="ttl"><i class="bi bi-people-fill"></i> Visitors <span class="sub ms-2"><?= esc($vRangeLabel) ?> · real humans · bots filtered</span></div>
-          <div class="d-flex align-items-center gap-2 flex-wrap">
-            <div class="vrange-pills" data-testid="visitors-range-pills">
-              <?php foreach ($vRanges as $rk => $rv): ?>
-                <a class="vrange-pill <?= $vRange===$rk?'active':'' ?>" href="?tab=dashboard&vrange=<?= esc($rk) ?>#visitors-section" data-testid="vrange-<?= esc($rk) ?>"><?= esc($rv[0]) ?></a>
-              <?php endforeach; ?>
-            </div>
-            <span class="badge bg-success-subtle text-success" style="font-size:11px;"><i class="bi bi-eye-fill me-1"></i><?= number_format($vTodayHits) ?> page-views</span>
+      <div class="card-e" id="visitorsCard">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 px-3 py-3" style="border-bottom:1px solid var(--border);">
+          <div class="vrange-pills" data-testid="visitors-range-pills">
+            <?php foreach ($vRanges as $rk => $rv): ?>
+              <button type="button" class="vrange-pill <?= $vRange===$rk?'active':'' ?>" data-vrange="<?= esc($rk) ?>" data-testid="vrange-<?= esc($rk) ?>"><?= esc($rv[0]) ?></button>
+            <?php endforeach; ?>
+            <button type="button" class="vrange-pill" data-vrange="custom" data-testid="vrange-custom"><i class="bi bi-calendar3 me-1"></i>Custom</button>
           </div>
+          <div class="vrange-custom-row" id="vrangeCustomRow" style="display:none;">
+            <label class="small text-muted me-1">From</label>
+            <input type="date" id="vrangeFrom" class="form-control form-control-sm" data-testid="vrange-from">
+            <label class="small text-muted ms-2 me-1">To</label>
+            <input type="date" id="vrangeTo" class="form-control form-control-sm" data-testid="vrange-to">
+            <button type="button" class="btn btn-sm btn-primary ms-2" id="vrangeApply" data-testid="vrange-apply"><i class="bi bi-check2 me-1"></i>Apply</button>
+            <button type="button" class="btn btn-sm btn-link text-muted" id="vrangeCancel" data-testid="vrange-cancel">Cancel</button>
+          </div>
+        </div>
+        <div id="visitorsBody" data-testid="visitors-body" style="position:relative; min-height:280px;">
+        <div class="card-head" data-vrange-header>
+          <div class="ttl"><i class="bi bi-people-fill"></i> Visitors <span class="sub ms-2"><?= esc($vRangeLabel) ?> · real humans · bots filtered</span></div>
+          <span class="badge bg-success-subtle text-success" style="font-size:11px;"><i class="bi bi-eye-fill me-1"></i><?= number_format($vTodayHits) ?> page-views</span>
         </div>
         <div class="card-body-p">
           <div class="row g-3">
@@ -986,15 +997,103 @@ if ($tab === 'dashboard'):
             </div>
           </div>
         </div>
+        </div><!-- /#visitorsBody -->
       </div>
     </div>
   </div>
 
+  <script>
+  // -------------------------------------------------------------------
+  // Visitor widget — AJAX range switcher.  Pill clicks (and Custom date
+  // range apply) fetch /ajax/visitor-stats.php and swap #visitorsBody
+  // in place.  No page reload, no scroll-to-top jump.
+  // -------------------------------------------------------------------
+  (function(){
+    const card    = document.getElementById('visitorsCard');
+    const body    = document.getElementById('visitorsBody');
+    if (!card || !body) return;
+    const pills   = card.querySelectorAll('.vrange-pill');
+    const customRow = document.getElementById('vrangeCustomRow');
+    const $from   = document.getElementById('vrangeFrom');
+    const $to     = document.getElementById('vrangeTo');
+
+    function setActive(range) {
+      pills.forEach(p => p.classList.toggle('active', p.dataset.vrange === range));
+    }
+
+    async function loadRange(range, opts) {
+      opts = opts || {};
+      // Preserve scroll position — re-apply after content swap so the page
+      // doesn't jump as elements resize.
+      const scrollY = window.scrollY;
+      body.style.opacity = '0.45';
+      body.style.pointerEvents = 'none';
+      try {
+        let url = '/ajax/visitor-stats.php?range=' + encodeURIComponent(range);
+        if (range === 'custom') {
+          if (!opts.from || !opts.to) return;
+          url += '&from=' + encodeURIComponent(opts.from) + '&to=' + encodeURIComponent(opts.to);
+        }
+        const r = await fetch(url);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const html = await r.text();
+        body.innerHTML = html;
+        setActive(range);
+        // Update the URL (so refresh keeps the chosen range) without scrolling
+        const qs = new URLSearchParams(window.location.search);
+        qs.set('tab', 'dashboard');
+        qs.set('vrange', range);
+        if (range === 'custom') { qs.set('from', opts.from); qs.set('to', opts.to); }
+        else { qs.delete('from'); qs.delete('to'); }
+        history.replaceState(null, '', '?' + qs.toString());
+      } catch (e) {
+        body.innerHTML = '<div class="p-4 text-center text-danger"><i class="bi bi-exclamation-triangle me-1"></i> Failed to load — ' + (e.message || 'network error') + '</div>';
+      } finally {
+        body.style.opacity = '';
+        body.style.pointerEvents = '';
+        // Restore scroll position — keeps the admin where they clicked.
+        window.scrollTo({top: scrollY, behavior: 'instant'});
+      }
+    }
+
+    pills.forEach(p => p.addEventListener('click', function(){
+      const r = p.dataset.vrange;
+      if (r === 'custom') {
+        // Show the date picker row.  Default to last 7 days for convenience.
+        if (!$from.value) $from.value = new Date(Date.now() - 7*86400000).toISOString().slice(0,10);
+        if (!$to.value)   $to.value   = new Date().toISOString().slice(0,10);
+        customRow.style.display = 'flex';
+        setActive('custom');
+        $from.focus();
+        return;
+      }
+      customRow.style.display = 'none';
+      loadRange(r);
+    }));
+
+    document.getElementById('vrangeApply')?.addEventListener('click', function(){
+      const from = $from.value, to = $to.value;
+      if (!from || !to) { alert('Please pick both From and To dates.'); return; }
+      if (from > to) { alert('From date must be earlier than To date.'); return; }
+      loadRange('custom', {from: from, to: to});
+    });
+    document.getElementById('vrangeCancel')?.addEventListener('click', function(){
+      customRow.style.display = 'none';
+      // Revert to whatever pill was active before, default to "today"
+      const active = card.querySelector('.vrange-pill.active');
+      const r = (active && active.dataset.vrange && active.dataset.vrange !== 'custom') ? active.dataset.vrange : 'today';
+      setActive(r);
+    });
+  })();
+  </script>
+
   <style>
-    .vrange-pills { display:inline-flex; gap:4px; background:var(--bg); padding:3px; border-radius:999px; border:1px solid var(--border); }
-    .vrange-pill { padding:4px 12px; border-radius:999px; font-size:11.5px; font-weight:600; color:var(--muted); text-decoration:none; transition:all .15s ease; white-space:nowrap; }
+    .vrange-pills { display:inline-flex; gap:4px; background:var(--bg); padding:3px; border-radius:999px; border:1px solid var(--border); flex-wrap:wrap; }
+    .vrange-pill { padding:4px 12px; border-radius:999px; font-size:11.5px; font-weight:600; color:var(--muted); text-decoration:none; transition:all .15s ease; white-space:nowrap; border:0; background:transparent; cursor:pointer; }
     .vrange-pill:hover { background:rgba(59,130,246,.08); color:var(--brand); }
     .vrange-pill.active { background:var(--brand); color:#fff; box-shadow:0 1px 2px rgba(59,130,246,.3); }
+    .vrange-custom-row { display:flex; align-items:center; gap:4px; flex-wrap:wrap; }
+    .vrange-custom-row input[type="date"] { max-width:150px; font-size:12px; }
     .vis-headline { padding:8px 4px; }
     .vis-num { font-size:38px; font-weight:800; line-height:1; color:var(--text); letter-spacing:-1px; }
     .vis-lbl { font-size:12px; color:var(--muted); margin-top:4px; }
@@ -2266,26 +2365,27 @@ elseif ($tab === 'leads'):
     /* ------- Slide-over chat drawer ------- */
     .adm-chat-overlay { position:fixed; inset:0; background:rgba(15,23,42,.45); z-index:3000; display:flex; justify-content:flex-end; animation:adm-fade .18s ease-out; }
     @keyframes adm-fade { from{opacity:0;} to{opacity:1;} }
-    .adm-chat-panel { width:min(340px, 100vw); height:100vh; background:#fff; display:flex; flex-direction:column; box-shadow:-12px 0 32px rgba(15,23,42,.18); animation:adm-slide .25s cubic-bezier(.16,1,.3,1); }
+    .adm-chat-panel { width:min(300px, 100vw); height:100vh; background:#fff; display:flex; flex-direction:column; box-shadow:-12px 0 32px rgba(15,23,42,.20); animation:adm-slide .25s cubic-bezier(.16,1,.3,1); }
     @keyframes adm-slide { from{transform:translateX(100%);} to{transform:translateX(0);} }
     [data-bs-theme="dark"] .adm-chat-panel { background:#0f1729; color:#e2e8f0; }
 
-    /* Compact header */
-    .adm-chat-head { padding:8px 12px; border-bottom:1px solid #e5e7eb; display:flex; align-items:center; justify-content:space-between; gap:8px; background:#f8fafc; }
-    [data-bs-theme="dark"] .adm-chat-head { background:#0a1020; border-bottom-color:#1f2a44; }
-    .adm-chat-avatar { width:28px; height:28px; border-radius:50%; background:#e5e7eb; color:#475569; display:flex; align-items:center; justify-content:center; font-size:13px; flex-shrink:0; }
+    /* Compact navy-blue header */
+    .adm-chat-head { padding:8px 12px; border-bottom:1px solid #1e3a8a; display:flex; align-items:center; justify-content:space-between; gap:8px; background:linear-gradient(135deg,#1e3a8a 0%,#1e40af 60%,#2563eb 100%); color:#fff; }
+    .adm-chat-head .btn-close { filter: invert(1) brightness(2); opacity:.8; font-size:11px; }
+    .adm-chat-head .btn-close:hover { opacity:1; }
+    [data-bs-theme="dark"] .adm-chat-head { background:linear-gradient(135deg,#0f1f4a 0%,#1e3a8a 100%); border-bottom-color:#0a1733; }
+    .adm-chat-avatar { width:26px; height:26px; border-radius:50%; background:rgba(255,255,255,.18); color:#fff; display:flex; align-items:center; justify-content:center; font-size:12px; flex-shrink:0; }
+    .adm-chat-head #adm-chat-name { color:#fff !important; }
+    .adm-chat-status-pill { display:inline-flex; align-items:center; gap:4px; padding:1px 7px; border-radius:999px; font-size:10px; font-weight:600; background:rgba(255,255,255,.18); color:#e0e7ff; }
+    .adm-chat-status-pill .dot { width:5px; height:5px; border-radius:50%; background:#94a3b8; }
+    .adm-chat-status-pill.online { background:rgba(16,185,129,.25); color:#a7f3d0; }
+    .adm-chat-status-pill.online .dot { background:#10b981; box-shadow:0 0 0 3px rgba(16,185,129,.4); }
     [data-bs-theme="dark"] .adm-chat-avatar { background:#1f2a44; color:#cbd5e1; }
-    .adm-chat-status-pill { display:inline-flex; align-items:center; gap:5px; padding:1px 7px; border-radius:999px; font-size:10.5px; font-weight:600; background:#e5e7eb; color:#475569; }
-    .adm-chat-status-pill .dot { width:6px; height:6px; border-radius:50%; background:#9ca3af; }
-    .adm-chat-status-pill.online { background:#dcfce7; color:#15803d; }
-    .adm-chat-status-pill.online .dot { background:#10b981; box-shadow:0 0 0 3px rgba(16,185,129,.25); }
-    [data-bs-theme="dark"] .adm-chat-status-pill { background:#1f2a44; color:#cbd5e1; }
-    [data-bs-theme="dark"] .adm-chat-status-pill.online { background:rgba(16,185,129,.18); color:#86efac; }
-    #adm-chat-contact { font-size:10.5px; color:#64748b; max-width:200px; }
+    .adm-chat-status-pill.offline { /* uses default base style */ }
     [data-bs-theme="dark"] #adm-chat-contact { color:#94a3b8; }
 
     /* Gray offline banner */
-    .adm-chat-banner { padding:8px 14px; background:#f3f4f6; color:#6b7280; font-size:12px; border-bottom:1px solid #e5e7eb; }
+    .adm-chat-banner { padding:7px 12px; background:#f3f4f6; color:#6b7280; font-size:11.5px; border-bottom:1px solid #e5e7eb; }
     [data-bs-theme="dark"] .adm-chat-banner { background:#1a2335; color:#94a3b8; border-bottom-color:#2a3550; }
 
     /* Conversation body */
