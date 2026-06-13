@@ -871,248 +871,192 @@ if ($tab === 'dashboard'):
   </div>
 
   <!-- ====================================================================
-       Visitors — daily/weekly/monthly report of real human traffic with
-       OS, device and country breakdown.  Pill clicks load via AJAX so the
-       page doesn't scroll to top; the content swap stays anchored where
-       the admin clicked.
+       Visitors — multi-filter dashboard.  Inline From/To date pickers +
+       OS/Device dropdowns + clickable country flag chips.  All filters
+       compose; clicking any breakdown row toggles that filter.  AJAX so
+       the page never scrolls or reloads.
        ==================================================================== -->
   <div class="row g-3 mt-1" data-testid="visitors-section" id="visitors-section">
     <div class="col-12">
       <div class="card-e" id="visitorsCard">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 px-3 py-3" style="border-bottom:1px solid var(--border);">
-          <div class="vrange-pills" data-testid="visitors-range-pills">
-            <?php foreach ($vRanges as $rk => $rv): ?>
-              <button type="button" class="vrange-pill <?= $vRange===$rk?'active':'' ?>" data-vrange="<?= esc($rk) ?>" data-testid="vrange-<?= esc($rk) ?>"><?= esc($rv[0]) ?></button>
-            <?php endforeach; ?>
-            <button type="button" class="vrange-pill" data-vrange="custom" data-testid="vrange-custom"><i class="bi bi-calendar3 me-1"></i>Custom</button>
+        <div class="vis-filter-bar">
+          <div class="vis-filter-group">
+            <label><i class="bi bi-calendar3 me-1"></i>From</label>
+            <input type="date" id="vrangeFrom" data-testid="vrange-from" value="<?= esc(date('Y-m-d')) ?>">
+            <label class="ms-1">To</label>
+            <input type="date" id="vrangeTo" data-testid="vrange-to" value="<?= esc(date('Y-m-d')) ?>">
           </div>
-          <div class="vrange-custom-row" id="vrangeCustomRow" style="display:none;">
-            <label class="small text-muted me-1">From</label>
-            <input type="date" id="vrangeFrom" class="form-control form-control-sm" data-testid="vrange-from">
-            <label class="small text-muted ms-2 me-1">To</label>
-            <input type="date" id="vrangeTo" class="form-control form-control-sm" data-testid="vrange-to">
-            <button type="button" class="btn btn-sm btn-primary ms-2" id="vrangeApply" data-testid="vrange-apply"><i class="bi bi-check2 me-1"></i>Apply</button>
-            <button type="button" class="btn btn-sm btn-link text-muted" id="vrangeCancel" data-testid="vrange-cancel">Cancel</button>
+          <div class="vis-filter-group">
+            <label><i class="bi bi-display me-1"></i>OS</label>
+            <select id="vfOs" data-testid="vf-os">
+              <option value="">All</option>
+              <?php foreach (['Windows 10/11','Windows','macOS','iOS','Android','Linux','Chrome OS','Unknown'] as $opt): ?>
+                <option value="<?= esc($opt) ?>"><?= esc($opt) ?></option>
+              <?php endforeach; ?>
+            </select>
+            <label class="ms-1"><i class="bi bi-phone me-1"></i>Device</label>
+            <select id="vfDevice" data-testid="vf-device">
+              <option value="">All</option>
+              <option value="Desktop">Desktop</option>
+              <option value="Mobile">Mobile</option>
+              <option value="Tablet">Tablet</option>
+            </select>
+          </div>
+          <div class="vis-filter-group ms-auto">
+            <button type="button" class="btn btn-sm btn-soft-gray" id="vfReset" data-testid="vf-reset"><i class="bi bi-arrow-counterclockwise me-1"></i>Reset</button>
+            <button type="button" class="btn btn-sm vf-quick" data-quick="7" data-testid="vf-quick-7">7d</button>
+            <button type="button" class="btn btn-sm vf-quick" data-quick="30" data-testid="vf-quick-30">30d</button>
+            <button type="button" class="btn btn-sm vf-quick" data-quick="90" data-testid="vf-quick-90">3m</button>
+            <button type="button" class="btn btn-sm vf-quick" data-quick="365" data-testid="vf-quick-365">1y</button>
           </div>
         </div>
         <div id="visitorsBody" data-testid="visitors-body" style="position:relative; min-height:280px;">
-        <div class="card-head" data-vrange-header>
-          <div class="ttl"><i class="bi bi-people-fill"></i> Visitors <span class="sub ms-2"><?= esc($vRangeLabel) ?> · real humans · bots filtered</span></div>
-          <span class="badge bg-success-subtle text-success" style="font-size:11px;"><i class="bi bi-eye-fill me-1"></i><?= number_format($vTodayHits) ?> page-views</span>
+          <div class="p-4 text-center text-muted"><i class="bi bi-hourglass-split"></i> Loading…</div>
         </div>
-        <div class="card-body-p">
-          <div class="row g-3">
-            <!-- Big visitor count + trend spark -->
-            <div class="col-lg-4">
-              <div class="vis-headline">
-                <div class="vis-num" data-testid="visitors-today-unique"><?= number_format($vTodayUniq) ?></div>
-                <div class="vis-lbl">unique visitors · <?= esc($vRangeLabel) ?></div>
-                <div class="vis-delta <?= $vDelta>=0?'up':'down' ?>">
-                  <i class="bi bi-arrow-<?= $vDelta>=0?'up':'down' ?>-right"></i>
-                  <?= $vDelta>=0?'+':'' ?><?= $vDelta ?>%
-                  <span class="text-muted ms-1">vs previous (<?= number_format($vYestUniq) ?>)</span>
-                </div>
-                <div class="vis-spark" title="<?= esc(count($vTrend)) ?>-bar trend">
-                  <?php foreach ($vTrend as $tt):
-                    $h = max(8, ($tt['c']/$vTrendMax)*100);
-                    $isCurrent = $tt['d'] === date('Y-m-d');
-                  ?>
-                    <div class="vis-spark-bar <?= $isCurrent?'today':'' ?>" style="height:<?= $h ?>%;" title="<?= esc($tt['d']) ?>: <?= $tt['c'] ?> visitors">
-                      <span class="vis-spark-val"><?= $tt['c']>0 ? $tt['c'] : '' ?></span>
-                    </div>
-                  <?php endforeach; ?>
-                </div>
-                <div class="vis-spark-x">
-                  <?php foreach ($vTrend as $tt): ?><span><?= esc($tt['lbl'] ?? '') ?></span><?php endforeach; ?>
-                </div>
-              </div>
-            </div>
-
-            <!-- OS breakdown -->
-            <div class="col-lg-4 col-md-6">
-              <div class="vis-block" data-testid="visitors-os-block">
-                <div class="vis-block-ttl"><i class="bi bi-display me-1"></i> Operating System</div>
-                <?php if (empty($vOs)): ?>
-                  <div class="text-muted small py-3 text-center">No visitors in this range.</div>
-                <?php else:
-                  $osIcons = [
-                    'Windows 10/11'=>['bi-windows','#0078D4'], 'Windows 8.1'=>['bi-windows','#0078D4'],
-                    'Windows 8'=>['bi-windows','#0078D4'], 'Windows 7'=>['bi-windows','#0078D4'],
-                    'Windows'=>['bi-windows','#0078D4'],
-                    'macOS'=>['bi-apple','#1d1d1f'], 'iOS'=>['bi-apple','#1d1d1f'],
-                    'Android'=>['bi-android2','#3DDC84'], 'Linux'=>['bi-ubuntu','#E95420'],
-                    'Chrome OS'=>['bi-google','#FBBC05'], 'Unknown'=>['bi-question-circle','#9ca3af'],
-                  ];
-                  foreach ($vOs as $row):
-                    $pct = $vTodayUniq>0 ? round(((int)$row['c']/$vTodayUniq)*100) : 0;
-                    $ic = $osIcons[$row['os']] ?? ['bi-pc-display','#6b7280'];
-                ?>
-                  <div class="vis-row">
-                    <i class="bi <?= esc($ic[0]) ?>" style="color:<?= esc($ic[1]) ?>;font-size:16px;"></i>
-                    <div class="flex-grow-1 min-width-0">
-                      <div class="d-flex justify-content-between">
-                        <span class="small fw-semibold text-truncate"><?= esc($row['os']) ?></span>
-                        <span class="small text-muted"><?= (int)$row['c'] ?> · <?= $pct ?>%</span>
-                      </div>
-                      <div class="vis-bar"><span style="width:<?= $pct ?>%;background:<?= esc($ic[1]) ?>;"></span></div>
-                    </div>
-                  </div>
-                <?php endforeach; endif; ?>
-              </div>
-            </div>
-
-            <!-- Device + Country -->
-            <div class="col-lg-4 col-md-6">
-              <div class="vis-block" data-testid="visitors-device-block">
-                <div class="vis-block-ttl"><i class="bi bi-phone me-1"></i> Device</div>
-                <?php if (empty($vDev)): ?>
-                  <div class="text-muted small py-2">—</div>
-                <?php else:
-                  $devIcons = ['Desktop'=>['bi-display','#3b82f6'], 'Mobile'=>['bi-phone','#10b981'], 'Tablet'=>['bi-tablet','#f59e0b']];
-                  foreach ($vDev as $row):
-                    $pct = $vTodayUniq>0 ? round(((int)$row['c']/$vTodayUniq)*100) : 0;
-                    $ic = $devIcons[$row['device']] ?? ['bi-question-circle','#9ca3af'];
-                ?>
-                  <div class="vis-row">
-                    <i class="bi <?= esc($ic[0]) ?>" style="color:<?= esc($ic[1]) ?>;font-size:16px;"></i>
-                    <div class="flex-grow-1 min-width-0">
-                      <div class="d-flex justify-content-between">
-                        <span class="small fw-semibold"><?= esc($row['device']) ?></span>
-                        <span class="small text-muted"><?= (int)$row['c'] ?> · <?= $pct ?>%</span>
-                      </div>
-                      <div class="vis-bar"><span style="width:<?= $pct ?>%;background:<?= esc($ic[1]) ?>;"></span></div>
-                    </div>
-                  </div>
-                <?php endforeach; endif; ?>
-
-                <?php if (!empty($vCountry)): ?>
-                <div class="vis-block-ttl mt-3"><i class="bi bi-globe2 me-1"></i> Top Countries</div>
-                <div class="d-flex flex-wrap gap-2">
-                  <?php foreach ($vCountry as $c): ?>
-                    <span class="vis-chip"><?= esc($c['country'] ?: 'XX') ?> <strong><?= (int)$c['c'] ?></strong></span>
-                  <?php endforeach; ?>
-                </div>
-                <?php endif; ?>
-              </div>
-            </div>
-          </div>
-        </div>
-        </div><!-- /#visitorsBody -->
       </div>
     </div>
   </div>
 
   <script>
-  // -------------------------------------------------------------------
-  // Visitor widget — AJAX range switcher.  Pill clicks (and Custom date
-  // range apply) fetch /ajax/visitor-stats.php and swap #visitorsBody
-  // in place.  No page reload, no scroll-to-top jump.
-  // -------------------------------------------------------------------
+  // Visitor widget — multi-filter controller.
   (function(){
-    const card    = document.getElementById('visitorsCard');
-    const body    = document.getElementById('visitorsBody');
-    if (!card || !body) return;
-    const pills   = card.querySelectorAll('.vrange-pill');
-    const customRow = document.getElementById('vrangeCustomRow');
-    const $from   = document.getElementById('vrangeFrom');
-    const $to     = document.getElementById('vrangeTo');
+    const $from = document.getElementById('vrangeFrom');
+    const $to   = document.getElementById('vrangeTo');
+    const $os   = document.getElementById('vfOs');
+    const $dev  = document.getElementById('vfDevice');
+    const $body = document.getElementById('visitorsBody');
+    const filters = { from: $from.value, to: $to.value, os: '', device: '', country: '' };
 
-    function setActive(range) {
-      pills.forEach(p => p.classList.toggle('active', p.dataset.vrange === range));
-    }
-
-    async function loadRange(range, opts) {
-      opts = opts || {};
-      // Preserve scroll position — re-apply after content swap so the page
-      // doesn't jump as elements resize.
+    async function reload(){
       const scrollY = window.scrollY;
-      body.style.opacity = '0.45';
-      body.style.pointerEvents = 'none';
+      $body.style.opacity = '0.45'; $body.style.pointerEvents = 'none';
       try {
-        let url = '/ajax/visitor-stats.php?range=' + encodeURIComponent(range);
-        if (range === 'custom') {
-          if (!opts.from || !opts.to) return;
-          url += '&from=' + encodeURIComponent(opts.from) + '&to=' + encodeURIComponent(opts.to);
-        }
-        const r = await fetch(url);
+        const qs = new URLSearchParams({from: filters.from, to: filters.to,
+                                        os: filters.os, device: filters.device, country: filters.country});
+        const r = await fetch('/ajax/visitor-stats.php?' + qs.toString());
         if (!r.ok) throw new Error('HTTP ' + r.status);
-        const html = await r.text();
-        body.innerHTML = html;
-        setActive(range);
-        // Update the URL (so refresh keeps the chosen range) without scrolling
-        const qs = new URLSearchParams(window.location.search);
-        qs.set('tab', 'dashboard');
-        qs.set('vrange', range);
-        if (range === 'custom') { qs.set('from', opts.from); qs.set('to', opts.to); }
-        else { qs.delete('from'); qs.delete('to'); }
-        history.replaceState(null, '', '?' + qs.toString());
-      } catch (e) {
-        body.innerHTML = '<div class="p-4 text-center text-danger"><i class="bi bi-exclamation-triangle me-1"></i> Failed to load — ' + (e.message || 'network error') + '</div>';
+        $body.innerHTML = await r.text();
+        wireBodyEvents();
+      } catch(e) {
+        $body.innerHTML = '<div class="p-4 text-center text-danger"><i class="bi bi-exclamation-triangle me-1"></i> ' + (e.message||'Network error') + '</div>';
       } finally {
-        body.style.opacity = '';
-        body.style.pointerEvents = '';
-        // Restore scroll position — keeps the admin where they clicked.
+        $body.style.opacity = ''; $body.style.pointerEvents = '';
         window.scrollTo({top: scrollY, behavior: 'instant'});
       }
     }
+    function wireBodyEvents(){
+      // Click a row/chip to apply the filter (toggle off if already active)
+      $body.querySelectorAll('[data-filter-key]').forEach(el => el.addEventListener('click', function(){
+        const k = el.dataset.filterKey, v = el.dataset.filterVal;
+        filters[k] = (filters[k] === v) ? '' : v;
+        // Sync the dropdowns visually too
+        if (k === 'os')     $os.value  = filters.os;
+        if (k === 'device') $dev.value = filters.device;
+        reload();
+      }));
+      // Active-chip click to clear
+      $body.querySelectorAll('[data-clear]').forEach(el => el.addEventListener('click', function(){
+        const k = el.dataset.clear; filters[k] = '';
+        if (k === 'os')     $os.value  = '';
+        if (k === 'device') $dev.value = '';
+        reload();
+      }));
+    }
 
-    pills.forEach(p => p.addEventListener('click', function(){
-      const r = p.dataset.vrange;
-      if (r === 'custom') {
-        // Show the date picker row.  Default to last 7 days for convenience.
-        if (!$from.value) $from.value = new Date(Date.now() - 7*86400000).toISOString().slice(0,10);
-        if (!$to.value)   $to.value   = new Date().toISOString().slice(0,10);
-        customRow.style.display = 'flex';
-        setActive('custom');
-        $from.focus();
-        return;
-      }
-      customRow.style.display = 'none';
-      loadRange(r);
+    [$from, $to].forEach(i => i.addEventListener('change', function(){
+      filters.from = $from.value; filters.to = $to.value;
+      if (filters.from > filters.to) [filters.from, filters.to] = [filters.to, filters.from];
+      reload();
+    }));
+    $os.addEventListener('change',  function(){ filters.os     = $os.value;  reload(); });
+    $dev.addEventListener('change', function(){ filters.device = $dev.value; reload(); });
+
+    document.getElementById('vfReset').addEventListener('click', function(){
+      const today = new Date().toISOString().slice(0,10);
+      $from.value = today; $to.value = today; $os.value = ''; $dev.value = '';
+      Object.assign(filters, {from: today, to: today, os:'', device:'', country:''});
+      reload();
+    });
+    document.querySelectorAll('.vf-quick').forEach(b => b.addEventListener('click', function(){
+      const days = parseInt(b.dataset.quick, 10);
+      const today = new Date();
+      const from  = new Date(Date.now() - (days-1)*86400000);
+      $from.value = from.toISOString().slice(0,10);
+      $to.value   = today.toISOString().slice(0,10);
+      filters.from = $from.value; filters.to = $to.value;
+      reload();
     }));
 
-    document.getElementById('vrangeApply')?.addEventListener('click', function(){
-      const from = $from.value, to = $to.value;
-      if (!from || !to) { alert('Please pick both From and To dates.'); return; }
-      if (from > to) { alert('From date must be earlier than To date.'); return; }
-      loadRange('custom', {from: from, to: to});
-    });
-    document.getElementById('vrangeCancel')?.addEventListener('click', function(){
-      customRow.style.display = 'none';
-      // Revert to whatever pill was active before, default to "today"
-      const active = card.querySelector('.vrange-pill.active');
-      const r = (active && active.dataset.vrange && active.dataset.vrange !== 'custom') ? active.dataset.vrange : 'today';
-      setActive(r);
-    });
+    // Initial load
+    reload();
   })();
   </script>
 
   <style>
-    .vrange-pills { display:inline-flex; gap:4px; background:var(--bg); padding:3px; border-radius:999px; border:1px solid var(--border); flex-wrap:wrap; }
-    .vrange-pill { padding:4px 12px; border-radius:999px; font-size:11.5px; font-weight:600; color:var(--muted); text-decoration:none; transition:all .15s ease; white-space:nowrap; border:0; background:transparent; cursor:pointer; }
-    .vrange-pill:hover { background:rgba(59,130,246,.08); color:var(--brand); }
-    .vrange-pill.active { background:var(--brand); color:#fff; box-shadow:0 1px 2px rgba(59,130,246,.3); }
-    .vrange-custom-row { display:flex; align-items:center; gap:4px; flex-wrap:wrap; }
-    .vrange-custom-row input[type="date"] { max-width:150px; font-size:12px; }
+    /* Multi-filter top bar */
+    .vis-filter-bar { display:flex; align-items:center; flex-wrap:wrap; gap:10px; padding:10px 14px; border-bottom:1px solid var(--border); background:linear-gradient(180deg, rgba(248,250,252,.7), transparent); }
+    [data-bs-theme="dark"] .vis-filter-bar { background:linear-gradient(180deg, rgba(15,23,41,.4), transparent); }
+    .vis-filter-group { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+    .vis-filter-group label { font-size:11.5px; font-weight:600; color:var(--muted); margin:0; }
+    .vis-filter-group input[type="date"], .vis-filter-group select {
+      font-size:12px; padding:4px 8px; border:1px solid var(--border); border-radius:6px; background:#fff;
+      max-width:155px; line-height:1.3;
+    }
+    [data-bs-theme="dark"] .vis-filter-group input[type="date"],
+    [data-bs-theme="dark"] .vis-filter-group select { background:#0f1729; color:#e2e8f0; border-color:#1f2a44; }
+    .vis-filter-group input[type="date"]:focus, .vis-filter-group select:focus { outline:0; border-color:var(--brand); }
+    .vf-quick { font-size:11.5px; padding:3px 10px; background:transparent; border:1px solid var(--border); color:var(--muted); border-radius:6px; }
+    .vf-quick:hover { background:var(--brand); color:#fff; border-color:var(--brand); }
+
+    /* Inside-body header (range label + active chips) */
+    .vis-header-row { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; padding:12px 14px 0; }
+    .vis-header-row .ttl { font-size:15px; font-weight:700; color:var(--text); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .vis-range-lbl { font-size:11.5px; font-weight:500; color:var(--muted); margin-left:4px; }
+    .vis-active-chip { display:inline-flex; align-items:center; padding:3px 10px; border-radius:999px; background:#dbeafe; color:#1e3a8a; font-size:11.5px; font-weight:600; cursor:pointer; transition:filter .15s ease; }
+    .vis-active-chip:hover { filter:brightness(.95); }
+    [data-bs-theme="dark"] .vis-active-chip { background:rgba(59,130,246,.2); color:#bfdbfe; }
+
+    /* Headline (left column) */
     .vis-headline { padding:8px 4px; }
     .vis-num { font-size:38px; font-weight:800; line-height:1; color:var(--text); letter-spacing:-1px; }
     .vis-lbl { font-size:12px; color:var(--muted); margin-top:4px; }
     .vis-delta { margin-top:8px; font-size:13px; font-weight:600; }
     .vis-delta.up   { color:#16a34a; }
     .vis-delta.down { color:#dc2626; }
-    .vis-spark { display:flex; align-items:flex-end; gap:4px; height:60px; margin-top:14px; padding:0 2px; }
-    .vis-spark-bar { flex:1; min-width:8px; background:linear-gradient(180deg,#60a5fa,#2563eb); border-radius:3px 3px 0 0; position:relative; transition:filter .15s ease; }
+    .vis-spark { display:flex; align-items:flex-end; gap:3px; height:60px; margin-top:14px; padding:0 2px; }
+    .vis-spark-bar { flex:1; min-width:6px; background:linear-gradient(180deg,#60a5fa,#2563eb); border-radius:3px 3px 0 0; position:relative; transition:filter .15s ease; }
     .vis-spark-bar:hover { filter:brightness(1.15); }
     .vis-spark-bar.today { background:linear-gradient(180deg,#10b981,#059669); }
-    .vis-spark-val { position:absolute; top:-16px; left:50%; transform:translateX(-50%); font-size:10px; color:var(--muted); }
-    .vis-spark-x { display:flex; gap:4px; padding:4px 2px 0; }
-    .vis-spark-x span { flex:1; min-width:8px; text-align:center; font-size:9.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .vis-spark-val { position:absolute; top:-15px; left:50%; transform:translateX(-50%); font-size:9.5px; color:var(--muted); }
+    .vis-spark-x { display:flex; gap:3px; padding:4px 2px 0; }
+    .vis-spark-x span { flex:1; min-width:6px; text-align:center; font-size:9.5px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+    /* OS / Device blocks — properly aligned rows */
     .vis-block { padding:6px 0; }
-    .vis-block-ttl { font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; margin-bottom:8px; }
-    .vis-row { display:flex; align-items:center; gap:10px; padding:6px 0; }
-    .vis-row + .vis-row { border-top:1px dashed rgba(148,163,184,.18); }
-    .vis-bar { height:5px; background:rgba(148,163,184,.18); border-radius:3px; overflow:hidden; margin-top:3px; }
+    .vis-block-ttl { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.7px; margin-bottom:10px; }
+    .vis-row { display:flex; align-items:center; gap:10px; padding:7px 8px; width:100%; border:0; background:transparent; border-radius:8px; text-align:left; transition:background .12s ease; cursor:pointer; }
+    .vis-row:hover { background:rgba(59,130,246,.06); }
+    .vis-row.is-active { background:rgba(59,130,246,.12); box-shadow:inset 0 0 0 1px rgba(59,130,246,.45); }
+    [data-bs-theme="dark"] .vis-row.is-active { background:rgba(59,130,246,.18); }
+    .vis-row + .vis-row { margin-top:2px; }
+    .vis-row-body { flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
+    .vis-row-head { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+    .vis-row-name { font-size:12.5px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .vis-row-num { font-size:11.5px; color:var(--muted); white-space:nowrap; font-variant-numeric:tabular-nums; flex-shrink:0; }
+    .vis-row-num .vis-pct { color:var(--muted); }
+    .vis-bar { height:5px; background:rgba(148,163,184,.18); border-radius:3px; overflow:hidden; }
     .vis-bar span { display:block; height:100%; border-radius:3px; transition:width .3s ease; }
+
+    /* Country flag chips */
+    .vis-flag-chip { display:inline-flex; align-items:center; gap:6px; padding:5px 11px; background:#f1f5f9; border:1px solid var(--border); border-radius:999px; font-size:12px; color:var(--text); cursor:pointer; transition:all .15s ease; }
+    .vis-flag-chip:hover { background:#e0e7ff; transform: translateY(-1px); }
+    .vis-flag-chip.is-active { background:linear-gradient(135deg,#1e3a8a,#2563eb); color:#fff; border-color:#1e40af; box-shadow:0 2px 6px rgba(30,64,175,.3); }
+    .vis-flag { font-size:18px; line-height:1; }
+    .vis-flag-cc { font-weight:700; letter-spacing:.3px; }
+    .vis-flag-num { font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums; }
+    .vis-flag-chip.is-active .vis-flag-num { color:rgba(255,255,255,.85); }
+    [data-bs-theme="dark"] .vis-flag-chip { background:#0f1729; }
+
     .vis-chip { background:var(--bg); border:1px solid var(--border); padding:3px 9px; border-radius:999px; font-size:11.5px; color:var(--text); }
     [data-bs-theme="dark"] .vis-chip { background:#0f1729; }
   </style>
@@ -2877,6 +2821,13 @@ elseif ($tab === 'emails'):
                     data-testid="resend-failed-btn-<?= (int)$e['id'] ?>">
               <i class="bi bi-arrow-clockwise me-1"></i> Resend Email
             </button>
+            <button type="button"
+                    class="btn btn-soft-amber btn-sm fw-semibold ec-test-btn"
+                    data-recipient="<?= esc($e['recipient']) ?>"
+                    data-testid="test-smtp-btn-<?= (int)$e['id'] ?>"
+                    title="Diagnose why this recipient isn't reachable">
+              <i class="bi bi-activity me-1"></i> Test Delivery
+            </button>
           <?php endif; ?>
           <button type="button"
                   class="btn btn-soft-amber btn-sm"
@@ -3099,6 +3050,72 @@ elseif ($tab === 'emails'):
       });
     });
 
+    // Inline "Test Delivery" buttons — diagnostic only, never sends a real email.
+    document.querySelectorAll('.ec-test-btn').forEach(btn => {
+      btn.addEventListener('click', async function(){
+        const recipient = btn.dataset.recipient || '';
+        if (!recipient) return;
+        openSmtpTestModal(recipient);
+        btn.disabled = true; const oldHtml = btn.innerHTML;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Testing…';
+        try {
+          const r = await fetch('/ajax/smtp-test-recipient.php', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({email: recipient})
+          });
+          const j = await r.json();
+          renderSmtpTestResult(j, recipient);
+        } catch(e) {
+          renderSmtpTestResult({ok:false, checks:[], summary:'Network error: ' + e.message}, recipient);
+        } finally {
+          btn.disabled = false; btn.innerHTML = oldHtml;
+        }
+      });
+    });
+    function openSmtpTestModal(recipient){
+      let m = document.getElementById('smtpTestModal');
+      if (!m) {
+        m = document.createElement('div');
+        m.id = 'smtpTestModal';
+        m.innerHTML = '<div class="smtp-test-backdrop"></div>' +
+                      '<div class="smtp-test-dialog" role="dialog" aria-modal="true">' +
+                        '<div class="smtp-test-head">' +
+                          '<div class="ttl"><i class="bi bi-activity me-2"></i>SMTP Delivery Diagnostic</div>' +
+                          '<button type="button" class="btn-close" aria-label="Close" onclick="closeSmtpTestModal()"></button>' +
+                        '</div>' +
+                        '<div class="smtp-test-recipient" id="smtpTestRecipient"></div>' +
+                        '<div class="smtp-test-body" id="smtpTestBody"><div class="text-center text-muted p-4"><span class="spinner-border spinner-border-sm me-1"></span> Running checks…</div></div>' +
+                      '</div>';
+        document.body.appendChild(m);
+        m.querySelector('.smtp-test-backdrop').addEventListener('click', closeSmtpTestModal);
+      }
+      document.getElementById('smtpTestRecipient').innerHTML = '<i class="bi bi-envelope me-1"></i> Testing: <code>' + recipient.replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])) + '</code>';
+      document.getElementById('smtpTestBody').innerHTML = '<div class="text-center text-muted p-4"><span class="spinner-border spinner-border-sm me-1"></span> Running checks…</div>';
+      m.classList.add('open'); document.body.style.overflow = 'hidden';
+    }
+    function closeSmtpTestModal(){
+      const m = document.getElementById('smtpTestModal');
+      if (m) m.classList.remove('open');
+      document.body.style.overflow = '';
+    }
+    window.closeSmtpTestModal = closeSmtpTestModal;
+    function renderSmtpTestResult(j, recipient){
+      const body = document.getElementById('smtpTestBody'); if (!body) return;
+      const iconFor = (ok) => ok === true ? '<i class="bi bi-check-circle-fill text-success"></i>'
+                            : ok === false ? '<i class="bi bi-x-circle-fill text-danger"></i>'
+                            : '<i class="bi bi-info-circle-fill text-warning"></i>';
+      const html = (j.checks || []).map(c =>
+        '<div class="smtp-test-step ' + (c.ok===false?'is-fail':c.ok===true?'is-ok':'is-warn') + '">' +
+          '<div class="step-icon">' + iconFor(c.ok) + '</div>' +
+          '<div class="step-body"><div class="step-label">' + (c.label||c.step) + '</div>' +
+                                '<div class="step-detail">' + (c.detail||'') + '</div></div>' +
+        '</div>'
+      ).join('');
+      const verdictClass = j.ok ? 'verdict-ok' : 'verdict-fail';
+      const verdictIcon  = j.ok ? 'bi-check2-circle text-success' : 'bi-exclamation-triangle-fill text-warning';
+      body.innerHTML = html + '<div class="smtp-test-verdict ' + verdictClass + '"><i class="bi ' + verdictIcon + ' me-2"></i>' + (j.summary || '') + '</div>';
+    }
+
     function openEditResendModal(id, recipient, subject, customerName) {
       document.getElementById('er_email_id').value = id;
       document.getElementById('er_recipient').value = recipient || '';
@@ -3165,6 +3182,33 @@ elseif ($tab === 'emails'):
     .resend-toast.show { opacity:1; transform:translateY(0); }
     .resend-toast.ok  { background:linear-gradient(135deg,#15803d,#16a34a); }
     .resend-toast.err { background:linear-gradient(135deg,#b91c1c,#dc2626); }
+
+    /* SMTP test diagnostic modal */
+    #smtpTestModal { position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:5000; }
+    #smtpTestModal.open { display:flex; animation:adm-fade .2s ease-out; }
+    .smtp-test-backdrop { position:absolute; inset:0; background:rgba(15,23,42,.55); }
+    .smtp-test-dialog { position:relative; width:min(540px, 92vw); max-height:90vh; overflow:auto; background:#fff; border-radius:14px; box-shadow:0 18px 50px rgba(15,23,42,.32); animation:adm-slide .25s cubic-bezier(.16,1,.3,1); }
+    [data-bs-theme="dark"] .smtp-test-dialog { background:#0f1729; color:#e2e8f0; }
+    .smtp-test-head { padding:14px 18px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; gap:8px; background:linear-gradient(135deg,#1e3a8a,#2563eb); color:#fff; border-radius:14px 14px 0 0; }
+    .smtp-test-head .ttl { font-weight:700; font-size:14px; }
+    .smtp-test-head .btn-close { filter: invert(1) brightness(2); opacity:.85; }
+    .smtp-test-recipient { padding:10px 18px; border-bottom:1px solid var(--border); font-size:12.5px; color:var(--muted); background:rgba(241,245,249,.5); }
+    [data-bs-theme="dark"] .smtp-test-recipient { background:rgba(15,23,41,.4); }
+    .smtp-test-body { padding:12px 18px 16px; }
+    .smtp-test-step { display:flex; gap:12px; padding:10px 12px; border-radius:10px; margin-bottom:8px; align-items:flex-start; }
+    .smtp-test-step.is-ok   { background:rgba(34,197,94,.08); }
+    .smtp-test-step.is-fail { background:rgba(239,68,68,.08); }
+    .smtp-test-step.is-warn { background:rgba(245,158,11,.10); }
+    .step-icon { font-size:18px; line-height:1; flex-shrink:0; padding-top:1px; }
+    .step-body { flex:1; min-width:0; }
+    .step-label { font-size:13px; font-weight:700; color:var(--text); margin-bottom:2px; }
+    .step-detail { font-size:12px; color:var(--muted); line-height:1.4; word-break:break-word; }
+    .step-detail code { background:rgba(148,163,184,.2); padding:1px 6px; border-radius:4px; font-size:11px; }
+    .smtp-test-verdict { margin-top:12px; padding:11px 14px; border-radius:10px; font-size:13px; line-height:1.45; display:flex; align-items:flex-start; }
+    .smtp-test-verdict.verdict-ok   { background:rgba(34,197,94,.10); color:#15803d; border:1px solid rgba(34,197,94,.30); }
+    .smtp-test-verdict.verdict-fail { background:rgba(245,158,11,.10); color:#92400e; border:1px solid rgba(245,158,11,.30); }
+    [data-bs-theme="dark"] .smtp-test-verdict.verdict-ok   { color:#86efac; }
+    [data-bs-theme="dark"] .smtp-test-verdict.verdict-fail { color:#fde68a; }
   </style>
 
 <?php
