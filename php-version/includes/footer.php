@@ -174,16 +174,14 @@
     <div id="chat-lead-form" class="chat-lead-card" style="display:none;" data-testid="chat-lead-form">
       <div id="chat-lead-nudge" class="chat-lead-nudge" style="display:none;" data-testid="chat-lead-nudge">
         <i class="bi bi-lightning-charge-fill"></i>
-        <span><strong>Don't lose this</strong> — agent on the way. Share your email or phone so we don't miss you ↓</span>
+        <span><strong>Don't lose this</strong> — agent on the way. Share your details so we don't miss you ↓</span>
       </div>
-      <div class="chat-lead-title">Share a few quick details so I can put you in touch with the right specialist.</div>
-      <input id="lead-name"  class="form-control form-control-sm chat-lead-input" placeholder="Your name"      data-testid="lead-name">
-      <input id="lead-email" type="email" class="form-control form-control-sm chat-lead-input" placeholder="Email address" data-testid="lead-email">
-      <input id="lead-phone" class="form-control form-control-sm chat-lead-input" placeholder="Phone number"   data-testid="lead-phone">
-      <button class="btn btn-sm chat-lead-cta" onclick="submitLead(true)" data-testid="lead-callback-btn"><i class="bi bi-telephone-outbound me-1"></i>Request a callback</button>
-      <button type="button" class="btn btn-sm chat-lead-cta-chat" onclick="submitLead('chat')" data-testid="lead-chat-btn"><i class="bi bi-chat-dots-fill me-1"></i>Chat Now</button>
-      <a href="tel:<?= esc($brandPhone) ?>" class="btn btn-sm chat-lead-cta-alt" onclick="submitLead(false)" data-testid="lead-call-btn"><i class="bi bi-telephone me-1"></i>Call <?= esc($brandPhone) ?></a>
-      <button class="btn btn-link chat-lead-skip" onclick="skipLead()" data-testid="lead-skip-btn">Skip — I just want to ask a question</button>
+      <div class="chat-lead-title">Share your name, email and phone — we'll connect you with a live agent right away.</div>
+      <input id="lead-name"  class="form-control form-control-sm chat-lead-input" placeholder="Full name"      data-testid="lead-name" autocomplete="name">
+      <input id="lead-email" type="email" class="form-control form-control-sm chat-lead-input" placeholder="Email address" data-testid="lead-email" autocomplete="email">
+      <input id="lead-phone" class="form-control form-control-sm chat-lead-input" placeholder="Phone number"   data-testid="lead-phone" autocomplete="tel">
+      <button type="button" class="btn btn-sm chat-lead-cta-chat chat-lead-cta-primary" onclick="submitLead('chat')" data-testid="lead-chat-btn"><i class="bi bi-chat-dots-fill me-1"></i>Connect me with an agent</button>
+      <a href="tel:<?= esc($brandPhone) ?>" class="btn btn-sm chat-lead-cta-alt" onclick="submitLead(false)" data-testid="lead-call-btn"><i class="bi bi-telephone me-1"></i>Or call us at <?= esc($brandPhone) ?></a>
     </div>
   </div>
   <div id="chat-typing" class="chat-typing" style="display:none;" data-testid="chat-admin-typing">
