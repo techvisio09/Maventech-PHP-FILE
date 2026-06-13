@@ -307,28 +307,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $base = rtrim(site_url(), '/');
                     $prodUrl = $base . '/product.php?slug=' . urlencode($prodRow['slug']);
                     foreach ($subs->fetchAll() as $sub) {
-                        $subject = "Good news — " . $prodRow['name'] . " is back in stock!";
-                        $html = '<!doctype html><html><body style="margin:0;padding:0;background:#fbfcfd;font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#1f2937;">
-<div style="max-width:580px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 18px rgba(15,23,42,.06);">
-  <div style="background:linear-gradient(135deg,#f59e0b,#d97706);padding:28px 32px;text-align:center;color:#fff;">
-    <div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;font-weight:700;opacity:.85;">' . esc($co['name']) . '</div>
-    <h1 style="margin:8px 0 0;font-size:22px;font-weight:800;">It\'s back in stock!</h1>
-  </div>
-  <div style="padding:30px 32px;">
-    <p style="font-size:15px;color:#475569;margin:0 0 18px;line-height:1.6;">Great news! The product you were waiting for is available again:</p>
-    <div style="background:#fff7ed;border:1px dashed #fed7aa;border-radius:12px;padding:18px;text-align:center;margin-bottom:22px;">
-      <div style="font-size:18px;font-weight:700;color:#0f172a;">' . esc($prodRow['name']) . '</div>
-      <div style="margin-top:4px;font-size:12px;color:#92400e;letter-spacing:1px;text-transform:uppercase;font-weight:700;">Limited stock — grab it now</div>
-    </div>
-    <div style="text-align:center;">
-      <a href="' . esc($prodUrl) . '" style="display:inline-block;padding:13px 32px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border-radius:999px;text-decoration:none;font-weight:700;font-size:14px;letter-spacing:.3px;">Buy it now &rarr;</a>
-    </div>
-    <p style="font-size:12px;color:#94a3b8;text-align:center;margin-top:24px;">You\'re receiving this because you subscribed to restock alerts for this product. We\'ll only email you once.</p>
-  </div>
-  <div style="background:#f8fafc;padding:18px 32px;border-top:1px solid #f1f3f5;font-size:11.5px;color:#64748b;text-align:center;">
-    Need help? <a href="mailto:' . esc($co['email']) . '" style="color:#3b82f6;text-decoration:none;">' . esc($co['email']) . '</a> &middot; ' . esc($co['phone']) . '
-  </div>
-</div></body></html>';
+                        $subject = "It's back! " . $prodRow['name'] . " is in stock now";
+                        $html = '<!doctype html><html><body style="margin:0;padding:0;background:#f1f5f9;font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#1f2937;">
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f1f5f9;padding:32px 0;">
+  <tr><td align="center">
+    <table width="580" cellpadding="0" cellspacing="0" border="0" style="max-width:580px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 6px 24px rgba(15,23,42,.10);">
+      <!-- HEADER -->
+      <tr><td style="background:linear-gradient(135deg,#15803d 0%,#16a34a 60%,#22c55e 100%);padding:34px 32px 28px;text-align:center;color:#fff;">
+        <div style="font-size:11px;letter-spacing:3px;text-transform:uppercase;font-weight:700;opacity:.9;">' . esc($co['name']) . '</div>
+        <div style="margin:18px auto 12px;width:64px;height:64px;background:rgba(255,255,255,.20);border-radius:50%;display:inline-block;text-align:center;line-height:64px;">
+          <span style="font-size:30px;">&#x1F389;</span>
+        </div>
+        <h1 style="margin:6px 0 4px;font-size:26px;font-weight:800;letter-spacing:-.3px;">It\'s back in stock!</h1>
+        <div style="color:#dcfce7;font-size:13px;">Grab yours before it\'s gone again.</div>
+      </td></tr>
+      <!-- BODY -->
+      <tr><td style="padding:30px 36px 14px;">
+        <p style="font-size:15px;color:#334155;margin:0 0 24px;line-height:1.6;">Hi there 👋<br>You asked us to keep an eye on this one — and we did. The product you\'ve been waiting for just landed back in inventory:</p>
+
+        <!-- Hero product card -->
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:linear-gradient(135deg,#ecfdf5,#d1fae5);border:1px solid #a7f3d0;border-radius:14px;margin-bottom:24px;">
+          <tr><td style="padding:22px 22px 20px;text-align:center;">
+            <div style="display:inline-block;background:#15803d;color:#fff;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;font-weight:800;padding:4px 11px;border-radius:999px;">Available now</div>
+            <div style="margin-top:14px;font-size:20px;font-weight:800;color:#0f172a;line-height:1.3;">' . esc($prodRow['name']) . '</div>
+            <div style="margin-top:6px;font-size:12px;color:#15803d;font-weight:600;letter-spacing:.4px;">&#x26A1; Limited stock &middot; first come, first served</div>
+          </td></tr>
+        </table>
+
+        <!-- Big CTA -->
+        <div style="text-align:center;margin:0 0 8px;">
+          <a href="' . esc($prodUrl) . '" style="display:inline-block;padding:14px 36px;background:linear-gradient(135deg,#15803d,#16a34a);color:#fff;border-radius:999px;text-decoration:none;font-weight:800;font-size:15px;letter-spacing:.3px;box-shadow:0 8px 22px rgba(22,163,74,.40);">Buy it now &rarr;</a>
+        </div>
+        <p style="text-align:center;font-size:12px;color:#94a3b8;margin:16px 0 0;">Tip: lock it in within the next hour — popular items sell out fast.</p>
+
+        <!-- Trust strip -->
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:28px;border-top:1px solid #e2e8f0;padding-top:18px;">
+          <tr>
+            <td style="text-align:center;font-size:11px;color:#64748b;line-height:1.6;">
+              &#x2705; Instant delivery to your email &middot;
+              &#x1F512; Secure checkout &middot;
+              &#x1F4DE; ' . esc($co['phone']) . '
+            </td>
+          </tr>
+        </table>
+      </td></tr>
+      <!-- FOOTER -->
+      <tr><td style="background:#0f172a;padding:20px 32px;color:#94a3b8;font-size:11.5px;line-height:1.55;text-align:center;">
+        <div style="color:#e2e8f0;font-weight:700;font-size:13px;margin-bottom:6px;">' . esc($co['name']) . '</div>
+        Need help? <a href="mailto:' . esc($co['email']) . '" style="color:#34d399;text-decoration:none;">' . esc($co['email']) . '</a>
+        &middot; <span style="color:#cbd5e1;">' . esc($co['phone']) . '</span><br>
+        <span style="color:#64748b;">You signed up for restock alerts on this product &middot; this is a one-time notice.</span>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>';
                         try {
                             smtp_queue_email($sub['email'], $subject, $html, [
                                 'template_code' => 'stock_back',
