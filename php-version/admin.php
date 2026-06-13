@@ -1112,7 +1112,7 @@ elseif ($tab === 'company'):
     <?php endif; ?>
   </div>
 
-  <div class="card-e p-4 mb-3" data-testid="company-info-card" style="border-left:4px solid #3b82f6;">
+  <div class="card-e card-e--plain p-4 mb-3 company-info-shell" data-testid="company-info-card">
     <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-3">
       <div class="d-flex align-items-center gap-3">
         <div class="ci-logo-box" data-testid="ci-logo-preview">
@@ -1161,22 +1161,28 @@ elseif ($tab === 'company'):
         </div>
         <div class="col-12">
           <label class="form-label small fw-semibold"><i class="bi bi-image me-1"></i>Company Logo <span class="text-muted fw-normal">— shows at the top of every email. Leave empty to auto-generate a clean monogram from your company name's first letter.</span></label>
-          <div class="d-flex align-items-center gap-3 flex-wrap p-3 rounded" style="background:var(--bg);border:1px dashed var(--border);">
-            <div class="ci-logo-preview-lg" id="ciLogoPreviewLg">
-              <?php if ($co['logo']): ?>
-                <img src="<?= esc($co['logo']) ?>" alt="Logo" data-testid="ci-logo-preview-img">
-              <?php else: ?>
-                <?= render_logo(56) ?>
-                <small class="text-muted d-block mt-1" style="font-size:11px;">Auto-generated from "<?= esc($co['name'] ?: 'Your Brand') ?>"</small>
-              <?php endif; ?>
-            </div>
-            <div class="flex-grow-1 d-flex gap-2 flex-wrap align-items-center">
-              <input type="file" class="form-control form-control-sm" id="ciLogoFile" accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml" style="max-width:300px;" data-testid="ci-logo-file">
-              <button type="button" class="btn btn-soft-blue btn-sm" id="ciLogoUploadBtn" data-testid="ci-logo-upload-btn"><i class="bi bi-cloud-upload me-1"></i> Upload</button>
-              <?php if ($co['logo']): ?>
-                <button type="button" class="btn btn-soft-gray btn-sm" id="ciLogoRemoveBtn" data-testid="ci-logo-remove-btn"><i class="bi bi-x-circle me-1"></i> Remove</button>
-              <?php endif; ?>
-              <span class="text-muted small">JPG · PNG · GIF · WebP · SVG · max 3 MB</span>
+          <div class="dz-upload" id="ciDropZone" data-testid="ci-dropzone">
+            <input type="file" id="ciLogoFile" accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml" data-testid="ci-logo-file">
+            <div class="dz-body">
+              <div class="ci-logo-preview-lg" id="ciLogoPreviewLg">
+                <?php if ($co['logo']): ?>
+                  <img src="<?= esc($co['logo']) ?>" alt="Logo" data-testid="ci-logo-preview-img">
+                <?php else: ?>
+                  <?= render_logo(74) ?>
+                <?php endif; ?>
+              </div>
+              <div class="flex-grow-1" style="min-width:0;">
+                <div class="dz-icon" style="display:none;"><i class="bi bi-cloud-arrow-up-fill"></i></div>
+                <div class="dz-label"><?= $co['logo'] ? 'Current logo' : 'Auto-monogram preview' ?></div>
+                <div class="dz-hint"><i class="bi bi-cloud-arrow-up me-1"></i> Drop a file here, or click anywhere in this card to choose one. <strong>JPG · PNG · GIF · WebP · SVG · max 3&nbsp;MB</strong></div>
+                <div class="dz-filename mt-1" id="ciFileName" data-testid="ci-file-name"></div>
+              </div>
+              <div class="dz-actions">
+                <button type="button" class="dz-btn dz-btn-primary" id="ciLogoUploadBtn" data-testid="ci-logo-upload-btn"><i class="bi bi-cloud-upload"></i> Upload</button>
+                <?php if ($co['logo']): ?>
+                  <button type="button" class="dz-btn dz-btn-ghost" id="ciLogoRemoveBtn" data-testid="ci-logo-remove-btn"><i class="bi bi-x-circle"></i> Remove</button>
+                <?php endif; ?>
+              </div>
             </div>
           </div>
           <div id="ciLogoErr" class="small text-danger mt-2 d-none"></div>
@@ -1191,11 +1197,11 @@ elseif ($tab === 'company'):
   </div>
 
   <!-- Where it shows up -->
-  <div class="card-e p-3 mb-3" style="background:linear-gradient(135deg,#f0f9ff,#eff6ff);border:1px solid #bfdbfe;">
+  <div class="card-e card-e--plain p-3 mb-3 ci-where-card" data-testid="ci-where-card">
     <div class="d-flex gap-3 align-items-start">
       <i class="bi bi-info-circle text-primary" style="font-size:22px;line-height:1;"></i>
       <div class="small">
-        <strong class="d-block mb-1" style="color:#1e40af;">Where these details appear</strong>
+        <strong class="d-block mb-1" style="color:var(--brand-dk,#1e40af);">Where these details appear</strong>
         <div class="row g-2">
           <div class="col-md-4">&bull; Email header logo &amp; brand name</div>
           <div class="col-md-4">&bull; Order confirmation footer (support email + phone)</div>
@@ -1256,43 +1262,80 @@ elseif ($tab === 'company'):
     var urlInput = document.getElementById('ciLogoUrl');
     var preview  = document.getElementById('ciLogoPreviewLg');
     var errBox   = document.getElementById('ciLogoErr');
+    var dz       = document.getElementById('ciDropZone');
+    var fname    = document.getElementById('ciFileName');
 
     function showErr(m){ if (!errBox) return; errBox.textContent = m || ''; errBox.classList.toggle('d-none', !m); }
     function renderLogo(url){
       if (!preview) return;
       preview.innerHTML = url
         ? '<img src="' + url + '" alt="Logo" data-testid="ci-logo-preview-img">'
-        : '<span class="text-muted small"><i class="bi bi-image"></i> No logo yet</span>';
+        : (preview.dataset.fallback || '<span class="text-muted small"><i class="bi bi-image"></i> No logo yet</span>');
     }
-
-    if (upBtn) upBtn.addEventListener('click', function(){
+    function uploadFile(file){
+      if (!file) return;
+      var ok = ['image/jpeg','image/png','image/gif','image/webp','image/svg+xml'].indexOf(file.type) !== -1;
+      if (!ok) { showErr('That format isn\'t supported. Use JPG, PNG, GIF, WebP or SVG.'); return; }
+      if (file.size > 3 * 1024 * 1024) { showErr('Logo must be under 3 MB.'); return; }
       showErr('');
-      if (!fileEl.files || !fileEl.files[0]) { showErr('Please choose a logo image first.'); return; }
-      var fd = new FormData(); fd.append('logo', fileEl.files[0]);
-      var orig = upBtn.innerHTML; upBtn.disabled = true;
-      upBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Uploading…';
+      if (fname) fname.textContent = file.name + ' · ' + Math.round(file.size/1024) + ' KB';
+      var fd = new FormData(); fd.append('logo', file);
+      var orig = upBtn ? upBtn.innerHTML : '';
+      if (upBtn) { upBtn.disabled = true; upBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Uploading…'; }
       fetch('ajax/company-logo.php', { method:'POST', body: fd })
         .then(function(r){ return r.json().catch(function(){ return {ok:false, error:'Server error'}; }); })
         .then(function(j){
-          upBtn.disabled = false; upBtn.innerHTML = orig;
+          if (upBtn) { upBtn.disabled = false; upBtn.innerHTML = orig; }
           if (!j || !j.ok) { showErr((j && j.error) || 'Upload failed.'); return; }
-          urlInput.value = j.url;
+          if (urlInput) urlInput.value = j.url;
           renderLogo(j.url);
+          // Show the freshly-uploaded file as success state
+          if (fname) fname.innerHTML = '<i class="bi bi-check-circle-fill text-success"></i> ' + file.name + ' uploaded';
         }).catch(function(){
-          upBtn.disabled = false; upBtn.innerHTML = orig;
+          if (upBtn) { upBtn.disabled = false; upBtn.innerHTML = orig; }
           showErr('Network error — please try again.');
         });
+    }
+
+    if (fileEl) fileEl.addEventListener('change', function(){
+      if (fileEl.files && fileEl.files[0]) uploadFile(fileEl.files[0]);
     });
 
-    if (rmBtn) rmBtn.addEventListener('click', function(){
+    if (upBtn) upBtn.addEventListener('click', function(e){
+      e.stopPropagation();
+      if (!fileEl.files || !fileEl.files[0]) { fileEl.click(); return; }
+      uploadFile(fileEl.files[0]);
+    });
+
+    if (rmBtn) rmBtn.addEventListener('click', function(e){
+      e.stopPropagation();
       if (!confirm('Remove the company logo?')) return;
-      urlInput.value = '';
+      if (urlInput) urlInput.value = '';
       renderLogo('');
       var clr = document.createElement('input');
       clr.type = 'hidden'; clr.name = 'clear_logo'; clr.value = '1';
       form.appendChild(clr);
       rmBtn.disabled = true;
+      if (fname) fname.textContent = '';
     });
+
+    // Drag-and-drop wiring
+    if (dz) {
+      ['dragenter','dragover'].forEach(function(ev){
+        dz.addEventListener(ev, function(e){ e.preventDefault(); e.stopPropagation(); dz.classList.add('dz-dragover'); });
+      });
+      ['dragleave','drop'].forEach(function(ev){
+        dz.addEventListener(ev, function(e){ e.preventDefault(); e.stopPropagation(); dz.classList.remove('dz-dragover'); });
+      });
+      dz.addEventListener('drop', function(e){
+        var dt = e.dataTransfer;
+        if (dt && dt.files && dt.files[0]) {
+          // Reflect dropped file into the hidden <input type=file> so re-submit works
+          try { fileEl.files = dt.files; } catch(_){}
+          uploadFile(dt.files[0]);
+        }
+      });
+    }
   })();
   </script>
 
@@ -2784,8 +2827,7 @@ elseif ($tab === 'emails'):
 
   <?php if (!$emailsSmtp['enabled'] || $emailsSmtp['host'] === ''): ?>
   <!-- ==== Critical "SMTP not configured" banner — explains why "sent" emails aren't arriving ==== -->
-  <div class="card-e p-3 mb-3" data-testid="emails-smtp-disabled-banner"
-       style="border-left:5px solid #ef4444;background:linear-gradient(90deg,#fee2e2 0%,#fef3c7 100%);">
+  <div class="card-e card-e--plain p-3 mb-3 emails-banner-critical" data-testid="emails-smtp-disabled-banner">
     <div class="d-flex gap-3 align-items-start">
       <i class="bi bi-exclamation-octagon-fill" style="font-size:26px;line-height:1;color:#b91c1c;"></i>
       <div class="small flex-grow-1" style="color:#7f1d1d;">
@@ -3737,8 +3779,7 @@ elseif ($tab === 'smtp'):
 
   <?php if (!$smtp['enabled'] || $smtp['host'] === ''): ?>
   <!-- ==== Critical "SMTP not configured" banner ==== -->
-  <div class="card-e p-3 mb-3" data-testid="smtp-not-configured-banner"
-       style="border-left:5px solid #ef4444;background:linear-gradient(90deg,#fee2e2 0%,#fef3c7 100%);">
+  <div class="card-e card-e--plain p-3 mb-3 smtp-banner-critical" data-testid="smtp-not-configured-banner">
     <div class="d-flex gap-3 align-items-start">
       <i class="bi bi-exclamation-octagon-fill" style="font-size:28px;line-height:1;color:#b91c1c;"></i>
       <div class="small" style="color:#7f1d1d;">
@@ -3755,8 +3796,7 @@ elseif ($tab === 'smtp'):
       $alignmentOk = ($fromDomain !== '' && $userDomain !== '' && $fromDomain === $userDomain);
     ?>
     <?php if (!$alignmentOk && $smtp['username'] !== ''): ?>
-    <div class="card-e p-3 mb-3" data-testid="smtp-alignment-warning"
-         style="border-left:5px solid #f59e0b;background:linear-gradient(90deg,#fef3c7 0%,#fefce8 100%);">
+    <div class="card-e card-e--plain p-3 mb-3 smtp-banner-warn" data-testid="smtp-alignment-warning">
       <div class="d-flex gap-3 align-items-start">
         <i class="bi bi-shield-exclamation" style="font-size:24px;line-height:1;color:#92400e;"></i>
         <div class="small" style="color:#78350f;">

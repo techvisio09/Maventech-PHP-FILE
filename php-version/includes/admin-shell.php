@@ -541,12 +541,163 @@ body::before { content: none; }
 /* ============ CARDS / TABLES ============ */
 .card-e {
   background: var(--card-bg);
-  border:1px solid var(--border);
+  border: 1px solid var(--border);
   border-radius: 14px;
   box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 1px 3px rgba(15,23,42,.02);
-  transition: box-shadow .2s ease, transform .15s ease;
+  transition: box-shadow .25s ease, transform .15s ease, border-color .25s ease;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
 }
-.card-e:hover { box-shadow: 0 4px 14px rgba(15,23,42,.06), 0 1px 3px rgba(15,23,42,.04); }
+/* Premium gradient outline — sits *outside* the card body so the border
+   becomes a multi-stop teal→blue→violet glow on hover.  Uses ::before so
+   we don't touch the existing border / padding tokens. */
+.card-e::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, #0ea5e9 0%, #3b82f6 35%, #8b5cf6 70%, #ec4899 100%);
+  -webkit-mask: linear-gradient(#000, #000) content-box, linear-gradient(#000, #000);
+  -webkit-mask-composite: xor;
+          mask: linear-gradient(#000, #000) content-box, linear-gradient(#000, #000);
+          mask-composite: exclude;
+  opacity: 0;
+  transition: opacity .25s ease;
+  pointer-events: none;
+  z-index: 0;
+}
+.card-e:hover::before { opacity: .55; }
+/* 4px brand-color left-accent bar on every card-e, drawn via ::after so
+   the existing border doesn't need to change.  Subtle in light mode,
+   sharper in dark mode for contrast. */
+.card-e::after {
+  content: "";
+  position: absolute;
+  left: 0; top: 12px; bottom: 12px;
+  width: 4px; border-radius: 2px;
+  background: linear-gradient(180deg, #0ea5e9, #1d4ed8 60%, #4338ca);
+  opacity: .85;
+  pointer-events: none;
+  z-index: 0;
+}
+[data-bs-theme="dark"] .card-e::after { opacity: 1; box-shadow: 0 0 14px rgba(59,130,246,.45); }
+/* Make sure the card's children sit above the ::before / ::after layers. */
+.card-e > * { position: relative; z-index: 1; }
+.card-e:hover { box-shadow: 0 8px 24px rgba(15,23,42,.10), 0 2px 5px rgba(15,23,42,.06); border-color: transparent; transform: translateY(-1px); }
+[data-bs-theme="dark"] .card-e:hover { box-shadow: 0 8px 28px rgba(0,0,0,.45), 0 2px 5px rgba(0,0,0,.30); }
+/* Opt-out modifier — let specific callouts (the blue "Where these
+   details appear" / red SMTP banner / amber alignment notice) suppress
+   the global accent bar and gradient outline so their own coloured
+   borders aren't visually duplicated. */
+.card-e.card-e--plain::before,
+.card-e.card-e--plain::after { content: none; }
+
+/* ---------- Callout / banner variants used across admin tabs ---------- */
+.ci-where-card {
+  background: linear-gradient(135deg, #eff6ff, #f0f9ff);
+  border: 1px solid #bfdbfe !important;
+  color: #1e3a8a;
+}
+.ci-where-card .small { color: #1e3a8a; }
+[data-bs-theme="dark"] .ci-where-card {
+  background: linear-gradient(135deg, rgba(30,64,175,.22), rgba(14,165,233,.16));
+  border-color: rgba(96,165,250,.42) !important;
+  color: #dbeafe;
+}
+[data-bs-theme="dark"] .ci-where-card .small { color: #dbeafe; }
+[data-bs-theme="dark"] .ci-where-card strong { color: #93c5fd !important; }
+
+.smtp-banner-critical, .emails-banner-critical {
+  background: linear-gradient(90deg, #fee2e2 0%, #fef3c7 100%);
+  border: 1px solid #fca5a5 !important;
+  border-left: 5px solid #ef4444 !important;
+  color: #7f1d1d;
+}
+[data-bs-theme="dark"] .smtp-banner-critical,
+[data-bs-theme="dark"] .emails-banner-critical {
+  background: linear-gradient(90deg, rgba(127,29,29,.32) 0%, rgba(120,53,15,.28) 100%);
+  border-color: rgba(248,113,113,.55) !important;
+  border-left-color: #f87171 !important;
+  color: #fecaca;
+}
+[data-bs-theme="dark"] .smtp-banner-critical strong,
+[data-bs-theme="dark"] .emails-banner-critical strong { color:#fecaca; }
+
+.smtp-banner-warn {
+  background: linear-gradient(90deg, #fef3c7 0%, #fefce8 100%);
+  border: 1px solid #fcd34d !important;
+  border-left: 5px solid #f59e0b !important;
+  color: #78350f;
+}
+[data-bs-theme="dark"] .smtp-banner-warn {
+  background: linear-gradient(90deg, rgba(120,53,15,.30) 0%, rgba(133,77,14,.20) 100%);
+  border-color: rgba(252,211,77,.50) !important;
+  border-left-color: #fbbf24 !important;
+  color: #fde68a;
+}
+[data-bs-theme="dark"] .smtp-banner-warn strong { color: #fcd34d; }
+
+.company-info-shell { border-left: 4px solid #3b82f6 !important; }
+[data-bs-theme="dark"] .company-info-shell { border-left-color: #60a5fa !important; }
+
+/* ---------- Modern drag-and-drop upload zone ---------- */
+.dz-upload {
+  position: relative;
+  border: 2px dashed var(--border);
+  border-radius: 14px;
+  padding: 22px 18px;
+  background: linear-gradient(135deg, rgba(14,165,233,.04), rgba(99,102,241,.04));
+  transition: border-color .2s ease, background .2s ease, transform .2s ease;
+}
+[data-bs-theme="dark"] .dz-upload {
+  background: linear-gradient(135deg, rgba(14,165,233,.10), rgba(99,102,241,.08));
+  border-color: rgba(96,165,250,.30);
+}
+.dz-upload:hover, .dz-upload.dz-hover {
+  border-color: #3b82f6;
+  background: linear-gradient(135deg, rgba(14,165,233,.10), rgba(99,102,241,.12));
+  transform: translateY(-1px);
+}
+.dz-upload.dz-dragover {
+  border-color: #06b6d4;
+  background: linear-gradient(135deg, rgba(6,182,212,.18), rgba(14,165,233,.18));
+  box-shadow: 0 0 0 4px rgba(14,165,233,.18);
+}
+.dz-upload input[type="file"] {
+  position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+}
+.dz-upload .dz-body {
+  display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
+}
+.dz-upload .dz-icon {
+  width: 54px; height: 54px; flex-shrink: 0;
+  background: linear-gradient(135deg, #0ea5e9, #1d4ed8);
+  border-radius: 14px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 24px;
+  box-shadow: 0 6px 18px rgba(29,78,216,.30);
+}
+.dz-upload .dz-label  { font-weight: 700; font-size: 14px; color: var(--text); }
+.dz-upload .dz-hint   { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.dz-upload .dz-actions { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; position: relative; z-index: 2; }
+.dz-upload .dz-btn {
+  border: none; font-weight: 600; font-size: 13px;
+  border-radius: 999px; padding: 7px 16px;
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: filter .15s ease, transform .12s ease;
+  cursor: pointer;
+}
+.dz-upload .dz-btn-primary { background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: #fff; box-shadow: 0 4px 10px rgba(29,78,216,.30); }
+.dz-upload .dz-btn-primary:hover { filter: brightness(1.05); transform: translateY(-1px); }
+.dz-upload .dz-btn-ghost { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+.dz-upload .dz-btn-ghost:hover { background: var(--gray-soft); }
+[data-bs-theme="dark"] .dz-upload .dz-btn-ghost { background: #334155; color:#e2e8f0; border-color:#475569; }
+.dz-upload .dz-filename {
+  font-size: 12px; color: var(--muted); max-width: 220px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .card-e .card-head {
   display:flex; align-items:center; justify-content:space-between;
   padding: 14px 18px; border-bottom: 1px solid var(--border);

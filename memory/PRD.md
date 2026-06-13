@@ -307,6 +307,13 @@ See `/app/memory/test_credentials.md`.
 ### Security headers (carry-over from prior batch)
 - `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=()…`, HSTS — all emitted by `includes/functions.php`.
 
+## [June 2026] Card polish + drag-and-drop upload + dynamic Google Maps
+- **Universal `.card-e` premium styling** (admin-shell.php) — every card now ships with a 4px blue→indigo gradient **left-accent bar** (`::after`) and a multi-stop teal→blue→violet→pink **gradient outline** that fades in on hover (`::before` masked layer). Hover state lifts the card 1px and switches to a deeper shadow. Cards opt out with the new `.card-e--plain` modifier (used by the SMTP banner, alignment-warning, "Where these details appear" callout and the Company-Info shell so their custom borders aren't duplicated).
+- **Drag-and-drop upload zone** (`#ciDropZone`) replaces the basic file-input row in Admin → Company Info. The zone has a dashed teal/blue gradient background that brightens on hover, glows with a sky-blue outer ring on `dragover`, hides the file `<input>` behind the entire card so clicking anywhere opens the picker, auto-uploads on drop / select, and surfaces a real-time filename + size + success tick. Upload / Remove buttons use the new pill-shaped `dz-btn` style (gradient-fill primary + ghost secondary).
+- **"Where these details appear" callout — dark-mode fix** — previously the inline-styled `background:#f0f9ff` + `color:#1e40af` rendered as unreadable dark-on-dark. Moved styles to `.ci-where-card` with explicit dark-mode overrides (navy/teal gradient background + light-blue text).
+- **SMTP banner colours dark-mode safe** — the "SMTP not configured" and "From-domain mismatch" banners now use `.smtp-banner-critical` / `.smtp-banner-warn` classes with dark-mode-aware gradients (translucent red→amber and amber→yellow respectively).
+- **Footer Google Maps auto-syncs to Company Address** — confirmed end-to-end: footer's "View on Google Maps" button uses `urlencode($brandAddress)` from `company_info()['address']`. Live test returned `https://www.google.com/maps/search/?api=1&query=123+Maventech+Way%2C+Austin+TX+78701` — any update in the admin's Company Info card now reflects on the public footer + map on next page load (per-request cache).
+
 ## Roadmap / Backlog (P2)
 - Split `admin.php` (>3700 lines) into per-tab partials under `includes/tabs/`
 - Add bulk-paste key validation (deduplicate vs. existing)
