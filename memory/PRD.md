@@ -340,6 +340,14 @@ See `/app/memory/test_credentials.md`.
 - **Picker UI** — 4 vibe cards inside Admin → Company Info → "Brand Vibe", each with a live mini-logo preview, motion/radius/weight chips and dark-mode-aware active state.  Clicking a card cascades to the Motion picker so both stay visually consistent.  Body data attributes update live for an instant on-page preview (final SVG gradient re-renders after save).
 - Verified end-to-end: clicking **Playful** → Save → the storefront's M logo gradient, brand text gradient, and the "Shop Now" primary button all instantly switch to the orange→pink→purple palette.
 
+## [June 2026] Brand Vibe scheduling — cron-less auto re-skin
+- **New `vibe_schedule` table** (`id, vibe, starts_at, ends_at, label, applied_at, created_at`) — added to `ensure_db_schema()` and migrated live.
+- **`apply_vibe_schedule()`** in `includes/functions.php` — runs once per request (per-process static flag), finds the most recently-started active row where `starts_at <= NOW() AND (ends_at IS NULL OR ends_at >= NOW())`, writes the new vibe + bundled motion via `setting_set()`, and stamps `applied_at` so the apply event is auditable. Same "no real cron required" pattern that already drains the email queue.
+- **Hooked into `functions.php`** right after the security-headers block so EVERY request (public or admin) honours the schedule.
+- **Admin UI** — new "Schedule a Brand Vibe switch" card on Company Info (always visible — no need to enter the edit form). Form row with `<input type="datetime-local">` for start + end, label, vibe dropdown, Add button. Schedule list below shows each entry with a mini gradient swatch, vibe label, optional custom label pill, state badge (LIVE NOW / Upcoming / Past, colour-coded), datetime range, and a delete button. Past entries are faded; live entries have a green-tinted ring.
+- **New POST actions** in `admin.php`: `add_vibe_schedule` (validates vibe whitelist + datetime parsing + end-after-start) and `delete_vibe_schedule`.
+- Verified end-to-end: added a "live now" Playful schedule via curl → next page request auto-applied it, set `applied_at`, switched the storefront to Playful, and the public site immediately rendered `data-brand-vibe="playful"`. Cleared the demo entry afterwards so the storefront returned to Classic baseline. Two demo schedules (one Past, one Upcoming) left in the table so admins see all three visual states.
+
 ## Roadmap / Backlog (P2)
 - Split `admin.php` (>3700 lines) into per-tab partials under `includes/tabs/`
 - Add bulk-paste key validation (deduplicate vs. existing)

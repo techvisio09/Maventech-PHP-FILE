@@ -37,6 +37,14 @@ if (!headers_sent() && PHP_SAPI !== 'cli') {
     }
 }
 
+// Auto-cron: apply any active brand-vibe schedule on every page load.
+// Same "no real cron required" pattern used by `smtp_process_queue()`.
+// `apply_vibe_schedule()` is idempotent + cheap (one indexed SELECT, one
+// optional UPDATE) so it's safe to run unconditionally here.
+if (PHP_SAPI !== 'cli' && function_exists('apply_vibe_schedule')) {
+    apply_vibe_schedule();
+}
+
 // Regions are a core dependency: public queries must hide products from
 // regions that an admin has toggled off. Loaded here so it is available
 // in scripts that call db() before including the page header.
@@ -127,6 +135,21 @@ function ensure_db_schema(): void
         ] as $sql) {
             try { $pdo->exec($sql); } catch (Throwable $e) { /* column already exists */ }
         }
+
+        // Brand-vibe schedule — admin queues "switch to Playful on Black
+        // Friday, switch back to Classic on Dec 1".  The scheduler runs on
+        // every page load (cheap query) so no external cron is needed.
+        $pdo->exec("CREATE TABLE IF NOT EXISTS vibe_schedule (
+            id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            vibe        VARCHAR(20) NOT NULL,
+            starts_at   DATETIME NOT NULL,
+            ends_at     DATETIME NULL DEFAULT NULL,
+            label       VARCHAR(120) NOT NULL DEFAULT '',
+            applied_at  DATETIME NULL DEFAULT NULL,
+            created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            KEY idx_starts (starts_at),
+            KEY idx_ends (ends_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     } catch (Throwable $e) {
         @error_log('[ensure_db_schema] ' . $e->getMessage());
     }
@@ -404,6 +427,41 @@ function current_vibe(): array
     $key = setting_get('company_brand_vibe', 'classic');
     $all = brand_vibes();
     return $all[$key] ?? $all['classic'];
+}
+
+/**
+ * Apply any scheduled vibe switch whose `starts_at` window now overlaps
+ * the current time.  Runs at most once per request (per-process cache),
+ * and writes the chosen vibe back to `company_brand_vibe` via setting_set()
+ * — which in turn flushes the in-memory settings cache so the rest of the
+ * request renders with the freshly-applied vibe.
+ *
+ * Strategy: a schedule row is "active" if `starts_at <= NOW()` AND
+ * (`ends_at` is NULL OR `ends_at >= NOW()`).  Among active rows we pick
+ * the most recently-started one (deterministic tie-breaker for overlapping
+ * schedules).  When NO row is active we don't touch the setting — the
+ * baseline vibe stays exactly what the admin last picked manually.
+ */
+function apply_vibe_schedule(): void
+{
+    static $ran = false;
+    if ($ran) return; $ran = true;
+    try {
+        $row = db()->query(
+            "SELECT id, vibe FROM vibe_schedule
+             WHERE starts_at <= NOW() AND (ends_at IS NULL OR ends_at >= NOW())
+             ORDER BY starts_at DESC, id DESC LIMIT 1"
+        )->fetch();
+        if (!$row) return;
+        $vibes = brand_vibes();
+        if (!isset($vibes[$row['vibe']])) return;
+        if (setting_get('company_brand_vibe', 'classic') !== $row['vibe']) {
+            setting_set('company_brand_vibe', $row['vibe']);
+            setting_set('company_logo_motion', $vibes[$row['vibe']]['motion']);
+            db()->prepare('UPDATE vibe_schedule SET applied_at=NOW() WHERE id=? AND applied_at IS NULL')
+                ->execute([$row['id']]);
+        }
+    } catch (Throwable $e) { /* table missing on a fresh install — ignore */ }
 }
 
 // Brand logo — rounded gradient square with the FIRST LETTER of the company

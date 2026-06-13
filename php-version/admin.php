@@ -188,6 +188,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             : 'admin.php?tab=templates&msg=Billing+note+updated';
         header('Location: '.$back); exit;
 
+    } elseif ($action === 'add_vibe_schedule') {
+        // Queue a future Brand Vibe switch (e.g. Black Friday → Playful).
+        $svibe = strtolower(trim($_POST['vibe'] ?? 'classic'));
+        $vibes = brand_vibes();
+        if (!isset($vibes[$svibe])) $svibe = 'classic';
+        $starts = trim($_POST['starts_at'] ?? '');
+        $ends   = trim($_POST['ends_at']   ?? '');
+        $label  = trim($_POST['label']     ?? '');
+        $startsTs = $starts !== '' ? strtotime($starts) : false;
+        $endsTs   = $ends   !== '' ? strtotime($ends)   : null;
+        if ($startsTs && (!$endsTs || $endsTs > $startsTs)) {
+            $pdo->prepare('INSERT INTO vibe_schedule (vibe, starts_at, ends_at, label) VALUES (?,?,?,?)')
+                ->execute([
+                    $svibe,
+                    date('Y-m-d H:i:s', $startsTs),
+                    $endsTs ? date('Y-m-d H:i:s', $endsTs) : null,
+                    mb_substr($label, 0, 120),
+                ]);
+            header('Location: admin.php?tab=company&msg=Schedule+added'); exit;
+        }
+        header('Location: admin.php?tab=company&msg=Invalid+schedule'); exit;
+    } elseif ($action === 'delete_vibe_schedule') {
+        $sid = (int)($_POST['schedule_id'] ?? 0);
+        if ($sid > 0) {
+            $pdo->prepare('DELETE FROM vibe_schedule WHERE id=?')->execute([$sid]);
+        }
+        header('Location: admin.php?tab=company&msg=Schedule+removed'); exit;
     } elseif ($action === 'save_company_info') {
         // Single source of truth for company branding shown across all transactional emails.
         setting_set('company_name',    trim($_POST['company_name']    ?? ''));
@@ -1266,6 +1293,93 @@ elseif ($tab === 'company'):
     </form>
   </div>
 
+  <!-- Brand Vibe schedule -->
+  <?php
+    $vsRows = $pdo->query("SELECT id, vibe, starts_at, ends_at, label, applied_at FROM vibe_schedule ORDER BY starts_at ASC")->fetchAll();
+    $vsVibes = brand_vibes();
+    $vsNow = time();
+  ?>
+  <div class="card-e p-4 mb-3 vibe-sched-card" data-testid="vibe-schedule-card">
+    <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+      <div>
+        <h2 class="h6 fw-bold mb-1"><i class="bi bi-calendar-event text-primary me-1"></i> Schedule a Brand Vibe switch</h2>
+        <small class="text-muted">Queue future re-skins (Black Friday → Playful, January → Premium). The active schedule auto-applies on every page load — no cron needed.</small>
+      </div>
+    </div>
+    <form method="post" class="row g-2 align-items-end mb-3" data-testid="vibe-schedule-form">
+      <input type="hidden" name="action" value="add_vibe_schedule">
+      <div class="col-md-2">
+        <label class="form-label small fw-semibold mb-1">Vibe</label>
+        <select name="vibe" class="form-select form-select-sm" data-testid="vsf-vibe">
+          <?php foreach ($vsVibes as $k => $v): ?>
+            <option value="<?= $k ?>"><?= esc($v['label']) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small fw-semibold mb-1">Starts at</label>
+        <input type="datetime-local" name="starts_at" class="form-control form-control-sm" required data-testid="vsf-starts">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small fw-semibold mb-1">Ends at <small class="text-muted fw-normal">(optional)</small></label>
+        <input type="datetime-local" name="ends_at" class="form-control form-control-sm" data-testid="vsf-ends">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small fw-semibold mb-1">Label <small class="text-muted fw-normal">(optional)</small></label>
+        <input type="text" name="label" class="form-control form-control-sm" placeholder="e.g. Black Friday 2026" maxlength="120" data-testid="vsf-label">
+      </div>
+      <div class="col-md-1 d-grid">
+        <button class="btn btn-primary btn-sm" data-testid="vsf-add"><i class="bi bi-plus-lg"></i> Add</button>
+      </div>
+    </form>
+
+    <?php if (empty($vsRows)): ?>
+      <div class="text-center text-muted small py-3" data-testid="vibe-schedule-empty">
+        <i class="bi bi-calendar-x" style="font-size:22px;display:block;margin-bottom:6px;opacity:.55;"></i>
+        No scheduled switches yet — the active vibe stays whatever you set above.
+      </div>
+    <?php else: ?>
+      <div class="vibe-sched-list" data-testid="vibe-schedule-list">
+        <?php foreach ($vsRows as $row):
+          $startTs = strtotime($row['starts_at']);
+          $endsTs  = $row['ends_at'] ? strtotime($row['ends_at']) : null;
+          $isActive = $startTs <= $vsNow && (!$endsTs || $endsTs >= $vsNow);
+          $isUpcoming = $startTs > $vsNow;
+          $isPast = $endsTs && $endsTs < $vsNow;
+          $v = $vsVibes[$row['vibe']] ?? $vsVibes['classic'];
+        ?>
+          <div class="vibe-sched-row <?= $isActive?'is-active':($isUpcoming?'is-upcoming':'is-past') ?>"
+               style="--vibe-g0: <?= $v['gradient'][0] ?>; --vibe-g1: <?= $v['gradient'][1] ?>; --vibe-g2: <?= $v['gradient'][2] ?>; --vibe-accent: <?= $v['accent'] ?>;"
+               data-testid="vibe-schedule-row-<?= (int)$row['id'] ?>">
+            <span class="vibe-sched-swatch">
+              <span class="vibe-sched-letter"><?= esc(strtoupper(substr(setting_get('company_name', 'M'), 0, 1) ?: 'M')) ?></span>
+            </span>
+            <div class="vibe-sched-meta">
+              <div class="vibe-sched-title">
+                <strong><?= esc($v['label']) ?></strong>
+                <?php if ($row['label']): ?><span class="vibe-sched-label-pill">"<?= esc($row['label']) ?>"</span><?php endif; ?>
+                <?php if ($isActive):   ?><span class="vibe-sched-state active">● LIVE NOW</span>
+                <?php elseif ($isPast): ?><span class="vibe-sched-state past">Past</span>
+                <?php else:             ?><span class="vibe-sched-state upcoming">Upcoming</span>
+                <?php endif; ?>
+              </div>
+              <small class="text-muted">
+                <i class="bi bi-arrow-right-short"></i>
+                <?= esc(date('M j, Y · g:i A', $startTs)) ?>
+                <?php if ($endsTs): ?> &nbsp;→&nbsp; <?= esc(date('M j, Y · g:i A', $endsTs)) ?><?php else: ?> &nbsp;<em>(no end — runs until the next scheduled switch)</em><?php endif; ?>
+              </small>
+            </div>
+            <form method="post" class="vibe-sched-delete" onsubmit="return confirm('Remove this scheduled switch?');">
+              <input type="hidden" name="action" value="delete_vibe_schedule">
+              <input type="hidden" name="schedule_id" value="<?= (int)$row['id'] ?>">
+              <button class="btn btn-sm btn-soft-gray" title="Remove" data-testid="vibe-schedule-delete-<?= (int)$row['id'] ?>"><i class="bi bi-x-lg"></i></button>
+            </form>
+          </div>
+        <?php endforeach; ?>
+      </div>
+    <?php endif; ?>
+  </div>
+
   <!-- Where it shows up -->
   <div class="card-e card-e--plain p-3 mb-3 ci-where-card" data-testid="ci-where-card">
     <div class="d-flex gap-3 align-items-start">
@@ -1438,6 +1552,50 @@ elseif ($tab === 'company'):
     }
     [data-bs-theme="dark"] .vibe-chip { background: rgba(255,255,255,.10); }
     .vibe-chip .bi { font-size: 11px; opacity: .7; }
+
+    /* ---- Brand Vibe schedule list ---- */
+    .vibe-sched-list { display: flex; flex-direction: column; gap: 8px; }
+    .vibe-sched-row {
+      display: flex; align-items: center; gap: 14px;
+      padding: 10px 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      position: relative;
+      overflow: hidden;
+    }
+    .vibe-sched-row::before {
+      content: "";
+      position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+      background: linear-gradient(180deg, var(--vibe-g0), var(--vibe-g1) 55%, var(--vibe-g2));
+    }
+    .vibe-sched-row.is-active { border-color: var(--vibe-accent); box-shadow: 0 0 0 2px rgba(34,197,94,.18); }
+    .vibe-sched-row.is-past   { opacity: .55; }
+    [data-bs-theme="dark"] .vibe-sched-row { background: #1e293b; }
+    .vibe-sched-swatch {
+      width: 38px; height: 38px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--vibe-g0), var(--vibe-g1) 55%, var(--vibe-g2));
+      box-shadow: 0 2px 6px rgba(15,23,42,.18);
+      display: inline-flex; align-items: center; justify-content: center;
+      color: #fff; font-weight: 800; font-size: 17px;
+      flex-shrink: 0; margin-left: 6px;
+    }
+    .vibe-sched-meta { flex: 1; min-width: 0; line-height: 1.3; }
+    .vibe-sched-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13.5px; }
+    .vibe-sched-label-pill { background: rgba(15,23,42,.06); padding: 1px 8px; border-radius: 999px; font-size: 11px; color: var(--muted); font-style: italic; }
+    [data-bs-theme="dark"] .vibe-sched-label-pill { background: rgba(255,255,255,.08); }
+    .vibe-sched-state {
+      font-size: 10px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase;
+      padding: 2px 8px; border-radius: 999px;
+    }
+    .vibe-sched-state.active   { background: rgba(34,197,94,.18); color: #059669; }
+    .vibe-sched-state.upcoming { background: rgba(59,130,246,.18); color: #2563eb; }
+    .vibe-sched-state.past     { background: rgba(148,163,184,.20); color: #64748b; }
+    [data-bs-theme="dark"] .vibe-sched-state.active   { background: rgba(34,197,94,.28); color: #34d399; }
+    [data-bs-theme="dark"] .vibe-sched-state.upcoming { background: rgba(96,165,250,.28); color: #93c5fd; }
+    [data-bs-theme="dark"] .vibe-sched-state.past     { background: rgba(148,163,184,.30); color: #cbd5e1; }
+    .vibe-sched-delete { margin: 0; }
   </style>
 
   <script>
