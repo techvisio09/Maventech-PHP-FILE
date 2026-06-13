@@ -3094,14 +3094,14 @@ elseif ($tab === 'api'):
 ?>
   <?php $apiTab = $_GET['gw'] ?? 'toggles'; $isToggles = ($apiTab === 'toggles'); ?>
   <?php if ($isToggles): ?>
-    <h5 class="fw-bold mb-1"><i class="bi bi-credit-card-2-front text-primary me-1"></i> Payment Gateways</h5>
+    <h5 class="fw-bold mb-1"><i class="bi bi-credit-card-2-front text-primary me-1"></i> API / Payment Gateway</h5>
     <p class="text-muted small mb-3">Manage every payment method in one place — enable or disable each gateway with a <strong>single click</strong>, and edit its API credentials when you need to. Status saves instantly and propagates to the checkout page.</p>
   <?php else: ?>
     <div class="d-flex align-items-center gap-2 mb-1">
-      <a href="?tab=api&gw=toggles" class="btn btn-sm btn-soft-gray rounded-pill" data-testid="back-to-gateways"><i class="bi bi-arrow-left"></i> Payment Gateways</a>
+      <a href="?tab=api&gw=toggles" class="btn btn-sm btn-soft-gray rounded-pill" data-testid="back-to-gateways"><i class="bi bi-arrow-left"></i> API / Payment Gateway</a>
       <h5 class="fw-bold mb-0">› <?= $apiTab === 'paypal' ? 'PayPal Credentials' : 'Card Payment Credentials' ?></h5>
     </div>
-    <p class="text-muted small mb-3">Configure the API credentials this gateway uses. Changes apply instantly. Toggle the gateway on/off from the <a href="?tab=api&gw=toggles">Payment Gateways</a> overview.</p>
+    <p class="text-muted small mb-3">Configure the API credentials this gateway uses. Changes apply instantly. Toggle the gateway on/off from the <a href="?tab=api&gw=toggles">API / Payment Gateway</a> overview.</p>
   <?php endif; ?>
 
   <?php if ($isToggles):
