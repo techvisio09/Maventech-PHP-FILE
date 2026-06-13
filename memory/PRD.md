@@ -377,6 +377,16 @@ See `/app/memory/test_credentials.md`.
 - **Curl-verified end-to-end**: beacon set → poll returns `true` → wait 6 sec → poll returns `false` → send message → beacon cleared immediately.
 - **Screenshot-verified**: live indicator visible in both admin chat panel and customer chat widget.
 
+## [June 2026] Highest-intent lead capture nudge
+- **New sticky banner** `#chat-lead-nudge` inside `chat-lead-form` (footer.php). Surfaces the instant a visitor types into the chat input without having submitted the lead form: *"⚡ Don't lose this — agent on the way. Share your email or phone so we don't miss you ↓"*
+- **Trigger** — `maybeShowLeadNudge()` in `assets/js/main.js` fires on every `input` / `focus` event on `#chat-input`. Short-circuits if `localStorage.uc_lead_done === '1'` so the banner never re-appears for returning visitors.
+- **UX polish**:
+  - Orange→amber gradient with a pulsing shadow keyframe so it draws the eye without screaming.
+  - Smooth-scrolls the form into view so the visitor can capture-in-place without hunting.
+  - Both `submitLead()` and `skipLead()` set `uc_lead_done='1'` so the nudge auto-suppresses after either path.
+- **Dark-mode aware** and respects `prefers-reduced-motion`.
+- Verified end-to-end: cleared localStorage → opened chat → typed `hi` → banner appeared at top of form (`nudgeVisible: 'flex'`), form scrolled into focus, all 3 lead inputs + 3 CTAs (Request callback / Chat Now / Call) became actionable in one glance.
+
 ## Roadmap / Backlog (P2)
 - Split `admin.php` (>3700 lines) into per-tab partials under `includes/tabs/`
 - Add bulk-paste key validation (deduplicate vs. existing)

@@ -370,9 +370,36 @@ function pingCustomerTyping(on){
 document.addEventListener('DOMContentLoaded', () => {
   const i = document.getElementById('chat-input');
   if (!i) return;
-  i.addEventListener('input', () => pingCustomerTyping(i.value.trim().length > 0));
+  i.addEventListener('input', () => {
+    pingCustomerTyping(i.value.trim().length > 0);
+    maybeShowLeadNudge();
+  });
+  i.addEventListener('focus', maybeShowLeadNudge);
   i.addEventListener('blur',  () => pingCustomerTyping(false));
 });
+
+// Surface the "Don't lose this — agent on the way" sticky banner on the
+// lead form the moment the customer starts typing without having
+// submitted their contact details.  Highest-intent moment → highest
+// conversion ROI on the lead capture.  Once the customer submits the
+// form (uc_lead_done='1') the nudge stays hidden forever.
+function maybeShowLeadNudge(){
+  if (localStorage.getItem('uc_lead_done') === '1') return;
+  const form  = document.getElementById('chat-lead-form');
+  const nudge = document.getElementById('chat-lead-nudge');
+  const input = document.getElementById('chat-input');
+  if (!form || !nudge || !input) return;
+  // Only show when there's actual typing intent — empty input shouldn't
+  // bug a returning visitor.
+  const hasIntent = input.value.trim().length > 0 || document.activeElement === input;
+  if (!hasIntent) { nudge.style.display = 'none'; return; }
+  // Make sure the form is visible (skipLead may have hidden it).
+  if (form.style.display === 'none') form.style.display = '';
+  nudge.style.display = 'flex';
+  // Smooth-scroll the lead form into view so the customer can't miss
+  // the new banner.  Bottom-anchored so the input stays visible.
+  try { form.scrollIntoView({behavior:'smooth', block:'end'}); } catch(_) {}
+}
 async function relayCustomerMessageToAdmin(text) {
   const token = localStorage.getItem('uc_chat_token');
   if (!token) return;

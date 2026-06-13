@@ -172,6 +172,10 @@
       <button class="chat-chip" onclick="quickAsk('Do your licenses expire or need a subscription?')" data-testid="chat-chip-license"><i class="bi bi-infinity me-1"></i>License validity</button>
     </div>
     <div id="chat-lead-form" class="chat-lead-card" style="display:none;" data-testid="chat-lead-form">
+      <div id="chat-lead-nudge" class="chat-lead-nudge" style="display:none;" data-testid="chat-lead-nudge">
+        <i class="bi bi-lightning-charge-fill"></i>
+        <span><strong>Don't lose this</strong> — agent on the way. Share your email or phone so we don't miss you ↓</span>
+      </div>
       <div class="chat-lead-title">Share a few quick details so I can put you in touch with the right specialist.</div>
       <input id="lead-name"  class="form-control form-control-sm chat-lead-input" placeholder="Your name"      data-testid="lead-name">
       <input id="lead-email" type="email" class="form-control form-control-sm chat-lead-input" placeholder="Email address" data-testid="lead-email">

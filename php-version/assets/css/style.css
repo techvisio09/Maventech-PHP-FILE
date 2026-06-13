@@ -726,6 +726,45 @@ body.has-deal-bar #chat-panel { bottom: 155px; }
 }
 .chat-lead-skip:hover { color: var(--chat-accent) !important; }
 
+/* Sticky "Don't lose this — agent on the way" nudge.  Surfaces the
+   instant the customer starts typing into the chat-input without having
+   submitted the lead form — captures the highest-intent moment before
+   they bounce. */
+.chat-lead-nudge {
+  display: flex; align-items: center; gap: 8px;
+  margin: -2px -2px 12px;
+  padding: 8px 12px;
+  background: linear-gradient(135deg, #fef3c7, #fed7aa);
+  color: #7c2d12;
+  border: 1px solid #fb923c;
+  border-left: 4px solid #ea580c;
+  border-radius: 12px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  box-shadow: 0 4px 14px rgba(234,88,12,.22);
+  animation: chat-nudge-in .35s ease-out, chat-nudge-pulse 2.4s ease-in-out 1.2s infinite;
+}
+.chat-lead-nudge .bi { font-size: 18px; color: #ea580c; flex-shrink: 0; }
+[data-bs-theme="dark"] .chat-lead-nudge {
+  background: linear-gradient(135deg, rgba(180,83,9,.40), rgba(234,88,12,.30));
+  color: #fed7aa;
+  border-color: rgba(251,146,60,.55);
+  border-left-color: #fb923c;
+}
+[data-bs-theme="dark"] .chat-lead-nudge .bi { color: #fbbf24; }
+@keyframes chat-nudge-in {
+  from { opacity: 0; transform: translateY(-6px) scale(.95); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes chat-nudge-pulse {
+  0%, 100% { box-shadow: 0 4px 14px rgba(234,88,12,.22); }
+  50%      { box-shadow: 0 6px 22px rgba(234,88,12,.45); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-lead-nudge { animation: chat-nudge-in .35s ease-out; }
+}
+
+
 /* Live presence — admin is typing indicator (visible to customer).
    Pings from chat-customer.php (admin_typing flag, 5-sec freshness)
    drive the toggle from main.js inside adminPollOnce().  Same visual
