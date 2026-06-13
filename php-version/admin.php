@@ -2307,23 +2307,27 @@ elseif ($tab === 'leads'):
     [data-bs-theme="dark"] .chat-pill-dot { border-color:#0f1729; }
 
     /* ------- Slide-over chat drawer ------- */
-    .adm-chat-overlay { position:fixed; inset:0; background:rgba(15,23,42,.45); z-index:3000; display:flex; justify-content:flex-end; animation:adm-fade .18s ease-out; }
+    /* Floating chat widget (matches the customer-facing widget styling).
+       Anchored bottom-right with rounded corners, soft shadow, navy header. */
+    .adm-chat-overlay { position:fixed; inset:auto 20px 20px auto; background:transparent; z-index:3000; display:flex; justify-content:flex-end; animation:adm-fade .18s ease-out; pointer-events:none; }
+    .adm-chat-overlay::before { content:""; position:fixed; inset:0; background:rgba(15,23,42,.18); pointer-events:auto; z-index:-1; animation:adm-fade .18s ease-out; }
     @keyframes adm-fade { from{opacity:0;} to{opacity:1;} }
-    .adm-chat-panel { width:min(300px, 100vw); height:100vh; background:#fff; display:flex; flex-direction:column; box-shadow:-12px 0 32px rgba(15,23,42,.20); animation:adm-slide .25s cubic-bezier(.16,1,.3,1); }
-    @keyframes adm-slide { from{transform:translateX(100%);} to{transform:translateX(0);} }
+    .adm-chat-panel { width:min(330px, calc(100vw - 32px)); height:min(520px, calc(100vh - 100px)); background:#fff; display:flex; flex-direction:column; box-shadow:0 18px 48px rgba(15,23,42,.28); border-radius:16px; overflow:hidden; animation:adm-pop-in .22s cubic-bezier(.16,1,.3,1); pointer-events:auto; }
+    @keyframes adm-pop-in { from{transform:translateY(14px) scale(.96); opacity:0;} to{transform:translateY(0) scale(1); opacity:1;} }
     [data-bs-theme="dark"] .adm-chat-panel { background:#0f1729; color:#e2e8f0; }
 
     /* Compact navy-blue header */
-    .adm-chat-head { padding:8px 12px; border-bottom:1px solid #1e3a8a; display:flex; align-items:center; justify-content:space-between; gap:8px; background:linear-gradient(135deg,#1e3a8a 0%,#1e40af 60%,#2563eb 100%); color:#fff; }
-    .adm-chat-head .btn-close { filter: invert(1) brightness(2); opacity:.8; font-size:11px; }
+    .adm-chat-head { padding:10px 12px; border-bottom:1px solid rgba(255,255,255,.10); display:flex; align-items:center; justify-content:space-between; gap:8px; background:linear-gradient(135deg,#1e3a8a 0%,#1e40af 60%,#2563eb 100%); color:#fff; flex-shrink:0; }
+    .adm-chat-head .btn-close { filter: invert(1) brightness(2); opacity:.85; font-size:11px; }
     .adm-chat-head .btn-close:hover { opacity:1; }
-    [data-bs-theme="dark"] .adm-chat-head { background:linear-gradient(135deg,#0f1f4a 0%,#1e3a8a 100%); border-bottom-color:#0a1733; }
-    .adm-chat-avatar { width:26px; height:26px; border-radius:50%; background:rgba(255,255,255,.18); color:#fff; display:flex; align-items:center; justify-content:center; font-size:12px; flex-shrink:0; }
-    .adm-chat-head #adm-chat-name { color:#fff !important; }
+    [data-bs-theme="dark"] .adm-chat-head { background:linear-gradient(135deg,#0f1f4a 0%,#1e3a8a 100%); }
+    .adm-chat-avatar { width:28px; height:28px; border-radius:50%; background:rgba(255,255,255,.20); color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; flex-shrink:0; }
+    .adm-chat-head #adm-chat-name { color:#fff !important; font-size:13px; line-height:1.2; }
     .adm-chat-status-pill { display:inline-flex; align-items:center; gap:4px; padding:1px 7px; border-radius:999px; font-size:10px; font-weight:600; background:rgba(255,255,255,.18); color:#e0e7ff; }
     .adm-chat-status-pill .dot { width:5px; height:5px; border-radius:50%; background:#94a3b8; }
-    .adm-chat-status-pill.online { background:rgba(16,185,129,.25); color:#a7f3d0; }
+    .adm-chat-status-pill.online { background:rgba(16,185,129,.30); color:#a7f3d0; }
     .adm-chat-status-pill.online .dot { background:#10b981; box-shadow:0 0 0 3px rgba(16,185,129,.4); }
+    .adm-chat-status-pill.offline { /* uses default base style */ }
     [data-bs-theme="dark"] .adm-chat-avatar { background:#1f2a44; color:#cbd5e1; }
     .adm-chat-status-pill.offline { /* uses default base style */ }
     [data-bs-theme="dark"] #adm-chat-contact { color:#94a3b8; }
@@ -2363,7 +2367,10 @@ elseif ($tab === 'leads'):
     .adm-chat-foot .send-btn:hover { background:#1d4ed8; }
     .adm-chat-foot .send-btn:disabled { background:#cbd5e1; cursor:not-allowed; }
 
-    @media (max-width:576px) { .adm-chat-panel { width:100vw; } }
+    @media (max-width:576px) {
+      .adm-chat-overlay { inset: auto 8px 8px 8px; }
+      .adm-chat-panel { width:calc(100vw - 16px); height:calc(100vh - 90px); border-radius:14px; }
+    }
   </style>
 
   <script>

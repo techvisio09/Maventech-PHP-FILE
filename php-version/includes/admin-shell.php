@@ -259,71 +259,59 @@ $admin       = $admin ?? current_admin();
 
 body { background: var(--bg); color: var(--text); font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; font-size: 14px; position:relative; }
 
-/* Microsoft Office app icons watermark — Word, Excel, PowerPoint, Outlook,
-   OneNote, Teams, Visio arranged in a clean repeating pattern at low
-   opacity.  Animated so the tiled pattern slowly drifts across the
-   screen — combined with the .adm-floats layer this gives the whole
-   background a subtle "moving" feel. */
-body::before {
-  content: "";
-  position: fixed;
-  inset: -10vh -10vw;     /* extra bleed so the drift never reveals edges */
-  pointer-events: none;
-  z-index: 0;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='360' viewBox='0 0 360 360'><g opacity='0.12'><g transform='translate(30 30)'><rect width='44' height='44' rx='8' fill='%23185ABD'/><text x='22' y='29' font-family='Segoe UI,Arial' font-size='18' font-weight='800' fill='white' text-anchor='middle'>W</text></g><g transform='translate(110 30)'><rect width='44' height='44' rx='8' fill='%23107C41'/><text x='22' y='29' font-family='Segoe UI,Arial' font-size='18' font-weight='800' fill='white' text-anchor='middle'>X</text></g><g transform='translate(190 30)'><rect width='44' height='44' rx='8' fill='%23D24726'/><text x='22' y='29' font-family='Segoe UI,Arial' font-size='15' font-weight='800' fill='white' text-anchor='middle'>PPT</text></g><g transform='translate(270 30)'><rect width='44' height='44' rx='8' fill='%230072C6'/><text x='22' y='29' font-family='Segoe UI,Arial' font-size='18' font-weight='800' fill='white' text-anchor='middle'>O</text></g><g transform='translate(30 160)'><rect width='44' height='44' rx='8' fill='%237719AA'/><text x='22' y='29' font-family='Segoe UI,Arial' font-size='17' font-weight='800' fill='white' text-anchor='middle'>ON</text></g><g transform='translate(110 160)'><rect width='44' height='44' rx='8' fill='%234B53BC'/><text x='22' y='29' font-family='Segoe UI,Arial' font-size='15' font-weight='800' fill='white' text-anchor='middle'>TM</text></g><g transform='translate(190 160)'><rect width='44' height='44' rx='8' fill='%233955A3'/><text x='22' y='29' font-family='Segoe UI,Arial' font-size='15' font-weight='800' fill='white' text-anchor='middle'>VI</text></g><g transform='translate(270 160)'><rect width='44' height='44' rx='8' fill='%2331752F'/><text x='22' y='29' font-family='Segoe UI,Arial' font-size='15' font-weight='800' fill='white' text-anchor='middle'>PR</text></g><g transform='translate(70 270)'><rect width='44' height='44' rx='8' fill='%23F25022'/><text x='22' y='29' font-family='Segoe UI,Arial' font-size='13' font-weight='700' fill='white' text-anchor='middle'>365</text></g><g transform='translate(170 270)'><rect width='44' height='44' rx='8' fill='%2300A4EF'/><text x='22' y='29' font-family='Segoe UI,Arial' font-size='14' font-weight='800' fill='white' text-anchor='middle'>MS</text></g><g transform='translate(270 270)'><rect width='44' height='44' rx='8' fill='%23FFB900'/><text x='22' y='29' font-family='Segoe UI,Arial' font-size='15' font-weight='800' fill='%23633b00' text-anchor='middle'>WIN</text></g></g></svg>");
-  background-repeat: repeat;
-  background-size: 360px 360px;
-  background-position: 0 0;
-  opacity: 1;
-  animation: adm-wm-drift 60s linear infinite;
-}
-@keyframes adm-wm-drift {
-  0%   { background-position: 0       0; }
-  100% { background-position: 360px -360px; }
-}
-@media (prefers-reduced-motion: reduce) { body::before { animation: none; } }
-/* Dark mode — bump watermark opacity slightly (dark bg absorbs more) */
-[data-bs-theme="dark"] body::before { opacity: 0.65; }
+/* Watermark removed per user request — only the animated floating-icons
+   layer below provides background ambience.  body::before still exists
+   but holds nothing (kept as a hook in case we want a tint later). */
+body::before { content: none; }
 
 /* =============================================================
-   FLOATING ICONS WATERMARK — a second, animated layer on top of
-   the static repeating watermark above.  ~14 product/security
-   glyphs drift diagonally across the viewport at very low opacity
-   so the dashboard always remains the visual focus.
+   FLOATING TECH ICONS — animated background layer.
+   Larger, more visible glyphs that look like real product icons.
+   Drift faster (12-18s/loop) so the screen feels alive.
    ============================================================= */
 .adm-floats { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
 .adm-floats i {
   position: absolute;
-  font-size: 38px;
-  opacity: 0.16;
-  color: #1d4ed8;
-  filter: drop-shadow(0 1px 2px rgba(15,23,42,.06));
-  animation: adm-float-drift 38s linear infinite;
+  font-size: 56px;
+  opacity: 0.18;
+  filter: drop-shadow(0 2px 4px rgba(15,23,42,.08));
+  animation: adm-float-drift 16s ease-in-out infinite;
   will-change: transform;
 }
-[data-bs-theme="dark"] .adm-floats i { color: #93c5fd; opacity: 0.18; }
+[data-bs-theme="dark"] .adm-floats i { opacity: 0.22; }
 .adm-floats i:nth-child(odd)  { animation-name: adm-float-drift; }
-.adm-floats i:nth-child(even) { animation-name: adm-float-drift-rev; }
-.adm-floats i:nth-child(3n)   { color: #16a34a; }
-.adm-floats i:nth-child(3n+1) { color: #d97706; }
-.adm-floats i:nth-child(5n)   { color: #dc2626; }
-[data-bs-theme="dark"] .adm-floats i:nth-child(3n)   { color: #86efac; }
-[data-bs-theme="dark"] .adm-floats i:nth-child(3n+1) { color: #fcd34d; }
-[data-bs-theme="dark"] .adm-floats i:nth-child(5n)   { color: #fca5a5; }
+.adm-floats i:nth-child(even) { animation-name: adm-float-drift-rev; animation-duration: 18s; }
+.adm-floats i:nth-child(3n)   { animation-duration: 14s; }
+.adm-floats i:nth-child(4n)   { animation-duration: 20s; }
+.adm-floats i:nth-child(5n)   { animation-duration: 12s; }
+
+/* Per-icon real-product colours so they look like actual product logos */
+.adm-floats .ic-win    { color: #0078D4; }     /* Windows blue */
+.adm-floats .ic-office { color: #D24726; }     /* Office orange */
+.adm-floats .ic-apple  { color: #6b7280; }     /* Apple gray */
+.adm-floats .ic-droid  { color: #3DDC84; }     /* Android green */
+.adm-floats .ic-shield { color: #DC2626; }     /* security red */
+.adm-floats .ic-cloud  { color: #0EA5E9; }     /* cloud sky */
+.adm-floats .ic-key    { color: #F59E0B; }     /* key amber */
+.adm-floats .ic-cpu    { color: #8B5CF6; }     /* purple */
+.adm-floats .ic-mail   { color: #2563EB; }     /* blue */
+.adm-floats .ic-card   { color: #10B981; }     /* green */
+.adm-floats .ic-globe  { color: #6366F1; }     /* indigo */
+.adm-floats .ic-bell   { color: #EAB308; }     /* yellow */
 
 @keyframes adm-float-drift {
   0%   { transform: translate(0, 0)         rotate(0deg)   scale(1); }
-  25%  { transform: translate(15vw, -8vh)   rotate(90deg)  scale(1.1); }
-  50%  { transform: translate(30vw, 12vh)   rotate(180deg) scale(0.95); }
-  75%  { transform: translate(15vw, 25vh)   rotate(270deg) scale(1.05); }
-  100% { transform: translate(0, 0)         rotate(360deg) scale(1); }
+  25%  { transform: translate(20vw, -12vh)  rotate(45deg)  scale(1.15); }
+  50%  { transform: translate(35vw, 18vh)   rotate(-25deg) scale(0.9); }
+  75%  { transform: translate(15vw, 30vh)   rotate(60deg)  scale(1.1); }
+  100% { transform: translate(0, 0)         rotate(0deg)   scale(1); }
 }
 @keyframes adm-float-drift-rev {
-  0%   { transform: translate(0, 0)          rotate(0deg)    scale(1); }
-  25%  { transform: translate(-12vw, 10vh)   rotate(-90deg)  scale(0.9); }
-  50%  { transform: translate(-25vw, -8vh)   rotate(-180deg) scale(1.15); }
-  75%  { transform: translate(-12vw, -18vh)  rotate(-270deg) scale(1); }
-  100% { transform: translate(0, 0)          rotate(-360deg) scale(1); }
+  0%   { transform: translate(0, 0)         rotate(0deg)    scale(1); }
+  25%  { transform: translate(-18vw, 15vh)  rotate(-60deg)  scale(0.85); }
+  50%  { transform: translate(-32vw, -10vh) rotate(40deg)   scale(1.2); }
+  75%  { transform: translate(-15vw, -25vh) rotate(-30deg)  scale(1); }
+  100% { transform: translate(0, 0)         rotate(0deg)    scale(1); }
 }
 @media (prefers-reduced-motion: reduce) {
   .adm-floats i { animation: none; }
@@ -697,33 +685,67 @@ hr { border-color: var(--border); opacity:.5; }
   .kpi-tile .kpi-value { font-size:20px; }
   .row.g-3 > [class^="col-"], .row.g-4 > [class^="col-"] { margin-bottom:8px; }
   h5.fw-bold { font-size:16px; }
+
+  /* Adm-content padding tightens up on small screens */
+  .adm-content { padding: 12px !important; }
+  .adm-top { padding: 0 12px; }
+
+  /* Topbar — hide the verbose right-side widgets to keep room for the bell + avatar */
+  .adm-top .right .adm-mode-toggle, .adm-top .right .adm-region-dd { display:none !important; }
+
+  /* All filter pills & toolbars wrap nicely without horizontal scroll */
+  .nav.nav-pills { flex-wrap:wrap !important; }
+  .vis-filter-bar { padding: 8px 10px; gap: 6px; }
+  .vis-filter-group { flex: 1 1 100%; }
+  .vis-filter-group:last-child { justify-content: flex-start; }
+  .vis-filter-group input[type="date"], .vis-filter-group select { max-width: 100%; flex: 1; }
+
+  /* Email-activity cards stack their meta + buttons on small screens */
+  .ec-head { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .ec-actions { flex-wrap: wrap; gap: 6px; }
+  .ec-actions .btn { font-size: 11.5px; padding: 5px 10px; }
+
+  /* Lead-management table cells wrap content rather than overflowing */
+  table.table { font-size: 12.5px; }
+  table.table td, table.table th { padding: 8px 6px; }
+}
+
+/* Extra-narrow phones — go even tighter */
+@media (max-width: 480px) {
+  .adm-content { padding: 8px !important; }
+  .adm-top .adm-brand-cp { font-size: 9px !important; letter-spacing: 1px !important; }
+  .vrange-pills, .vrange-pill { font-size: 11px; }
+  .vis-num { font-size: 30px; }
+  .vis-flag-chip { font-size: 11px; padding: 4px 8px; }
+  .ec-actions .btn span:not(.spinner-border) { display:inline; }
 }
 </style>
 </head>
 <body>
 
 <!-- ============================================================
-     Floating watermark icons — drift across the background at
-     very low opacity.  Pointer-events:none + z-index:0 so they
-     never interfere with the UI.  Positions are seeded with
-     inline left/top + animation-delay so each one starts in a
-     different spot and stays out of sync.
+     Floating tech icons — real product-style icons drift across
+     the background.  Faster animation, bigger size, real colours.
      ============================================================ -->
 <div class="adm-floats" aria-hidden="true" data-testid="adm-floats">
-  <i class="bi bi-windows"      style="left:5%;  top:8%;  animation-delay: 0s;    font-size:42px;"></i>
-  <i class="bi bi-microsoft"    style="left:18%; top:62%; animation-delay: -4s;   font-size:38px;"></i>
-  <i class="bi bi-shield-lock"  style="left:32%; top:18%; animation-delay: -8s;   font-size:34px;"></i>
-  <i class="bi bi-key-fill"     style="left:46%; top:75%; animation-delay: -12s;  font-size:36px;"></i>
-  <i class="bi bi-cloud-fill"   style="left:60%; top:30%; animation-delay: -16s;  font-size:44px;"></i>
-  <i class="bi bi-laptop"       style="left:74%; top:55%; animation-delay: -20s;  font-size:40px;"></i>
-  <i class="bi bi-fingerprint"  style="left:88%; top:12%; animation-delay: -24s;  font-size:36px;"></i>
-  <i class="bi bi-cpu-fill"     style="left:10%; top:42%; animation-delay: -28s;  font-size:38px;"></i>
-  <i class="bi bi-envelope-paper" style="left:28%; top:88%; animation-delay: -32s; font-size:36px;"></i>
-  <i class="bi bi-bag-check"    style="left:52%; top:8%;  animation-delay: -36s;  font-size:34px;"></i>
-  <i class="bi bi-graph-up"     style="left:68%; top:85%; animation-delay: -10s;  font-size:38px;"></i>
-  <i class="bi bi-globe2"       style="left:82%; top:38%; animation-delay: -14s;  font-size:42px;"></i>
-  <i class="bi bi-credit-card-2-front" style="left:38%; top:48%; animation-delay: -18s; font-size:34px;"></i>
-  <i class="bi bi-bell-fill"    style="left:90%; top:72%; animation-delay: -22s;  font-size:32px;"></i>
+  <i class="bi bi-windows      ic-win"    style="left:5%;  top:8%;  animation-delay: 0s;"></i>
+  <i class="bi bi-microsoft    ic-office" style="left:18%; top:62%; animation-delay: -2s;"></i>
+  <i class="bi bi-shield-lock  ic-shield" style="left:32%; top:18%; animation-delay: -4s;"></i>
+  <i class="bi bi-key-fill     ic-key"    style="left:46%; top:75%; animation-delay: -6s;"></i>
+  <i class="bi bi-cloud-fill   ic-cloud"  style="left:60%; top:30%; animation-delay: -1s;"></i>
+  <i class="bi bi-laptop       ic-win"    style="left:74%; top:55%; animation-delay: -3s;"></i>
+  <i class="bi bi-fingerprint  ic-shield" style="left:88%; top:12%; animation-delay: -5s;"></i>
+  <i class="bi bi-cpu-fill     ic-cpu"    style="left:10%; top:42%; animation-delay: -7s;"></i>
+  <i class="bi bi-envelope-paper ic-mail" style="left:28%; top:88%; animation-delay: -8s;"></i>
+  <i class="bi bi-bag-check    ic-card"   style="left:52%; top:8%;  animation-delay: -9s;"></i>
+  <i class="bi bi-graph-up     ic-cpu"    style="left:68%; top:85%; animation-delay: -10s;"></i>
+  <i class="bi bi-globe2       ic-globe"  style="left:82%; top:38%; animation-delay: -11s;"></i>
+  <i class="bi bi-credit-card-2-front ic-card" style="left:38%; top:48%; animation-delay: -12s;"></i>
+  <i class="bi bi-bell-fill    ic-bell"   style="left:90%; top:72%; animation-delay: -13s;"></i>
+  <i class="bi bi-apple        ic-apple"  style="left:2%;  top:78%; animation-delay: -14s;"></i>
+  <i class="bi bi-android2     ic-droid"  style="left:42%; top:32%; animation-delay: -15s;"></i>
+  <i class="bi bi-shield-check ic-shield" style="left:65%; top:65%; animation-delay: -2.5s;"></i>
+  <i class="bi bi-window-stack ic-win"    style="left:22%; top:25%; animation-delay: -4.5s;"></i>
 </div>
 
 <header class="adm-top" data-testid="adm-topbar">
