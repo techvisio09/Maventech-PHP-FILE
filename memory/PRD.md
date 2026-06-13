@@ -320,6 +320,14 @@ See `/app/memory/test_credentials.md`.
 - **`prefers-reduced-motion`** honoured on both layers.
 - Cleared the test GIF (`company_logo = ''` + `company_name = "Maventech Software"`) so the auto-generated "M" mark renders site-wide. Admins can still upload a custom logo via the drag-and-drop card any time — the bounce animation will follow the new image.
 
+## [June 2026] Brand Motion picker
+- **Four motion presets** (Bounce / Spin / Pulse / Static) selectable from Admin → Company Info → "Brand Motion".  Each option renders its own animated mini-logo preview inside the picker pill (uses the same keyframes that drive the real navbar/topbar).
+- **Setting stored** at `settings.company_logo_motion` (default `bounce`).  Saved through the existing `save_company_info` POST action with input whitelist (`bounce|spin|pulse|static`).
+- **Applied site-wide** via a single CSS attribute selector on `<body data-brand-motion="...">` — picked up by both `includes/header.php` (public navbar) and `includes/admin-shell.php` (admin topbar).  Targets the inline SVG `.brand-mark` *and* a custom uploaded `<img>` so the motion follows whichever asset is active.
+- **Per-request cache invalidation** for `setting_get()` — PHP's built-in dev-server keeps workers alive across requests, so the previous static cache meant new settings only showed up after a worker died.  Fixed by tying the in-memory cache to `$_SERVER['REQUEST_TIME_FLOAT']`: a new request value forces a fresh DB read.  Verified across 8 worker PIDs.
+- **`prefers-reduced-motion`** honoured on all four animations.
+- Verified end-to-end: clicking a pill → saving → admin topbar AND public navbar both react with the new motion, with no page reload needed for downstream visitors.
+
 ## Roadmap / Backlog (P2)
 - Split `admin.php` (>3700 lines) into per-tab partials under `includes/tabs/`
 - Add bulk-paste key validation (deduplicate vs. existing)

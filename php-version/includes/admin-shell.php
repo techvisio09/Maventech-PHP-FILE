@@ -376,14 +376,31 @@ body::before { content: none; }
   width:34px; height:34px; border-radius:9px;
   background:linear-gradient(135deg,#3b82f6,#1d4ed8);
   display:inline-flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:18px;
-  /* Continuous 360° spin + gentle vertical bounce, combined in one keyframe
-     so both transforms apply without overriding each other. */
+  /* Animation driven by `body[data-brand-motion]` so admins can swap
+     Bounce / Spin / Pulse / Static from Company Info → Brand Motion. */
   transform-style: preserve-3d;
-  animation: m-logo-spin-bounce 3s ease-in-out infinite;
   box-shadow: 0 6px 18px rgba(29,78,216,.35);
   will-change: transform;
 }
-.adm-top .brand-center .m-logo:hover {
+.adm-top .brand-center .m-logo-img { box-shadow: 0 6px 18px rgba(29,78,216,.35); }
+body[data-brand-motion="bounce"] .adm-top .brand-center .m-logo,
+body[data-brand-motion="bounce"] .adm-top .brand-center .m-logo-img {
+  animation: m-logo-spin-bounce 3s ease-in-out infinite;
+}
+body[data-brand-motion="spin"] .adm-top .brand-center .m-logo,
+body[data-brand-motion="spin"] .adm-top .brand-center .m-logo-img {
+  animation: m-logo-pure-spin 4.5s linear infinite;
+}
+body[data-brand-motion="pulse"] .adm-top .brand-center .m-logo,
+body[data-brand-motion="pulse"] .adm-top .brand-center .m-logo-img {
+  animation: m-logo-pulse 2.4s ease-in-out infinite;
+}
+body[data-brand-motion="static"] .adm-top .brand-center .m-logo,
+body[data-brand-motion="static"] .adm-top .brand-center .m-logo-img {
+  animation: none;
+}
+.adm-top .brand-center .m-logo:hover,
+.adm-top .brand-center .m-logo-img:hover {
   animation-play-state: paused;
   cursor: pointer;
 }
@@ -394,8 +411,16 @@ body::before { content: none; }
   75%  { transform: translateY(-6px) rotateY(270deg) scale(1.05); }
   100% { transform: translateY(0)    rotateY(360deg) scale(1); }
 }
+@keyframes m-logo-pure-spin {
+  0%   { transform: rotateY(0deg); }
+  100% { transform: rotateY(360deg); }
+}
+@keyframes m-logo-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 6px 18px rgba(29,78,216,.35); }
+  50%      { transform: scale(1.10); box-shadow: 0 8px 26px rgba(29,78,216,.55); }
+}
 @media (prefers-reduced-motion: reduce) {
-  .adm-top .brand-center .m-logo { animation: none; }
+  .adm-top .brand-center .m-logo, .adm-top .brand-center .m-logo-img { animation: none; }
 }
 .adm-top .brand-center small { font-size:9px;letter-spacing:1.8px;color:var(--muted);font-weight:600;}
 .adm-top .brand-center .adm-brand-cp {
@@ -966,7 +991,7 @@ hr { border-color: var(--border); opacity:.5; }
 }
 </style>
 </head>
-<body>
+<body data-brand-motion="<?= esc(setting_get('company_logo_motion', 'bounce')) ?>">
 
 <!-- ============================================================
      Floating tech icons — real product-style icons drift across

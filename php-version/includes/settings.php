@@ -2,6 +2,12 @@
 // Settings helpers — used by admin template editor + email sender + checkout.
 function setting_get(string $key, string $default = ''): string {
     static $cache = null;
+    static $reqMarker = null;
+    // Detect a new HTTP request — PHP-CLI workers reuse the same process so
+    // we can't rely on a static initialiser firing per-request.  REQUEST_TIME
+    // is constant within a request and changes between them.
+    $cur = $_SERVER['REQUEST_TIME_FLOAT'] ?? 0;
+    if ($reqMarker !== $cur) { $cache = null; $reqMarker = $cur; }
     if ($cache === null) {
         try {
             $rows = db()->query('SELECT k,v FROM settings')->fetchAll();
@@ -9,11 +15,15 @@ function setting_get(string $key, string $default = ''): string {
             foreach ($rows as $r) $cache[$r['k']] = $r['v'];
         } catch (Throwable $e) { $cache = []; }
     }
+    if ($key === '__flush__') { $cache = null; return ''; }
     return $cache[$key] ?? $default;
 }
 
 function setting_set(string $key, string $val): void {
     db()->prepare('INSERT INTO settings (k,v) VALUES (?,?) ON DUPLICATE KEY UPDATE v=VALUES(v)')->execute([$key,$val]);
+    // Drop the in-process static cache so the next setting_get() re-reads
+    // the freshly-written row.  Critical for PHP-CLI persistent workers.
+    setting_get('__flush__');
 }
 
 function paypal_enabled(): bool {

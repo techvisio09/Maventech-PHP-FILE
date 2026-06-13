@@ -194,6 +194,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         setting_set('company_email',   trim($_POST['company_email']   ?? ''));
         setting_set('company_phone',   trim($_POST['company_phone']   ?? ''));
         setting_set('company_address', trim($_POST['company_address'] ?? ''));
+        // Brand motion preset (drives logo animation on public navbar + admin topbar).
+        $motion = strtolower(trim($_POST['company_logo_motion'] ?? 'bounce'));
+        if (!in_array($motion, ['bounce','spin','pulse','static'], true)) $motion = 'bounce';
+        setting_set('company_logo_motion', $motion);
         if (!empty($_POST['company_logo'])) setting_set('company_logo', trim($_POST['company_logo']));
         if (!empty($_POST['clear_logo']))    setting_set('company_logo', '');
         header('Location: admin.php?tab=company&msg=Saved'); exit;
@@ -1160,6 +1164,32 @@ elseif ($tab === 'company'):
           <textarea class="form-control" name="company_address" rows="2" placeholder="Street, City, State ZIP, Country" data-testid="ci-address-input"><?= esc($co['address']) ?></textarea>
         </div>
         <div class="col-12">
+          <label class="form-label small fw-semibold"><i class="bi bi-magic me-1"></i>Brand Motion <span class="text-muted fw-normal">— how the logo animates on the navbar &amp; admin topbar</span></label>
+          <?php $curMotion = setting_get('company_logo_motion', 'bounce'); ?>
+          <input type="hidden" name="company_logo_motion" id="ciMotionInput" value="<?= esc($curMotion) ?>" data-testid="ci-motion-input">
+          <div class="motion-picker d-flex flex-wrap gap-2" id="ciMotionPicker" data-testid="ci-motion-picker">
+            <?php foreach ([
+              ['bounce', 'bi-arrow-down-up',     'Bounce',  'Spin + vertical bob — playful B2C feel'],
+              ['spin',   'bi-arrow-clockwise',    'Spin',    'Continuous 360° coin spin'],
+              ['pulse',  'bi-broadcast',          'Pulse',   'Gentle scale heartbeat'],
+              ['static', 'bi-pause-circle',       'Static',  'Premium, no motion'],
+            ] as [$key,$icon,$label,$desc]): ?>
+              <button type="button"
+                      class="motion-pill <?= $curMotion===$key?'active':'' ?>"
+                      data-motion="<?= $key ?>"
+                      data-testid="ci-motion-<?= $key ?>"
+                      title="<?= esc($desc) ?>">
+                <span class="motion-preview motion-<?= $key ?>"><?= render_logo(28, substr($co['name'] ?: 'M', 0, 1)) ?></span>
+                <span class="motion-label">
+                  <i class="bi <?= $icon ?>"></i>
+                  <strong><?= esc($label) ?></strong>
+                  <small class="text-muted d-block"><?= esc($desc) ?></small>
+                </span>
+              </button>
+            <?php endforeach; ?>
+          </div>
+        </div>
+        <div class="col-12">
           <label class="form-label small fw-semibold"><i class="bi bi-image me-1"></i>Company Logo <span class="text-muted fw-normal">— shows at the top of every email. Leave empty to auto-generate a clean monogram from your company name's first letter.</span></label>
           <div class="dz-upload" id="ciDropZone" data-testid="ci-dropzone">
             <input type="file" id="ciLogoFile" accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml" data-testid="ci-logo-file">
@@ -1245,6 +1275,59 @@ elseif ($tab === 'company'):
       flex-shrink: 0;
     }
     .ci-logo-preview-lg img { max-width: 90px; max-height: 90px; object-fit: contain; }
+    /* ---- Brand motion picker (Bounce / Spin / Pulse / Static) ---- */
+    .motion-picker { width: 100%; }
+    .motion-pill {
+      display: inline-flex; align-items: center; gap: 10px;
+      padding: 10px 14px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      cursor: pointer;
+      transition: border-color .2s ease, transform .15s ease, background .2s ease, box-shadow .25s ease;
+      flex: 1 1 230px; max-width: 260px;
+      text-align: left;
+    }
+    .motion-pill:hover { transform: translateY(-1px); border-color: rgba(59,130,246,.55); box-shadow: 0 6px 18px rgba(15,23,42,.06); }
+    .motion-pill.active {
+      border-color: transparent;
+      background: linear-gradient(135deg, rgba(14,165,233,.10), rgba(99,102,241,.10));
+      box-shadow: 0 0 0 2px #3b82f6, 0 8px 24px rgba(59,130,246,.18);
+    }
+    [data-bs-theme="dark"] .motion-pill { background: #1e293b; }
+    [data-bs-theme="dark"] .motion-pill.active { background: linear-gradient(135deg, rgba(14,165,233,.22), rgba(99,102,241,.20)); box-shadow: 0 0 0 2px #60a5fa, 0 8px 24px rgba(59,130,246,.30); }
+    .motion-pill .motion-label { line-height: 1.25; }
+    .motion-pill .motion-label strong { font-size: 13px; }
+    .motion-pill .motion-label small { font-size: 11px; }
+    .motion-pill .motion-label .bi { color: var(--brand-dk); margin-right: 4px; }
+    .motion-preview {
+      width: 40px; height: 40px;
+      border-radius: 10px;
+      display: inline-flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transform-style: preserve-3d;
+      will-change: transform;
+    }
+    .motion-preview svg { width: 32px; height: 32px; }
+    .motion-preview.motion-bounce { animation: motion-pv-bounce 3s ease-in-out infinite; }
+    .motion-preview.motion-spin   { animation: motion-pv-spin 4.5s linear infinite; }
+    .motion-preview.motion-pulse  { animation: motion-pv-pulse 2.4s ease-in-out infinite; }
+    .motion-preview.motion-static { animation: none; }
+    @keyframes motion-pv-bounce {
+      0%   { transform: translateY(0) rotateY(0deg) scale(1); }
+      25%  { transform: translateY(-4px) rotateY(90deg) scale(1.04); }
+      50%  { transform: translateY(0) rotateY(180deg) scale(1); }
+      75%  { transform: translateY(-4px) rotateY(270deg) scale(1.04); }
+      100% { transform: translateY(0) rotateY(360deg) scale(1); }
+    }
+    @keyframes motion-pv-spin {
+      0% { transform: rotateY(0); } 100% { transform: rotateY(360deg); }
+    }
+    @keyframes motion-pv-pulse {
+      0%, 100% { transform: scale(1); }
+      50%      { transform: scale(1.10); }
+    }
+    @media (prefers-reduced-motion: reduce) { .motion-preview { animation: none !important; } }
   </style>
 
   <script>
@@ -1334,6 +1417,21 @@ elseif ($tab === 'company'):
           try { fileEl.files = dt.files; } catch(_){}
           uploadFile(dt.files[0]);
         }
+      });
+    }
+
+    // Brand motion picker — click a pill to highlight it + write into the
+    // hidden input.  The actual motion is applied to the public navbar +
+    // admin topbar by the `body[data-brand-motion]` selectors in CSS.
+    var picker = document.getElementById('ciMotionPicker');
+    var motionInput = document.getElementById('ciMotionInput');
+    if (picker && motionInput) {
+      picker.querySelectorAll('.motion-pill').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          picker.querySelectorAll('.motion-pill').forEach(function(b){ b.classList.remove('active'); });
+          btn.classList.add('active');
+          motionInput.value = btn.getAttribute('data-motion') || 'bounce';
+        });
       });
     }
   })();

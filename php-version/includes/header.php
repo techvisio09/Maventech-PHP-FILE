@@ -86,7 +86,7 @@ $ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.sv
   <link href="assets/css/style.css" rel="stylesheet">
   <script>window.SITE_PHONE = '<?= esc($brandPhone) ?>'; window.CART_SLUGS = <?= json_encode(array_keys(cart())) ?>;</script>
 </head>
-<body>
+<body data-brand-motion="<?= esc(setting_get('company_logo_motion', 'bounce')) ?>">
 
 <?php if ($checkoutHeader): ?>
 <!-- Slim secure-checkout header -->
