@@ -23,11 +23,24 @@ if (!$leadId) { echo json_encode(['ok'=>false,'error'=>'No lead']); exit; }
 // Heartbeat: update last_seen on every call
 $pdo->prepare('UPDATE chat_leads SET last_seen=NOW() WHERE id=?')->execute([$leadId]);
 
+// Typing beacon — customer is composing.  JS pings ~every 2s while
+// the textarea has focus + non-empty content; the 5-sec freshness
+// check in the response makes the admin's "Customer is typing…"
+// indicator disappear quickly once the customer stops.
+if ($action === 'typing') {
+    $on = !empty($in['typing']);
+    $pdo->prepare('UPDATE chat_leads SET typing_customer_at = ' . ($on ? 'NOW()' : 'NULL') . ' WHERE id=?')
+        ->execute([$leadId]);
+    echo json_encode(['ok'=>true]); exit;
+}
+
 if ($action === 'send') {
     $msg = trim($in['message'] ?? '');
     if ($msg === '') { echo json_encode(['ok'=>false,'error'=>'empty']); exit; }
     $pdo->prepare('INSERT INTO chat_messages (lead_id, sender, message) VALUES (?,?,?)')
         ->execute([$leadId, 'customer', mb_substr($msg, 0, 2000, 'UTF-8')]);
+    // Sending a message implies done typing — clear the beacon immediately.
+    $pdo->prepare('UPDATE chat_leads SET typing_customer_at = NULL WHERE id=?')->execute([$leadId]);
 }
 
 $since = (int)($in['since'] ?? 0);
@@ -42,4 +55,12 @@ if ($rows) {
     $upd = $pdo->prepare("UPDATE chat_messages SET read_at=NOW() WHERE id IN ($ph)");
     $upd->execute($ids);
 }
-echo json_encode(['ok'=>true, 'messages'=>$rows]);
+
+// Surface the admin's typing state to the customer poller so the public
+// chat widget can render "● Admin is typing…" within 1 polling tick.
+$tStmt = $pdo->prepare('SELECT typing_admin_at FROM chat_leads WHERE id=?');
+$tStmt->execute([$leadId]);
+$adminTyping = (string)$tStmt->fetchColumn();
+$adminIsTyping = $adminTyping && (time() - strtotime($adminTyping)) <= 5;
+
+echo json_encode(['ok'=>true, 'messages'=>$rows, 'admin_typing'=>$adminIsTyping]);

@@ -22,8 +22,22 @@ if ($action === 'send') {
     if (!$leadId || $msg === '') { echo json_encode(['ok'=>false,'error'=>'invalid']); exit; }
     $pdo->prepare('INSERT INTO chat_messages (lead_id, sender, message) VALUES (?,?,?)')
         ->execute([$leadId, 'admin', mb_substr($msg, 0, 2000, 'UTF-8')]);
+    // Sending implies done typing — clear the beacon immediately.
+    $pdo->prepare('UPDATE chat_leads SET typing_admin_at = NULL WHERE id=?')->execute([$leadId]);
     echo json_encode(['ok'=>true,'id'=>(int)$pdo->lastInsertId()]);
     exit;
+}
+
+// Typing beacon — admin is composing.  JS pings ~every 2s while
+// the textarea has focus + non-empty content.  Customer-side poller
+// surfaces this within 1 tick as "● Admin is typing…".
+if ($action === 'typing') {
+    $leadId = (int)($in['lead_id'] ?? 0);
+    if (!$leadId) { echo json_encode(['ok'=>false]); exit; }
+    $on = !empty($in['typing']);
+    $pdo->prepare('UPDATE chat_leads SET typing_admin_at = ' . ($on ? 'NOW()' : 'NULL') . ' WHERE id=?')
+        ->execute([$leadId]);
+    echo json_encode(['ok'=>true]); exit;
 }
 
 if ($action === 'unread') {
@@ -40,22 +54,27 @@ if ($action === 'unread') {
 // thread (default)
 $leadId = (int)($in['lead_id'] ?? 0);
 if (!$leadId) { echo json_encode(['ok'=>false,'error'=>'lead_id required']); exit; }
-$lead = $pdo->prepare('SELECT id, name, email, phone, last_seen FROM chat_leads WHERE id=?');
+$lead = $pdo->prepare('SELECT id, name, email, phone, last_seen, typing_customer_at FROM chat_leads WHERE id=?');
 $lead->execute([$leadId]); $leadRow = $lead->fetch();
 if (!$leadRow) { echo json_encode(['ok'=>false,'error'=>'not found']); exit; }
 $msgs = $pdo->prepare('SELECT id, sender, message, sent_at FROM chat_messages WHERE lead_id=? ORDER BY id ASC LIMIT 200');
 $msgs->execute([$leadId]);
 // Mark customer messages as read
 $pdo->prepare("UPDATE chat_messages SET read_at=NOW() WHERE lead_id=? AND sender='customer' AND read_at IS NULL")->execute([$leadId]);
+// Surface the customer's typing state so the admin chat panel can show
+// "● Customer is typing…" within one polling tick.
+$customerIsTyping = $leadRow['typing_customer_at']
+    && (time() - strtotime($leadRow['typing_customer_at'])) <= 5;
 echo json_encode([
     'ok' => true,
     'lead' => [
-        'id'        => (int)$leadRow['id'],
-        'name'      => $leadRow['name'],
-        'email'     => $leadRow['email'],
-        'phone'     => $leadRow['phone'],
-        'last_seen' => $leadRow['last_seen'],
-        'online'    => _is_online($leadRow['last_seen']),
+        'id'             => (int)$leadRow['id'],
+        'name'           => $leadRow['name'],
+        'email'          => $leadRow['email'],
+        'phone'          => $leadRow['phone'],
+        'last_seen'      => $leadRow['last_seen'],
+        'online'         => _is_online($leadRow['last_seen']),
+        'customer_typing'=> $customerIsTyping,
     ],
     'messages' => $msgs->fetchAll(),
 ]);

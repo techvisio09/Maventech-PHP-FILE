@@ -334,8 +334,45 @@ async function adminPollOnce() {
         if (m.id > _adminLastMsgId) _adminLastMsgId = m.id;
       }
     }
+    // Show "Live agent is typing…" indicator while the admin's beacon
+    // is fresh (≤5 sec).  Hides automatically when the next poll comes
+    // back with admin_typing=false.
+    const t = document.getElementById('chat-typing');
+    if (t) {
+      const show = !!(j && j.admin_typing);
+      t.style.display = show ? 'block' : 'none';
+      if (show) { const body = document.getElementById('chat-body'); if (body) body.scrollTop = body.scrollHeight; }
+    }
   } catch (e) { /* keep retrying silently */ }
 }
+
+// Throttled customer "I'm typing" beacon — fires at most every 2 sec
+// while the chat-input has non-empty content.  Admin chat panel sees
+// "● Customer is typing…" within 1 polling tick (3-5 sec).
+let _custTypingAt = 0;
+function pingCustomerTyping(on){
+  const token = localStorage.getItem('uc_chat_token');
+  if (!token) return;
+  const now = Date.now();
+  if (on && (now - _custTypingAt) < 2000) return;
+  _custTypingAt = on ? now : 0;
+  try {
+    fetch('ajax/chat-customer.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'typing', token: token, typing: on ? 1 : 0 }),
+    });
+  } catch(_) {}
+}
+// Hook the public chat input — fires on every keystroke, with "off"
+// pings on blur / message-send so the admin's indicator disappears
+// quickly when the customer stops typing.
+document.addEventListener('DOMContentLoaded', () => {
+  const i = document.getElementById('chat-input');
+  if (!i) return;
+  i.addEventListener('input', () => pingCustomerTyping(i.value.trim().length > 0));
+  i.addEventListener('blur',  () => pingCustomerTyping(false));
+});
 async function relayCustomerMessageToAdmin(text) {
   const token = localStorage.getItem('uc_chat_token');
   if (!token) return;
@@ -366,6 +403,7 @@ async function sendChat(ev) {
   const msg = input.value.trim();
   if (!msg) return;
   input.value = '';
+  pingCustomerTyping(false); // sent — clear the "typing" beacon
   chatAppend('user', msg);
   // Also forward the customer's message to the admin chat thread (best-effort)
   relayCustomerMessageToAdmin(msg);

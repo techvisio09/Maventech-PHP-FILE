@@ -182,6 +182,14 @@
       <button class="btn btn-link chat-lead-skip" onclick="skipLead()" data-testid="lead-skip-btn">Skip — I just want to ask a question</button>
     </div>
   </div>
+  <div id="chat-typing" class="chat-typing" style="display:none;" data-testid="chat-admin-typing">
+    <div class="chat-typing-bubble">
+      <span class="chat-typing-dot"></span>
+      <span class="chat-typing-dot"></span>
+      <span class="chat-typing-dot"></span>
+      <span class="chat-typing-text">Live agent is typing…</span>
+    </div>
+  </div>
   <form class="chat-input-row d-flex align-items-center gap-2 p-2" onsubmit="sendChat(event)">
     <input id="chat-input" class="form-control form-control-sm chat-input" placeholder="Type a message…" autocomplete="off" data-testid="chat-input">
     <button class="btn chat-send-btn" type="submit" aria-label="Send" data-testid="chat-send"><i class="bi bi-send-fill"></i></button>

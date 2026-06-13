@@ -366,6 +366,17 @@ See `/app/memory/test_credentials.md`.
 - **Typed-message → "connect to live person"** — `ajax/chat.php`'s fallback branch (when `OPENAI_API_KEY` is empty) was rewritten. It now replies *"Hold on a moment — let me connect you with a live person. One of our agents has just been notified and will reply right here."* and sets `route_to_human: true` in the JSON.
 - **Admin warning loop** — already in place: the customer's typed message goes through `relayCustomerMessageToAdmin()` → `ajax/chat-customer.php` → inserts a row in `chat_messages`. The admin shell's existing 8-s `tick()` poller picks it up, bumps the bell badge, plays a WebAudio chime, shows a deep-linkable toast ("New message · [customer name]") — which already covers the "warning on admin portal" requirement end-to-end.
 
+## [June 2026] Mutual chat presence — typing indicators both ways
+- **New DB columns** on `chat_leads`: `typing_admin_at` + `typing_customer_at` (idempotent migration added to `ensure_db_schema()` and applied live).
+- **Throttled beacons** (`pingAdminTyping`, `pingCustomerTyping`) — fired on every keystroke while the textarea has non-empty content, hard-capped to one POST every 2 sec. Off-pings (blur / message-send / chat close) bypass the throttle so the indicator clears within ~1 tick.
+- **Endpoints extended**:
+  - `ajax/chat-admin.php` — new `typing` action (admin → customer beacon). Also returns `lead.customer_typing` boolean in every `thread` poll so admin chat shows "● Customer is typing…" within 1 tick.
+  - `ajax/chat-customer.php` — new `typing` action (customer → admin beacon). Also returns `admin_typing` boolean in every `poll` response so the public chat widget shows "● Live agent is typing…" within 1 tick.
+  - Both endpoints use a 5-sec freshness window — the indicator auto-disappears even if the keystroke beacon stops mid-stream.
+- **UI bubbles** — animated 3-dot loaders in matching brand colours, one in each chat panel: admin shell shows soft-blue "Customer is typing…" inside `#adm-chat-typing`, customer widget shows soft-blue "Live agent is typing…" inside `#chat-typing`. Both honour `prefers-reduced-motion` via the existing CSS animation budget.
+- **Curl-verified end-to-end**: beacon set → poll returns `true` → wait 6 sec → poll returns `false` → send message → beacon cleared immediately.
+- **Screenshot-verified**: live indicator visible in both admin chat panel and customer chat widget.
+
 ## Roadmap / Backlog (P2)
 - Split `admin.php` (>3700 lines) into per-tab partials under `includes/tabs/`
 - Add bulk-paste key validation (deduplicate vs. existing)

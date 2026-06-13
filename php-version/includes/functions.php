@@ -129,6 +129,12 @@ function ensure_db_schema(): void
         foreach ([
             "ALTER TABLE chat_leads ADD COLUMN last_seen DATETIME NULL DEFAULT NULL",
             "ALTER TABLE chat_leads ADD COLUMN chat_token VARCHAR(40) NOT NULL DEFAULT ''",
+            // Mutual typing-presence beacons — admins see a "Customer is
+            // typing…" indicator and customers see "Admin is typing…".
+            // Each side stamps NOW() on every keystroke (throttled to ~2s
+            // by the JS) so a "fresh within 5s" check serves the indicator.
+            "ALTER TABLE chat_leads ADD COLUMN typing_admin_at    DATETIME NULL DEFAULT NULL",
+            "ALTER TABLE chat_leads ADD COLUMN typing_customer_at DATETIME NULL DEFAULT NULL",
             // customer_reviews — admin_seen_at lets the topbar star-bell badge
             // tell which low-rating submissions are still unacknowledged.
             "ALTER TABLE customer_reviews ADD COLUMN admin_seen_at DATETIME NULL DEFAULT NULL",

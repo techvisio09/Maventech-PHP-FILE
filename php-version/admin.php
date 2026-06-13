@@ -2938,6 +2938,15 @@ elseif ($tab === 'leads'):
         </div>
       </div>
 
+      <div id="adm-chat-typing" class="adm-chat-typing" style="display:none;" data-testid="chat-customer-typing">
+        <div class="adm-chat-typing-bubble">
+          <span class="adm-chat-typing-dot"></span>
+          <span class="adm-chat-typing-dot"></span>
+          <span class="adm-chat-typing-dot"></span>
+          <span class="adm-chat-typing-text">Customer is typing…</span>
+        </div>
+      </div>
+
       <form id="adm-chat-form" class="adm-chat-foot" onsubmit="return admChatSend(event)">
         <textarea id="adm-chat-input" rows="1" maxlength="2000"
                   placeholder="Type a message…"
@@ -3003,6 +3012,40 @@ elseif ($tab === 'leads'):
     /* Gray offline banner */
     .adm-chat-banner { padding:7px 12px; background:#f3f4f6; color:#6b7280; font-size:11.5px; border-bottom:1px solid #e5e7eb; }
     [data-bs-theme="dark"] .adm-chat-banner { background:#1a2335; color:#94a3b8; border-bottom-color:#2a3550; }
+
+    /* Mutual presence — typing indicator bubble.  Lives between the
+       message list and the input row.  Shown when the OTHER side has
+       beaconed within the last 5 sec (chat-admin.php / chat-customer.php
+       expose `customer_typing` / `admin_typing` in their poll responses). */
+    .adm-chat-typing { padding: 4px 12px 6px; }
+    .adm-chat-typing-bubble {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 7px 12px;
+      background: linear-gradient(135deg, #dbeafe, #e0e7ff);
+      color: #1e3a8a;
+      border-radius: 14px;
+      border-bottom-right-radius: 5px;
+      border: 1px solid rgba(59,130,246,.20);
+      font-size: 11.5px;
+      font-style: italic;
+      box-shadow: 0 1px 2px rgba(15,23,42,.08);
+    }
+    [data-bs-theme="dark"] .adm-chat-typing-bubble {
+      background: linear-gradient(135deg, rgba(59,130,246,.22), rgba(99,102,241,.18));
+      color: #bfdbfe; border-color: rgba(96,165,250,.30);
+    }
+    .adm-chat-typing-dot {
+      display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+      background: #3b82f6;
+      animation: adm-typing-bounce 1.05s ease-in-out infinite;
+    }
+    .adm-chat-typing-dot:nth-child(2) { animation-delay: .18s; }
+    .adm-chat-typing-dot:nth-child(3) { animation-delay: .36s; margin-right: 4px; }
+    .adm-chat-typing-text { margin-left: 4px; }
+    @keyframes adm-typing-bounce {
+      0%, 80%, 100% { transform: translateY(0)   scale(1);   opacity: .55; }
+      40%           { transform: translateY(-3px) scale(1.15); opacity: 1;  }
+    }
 
     /* Conversation body */
     .adm-chat-body { flex:1 1 auto; overflow-y:auto; padding:10px 12px; display:flex; flex-direction:column; gap:5px; background:#f8fafc; }
@@ -3139,8 +3182,39 @@ elseif ($tab === 'leads'):
         const j = await r.json();
         if (!j.ok) return;
         renderMessages(j.messages || []);
-        if (j.lead) updateStatus(!!j.lead.online, j.lead.last_seen);
+        if (j.lead) {
+          updateStatus(!!j.lead.online, j.lead.last_seen);
+          // Show "Customer is typing…" within one tick when the beacon
+          // is fresh (chat-customer.php pings every 2s with a 5s
+          // freshness window — so the indicator dies quickly too).
+          const $typing = document.getElementById('adm-chat-typing');
+          if ($typing) {
+            const show = !!j.lead.customer_typing;
+            $typing.style.display = show ? 'block' : 'none';
+            if (show) $body.scrollTop = $body.scrollHeight;
+          }
+        }
       } catch(e){ /* network hiccup, retry next tick */ }
+    }
+
+    // Throttled admin "I'm typing" beacon — fires at most every 2 sec
+    // while the textarea has non-empty content + focus.  Customer-side
+    // poller surfaces this as "● Admin is typing…" within 1 tick.
+    let _typingBeaconAt = 0;
+    function pingAdminTyping(on){
+      if (!currentLeadId) return;
+      const now = Date.now();
+      // Only the "on" pings are throttled — the "off" ping (sent when
+      // input is cleared / blurred / message sent) should fire immediately
+      // so the customer's indicator clears without waiting for timeout.
+      if (on && (now - _typingBeaconAt) < 2000) return;
+      _typingBeaconAt = on ? now : 0;
+      try {
+        fetch((window.MAVEN_BASE||'/') + 'ajax/chat-admin.php', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({action:'typing', lead_id: currentLeadId, typing: on ? 1 : 0})
+        });
+      } catch(_){}
     }
 
     window.admChatOpen = function(leadId, name, email, phone){
@@ -3165,6 +3239,7 @@ elseif ($tab === 'leads'):
     };
 
     window.admChatClose = function(){
+      pingAdminTyping(false); // tell customer the admin walked away
       overlay.style.display = 'none';
       document.body.style.overflow = '';
       clearInterval(pollTimer); pollTimer = null;
@@ -3184,7 +3259,7 @@ elseif ($tab === 'leads'):
           body: JSON.stringify({action:'send', lead_id: currentLeadId, message: msg})
         });
         const j = await r.json();
-        if (j && j.ok) { $input.value = ''; await poll(); }
+        if (j && j.ok) { $input.value = ''; pingAdminTyping(false); await poll(); }
         else { alert((j && j.error) || 'Failed to send message.'); }
       } catch(e){ alert('Network error — please try again.'); }
       finally { btn.disabled = false; $input.disabled = false; $input.focus(); }
@@ -3228,10 +3303,14 @@ elseif ($tab === 'leads'):
       }
     });
     // Auto-grow the input as user types (capped via max-height in CSS)
+    // and beacon "admin is typing…" to the customer side.
     $input.addEventListener('input', function(){
       $input.style.height = 'auto';
       $input.style.height = Math.min($input.scrollHeight, 90) + 'px';
+      const hasText = $input.value.trim().length > 0;
+      pingAdminTyping(hasText);
     });
+    $input.addEventListener('blur', function(){ pingAdminTyping(false); });
 
     // ESC closes
     document.addEventListener('keydown', function(e){
