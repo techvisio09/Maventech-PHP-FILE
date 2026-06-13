@@ -65,6 +65,17 @@ function regions_bootstrap(): void {
                 }
             } catch (Throwable $e) { /* ignore — keep going */ }
         }
+
+        // Stock-notification subscribers (back-in-stock alerts)
+        $pdo->exec("CREATE TABLE IF NOT EXISTS stock_notifications (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            product_slug VARCHAR(120) NOT NULL,
+            email VARCHAR(190) NOT NULL,
+            region VARCHAR(8) NOT NULL DEFAULT 'US',
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            notified_at DATETIME NULL DEFAULT NULL,
+            KEY idx_pending (product_slug, region, notified_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
     } catch (Throwable $e) {
         // DB not reachable yet or insufficient privileges — silently skip,
         // the page will surface the underlying error normally.

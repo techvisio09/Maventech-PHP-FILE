@@ -11,11 +11,52 @@ if (!isset($_SESSION['cart'])) $_SESSION['cart'] = [];
 
 if ($action === 'add' && $slug && get_product($slug)) {
     $qty = max(1, (int)($in['qty'] ?? 1));
-    $_SESSION['cart'][$slug] = ($_SESSION['cart'][$slug] ?? 0) + $qty;
+    $cur = (int)($_SESSION['cart'][$slug] ?? 0);
+    $stock = available_keys_count($slug);
+    if ($stock <= 0) {
+        echo json_encode(['ok' => false, 'error' => 'This product is currently out of stock.', 'count' => cart_count()]);
+        exit;
+    }
+    // Cap final cart line at available stock
+    $newQty = min($stock, $cur + $qty);
+    $capped = ($newQty < $cur + $qty);
+    $_SESSION['cart'][$slug] = $newQty;
+    if ($capped) {
+        echo json_encode([
+            'ok'      => true,
+            'capped'  => true,
+            'qty'     => $newQty,
+            'stock'   => $stock,
+            'message' => "Only {$stock} unit" . ($stock===1?'':'s') . " available — cart updated to {$newQty}.",
+            'count'   => cart_count(),
+        ]);
+        exit;
+    }
 } elseif ($action === 'update' && $slug && isset($_SESSION['cart'][$slug])) {
     $qty = (int)($in['qty'] ?? 1);
-    if ($qty <= 0) unset($_SESSION['cart'][$slug]);
-    else $_SESSION['cart'][$slug] = $qty;
+    if ($qty <= 0) {
+        unset($_SESSION['cart'][$slug]);
+    } else {
+        $stock = available_keys_count($slug);
+        if ($stock <= 0) {
+            unset($_SESSION['cart'][$slug]);
+            echo json_encode(['ok' => false, 'error' => 'This product is now out of stock.', 'count' => cart_count()]);
+            exit;
+        }
+        $capped = $qty > $stock;
+        $_SESSION['cart'][$slug] = min($stock, $qty);
+        if ($capped) {
+            echo json_encode([
+                'ok'      => true,
+                'capped'  => true,
+                'qty'     => $_SESSION['cart'][$slug],
+                'stock'   => $stock,
+                'message' => "Only {$stock} unit" . ($stock===1?'':'s') . " available.",
+                'count'   => cart_count(),
+            ]);
+            exit;
+        }
+    }
 } elseif ($action === 'remove' && $slug) {
     unset($_SESSION['cart'][$slug]);
 } elseif ($action === 'coupon') {

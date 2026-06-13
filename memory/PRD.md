@@ -148,6 +148,13 @@ Create a comprehensive and user-friendly Admin Panel for Maventech Software with
   - When the rebuild kicks in, a small amber banner is shown above the preview: *"Preview rebuilt from the live <template> template + order data."* Real customer emails (full stored HTML) display unchanged with no banner.
   - Verified via Playwright on both id=23 (rebuilt → full styled order-delivery email) and id=17 (real Jane order — shown exactly as sent).
 
+- **[Feb 2026]** Stock-status overhaul on the product detail page (`product.php`) + Notify When Available subscription system:
+  - **Stock label rule**: when a product is in stock (≥1 license_key available), no stock-status message is shown anywhere on the product detail page — qty selector + Add-to-Cart / Buy-Now buttons are sufficient. When the product hits 0 stock, a red **"Out of Stock"** pill + disabled Out-of-Stock button are shown.
+  - **Notify When Available**: replaced the mailto link with a proper inline form (amber gradient card). Submits to new AJAX endpoint `/ajax/notify-stock.php` which validates email, dedupes (same email + product + region while still pending), inserts into the new `stock_notifications` table (id / product_slug / email / region / created_at / notified_at) — auto-bootstrapped via `includes/regions.php`.
+  - **Quantity cap**: `pd-qty-input` already has `max=available_stock`. AJAX cart `add`/`update` actions now also cap server-side at `available_keys_count(slug)` and return `{capped:true, qty, message}` if the request exceeded stock.
+  - **Auto-restock email**: when admin adds keys via `action=add_keys` and stock crossed 0 → >0 for that product+region, every pending subscriber gets a "back in stock" email queued (`template_code=stock_back`, priority 4) and `notified_at` is set so they're never emailed twice for the same restock event. Admin flash message reports the count.
+  - Verified end-to-end: OOS product shows red label + amber Notify form; subscription persisted; dedupe + invalid-email validation work; in-stock product shows zero stock chrome with qty input max=2 (matches 2 available keys); cart cap returns `Only 2 units available — cart updated to 2.` when 5 requested; admin add_keys cycle queues the back-in-stock email and updates `notified_at`.
+
 ## Test Credentials
 See `/app/memory/test_credentials.md`.
 

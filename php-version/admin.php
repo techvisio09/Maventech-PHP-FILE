@@ -277,10 +277,73 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'add_keys') {
         $keys = array_filter(array_map('trim', explode("\n", $_POST['keys'] ?? '')));
         $stmt = $pdo->prepare('INSERT INTO license_keys (product_slug, license_key, region) VALUES (?,?,?)');
-        $n=0; foreach ($keys as $k) try { $stmt->execute([$_POST['product_slug'], $k, $region_code]); $n++; } catch (Exception $e) {}
-        $rs = $_POST['return_slug'] ?? $_POST['product_slug'] ?? '';
+        $slugForKeys = $_POST['product_slug'] ?? '';
+        // Snapshot stock BEFORE adding so we know if this restock crossed 0 → >0
+        $stockBefore = 0;
+        try {
+            $sb = $pdo->prepare("SELECT COUNT(*) FROM license_keys WHERE product_slug=? AND status='available' AND region=?");
+            $sb->execute([$slugForKeys, $region_code]);
+            $stockBefore = (int)$sb->fetchColumn();
+        } catch (Throwable $e) {}
+
+        $n=0; foreach ($keys as $k) try { $stmt->execute([$slugForKeys, $k, $region_code]); $n++; } catch (Exception $e) {}
+
+        // If this restock brought the product back from 0 → >0, queue "back in stock"
+        // emails to every pending subscriber for this product+region.
+        $notified = 0;
+        if ($n > 0 && $stockBefore === 0 && $slugForKeys !== '') {
+            try {
+                require_once __DIR__ . '/includes/mailer.php';
+                $prod = $pdo->prepare('SELECT slug, name FROM products WHERE slug=?');
+                $prod->execute([$slugForKeys]); $prodRow = $prod->fetch();
+                if ($prodRow) {
+                    $subs = $pdo->prepare('SELECT id, email FROM stock_notifications
+                                           WHERE product_slug=? AND region=? AND notified_at IS NULL');
+                    $subs->execute([$slugForKeys, $region_code]);
+                    $co = company_info();
+                    $base = rtrim(site_url(), '/');
+                    $prodUrl = $base . '/product.php?slug=' . urlencode($prodRow['slug']);
+                    foreach ($subs->fetchAll() as $sub) {
+                        $subject = "Good news — " . $prodRow['name'] . " is back in stock!";
+                        $html = '<!doctype html><html><body style="margin:0;padding:0;background:#fbfcfd;font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#1f2937;">
+<div style="max-width:580px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 18px rgba(15,23,42,.06);">
+  <div style="background:linear-gradient(135deg,#f59e0b,#d97706);padding:28px 32px;text-align:center;color:#fff;">
+    <div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;font-weight:700;opacity:.85;">' . esc($co['name']) . '</div>
+    <h1 style="margin:8px 0 0;font-size:22px;font-weight:800;">It\'s back in stock!</h1>
+  </div>
+  <div style="padding:30px 32px;">
+    <p style="font-size:15px;color:#475569;margin:0 0 18px;line-height:1.6;">Great news! The product you were waiting for is available again:</p>
+    <div style="background:#fff7ed;border:1px dashed #fed7aa;border-radius:12px;padding:18px;text-align:center;margin-bottom:22px;">
+      <div style="font-size:18px;font-weight:700;color:#0f172a;">' . esc($prodRow['name']) . '</div>
+      <div style="margin-top:4px;font-size:12px;color:#92400e;letter-spacing:1px;text-transform:uppercase;font-weight:700;">Limited stock — grab it now</div>
+    </div>
+    <div style="text-align:center;">
+      <a href="' . esc($prodUrl) . '" style="display:inline-block;padding:13px 32px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border-radius:999px;text-decoration:none;font-weight:700;font-size:14px;letter-spacing:.3px;">Buy it now &rarr;</a>
+    </div>
+    <p style="font-size:12px;color:#94a3b8;text-align:center;margin-top:24px;">You\'re receiving this because you subscribed to restock alerts for this product. We\'ll only email you once.</p>
+  </div>
+  <div style="background:#f8fafc;padding:18px 32px;border-top:1px solid #f1f3f5;font-size:11.5px;color:#64748b;text-align:center;">
+    Need help? <a href="mailto:' . esc($co['email']) . '" style="color:#3b82f6;text-decoration:none;">' . esc($co['email']) . '</a> &middot; ' . esc($co['phone']) . '
+  </div>
+</div></body></html>';
+                        try {
+                            smtp_queue_email($sub['email'], $subject, $html, [
+                                'template_code' => 'stock_back',
+                                'priority'      => 4,
+                            ]);
+                            $pdo->prepare('UPDATE stock_notifications SET notified_at=NOW() WHERE id=?')
+                                ->execute([$sub['id']]);
+                            $notified++;
+                        } catch (Throwable $e) { /* skip and continue */ }
+                    }
+                }
+            } catch (Throwable $e) { /* silent */ }
+        }
+
+        $rs = $_POST['return_slug'] ?? $slugForKeys;
         $back = $rs ? 'admin.php?tab=products&inv='.urlencode($rs).'&invtab=available' : 'admin.php?tab=products';
-        header('Location: '.$back.'&msg='.$n.'+key(s)+added'); exit;
+        $msg = $n.'+key(s)+added' . ($notified > 0 ? '+%E2%80%94+'.$notified.'+back-in-stock+email(s)+queued' : '');
+        header('Location: '.$back.'&msg='.$msg); exit;
 
     } elseif ($action === 'delete_key') {
         $pdo->prepare('DELETE FROM license_keys WHERE id=? AND status="available"')->execute([(int)$_POST['key_id']]);

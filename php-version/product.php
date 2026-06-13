@@ -114,14 +114,18 @@ include __DIR__ . '/includes/header.php';
       </div>
 
       <?php $stockN = available_keys_count($product['slug']); ?>
-      <div class="mb-3" data-testid="pd-stock-wrap">
-        <?= render_stock_pill($product['slug'], 'lg') ?>
-      </div>
+      <?php if ($stockN <= 0): ?>
+        <div class="mb-3" data-testid="pd-stock-wrap">
+          <span class="pc-stock-pill pc-stock-lg is-out" data-testid="stock-out-<?= esc($product['slug']) ?>">
+            <i class="bi bi-x-octagon-fill me-1"></i>Out of Stock
+          </span>
+        </div>
+      <?php endif; ?>
 
       <div class="d-flex gap-3 align-items-center mb-4 flex-wrap">
         <div class="input-group" style="width: 130px;">
           <button class="btn btn-outline-secondary" type="button" onclick="const q=document.getElementById('pd-qty'); q.value=Math.max(1, parseInt(q.value)-1)" <?= $stockN<=0?'disabled':'' ?>>−</button>
-          <input id="pd-qty" type="number" class="form-control text-center" value="1" min="1" max="<?= max(1,$stockN) ?>" <?= $stockN<=0?'disabled':'' ?>>
+          <input id="pd-qty" type="number" class="form-control text-center" value="1" min="1" max="<?= max(1,$stockN) ?>" <?= $stockN<=0?'disabled':'' ?> data-testid="pd-qty-input">
           <button class="btn btn-outline-secondary" type="button" onclick="const q=document.getElementById('pd-qty'); q.value=Math.min(<?= max(1,$stockN) ?>, parseInt(q.value)+1)" <?= $stockN<=0?'disabled':'' ?>>+</button>
         </div>
         <?php if ($stockN > 0): ?>
@@ -129,9 +133,87 @@ include __DIR__ . '/includes/header.php';
           <button class="btn btn-orange-outline btn-lg rounded-pill px-4 fw-bold buy-now-btn" data-slug="<?= esc($product['slug']) ?>" data-testid="pd-buy-now"><i class="bi bi-lightning-charge-fill me-1"></i>Buy Now</button>
         <?php else: ?>
           <button class="btn btn-secondary btn-lg rounded-pill px-4" disabled data-testid="pd-out-of-stock"><i class="bi bi-x-octagon me-2"></i>Out of Stock</button>
-          <a href="mailto:<?= esc(setting_get('company_email', SITE_EMAIL)) ?>?subject=Notify%20me%20when%20<?= rawurlencode($product['name']) ?>%20is%20back%20in%20stock" class="btn btn-outline-primary btn-lg rounded-pill px-4 fw-bold" data-testid="pd-notify-me"><i class="bi bi-bell me-1"></i>Notify When Available</a>
         <?php endif; ?>
       </div>
+
+      <?php if ($stockN <= 0): ?>
+        <!-- Notify When Available -->
+        <div class="card border-0 shadow-sm mb-4" id="notify-card" data-testid="notify-card"
+             style="background:linear-gradient(135deg,#fff7ed 0%,#fef3c7 100%); border-radius:14px;">
+          <div class="card-body p-3 p-md-4">
+            <div class="d-flex align-items-start gap-3 mb-3">
+              <div style="background:#f59e0b;color:#fff;width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <i class="bi bi-bell-fill" style="font-size:20px;"></i>
+              </div>
+              <div>
+                <h5 class="fw-bold mb-1" style="color:#92400e;">Notify When Available</h5>
+                <p class="text-muted small mb-0">Drop your email — we'll alert you the instant <strong><?= esc($product['name']) ?></strong> is restocked. No spam, just one quick email.</p>
+              </div>
+            </div>
+            <form id="notify-form" class="d-flex gap-2 flex-wrap" data-testid="notify-form" novalidate>
+              <input type="hidden" name="product_slug" value="<?= esc($product['slug']) ?>">
+              <input type="email" class="form-control rounded-pill px-3" name="email"
+                     placeholder="your@email.com" required
+                     data-testid="notify-email-input"
+                     style="flex:1; min-width:220px; border:1px solid #fed7aa; background:#fff;">
+              <button type="submit" class="btn btn-warning rounded-pill px-4 fw-bold" data-testid="notify-submit-btn" style="background:#f59e0b; border-color:#f59e0b; color:#fff;">
+                <i class="bi bi-envelope-check me-1"></i> Notify Me
+              </button>
+            </form>
+            <div id="notify-msg" class="small mt-2" data-testid="notify-msg" style="display:none;"></div>
+          </div>
+        </div>
+        <script>
+        (function(){
+          var form = document.getElementById('notify-form');
+          var msg  = document.getElementById('notify-msg');
+          if (!form) return;
+          form.addEventListener('submit', async function(e){
+            e.preventDefault();
+            var emailInput = form.querySelector('input[name="email"]');
+            var btn = form.querySelector('button[type="submit"]');
+            var email = (emailInput.value || '').trim();
+            msg.style.display = 'none';
+            if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+              msg.style.display = 'block';
+              msg.className = 'small mt-2 text-danger';
+              msg.textContent = 'Please enter a valid email address.';
+              return;
+            }
+            btn.disabled = true;
+            var oldHtml = btn.innerHTML;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Saving…';
+            try {
+              var res = await fetch('ajax/notify-stock.php', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                  product_slug: form.querySelector('input[name="product_slug"]').value,
+                  email: email,
+                }),
+              });
+              var data = await res.json();
+              msg.style.display = 'block';
+              if (data.ok) {
+                msg.className = 'small mt-2 text-success fw-semibold';
+                msg.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i>' + (data.message || "You're on the list!");
+                form.reset();
+              } else {
+                msg.className = 'small mt-2 text-danger';
+                msg.textContent = data.error || 'Something went wrong. Please try again.';
+              }
+            } catch (err) {
+              msg.style.display = 'block';
+              msg.className = 'small mt-2 text-danger';
+              msg.textContent = 'Network error. Please try again.';
+            } finally {
+              btn.disabled = false;
+              btn.innerHTML = oldHtml;
+            }
+          });
+        })();
+        </script>
+      <?php endif; ?>
 
       <div class="row g-3 small">
         <div class="col-sm-6"><i class="bi bi-lightning-charge-fill text-warning me-2"></i>Instant email delivery (15-30 min)</div>
