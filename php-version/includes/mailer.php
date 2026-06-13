@@ -285,10 +285,20 @@ function smtp_queue_email(string $to, string $subject, string $html, array $opts
     $dup->execute([$to, $subject, (string)$tpl]);
     if ($existing = (int)$dup->fetchColumn()) return $existing;
 
-    $pdo->prepare("INSERT INTO email_outbox
-        (recipient, subject, html, status, note, order_id, tracking_token, template_code, retry_count, max_retries, next_retry_at, priority)
-        VALUES (?,?,?,'queued',NULL,?,?,?,0,?,NOW(),?)")
-        ->execute([$to, $subject, $html, $oid, $tok, $tpl, $maxRetries, $priority]);
+    // Optional delay (in minutes) before the cron worker is allowed to send
+    // this row. Defaults to NOW() (immediate).
+    $delayMin = (int)($opts['delay_minutes'] ?? 0);
+    if ($delayMin > 0) {
+        $pdo->prepare("INSERT INTO email_outbox
+            (recipient, subject, html, status, note, order_id, tracking_token, template_code, retry_count, max_retries, next_retry_at, priority)
+            VALUES (?,?,?,'queued',NULL,?,?,?,0,?,DATE_ADD(NOW(), INTERVAL ? MINUTE),?)")
+            ->execute([$to, $subject, $html, $oid, $tok, $tpl, $maxRetries, $delayMin, $priority]);
+    } else {
+        $pdo->prepare("INSERT INTO email_outbox
+            (recipient, subject, html, status, note, order_id, tracking_token, template_code, retry_count, max_retries, next_retry_at, priority)
+            VALUES (?,?,?,'queued',NULL,?,?,?,0,?,NOW(),?)")
+            ->execute([$to, $subject, $html, $oid, $tok, $tpl, $maxRetries, $priority]);
+    }
     return (int)$pdo->lastInsertId();
 }
 

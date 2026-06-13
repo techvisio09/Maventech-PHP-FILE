@@ -10,14 +10,25 @@ if ($token) {
 }
 
 $saved = false;
+$saveError = '';
 if ($_SERVER['REQUEST_METHOD']==='POST' && $review) {
-    $rating = max(1, min(5, (int)($_POST['rating'] ?? 5)));
+    $rating  = (int)($_POST['rating'] ?? 0);
     $comment = trim($_POST['comment'] ?? '');
-    $ai = (int)($_POST['ai_generated'] ?? 0);
-    $pdo->prepare('UPDATE customer_reviews SET rating=?, comment=?, ai_generated=?, status="published", submitted_at=NOW() WHERE request_token=?')
-        ->execute([$rating, $comment, $ai, $token]);
-    $saved = true;
+    $ai      = (int)($_POST['ai_generated'] ?? 0);
+    if ($rating < 1 || $rating > 5) {
+        $saveError = 'Please select a star rating.';
+    } elseif ($comment === '') {
+        $saveError = 'Please write a short comment (or pick one of the AI suggestions).';
+    } else {
+        $pdo->prepare('UPDATE customer_reviews SET rating=?, comment=?, ai_generated=?, status="published", submitted_at=NOW() WHERE request_token=?')
+            ->execute([$rating, $comment, $ai, $token]);
+        $saved = true;
+    }
 }
+
+// Pre-rating from the email-link star click (?rating=N). 0 = none selected.
+$preRating = (int)($_GET['rating'] ?? 0);
+if ($preRating < 1 || $preRating > 5) $preRating = 0;
 
 $pageTitle = 'Share Your Feedback · ' . esc(SITE_BRAND);
 ?>
@@ -30,15 +41,19 @@ $pageTitle = 'Share Your Feedback · ' . esc(SITE_BRAND);
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
 <style>
 body { background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%); min-height:100vh; font-family:-apple-system,Segoe UI,Roboto,sans-serif; padding:30px 12px; }
-.review-card { max-width:560px; margin:0 auto; background:#fff; border-radius:18px; padding:36px 30px; box-shadow:0 20px 60px rgba(0,0,0,.25); }
-.stars { display:flex; gap:8px; justify-content:center; margin:20px 0; }
-.stars label { cursor:pointer; font-size:42px; color:#e5e7eb; transition:all .15s; }
-.stars input { display:none; }
-.stars label.lit, .stars label:hover, .stars label:hover ~ label { color:#facc15; transform:scale(1.1); }
-.stars { flex-direction:row-reverse; }  /* For hover-prev effect using ~ */
+.review-card { max-width:580px; margin:0 auto; background:#fff; border-radius:18px; padding:36px 30px; box-shadow:0 20px 60px rgba(0,0,0,.25); }
+.stars { display:flex; gap:10px; justify-content:center; margin:20px 0 8px; user-select:none; }
+.stars .star { cursor:pointer; font-size:46px; color:#e5e7eb; transition:color .12s, transform .12s; line-height:1; }
+.stars .star.lit { color:#facc15; }
+.stars .star:hover { transform:scale(1.12); }
 .btn-ai { background:linear-gradient(135deg,#8b5cf6 0%,#6d28d9 100%); color:#fff; border:none; font-weight:600; }
 .btn-ai:hover { background:linear-gradient(135deg,#7c3aed 0%,#5b21b6 100%); color:#fff; }
 .product-thumb { width:64px; height:64px; object-fit:contain; background:#f8fafc; border-radius:10px; padding:6px; }
+.ai-pick { background:#faf5ff; border:1px solid #e9d5ff; border-radius:12px; padding:12px 14px; font-size:13.5px; color:#374151; line-height:1.55; cursor:pointer; transition:all .15s; position:relative; }
+.ai-pick:hover { background:#f3e8ff; border-color:#c084fc; transform:translateY(-1px); }
+.ai-pick.selected { background:#ede9fe; border-color:#7c3aed; color:#1f2937; box-shadow:0 4px 12px rgba(124,58,237,.15); }
+.ai-pick.selected::after { content:"\F26B"; font-family:"bootstrap-icons"; position:absolute; top:8px; right:10px; color:#7c3aed; font-size:18px; }
+.ai-pick-label { display:inline-block; font-size:10px; font-weight:700; letter-spacing:1.2px; color:#7c3aed; text-transform:uppercase; margin-bottom:4px; }
 </style>
 </head>
 <body>
@@ -50,7 +65,7 @@ body { background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%); min-height:10
       <p class="text-muted small">This review link has expired or is invalid. Contact <a href="mailto:<?= esc(SITE_EMAIL) ?>"><?= esc(SITE_EMAIL) ?></a> for help.</p>
     </div>
   <?php elseif ($saved || $review['submitted_at']): ?>
-    <div class="text-center">
+    <div class="text-center" data-testid="review-thanks">
       <i class="bi bi-check-circle-fill text-success" style="font-size:54px;"></i>
       <h3 class="mt-3">Thank you for your feedback!</h3>
       <p class="text-muted">Your review has been published and helps other customers find great software.</p>
@@ -76,59 +91,151 @@ body { background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%); min-height:10
       </div>
     <?php endif; ?>
 
+    <?php if ($saveError): ?>
+      <div class="alert alert-warning small py-2" data-testid="review-error"><?= esc($saveError) ?></div>
+    <?php endif; ?>
+
     <form method="post" id="reviewForm">
       <input type="hidden" name="ai_generated" id="aiFlag" value="0">
+      <input type="hidden" name="rating" id="ratingInput" value="<?= $preRating ?>">
 
-      <div class="stars" data-testid="star-rating">
-        <?php $preRating = max(1, min(5, (int)($_GET['rating'] ?? 5))); ?>
-        <?php for ($i=5; $i>=1; $i--): ?>
-          <input type="radio" name="rating" id="r<?= $i ?>" value="<?= $i ?>" <?= $i==$preRating?'checked':'' ?> onchange="onStarChange(<?= $i ?>)">
-          <label for="r<?= $i ?>" class="<?= $i<=$preRating?'lit':'' ?>"><i class="bi bi-star-fill"></i></label>
+      <!-- Star widget (pure JS — no broken row-reverse trick) -->
+      <div class="stars" data-testid="star-rating" id="starWidget">
+        <?php for ($i=1; $i<=5; $i++): ?>
+          <span class="star <?= $i<=$preRating?'lit':'' ?>" data-val="<?= $i ?>" data-testid="star-<?= $i ?>" role="button" tabindex="0" aria-label="<?= $i ?> star<?= $i>1?'s':'' ?>"><i class="bi bi-star-fill"></i></span>
         <?php endfor; ?>
       </div>
-      <div class="text-center small text-muted mb-3" id="ratingLabel"><?php
-        $labels = [1=>'Poor — 1 star',2=>'Fair — 2 stars',3=>'Good — 3 stars',4=>'Great — 4 stars',5=>'Excellent — 5 stars'];
-        echo $labels[$preRating];
-      ?></div>
+      <div class="text-center small text-muted mb-3" id="ratingLabel">
+        <?php
+        $labels = [0=>'Tap a star to rate',1=>'Poor — 1 star',2=>'Fair — 2 stars',3=>'Good — 3 stars',4=>'Great — 4 stars',5=>'Excellent — 5 stars'];
+        echo esc($labels[$preRating] ?? $labels[0]);
+        ?>
+      </div>
 
-      <label class="form-label small fw-semibold">Your comment</label>
-      <textarea class="form-control" name="comment" id="cmt" rows="4" placeholder="Tell other customers what you liked…" required></textarea>
+      <label class="form-label small fw-semibold mb-1">Your comment</label>
+      <textarea class="form-control" name="comment" id="cmt" rows="4" placeholder="Tell other customers what you liked — or pick a suggestion below…" required data-testid="review-comment"></textarea>
 
-      <button type="button" class="btn btn-ai w-100 mt-2 mb-3" onclick="aiWrite()" data-testid="ai-write-btn">
-        <i class="bi bi-magic"></i> ✨ Help me write — generate based on my rating
-      </button>
+      <!-- AI suggestions picker -->
+      <div class="mt-3 d-flex justify-content-between align-items-center">
+        <div class="small fw-semibold text-muted">
+          <i class="bi bi-stars text-warning"></i> Quick suggestions
+        </div>
+        <button type="button" class="btn btn-ai btn-sm rounded-pill" onclick="loadSuggestions()" data-testid="ai-suggest-btn">
+          <i class="bi bi-magic me-1"></i> Generate suggestions
+        </button>
+      </div>
+      <div id="suggestionsBox" class="mt-2 d-grid gap-2" data-testid="suggestions-box" style="display:none;"></div>
+      <div id="suggestionsStatus" class="small text-muted mt-1" style="display:none;"></div>
 
-      <button class="btn btn-dark w-100 rounded-pill py-2 fw-bold" data-testid="submit-review">Submit Review</button>
+      <button class="btn btn-dark w-100 rounded-pill py-2 fw-bold mt-3" data-testid="submit-review">Submit Review</button>
       <p class="small text-muted text-center mt-3 mb-0">Your review will appear on our website to help other customers.</p>
     </form>
 
     <script>
-    const labels = {1:'Poor — 1 star',2:'Below average — 2 stars',3:'Okay — 3 stars',4:'Good — 4 stars',5:'Excellent — 5 stars'};
-    function onStarChange(n){
-      document.getElementById('ratingLabel').textContent = labels[n];
-      document.querySelectorAll('.stars label').forEach((l,i)=>{
-        var val = 5-i; // reversed because of flex-direction:row-reverse
-        l.classList.toggle('lit', val<=n);
+    const LABELS = {0:'Tap a star to rate',1:'Poor — 1 star',2:'Below average — 2 stars',3:'Okay — 3 stars',4:'Good — 4 stars',5:'Excellent — 5 stars'};
+    const PRODUCT_NAME = <?= json_encode($review['product_name'] ?? 'this product') ?>;
+    const widget   = document.getElementById('starWidget');
+    const stars    = widget.querySelectorAll('.star');
+    const ratingIn = document.getElementById('ratingInput');
+    const ratingLb = document.getElementById('ratingLabel');
+    const cmt      = document.getElementById('cmt');
+    const aiFlag   = document.getElementById('aiFlag');
+    const suggBox  = document.getElementById('suggestionsBox');
+    const suggStat = document.getElementById('suggestionsStatus');
+
+    function paint(n){
+      stars.forEach(s => {
+        const v = parseInt(s.dataset.val);
+        s.classList.toggle('lit', v <= n);
       });
+      ratingLb.textContent = LABELS[n] || LABELS[0];
     }
-    function getRating(){
-      return parseInt(document.querySelector('input[name="rating"]:checked').value);
+    function setRating(n){
+      ratingIn.value = n;
+      paint(n);
+      // If suggestions were already shown, refresh them to match the new rating
+      if (suggBox.style.display !== 'none') loadSuggestions();
     }
-    async function aiWrite() {
-      var btn = event.currentTarget; btn.disabled=true; var orig=btn.innerHTML;
-      btn.innerHTML='<span class="spinner-border spinner-border-sm me-1"></span> Writing…';
+
+    // Hover / click handlers on each star
+    stars.forEach(s => {
+      const val = parseInt(s.dataset.val);
+      s.addEventListener('mouseenter', () => paint(val));
+      s.addEventListener('click', () => setRating(val));
+      s.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setRating(val); }
+      });
+    });
+    // When pointer leaves the widget, restore the actually-selected rating
+    widget.addEventListener('mouseleave', () => paint(parseInt(ratingIn.value) || 0));
+
+    async function loadSuggestions(){
+      const r = parseInt(ratingIn.value) || 0;
+      if (r < 1) {
+        suggStat.style.display = 'block';
+        suggStat.className = 'small text-warning mt-1';
+        suggStat.textContent = 'Pick a star rating first — suggestions match the rating you give.';
+        return;
+      }
+      suggBox.style.display = 'grid';
+      suggBox.innerHTML = '<div class="text-muted small"><span class="spinner-border spinner-border-sm me-1"></span> Generating 3 suggestions for ' + r + '-star rating…</div>';
+      suggStat.style.display = 'none';
       try {
-        var r = await fetch('review-ai.php?rating=' + getRating() + '&product=' + encodeURIComponent('<?= esc(addslashes($review['product_name'] ?? 'this product')) ?>'));
-        var d = await r.json();
-        if (d.comment) {
-          document.getElementById('cmt').value = d.comment;
-          document.getElementById('aiFlag').value = '1';
-        } else {
-          alert('AI service unavailable — please type your comment manually.');
+        const url = 'review-ai.php?count=3&rating=' + r + '&product=' + encodeURIComponent(PRODUCT_NAME);
+        const res = await fetch(url);
+        const data = await res.json();
+        const list = (data.suggestions || []).filter(Boolean);
+        if (list.length === 0) {
+          suggBox.innerHTML = '<div class="text-danger small">AI service unavailable — please type your comment manually.</div>';
+          return;
         }
-      } catch (e) { alert('Network error: ' + e.message); }
-      btn.disabled=false; btn.innerHTML=orig;
+        suggBox.innerHTML = '';
+        list.forEach((txt, idx) => {
+          const card = document.createElement('div');
+          card.className = 'ai-pick';
+          card.setAttribute('data-testid', 'ai-suggestion-' + (idx+1));
+          card.innerHTML = '<span class="ai-pick-label">Option ' + (idx+1) + '</span><div>' + escapeHtml(txt) + '</div>';
+          card.addEventListener('click', () => {
+            cmt.value = txt;
+            aiFlag.value = '1';
+            suggBox.querySelectorAll('.ai-pick').forEach(c => c.classList.remove('selected'));
+            card.classList.add('selected');
+          });
+          suggBox.appendChild(card);
+        });
+        suggStat.style.display = 'block';
+        suggStat.className = 'small text-muted mt-2';
+        suggStat.innerHTML = '<i class="bi bi-info-circle me-1"></i>Click any card to use it — you can still edit the text after.';
+      } catch (e) {
+        suggBox.innerHTML = '<div class="text-danger small">Network error: ' + e.message + '</div>';
+      }
     }
+    function escapeHtml(s){ return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+    // If user types their own comment, clear the AI flag so we record it as human-written
+    cmt.addEventListener('input', () => {
+      if (aiFlag.value === '1') {
+        aiFlag.value = '0';
+        suggBox.querySelectorAll('.ai-pick.selected').forEach(c => c.classList.remove('selected'));
+      }
+    });
+
+    // Block form submission if rating not chosen
+    document.getElementById('reviewForm').addEventListener('submit', (e) => {
+      const r = parseInt(ratingIn.value) || 0;
+      if (r < 1) {
+        e.preventDefault();
+        ratingLb.textContent = 'Please pick a star rating first ⭐';
+        ratingLb.className = 'text-center small text-danger fw-semibold mb-3';
+        widget.scrollIntoView({behavior:'smooth', block:'center'});
+        return false;
+      }
+      if (cmt.value.trim() === '') {
+        e.preventDefault();
+        cmt.focus();
+        return false;
+      }
+    });
     </script>
   <?php endif; ?>
 </div>

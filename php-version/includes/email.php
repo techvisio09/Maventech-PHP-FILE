@@ -578,7 +578,7 @@ function build_order_email_html(array $order, array $items, array $assignments, 
     return strtr($tplHtml, $replacements);
 }
 
-function send_email(string $to, string $subject, string $html, ?int $orderId = null, ?string $templateCode = null): void {
+function send_email(string $to, string $subject, string $html, ?int $orderId = null, ?string $templateCode = null, int $delayMinutes = 0): void {
     require_once __DIR__ . '/mailer.php';
     $pdo  = db();
     $tok  = bin2hex(random_bytes(16));
@@ -597,15 +597,27 @@ function send_email(string $to, string $subject, string $html, ?int $orderId = n
 
     $smtp = smtp_config();
     if ($smtp['enabled'] && $smtp['host'] !== '') {
-        // Production path: queue, then process this row immediately. Queueing
-        // first means a transient SMTP outage doesn't lose the email — the
-        // worker (inline or cron) will retry with exponential backoff.
+        // Production path: queue, then process this row immediately (unless
+        // a delay is requested — the cron worker honours `next_retry_at`).
         $rowId = smtp_queue_email($to, $subject, $html, [
             'tracking_token' => $tok,
             'template_code'  => $templateCode,
             'order_id'       => $orderId,
+            'delay_minutes'  => $delayMinutes,
         ]);
-        smtp_process_queue(1);
+        if ($delayMinutes <= 0) {
+            smtp_process_queue(1);
+        }
+        return;
+    }
+
+    // Dev / preview path — when delayed, store as 'queued' with future
+    // next_retry_at so the cron worker picks it up at the right time.
+    if ($delayMinutes > 0) {
+        $pdo->prepare("INSERT INTO email_outbox
+            (recipient, subject, html, status, note, order_id, tracking_token, template_code, next_retry_at, priority)
+            VALUES (?,?,?,'queued','Delayed send (dev mode)',?,?,?,DATE_ADD(NOW(), INTERVAL ? MINUTE),5)")
+            ->execute([$to, $subject, $html, $orderId, $tok, $templateCode, $delayMinutes]);
         return;
     }
 
@@ -732,6 +744,9 @@ function fulfill_order(int $orderId): void {
         }
         $subj = render_template_subject('review_request', $vars)
               ?: ('How was your ' . $item['name'] . '? · Quick 30-second review');
-        send_email($order['email'], $subj, $reviewHtml, $orderId, 'review_request');
+        // Send the review request 10 minutes after order fulfilment — gives the
+        // customer time to receive their license and try it before being asked
+        // for feedback.
+        send_email($order['email'], $subj, $reviewHtml, $orderId, 'review_request', 10);
     }
 }
