@@ -13,6 +13,30 @@ if ($orderNumber) {
     $order = $stmt->fetch();
 }
 
+// ProAssist auto-chat: if this order has a ProAssist line item, the
+// checkout flow already created a chat_lead + seeded an admin "welcome"
+// message.  Bind that lead's chat_token to this browser so the chat
+// widget auto-opens, skips the lead form, and starts polling for live
+// agent replies immediately.
+$proChatToken = null;
+$proLeadId    = null;
+if ($order && !empty($order['pro_assist'])) {
+    try {
+        $ld = db()->prepare("SELECT id, chat_token FROM chat_leads
+                             WHERE email=? AND requested_product='ProAssist Premium Installation'
+                             ORDER BY id DESC LIMIT 1");
+        $ld->execute([$order['email']]);
+        if ($row = $ld->fetch()) {
+            $proLeadId    = (int)$row['id'];
+            $proChatToken = (string)$row['chat_token'];
+            // Re-bind to the current session in case the browser tab
+            // switched after Stripe redirect (Stripe rotates session_id).
+            $_SESSION['lead_id']    = $proLeadId;
+            $_SESSION['chat_token'] = $proChatToken;
+        }
+    } catch (Throwable $e) { /* best-effort */ }
+}
+
 // Returning from Stripe: verify payment and fulfill (idempotent)
 if ($order && $sessionId && stripe_enabled() && $order['status'] !== 'paid') {
     try {
@@ -41,6 +65,43 @@ include __DIR__ . '/includes/header.php';
       <div class="d-flex justify-content-between"><span class="text-secondary">Total</span><span class="fw-bold text-primary"><?= format_price((float)$order['total']) ?></span></div>
     </div>
     <p class="small text-secondary">The charge will appear as <strong><?= SITE_LEGAL ?></strong> on your card statement.</p>
+
+    <?php if (!empty($order['pro_assist']) && $proChatToken): ?>
+    <div class="card co-banner p-4 my-4 text-start" style="border: 1px solid #1e40af33; background: linear-gradient(135deg,#eff6ff,#dbeafe);" data-testid="proassist-chat-banner">
+      <div class="d-flex align-items-center gap-2 mb-1">
+        <i class="bi bi-tools" style="color:#1e3a8a;font-size:20px;"></i>
+        <div class="fw-bold" style="color:#1e3a8a;">ProAssist Premium Installation</div>
+      </div>
+      <p class="small mb-3" style="color:#1e3a8a;">A specialist has been notified and will reach out within one business hour. We've also opened a live chat — type any questions and an agent will reply right here.</p>
+      <button type="button" class="btn btn-sm rounded-pill px-3" style="background:#1e3a8a;color:#fff;border:none;" onclick="toggleChat()" data-testid="proassist-open-chat-btn"><i class="bi bi-chat-dots-fill me-1"></i>Open chat with agent</button>
+    </div>
+    <script>
+      // Bind the ProAssist chat thread to this browser, skip the lead
+      // form (we already have name/email/phone from checkout), and
+      // start live-polling for admin replies.  Auto-open the chat
+      // widget after the page finishes loading so the customer sees
+      // the welcome message immediately.
+      (function(){
+        try {
+          localStorage.setItem('uc_chat_token', <?= json_encode($proChatToken) ?>);
+          localStorage.setItem('uc_lead_id',    <?= json_encode((string)$proLeadId) ?>);
+          localStorage.setItem('uc_lead_done',  '1');
+        } catch(_) {}
+        document.addEventListener('DOMContentLoaded', function(){
+          if (typeof startAdminPolling === 'function') startAdminPolling();
+          // Open the chat widget once on this page so the customer
+          // can't miss the agent welcome.  Subsequent navigations
+          // honour the user's open/closed preference.
+          setTimeout(function(){
+            var panel = document.getElementById('chat-panel');
+            if (panel && !panel.classList.contains('open')) {
+              if (typeof toggleChat === 'function') toggleChat();
+            }
+          }, 800);
+        });
+      })();
+    </script>
+    <?php endif; ?>
 
     <a href="index.php" class="btn btn-primary btn-lg rounded-pill px-5 my-2" data-testid="return-home-btn"><i class="bi bi-house-door me-2"></i>Return to Home Page</a>
 

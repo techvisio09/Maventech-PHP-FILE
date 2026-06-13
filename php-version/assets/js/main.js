@@ -272,22 +272,17 @@ async function submitLead(callback) {
   localStorage.setItem('uc_lead_done', '1');
   document.getElementById('chat-lead-form').style.display = 'none';
   const firstName = (v.name.split(' ')[0] || '').trim();
-  // Default greeting after lead form is filled — this is the ONLY place
-  // that surfaces the long "phone + email + hours" auto-reply, so
-  // customers always see how to reach us once they've identified
-  // themselves.  Subsequent typed messages get the shorter "connecting
-  // you with a live person" reply (handled in ajax/chat.php).
-  const phone = window.SITE_PHONE || '1-888-632-9902';
-  const hello = 'Hi' + (firstName ? ' ' + firstName : '') + '! Thanks for reaching out — our live AI assistant is currently offline.\n\n'
-              + 'You can reach our team directly:\n'
-              + '📞 ' + phone + ' (Mon-Sat, 9 AM - 6 PM EST)\n'
-              + '✉️ services@maventechsoftware.com\n\n'
-              + "We've saved your details and an agent will get back to you within one business day. "
-              + (callback === 'chat'
-                  ? "Go ahead and type your question below — I'll loop in a live person right away."
-                  : (callback
-                      ? "While you wait, an agent will call you shortly on " + v.phone + "."
-                      : "Feel free to type a question here — we'll connect you with a real person."));
+  // Clean handoff message after the lead form is submitted.  Per product
+  // requirement we no longer show the long "AI offline / phone / hours"
+  // fallback — instead we confirm the connection and let the admin take
+  // over from the admin panel.  The customer's typed messages still get
+  // a short "looping in a live person" reply from ajax/chat.php.
+  const hello = 'Hi' + (firstName ? ' ' + firstName : '')
+              + "! Thanks — hold on a moment, let me connect you with an agent on our admin portal. "
+              + "They've just been notified and will reply right here in this chat shortly."
+              + (callback && callback !== 'chat'
+                  ? " We'll also call you on " + v.phone + " as soon as an agent is free."
+                  : '');
   chatAppend('user', v.name + ' · ' + v.email + ' · ' + v.phone + (callback==='chat'?'':(callback?'  (requested a callback)':'')));
   chatAppend('bot', hello);
 }

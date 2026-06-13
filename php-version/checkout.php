@@ -89,6 +89,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $proCty,
                         $proToken,
                     ]);
+                // Pre-fill the chat thread with an automated welcome so the
+                // customer lands in an "active conversation" the moment they
+                // open the widget on order-success.php.  Inserted as
+                // sender='admin' so the customer-side poller picks it up and
+                // appends it as a bot/agent bubble.
+                $proLeadId = (int)$pdo->lastInsertId();
+                $proFirst  = trim(explode(' ', $proName)[0] ?? '');
+                $proWelcome = 'Hi' . ($proFirst ? ' ' . $proFirst : '')
+                            . "! Thanks for choosing ProAssist Premium Installation on Order #" . $orderNumber . '. '
+                            . "A specialist has been notified and will reach out within one business hour to schedule your install call. "
+                            . "Feel free to drop any questions here in the meantime — we're online.";
+                $pdo->prepare('INSERT INTO chat_messages (lead_id, sender, message) VALUES (?,?,?)')
+                    ->execute([$proLeadId, 'admin', $proWelcome]);
+                // Bind the chat token to this browser session so the chat
+                // widget on order-success.php auto-connects (no lead form
+                // shown — we already have name/email/phone).
+                $_SESSION['lead_id']   = $proLeadId;
+                $_SESSION['chat_token'] = $proToken;
             } catch (Throwable $e) { /* lead-creation is best-effort */ }
         }
         $_SESSION['cart'] = [];
