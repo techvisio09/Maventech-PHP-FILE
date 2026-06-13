@@ -2161,7 +2161,13 @@ elseif ($tab === 'keys'):
 // EMAIL ACTIVITY CENTER
 // ============================================================================
 elseif ($tab === 'emails'):
-  $c = $pdo->query("SELECT SUM(status='queued') q, SUM(status='sent') s, SUM(opened_at IS NOT NULL) o, SUM(status='failed') f, COUNT(*) t FROM email_outbox")->fetch();
+  $c = $pdo->query("SELECT
+        SUM(status IN ('queued','retrying'))            q,
+        SUM(status = 'sent')                            s,
+        SUM(opened_at IS NOT NULL)                      o,
+        SUM(status IN ('failed','bounced'))             f,
+        COUNT(*)                                        t
+        FROM email_outbox")->fetch();
 ?>
   <h5 class="fw-bold mb-1">Email Activity Center</h5>
   <p class="text-muted small mb-3">Every transactional email — with delivery, open and click tracking. Click <i class="bi bi-eye"></i> to view the exact email the customer received.</p>
