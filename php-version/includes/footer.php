@@ -148,35 +148,35 @@
     <div class="d-flex align-items-center gap-2">
       <span class="chat-avatar"><i class="bi bi-stars"></i></span>
       <div class="lh-sm">
-        <div class="fw-bold">Max · AI Assistant</div>
-        <small style="opacity:.9"><span class="chat-online-dot"></span>Online — replies instantly</small>
+        <div class="chat-head-name">Max · AI Assistant</div>
+        <small class="chat-head-sub"><span class="chat-online-dot"></span>Online · typically replies in seconds</small>
       </div>
     </div>
-    <button class="btn btn-sm text-white" onclick="toggleChat()" aria-label="Close chat"><i class="bi bi-x-lg"></i></button>
+    <button class="btn btn-sm btn-link p-0 text-white" onclick="toggleChat()" aria-label="Close chat" data-testid="chat-close"><i class="bi bi-x-lg"></i></button>
   </div>
   <div id="chat-body">
-    <div class="chat-msg bot" data-testid="chat-default-message">👋 Hi there! Let me know if you have any questions about the product or pricing.</div>
+    <div class="chat-msg bot" data-testid="chat-default-message">Hi there! I'm here to help with products, pricing, activation or anything else you need. What can I look up for you?</div>
     <div class="chat-chips" id="chat-chips" data-testid="chat-chips">
-      <button class="chat-chip" onclick="quickAsk('Which Office is right for my Mac?')" data-testid="chat-chip-mac"><i class="bi bi-apple me-1"></i>Office for Mac?</button>
-      <button class="chat-chip" onclick="quickAsk('What is the best deal on Office 2024 right now?')" data-testid="chat-chip-deal"><i class="bi bi-tags me-1"></i>Best Office 2024 deal</button>
+      <button class="chat-chip" onclick="quickAsk('Which Office is right for my Mac?')" data-testid="chat-chip-mac"><i class="bi bi-apple me-1"></i>Office for Mac</button>
+      <button class="chat-chip" onclick="quickAsk('What is the best deal on Office 2024 right now?')" data-testid="chat-chip-deal"><i class="bi bi-tags me-1"></i>Best deals on Office 2024</button>
       <button class="chat-chip" onclick="quickAsk('How do I activate my license key after purchase?')" data-testid="chat-chip-activate"><i class="bi bi-key me-1"></i>Activation help</button>
       <button class="chat-chip" onclick="quickAsk('Do your licenses expire or need a subscription?')" data-testid="chat-chip-license"><i class="bi bi-infinity me-1"></i>License validity</button>
     </div>
-    <div id="chat-lead-form" class="card p-3 mb-2" style="display:none;" data-testid="chat-lead-form">
-      <div class="small fw-bold mb-2">Let's get you connected — fill in your details:</div>
-      <input id="lead-name" class="form-control form-control-sm mb-2" placeholder="Full name" data-testid="lead-name">
-      <input id="lead-email" type="email" class="form-control form-control-sm mb-2" placeholder="Email address" data-testid="lead-email">
-      <input id="lead-phone" class="form-control form-control-sm mb-2" placeholder="Phone number" data-testid="lead-phone">
-      <button class="btn btn-sm btn-primary w-100 mb-1" onclick="submitLead(true)" data-testid="lead-callback-btn"><i class="bi bi-telephone-outbound me-1"></i>Request a Callback</button>
-      <a href="tel:<?= SITE_PHONE ?>" class="btn btn-sm btn-outline-primary w-100 mb-1" onclick="submitLead(false)" data-testid="lead-call-btn"><i class="bi bi-telephone me-1"></i>Call <?= SITE_PHONE ?></a>
-      <button class="btn btn-sm btn-link w-100 text-secondary p-0" style="font-size:.7rem;" onclick="skipLead()" data-testid="lead-skip-btn">Skip — just ask a question</button>
+    <div id="chat-lead-form" class="chat-lead-card" style="display:none;" data-testid="chat-lead-form">
+      <div class="chat-lead-title">Share a few quick details so I can put you in touch with the right specialist.</div>
+      <input id="lead-name"  class="form-control form-control-sm chat-lead-input" placeholder="Your name"      data-testid="lead-name">
+      <input id="lead-email" type="email" class="form-control form-control-sm chat-lead-input" placeholder="Email address" data-testid="lead-email">
+      <input id="lead-phone" class="form-control form-control-sm chat-lead-input" placeholder="Phone number"   data-testid="lead-phone">
+      <button class="btn btn-sm chat-lead-cta" onclick="submitLead(true)" data-testid="lead-callback-btn"><i class="bi bi-telephone-outbound me-1"></i>Request a callback</button>
+      <a href="tel:<?= SITE_PHONE ?>" class="btn btn-sm chat-lead-cta-alt" onclick="submitLead(false)" data-testid="lead-call-btn"><i class="bi bi-telephone me-1"></i>Call <?= SITE_PHONE ?></a>
+      <button class="btn btn-link chat-lead-skip" onclick="skipLead()" data-testid="lead-skip-btn">Skip — I just want to ask a question</button>
     </div>
   </div>
-  <form class="chat-input-row d-flex align-items-center gap-2 p-2 border-top" onsubmit="sendChat(event)">
-    <input id="chat-input" class="form-control form-control-sm chat-input" placeholder="Ask anything…" autocomplete="off" data-testid="chat-input">
+  <form class="chat-input-row d-flex align-items-center gap-2 p-2" onsubmit="sendChat(event)">
+    <input id="chat-input" class="form-control form-control-sm chat-input" placeholder="Type a message…" autocomplete="off" data-testid="chat-input">
     <button class="btn chat-send-btn" type="submit" aria-label="Send" data-testid="chat-send"><i class="bi bi-send-fill"></i></button>
   </form>
-  <div class="chat-talk-band px-3 py-2 small text-center" data-testid="chat-talk-band"><i class="bi bi-headset me-1"></i><strong>Prefer to talk?</strong> <?= esc(SITE_HOURS) ?> · <a href="tel:<?= esc($brandPhone) ?>" class="fw-bold"><?= esc($brandPhone) ?></a></div>
+  <div class="chat-talk-band px-3 py-2 small text-center" data-testid="chat-talk-band"><i class="bi bi-headset me-1"></i>Prefer to talk? <?= esc(SITE_HOURS) ?> · <a href="tel:<?= esc($brandPhone) ?>"><?= esc($brandPhone) ?></a></div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>

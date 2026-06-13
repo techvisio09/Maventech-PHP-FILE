@@ -265,19 +265,20 @@ async function submitLead(callback) {
   } catch (e) { /* best-effort */ }
   localStorage.setItem('uc_lead_done', '1');
   document.getElementById('chat-lead-form').style.display = 'none';
+  const firstName = (v.name.split(' ')[0] || '').trim();
   if (callback) {
-    chatAppend('user', 'Name: ' + v.name + '\nEmail: ' + v.email + '\nPhone: ' + v.phone + '\n→ Requested a callback');
-    chatAppend('bot', '✅ You\'re now connected with our live support team.');
-    chatAppend('bot', '📞 Our agent is going to call you shortly — please be near your phone (' + v.phone + ').\n\nIn the meantime, I can help you right here with purchase assistance or the installation guide. What do you need?');
+    chatAppend('user', v.name + ' · ' + v.email + ' · ' + v.phone + '  (requested a callback)');
+    chatAppend('bot', 'Thanks for your information' + (firstName ? ', ' + firstName : '') + '. Let me connect you with one of our agents now — they\'ll call you shortly on ' + v.phone + '. While you wait, feel free to ask me anything about products, pricing or activation.');
   } else {
-    chatAppend('bot', 'Great, ' + v.name.split(' ')[0] + '! Call us now at ' + (window.SITE_PHONE || '') + ' and our team will assist you right away. I\'m also here if you\'d like to chat.');
+    chatAppend('user', v.name + ' · ' + v.email + ' · ' + v.phone);
+    chatAppend('bot', 'Thanks for your information' + (firstName ? ', ' + firstName : '') + '. Let me connect you with one of our agents — call ' + (window.SITE_PHONE || 'our team') + ' and they\'ll pick up right away. I\'m here too if you\'d like to keep chatting.');
   }
 }
 
 function skipLead() {
   localStorage.setItem('uc_lead_done', '1');
   document.getElementById('chat-lead-form').style.display = 'none';
-  chatAppend('bot', 'No problem! Ask me anything — products, pricing, installation, activation… I\'m here to help. 😊');
+  chatAppend('bot', 'No problem — ask me anything about products, pricing, installation or activation. I\'m happy to help.');
 }
 
 function chatAppend(role, text) {
