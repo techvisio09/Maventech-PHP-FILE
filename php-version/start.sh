@@ -30,6 +30,25 @@ fi
 mysql -uroot ucode_store -e "ALTER TABLE products ADD COLUMN IF NOT EXISTS activation_url VARCHAR(500) DEFAULT NULL" 2>/dev/null || true
 mysql -uroot ucode_store -e "ALTER TABLE products ADD COLUMN IF NOT EXISTS install_guide_url VARCHAR(500) DEFAULT NULL" 2>/dev/null || true
 
+# Visitor analytics — one row per public page view from a real human (bots/admin skipped at the PHP layer).
+mysql -uroot ucode_store -e "CREATE TABLE IF NOT EXISTS visitor_log (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    session_id VARCHAR(64) NOT NULL DEFAULT '',
+    ip_hash VARCHAR(64) NOT NULL DEFAULT '',
+    user_agent VARCHAR(500) NOT NULL DEFAULT '',
+    os VARCHAR(40) NOT NULL DEFAULT 'Unknown',
+    browser VARCHAR(40) NOT NULL DEFAULT 'Unknown',
+    device VARCHAR(20) NOT NULL DEFAULT 'Desktop',
+    country VARCHAR(8) NOT NULL DEFAULT '',
+    page_url VARCHAR(255) NOT NULL DEFAULT '',
+    referer VARCHAR(255) NOT NULL DEFAULT '',
+    visited_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_visited (visited_at),
+    KEY idx_session (session_id),
+    KEY idx_os (os),
+    KEY idx_device (device)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci" 2>/dev/null || true
+
 # 3) Export integration keys from the backend .env (preview convenience)
 ENVF=/app/backend/.env
 if [ -f "$ENVF" ]; then

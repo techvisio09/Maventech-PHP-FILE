@@ -501,6 +501,33 @@ if ($tab === 'dashboard'):
     $ordPending = (int)$pdo->query("SELECT COUNT(*) FROM orders WHERE status='pending' AND region=".$pdo->quote($region_code))->fetchColumn();
     $ordDeliv   = (int)$pdo->query("SELECT COUNT(*) FROM orders WHERE status='delivered' AND region=".$pdo->quote($region_code))->fetchColumn();
     $maxFunnel = max($leadsTotal, $ord, $ordPaid, $ordDeliv, 1);
+
+    // -------- VISITOR ANALYTICS (today) --------
+    // All counts are over REAL visitors (bots/admin filtered at insert time).
+    $vTodayUniq   = (int)$pdo->query("SELECT COUNT(DISTINCT session_id) FROM visitor_log WHERE DATE(visited_at)=CURDATE() AND session_id<>''")->fetchColumn();
+    $vTodayHits   = (int)$pdo->query("SELECT COUNT(*) FROM visitor_log WHERE DATE(visited_at)=CURDATE()")->fetchColumn();
+    $vYestUniq    = (int)$pdo->query("SELECT COUNT(DISTINCT session_id) FROM visitor_log WHERE DATE(visited_at)=DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND session_id<>''")->fetchColumn();
+    $vDelta       = $vYestUniq > 0 ? round((($vTodayUniq - $vYestUniq) / $vYestUniq) * 100) : ($vTodayUniq > 0 ? 100 : 0);
+    // OS / device / country breakdowns (today, unique sessions)
+    $vOs = $pdo->query("SELECT os, COUNT(DISTINCT session_id) c FROM visitor_log WHERE DATE(visited_at)=CURDATE() AND session_id<>'' GROUP BY os ORDER BY c DESC LIMIT 8")->fetchAll();
+    $vDev = $pdo->query("SELECT device, COUNT(DISTINCT session_id) c FROM visitor_log WHERE DATE(visited_at)=CURDATE() AND session_id<>'' GROUP BY device ORDER BY c DESC")->fetchAll();
+    $vCountry = $pdo->query("SELECT country, COUNT(DISTINCT session_id) c FROM visitor_log WHERE DATE(visited_at)=CURDATE() AND session_id<>'' AND country<>'' GROUP BY country ORDER BY c DESC LIMIT 6")->fetchAll();
+    // Recent 8 unique visitor sessions today (latest hit per session)
+    $vRecent = $pdo->query("SELECT v.* FROM visitor_log v INNER JOIN (
+                              SELECT session_id, MAX(id) mid FROM visitor_log
+                              WHERE DATE(visited_at)=CURDATE() AND session_id<>''
+                              GROUP BY session_id
+                            ) latest ON latest.mid = v.id
+                            ORDER BY v.id DESC LIMIT 8")->fetchAll();
+    // 7-day visitor trend (for the spark bars)
+    $vTrendRows = $pdo->query("SELECT DATE(visited_at) d, COUNT(DISTINCT session_id) c
+                                FROM visitor_log
+                                WHERE visited_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY) AND session_id<>''
+                                GROUP BY DATE(visited_at)")->fetchAll();
+    $vTrendMap = []; foreach ($vTrendRows as $r) $vTrendMap[$r['d']] = (int)$r['c'];
+    $vTrend = [];
+    for ($i=6; $i>=0; $i--) { $d = date('Y-m-d', strtotime("-$i days")); $vTrend[] = ['d'=>$d, 'c'=>(int)($vTrendMap[$d] ?? 0)]; }
+    $vTrendMax = max(array_column($vTrend,'c')) ?: 1;
 ?>
   <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
     <div>
@@ -813,6 +840,174 @@ if ($tab === 'dashboard'):
       </div>
     </div>
   </div>
+
+  <!-- ====================================================================
+       Today's Visitors — daily report of real human traffic with OS, device,
+       country breakdown + 7-day trend.  Bots and the admin session are
+       filtered out at the tracker level (includes/visitor_track.php).
+       ==================================================================== -->
+  <div class="row g-3 mt-1" data-testid="visitors-section">
+    <div class="col-12">
+      <div class="card-e">
+        <div class="card-head">
+          <div class="ttl"><i class="bi bi-people-fill"></i> Today's Visitors <span class="sub ms-2">real humans · bots filtered</span></div>
+          <div class="sub">
+            <span class="badge bg-success-subtle text-success" style="font-size:11px;"><i class="bi bi-eye-fill me-1"></i><?= number_format($vTodayHits) ?> page-views</span>
+          </div>
+        </div>
+        <div class="card-body-p">
+          <div class="row g-3">
+            <!-- Big visitor count + 7-day spark -->
+            <div class="col-lg-4">
+              <div class="vis-headline">
+                <div class="vis-num" data-testid="visitors-today-unique"><?= number_format($vTodayUniq) ?></div>
+                <div class="vis-lbl">unique visitors today</div>
+                <div class="vis-delta <?= $vDelta>=0?'up':'down' ?>">
+                  <i class="bi bi-arrow-<?= $vDelta>=0?'up':'down' ?>-right"></i>
+                  <?= $vDelta>=0?'+':'' ?><?= $vDelta ?>%
+                  <span class="text-muted ms-1">vs yesterday (<?= number_format($vYestUniq) ?>)</span>
+                </div>
+                <div class="vis-spark" title="Last 7 days unique visitors">
+                  <?php foreach ($vTrend as $tt):
+                    $h = max(8, ($tt['c']/$vTrendMax)*100);
+                    $isToday = $tt['d'] === date('Y-m-d');
+                  ?>
+                    <div class="vis-spark-bar <?= $isToday?'today':'' ?>" style="height:<?= $h ?>%;" title="<?= esc(date('M j', strtotime($tt['d']))) ?>: <?= $tt['c'] ?> visitors">
+                      <span class="vis-spark-val"><?= $tt['c'] ?></span>
+                    </div>
+                  <?php endforeach; ?>
+                </div>
+                <div class="vis-spark-x">
+                  <?php foreach ($vTrend as $tt): ?><span><?= esc(date('D', strtotime($tt['d']))) ?></span><?php endforeach; ?>
+                </div>
+              </div>
+            </div>
+
+            <!-- OS breakdown -->
+            <div class="col-lg-4 col-md-6">
+              <div class="vis-block" data-testid="visitors-os-block">
+                <div class="vis-block-ttl"><i class="bi bi-display me-1"></i> Operating System</div>
+                <?php if (empty($vOs)): ?>
+                  <div class="text-muted small py-3 text-center">No visitors yet today.</div>
+                <?php else:
+                  $osIcons = [
+                    'Windows 10/11'=>['bi-windows','#0078D4'], 'Windows 8.1'=>['bi-windows','#0078D4'],
+                    'Windows 8'=>['bi-windows','#0078D4'], 'Windows 7'=>['bi-windows','#0078D4'],
+                    'Windows'=>['bi-windows','#0078D4'],
+                    'macOS'=>['bi-apple','#1d1d1f'], 'iOS'=>['bi-apple','#1d1d1f'],
+                    'Android'=>['bi-android2','#3DDC84'], 'Linux'=>['bi-ubuntu','#E95420'],
+                    'Chrome OS'=>['bi-google','#FBBC05'], 'Unknown'=>['bi-question-circle','#9ca3af'],
+                  ];
+                  foreach ($vOs as $row):
+                    $pct = $vTodayUniq>0 ? round(((int)$row['c']/$vTodayUniq)*100) : 0;
+                    $ic = $osIcons[$row['os']] ?? ['bi-pc-display','#6b7280'];
+                ?>
+                  <div class="vis-row">
+                    <i class="bi <?= esc($ic[0]) ?>" style="color:<?= esc($ic[1]) ?>;font-size:16px;"></i>
+                    <div class="flex-grow-1 min-width-0">
+                      <div class="d-flex justify-content-between">
+                        <span class="small fw-semibold text-truncate"><?= esc($row['os']) ?></span>
+                        <span class="small text-muted"><?= (int)$row['c'] ?> · <?= $pct ?>%</span>
+                      </div>
+                      <div class="vis-bar"><span style="width:<?= $pct ?>%;background:<?= esc($ic[1]) ?>;"></span></div>
+                    </div>
+                  </div>
+                <?php endforeach; endif; ?>
+              </div>
+            </div>
+
+            <!-- Device + Country -->
+            <div class="col-lg-4 col-md-6">
+              <div class="vis-block" data-testid="visitors-device-block">
+                <div class="vis-block-ttl"><i class="bi bi-phone me-1"></i> Device</div>
+                <?php if (empty($vDev)): ?>
+                  <div class="text-muted small py-2">—</div>
+                <?php else:
+                  $devIcons = ['Desktop'=>['bi-display','#3b82f6'], 'Mobile'=>['bi-phone','#10b981'], 'Tablet'=>['bi-tablet','#f59e0b']];
+                  foreach ($vDev as $row):
+                    $pct = $vTodayUniq>0 ? round(((int)$row['c']/$vTodayUniq)*100) : 0;
+                    $ic = $devIcons[$row['device']] ?? ['bi-question-circle','#9ca3af'];
+                ?>
+                  <div class="vis-row">
+                    <i class="bi <?= esc($ic[0]) ?>" style="color:<?= esc($ic[1]) ?>;font-size:16px;"></i>
+                    <div class="flex-grow-1 min-width-0">
+                      <div class="d-flex justify-content-between">
+                        <span class="small fw-semibold"><?= esc($row['device']) ?></span>
+                        <span class="small text-muted"><?= (int)$row['c'] ?> · <?= $pct ?>%</span>
+                      </div>
+                      <div class="vis-bar"><span style="width:<?= $pct ?>%;background:<?= esc($ic[1]) ?>;"></span></div>
+                    </div>
+                  </div>
+                <?php endforeach; endif; ?>
+
+                <?php if (!empty($vCountry)): ?>
+                <div class="vis-block-ttl mt-3"><i class="bi bi-globe2 me-1"></i> Top Countries</div>
+                <div class="d-flex flex-wrap gap-2">
+                  <?php foreach ($vCountry as $c): ?>
+                    <span class="vis-chip"><?= esc($c['country'] ?: 'XX') ?> <strong><?= (int)$c['c'] ?></strong></span>
+                  <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recent visits feed (latest hit per session) -->
+          <?php if (!empty($vRecent)): ?>
+          <div class="mt-3 pt-3" style="border-top:1px solid var(--border);">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div class="small fw-semibold text-muted"><i class="bi bi-clock-history me-1"></i> Recent visits today</div>
+              <span class="small text-muted">latest <?= count($vRecent) ?> sessions</span>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-sm align-middle mb-0" style="font-size:12.5px;" data-testid="visitors-recent-table">
+                <thead><tr class="text-muted"><th>Time</th><th>Page</th><th>OS</th><th>Browser</th><th>Device</th><th>Country</th></tr></thead>
+                <tbody>
+                  <?php foreach ($vRecent as $v):
+                    $devIcon = ['Desktop'=>'bi-display','Mobile'=>'bi-phone','Tablet'=>'bi-tablet'][$v['device']] ?? 'bi-question-circle';
+                  ?>
+                  <tr>
+                    <td class="text-muted" style="white-space:nowrap;"><?= esc(date('H:i', strtotime($v['visited_at']))) ?></td>
+                    <td class="text-truncate" style="max-width:260px;"><code style="font-size:11px;"><?= esc($v['page_url'] ?: '/') ?></code></td>
+                    <td><?= esc($v['os']) ?></td>
+                    <td><?= esc($v['browser']) ?></td>
+                    <td><i class="bi <?= esc($devIcon) ?> me-1"></i><?= esc($v['device']) ?></td>
+                    <td><?= esc($v['country'] ?: '—') ?></td>
+                  </tr>
+                  <?php endforeach; ?>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <?php endif; ?>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    .vis-headline { padding:8px 4px; }
+    .vis-num { font-size:38px; font-weight:800; line-height:1; color:var(--text); letter-spacing:-1px; }
+    .vis-lbl { font-size:12px; color:var(--muted); margin-top:4px; }
+    .vis-delta { margin-top:8px; font-size:13px; font-weight:600; }
+    .vis-delta.up   { color:#16a34a; }
+    .vis-delta.down { color:#dc2626; }
+    .vis-spark { display:flex; align-items:flex-end; gap:6px; height:60px; margin-top:14px; padding:0 2px; }
+    .vis-spark-bar { flex:1; min-width:14px; background:linear-gradient(180deg,#60a5fa,#2563eb); border-radius:3px 3px 0 0; position:relative; transition:filter .15s ease; }
+    .vis-spark-bar:hover { filter:brightness(1.15); }
+    .vis-spark-bar.today { background:linear-gradient(180deg,#10b981,#059669); }
+    .vis-spark-val { position:absolute; top:-16px; left:50%; transform:translateX(-50%); font-size:10px; color:var(--muted); }
+    .vis-spark-x { display:flex; gap:6px; padding:4px 2px 0; }
+    .vis-spark-x span { flex:1; min-width:14px; text-align:center; font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
+    .vis-block { padding:6px 0; }
+    .vis-block-ttl { font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; margin-bottom:8px; }
+    .vis-row { display:flex; align-items:center; gap:10px; padding:6px 0; }
+    .vis-row + .vis-row { border-top:1px dashed rgba(148,163,184,.18); }
+    .vis-bar { height:5px; background:rgba(148,163,184,.18); border-radius:3px; overflow:hidden; margin-top:3px; }
+    .vis-bar span { display:block; height:100%; border-radius:3px; transition:width .3s ease; }
+    .vis-chip { background:var(--bg); border:1px solid var(--border); padding:3px 9px; border-radius:999px; font-size:11.5px; color:var(--text); }
+    [data-bs-theme="dark"] .vis-chip { background:#0f1729; }
+  </style>
 
 <?php
 // ============================================================================

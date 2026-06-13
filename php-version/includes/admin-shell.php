@@ -277,6 +277,50 @@ body::before {
 /* Dark mode — bump watermark opacity slightly (dark bg absorbs more) */
 [data-bs-theme="dark"] body::before { opacity: 0.55; }
 
+/* =============================================================
+   FLOATING ICONS WATERMARK — a second, animated layer on top of
+   the static repeating watermark above.  ~14 product/security
+   glyphs drift diagonally across the viewport at very low opacity
+   so the dashboard always remains the visual focus.
+   ============================================================= */
+.adm-floats { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+.adm-floats i {
+  position: absolute;
+  font-size: 38px;
+  opacity: 0.11;
+  color: #1d4ed8;
+  filter: drop-shadow(0 1px 2px rgba(15,23,42,.05));
+  animation: adm-float-drift 38s linear infinite;
+  will-change: transform;
+}
+[data-bs-theme="dark"] .adm-floats i { color: #93c5fd; opacity: 0.14; }
+.adm-floats i:nth-child(odd)  { animation-name: adm-float-drift; }
+.adm-floats i:nth-child(even) { animation-name: adm-float-drift-rev; }
+.adm-floats i:nth-child(3n)   { color: #16a34a; }
+.adm-floats i:nth-child(3n+1) { color: #d97706; }
+.adm-floats i:nth-child(5n)   { color: #dc2626; }
+[data-bs-theme="dark"] .adm-floats i:nth-child(3n)   { color: #86efac; }
+[data-bs-theme="dark"] .adm-floats i:nth-child(3n+1) { color: #fcd34d; }
+[data-bs-theme="dark"] .adm-floats i:nth-child(5n)   { color: #fca5a5; }
+
+@keyframes adm-float-drift {
+  0%   { transform: translate(0, 0)         rotate(0deg)   scale(1); }
+  25%  { transform: translate(15vw, -8vh)   rotate(90deg)  scale(1.1); }
+  50%  { transform: translate(30vw, 12vh)   rotate(180deg) scale(0.95); }
+  75%  { transform: translate(15vw, 25vh)   rotate(270deg) scale(1.05); }
+  100% { transform: translate(0, 0)         rotate(360deg) scale(1); }
+}
+@keyframes adm-float-drift-rev {
+  0%   { transform: translate(0, 0)          rotate(0deg)    scale(1); }
+  25%  { transform: translate(-12vw, 10vh)   rotate(-90deg)  scale(0.9); }
+  50%  { transform: translate(-25vw, -8vh)   rotate(-180deg) scale(1.15); }
+  75%  { transform: translate(-12vw, -18vh)  rotate(-270deg) scale(1); }
+  100% { transform: translate(0, 0)          rotate(-360deg) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .adm-floats i { animation: none; }
+}
+
 /* Ensure all admin content sits above the watermark */
 .adm-top, .adm-shell, .adm-sidebar, .adm-content, main, footer { position: relative; z-index: 1; }
 
@@ -649,6 +693,30 @@ hr { border-color: var(--border); opacity:.5; }
 </style>
 </head>
 <body>
+
+<!-- ============================================================
+     Floating watermark icons — drift across the background at
+     very low opacity.  Pointer-events:none + z-index:0 so they
+     never interfere with the UI.  Positions are seeded with
+     inline left/top + animation-delay so each one starts in a
+     different spot and stays out of sync.
+     ============================================================ -->
+<div class="adm-floats" aria-hidden="true" data-testid="adm-floats">
+  <i class="bi bi-windows"      style="left:5%;  top:8%;  animation-delay: 0s;    font-size:42px;"></i>
+  <i class="bi bi-microsoft"    style="left:18%; top:62%; animation-delay: -4s;   font-size:38px;"></i>
+  <i class="bi bi-shield-lock"  style="left:32%; top:18%; animation-delay: -8s;   font-size:34px;"></i>
+  <i class="bi bi-key-fill"     style="left:46%; top:75%; animation-delay: -12s;  font-size:36px;"></i>
+  <i class="bi bi-cloud-fill"   style="left:60%; top:30%; animation-delay: -16s;  font-size:44px;"></i>
+  <i class="bi bi-laptop"       style="left:74%; top:55%; animation-delay: -20s;  font-size:40px;"></i>
+  <i class="bi bi-fingerprint"  style="left:88%; top:12%; animation-delay: -24s;  font-size:36px;"></i>
+  <i class="bi bi-cpu-fill"     style="left:10%; top:42%; animation-delay: -28s;  font-size:38px;"></i>
+  <i class="bi bi-envelope-paper" style="left:28%; top:88%; animation-delay: -32s; font-size:36px;"></i>
+  <i class="bi bi-bag-check"    style="left:52%; top:8%;  animation-delay: -36s;  font-size:34px;"></i>
+  <i class="bi bi-graph-up"     style="left:68%; top:85%; animation-delay: -10s;  font-size:38px;"></i>
+  <i class="bi bi-globe2"       style="left:82%; top:38%; animation-delay: -14s;  font-size:42px;"></i>
+  <i class="bi bi-credit-card-2-front" style="left:38%; top:48%; animation-delay: -18s; font-size:34px;"></i>
+  <i class="bi bi-bell-fill"    style="left:90%; top:72%; animation-delay: -22s;  font-size:32px;"></i>
+</div>
 
 <header class="adm-top" data-testid="adm-topbar">
   <div class="left">
