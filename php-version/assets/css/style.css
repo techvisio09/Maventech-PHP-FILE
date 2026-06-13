@@ -726,6 +726,143 @@ body.has-deal-bar #chat-panel { bottom: 155px; }
 }
 .chat-lead-skip:hover { color: var(--chat-accent) !important; }
 
+/* ProAssist install-call scheduler — inline calendar inside the chat
+   widget.  Navy header + light date pills + green-pill selected state.
+   Sits at the top of #chat-body when uc_proassist=1. */
+.pa-sched-card {
+  background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%);
+  border: 1px solid #c7d8f7; border-radius: 12px;
+  padding: .8rem .85rem; margin-bottom: .6rem;
+  box-shadow: 0 1px 3px rgba(30,58,138,.06);
+}
+[data-bs-theme="dark"] .pa-sched-card {
+  background: linear-gradient(180deg,#1c2541 0%, #1a2440 100%);
+  border-color: #2d3a5a;
+}
+.pa-sched-header {
+  display: flex; align-items: flex-start; gap: .55rem;
+  margin-bottom: .55rem;
+}
+.pa-sched-header .bi {
+  font-size: 1.15rem; color: #1e3a8a; margin-top: 2px;
+}
+[data-bs-theme="dark"] .pa-sched-header .bi { color: #93c5fd; }
+.pa-sched-title {
+  font-size: .85rem; font-weight: 700; color: #1e3a8a; line-height: 1.2;
+}
+[data-bs-theme="dark"] .pa-sched-title { color: #c7d2fe; }
+.pa-sched-sub {
+  font-size: .7rem; color: #475569; margin-top: 1px;
+}
+[data-bs-theme="dark"] .pa-sched-sub { color: #94a3b8; }
+.pa-sched-step-label {
+  font-size: .68rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .04em; color: #64748b; margin-bottom: .35rem;
+}
+[data-bs-theme="dark"] .pa-sched-step-label { color: #94a3b8; }
+.pa-sched-tz {
+  font-size: .6rem; color: #94a3b8; font-weight: 500; margin-left: .3rem;
+  text-transform: none; letter-spacing: 0;
+}
+.pa-sched-dates {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: .3rem;
+}
+.pa-sched-date {
+  border: 1px solid #c7d8f7; background: #fff; border-radius: 8px;
+  padding: .35rem .25rem; text-align: center; cursor: pointer;
+  transition: all .14s ease;
+  display: flex; flex-direction: column; align-items: center;
+}
+.pa-sched-date:hover { border-color: #1e3a8a; background: #eff6ff; transform: translateY(-1px); }
+.pa-sched-date.is-selected { background: linear-gradient(135deg,#1e3a8a,#2563eb); border-color:#1e3a8a; color:#fff; }
+.pa-sched-date.is-selected .pa-sched-date-dow,
+.pa-sched-date.is-selected .pa-sched-date-mon { color: #c7d2fe; }
+[data-bs-theme="dark"] .pa-sched-date { background: #1f2a4a; border-color: #2d3a5a; color: #e0e7ff; }
+[data-bs-theme="dark"] .pa-sched-date:hover { background: #243156; }
+.pa-sched-date-dow {
+  font-size: .62rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .04em; color: #64748b;
+}
+.pa-sched-date-day {
+  font-size: .98rem; font-weight: 700; color: #1e3a8a; line-height: 1.1;
+}
+[data-bs-theme="dark"] .pa-sched-date-day { color: #e0e7ff; }
+.pa-sched-date.is-selected .pa-sched-date-day { color: #fff; }
+.pa-sched-date-mon {
+  font-size: .6rem; color: #64748b; text-transform: uppercase;
+}
+.pa-sched-times {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: .28rem;
+  max-height: 200px; overflow-y: auto; padding-right: 2px;
+}
+.pa-sched-time {
+  border: 1px solid #c7d8f7; background: #fff; border-radius: 6px;
+  padding: .3rem .1rem; text-align: center; cursor: pointer;
+  font-size: .73rem; font-weight: 600; color: #1e3a8a;
+  transition: all .12s ease;
+}
+.pa-sched-time:hover { border-color: #10b981; background: #ecfdf5; color: #047857; transform: translateY(-1px); }
+.pa-sched-time.is-taken,
+.pa-sched-time.is-past {
+  opacity: .35; cursor: not-allowed; background: #f1f5f9;
+  text-decoration: line-through; pointer-events: none; color: #94a3b8;
+}
+[data-bs-theme="dark"] .pa-sched-time { background: #1f2a4a; border-color: #2d3a5a; color: #c7d2fe; }
+[data-bs-theme="dark"] .pa-sched-time:hover { background: #064e3b; color: #6ee7b7; border-color: #10b981; }
+[data-bs-theme="dark"] .pa-sched-time.is-taken,
+[data-bs-theme="dark"] .pa-sched-time.is-past { background: #1a1f33; color: #475569; }
+.pa-sched-back {
+  margin-top: .5rem; background: transparent; border: 0;
+  color: #1e3a8a; font-size: .72rem; font-weight: 600;
+  padding: .15rem 0; cursor: pointer;
+}
+.pa-sched-back:hover { text-decoration: underline; }
+[data-bs-theme="dark"] .pa-sched-back { color: #93c5fd; }
+.pa-sched-error {
+  margin-top: .5rem; padding: .35rem .55rem; border-radius: 6px;
+  font-size: .72rem; background: #fef2f2; color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+.pa-sched-closed {
+  font-size: .72rem; color: #64748b; padding: .4rem;
+  text-align: center; font-style: italic;
+}
+.pa-sched-empty {
+  font-size: .72rem; color: #64748b; padding: .4rem;
+  text-align: center;
+}
+.pa-sched-step { margin-top: .25rem; }
+
+/* Confirmed booking card */
+.pa-sched-confirm {
+  background: linear-gradient(135deg,#ecfdf5 0%, #ffffff 100%);
+  border: 1px solid #6ee7b7; border-radius: 12px;
+  padding: .85rem; margin-bottom: .6rem; text-align: center;
+}
+[data-bs-theme="dark"] .pa-sched-confirm {
+  background: linear-gradient(135deg,#053922 0%, #0a3b29 100%);
+  border-color: #10b981;
+}
+.pa-sched-confirm-icon {
+  font-size: 1.6rem; color: #10b981; line-height: 1; margin-bottom: .25rem;
+}
+.pa-sched-confirm-title {
+  font-size: .8rem; font-weight: 700; color: #047857; line-height: 1.2;
+}
+[data-bs-theme="dark"] .pa-sched-confirm-title { color: #6ee7b7; }
+.pa-sched-confirm-when {
+  font-size: .8rem; color: #064e3b; margin-top: .25rem; font-weight: 600;
+}
+[data-bs-theme="dark"] .pa-sched-confirm-when { color: #d1fae5; }
+.pa-sched-reschedule {
+  margin-top: .55rem; background: transparent; border: 1px solid #10b981;
+  color: #047857; border-radius: 999px; padding: .25rem .85rem;
+  font-size: .72rem; font-weight: 600; cursor: pointer;
+  transition: all .14s ease;
+}
+.pa-sched-reschedule:hover { background: #10b981; color: #fff; }
+[data-bs-theme="dark"] .pa-sched-reschedule { color: #6ee7b7; }
+
 /* Sticky "Don't lose this — agent on the way" nudge.  Surfaces the
    instant the customer starts typing into the chat-input without having
    submitted the lead form — captures the highest-intent moment before

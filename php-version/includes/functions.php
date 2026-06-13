@@ -167,6 +167,30 @@ function ensure_db_schema(): void
             started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             KEY idx_started (started_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        // ProAssist install-call schedules — customer picks a 30-min slot
+        // from the chat widget, admin sees it on the new "Install Schedule"
+        // tab.  scheduled_at is stored in America/New_York time (label),
+        // scheduled_utc is the canonical UTC timestamp for sorting.
+        $pdo->exec("CREATE TABLE IF NOT EXISTS proassist_schedules (
+            id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            lead_id INT NOT NULL,
+            order_id INT NULL DEFAULT NULL,
+            order_number VARCHAR(40) NOT NULL DEFAULT '',
+            customer_name  VARCHAR(120) NOT NULL DEFAULT '',
+            customer_email VARCHAR(160) NOT NULL DEFAULT '',
+            customer_phone VARCHAR(40)  NOT NULL DEFAULT '',
+            scheduled_at   DATETIME NOT NULL,
+            scheduled_utc  DATETIME NOT NULL,
+            tz             VARCHAR(40) NOT NULL DEFAULT 'America/New_York',
+            status         ENUM('pending','confirmed','done','missed','cancelled') NOT NULL DEFAULT 'pending',
+            notes          TEXT NULL,
+            created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uniq_lead (lead_id),
+            KEY idx_sched_utc (scheduled_utc),
+            KEY idx_status (status)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     } catch (Throwable $e) {
         @error_log('[ensure_db_schema] ' . $e->getMessage());
     }

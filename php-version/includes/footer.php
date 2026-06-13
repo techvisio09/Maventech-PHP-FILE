@@ -183,6 +183,33 @@
       <button type="button" class="btn btn-sm chat-lead-cta-chat chat-lead-cta-primary" onclick="submitLead('chat')" data-testid="lead-chat-btn"><i class="bi bi-chat-dots-fill me-1"></i>Connect me with an agent</button>
       <a href="tel:<?= esc($brandPhone) ?>" class="btn btn-sm chat-lead-cta-alt" onclick="submitLead(false)" data-testid="lead-call-btn"><i class="bi bi-telephone me-1"></i>Or call us at <?= esc($brandPhone) ?></a>
     </div>
+    <!-- ProAssist install-call scheduler card (hidden until JS detects a ProAssist lead). -->
+    <div id="pa-sched-card" class="pa-sched-card" style="display:none;" data-testid="pa-sched-card">
+      <div class="pa-sched-header">
+        <i class="bi bi-calendar2-week"></i>
+        <div>
+          <div class="pa-sched-title" data-testid="pa-sched-title">Schedule your install call</div>
+          <div class="pa-sched-sub" data-testid="pa-sched-sub">Pick a 30-minute slot — Mon-Sat · 9 AM – 6 PM EST</div>
+        </div>
+      </div>
+      <div class="pa-sched-step" id="pa-sched-step-date">
+        <div class="pa-sched-step-label">1. Choose a date</div>
+        <div class="pa-sched-dates" id="pa-sched-dates" data-testid="pa-sched-dates"><!-- date pills injected by JS --></div>
+      </div>
+      <div class="pa-sched-step" id="pa-sched-step-time" style="display:none;">
+        <div class="pa-sched-step-label">2. Choose a time <span class="pa-sched-tz">EST</span></div>
+        <div class="pa-sched-times" id="pa-sched-times" data-testid="pa-sched-times"><!-- time pills injected by JS --></div>
+        <button type="button" class="pa-sched-back" onclick="paSchedBackToDates()" data-testid="pa-sched-back"><i class="bi bi-arrow-left me-1"></i>Pick a different date</button>
+      </div>
+      <div class="pa-sched-error" id="pa-sched-error" style="display:none;" data-testid="pa-sched-error"></div>
+    </div>
+    <!-- ProAssist booked confirmation card (shown after booking, hides the picker). -->
+    <div id="pa-sched-confirm" class="pa-sched-confirm" style="display:none;" data-testid="pa-sched-confirm">
+      <div class="pa-sched-confirm-icon"><i class="bi bi-check2-circle"></i></div>
+      <div class="pa-sched-confirm-title">Install call scheduled</div>
+      <div class="pa-sched-confirm-when" id="pa-sched-confirm-when" data-testid="pa-sched-confirm-when">—</div>
+      <button type="button" class="pa-sched-reschedule" onclick="paSchedReschedule()" data-testid="pa-sched-reschedule"><i class="bi bi-arrow-repeat me-1"></i>Reschedule</button>
+    </div>
   </div>
   <div id="chat-typing" class="chat-typing" style="display:none;" data-testid="chat-admin-typing">
     <div class="chat-typing-bubble">

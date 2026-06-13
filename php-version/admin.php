@@ -3426,6 +3426,171 @@ elseif ($tab === 'leads'):
 
 <?php
 // ============================================================================
+// INSTALL SCHEDULE — ProAssist install-call bookings
+// ============================================================================
+elseif ($tab === 'schedule'):
+    $sStatus = trim($_GET['st'] ?? 'all');
+    $allowed = ['all','pending','confirmed','done','missed','cancelled'];
+    if (!in_array($sStatus, $allowed, true)) $sStatus = 'all';
+
+    $where = '';
+    $params = [];
+    if ($sStatus !== 'all') { $where = ' WHERE s.status = ? '; $params[] = $sStatus; }
+
+    $st = $pdo->prepare("SELECT s.*, l.last_seen, l.chat_token, l.id AS lead_id
+                         FROM proassist_schedules s
+                         LEFT JOIN chat_leads l ON l.id = s.lead_id
+                         $where
+                         ORDER BY s.scheduled_utc ASC");
+    $st->execute($params);
+    $schedules = $st->fetchAll(PDO::FETCH_ASSOC);
+
+    // Status pill counts.
+    $counts = ['all'=>0,'pending'=>0,'confirmed'=>0,'done'=>0,'missed'=>0,'cancelled'=>0];
+    foreach ($pdo->query("SELECT status, COUNT(*) c FROM proassist_schedules GROUP BY status") as $r) {
+        $counts[$r['status']] = (int)$r['c'];
+        $counts['all'] += (int)$r['c'];
+    }
+
+    $nowEst = (new DateTime('now', new DateTimeZone('America/New_York')));
+?>
+<div class="card-e p-3 mb-3" data-testid="schedule-page-header">
+  <div class="d-flex align-items-center gap-2 flex-wrap">
+    <div>
+      <h5 class="m-0 fw-bold"><i class="bi bi-calendar-check me-2" style="color:#1e3a8a;"></i>Install Schedule</h5>
+      <div class="text-secondary small mt-1">ProAssist Premium Installation calls booked by customers from the chat widget. All times shown in EST.</div>
+    </div>
+    <div class="ms-auto small text-secondary">Now (EST): <strong><?= esc($nowEst->format('D, M j · g:i A')) ?></strong></div>
+  </div>
+  <div class="d-flex gap-2 flex-wrap mt-3" data-testid="schedule-status-pills">
+    <?php
+    $pills = [
+      'all'       => ['All',       '#475569'],
+      'pending'   => ['Pending',   '#d97706'],
+      'confirmed' => ['Confirmed', '#1d4ed8'],
+      'done'      => ['Done',      '#047857'],
+      'missed'    => ['Missed',    '#b91c1c'],
+      'cancelled' => ['Cancelled', '#475569'],
+    ];
+    foreach ($pills as $k => [$label, $color]):
+        $active = ($sStatus === $k);
+    ?>
+      <a href="admin.php?tab=schedule&st=<?= $k ?>"
+         class="schedule-pill <?= $active ? 'active' : '' ?>"
+         style="<?= $active ? "background:$color;color:#fff;border-color:$color;" : "color:$color;border-color:$color;" ?>"
+         data-testid="schedule-pill-<?= $k ?>">
+        <?= esc($label) ?> · <?= $counts[$k] ?? 0 ?>
+      </a>
+    <?php endforeach; ?>
+  </div>
+</div>
+
+<style>
+.schedule-pill { display:inline-flex; align-items:center; gap:.35rem; padding:.32rem .85rem; border-radius:999px; background:#fff; border:1px solid; font-size:.78rem; font-weight:600; text-decoration:none; transition: all .14s ease; }
+.schedule-pill:hover { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(0,0,0,.08); }
+[data-bs-theme="dark"] .schedule-pill { background: #1e293b; }
+.sched-card { border:1px solid var(--card-border,#e2e8f0); border-radius:12px; padding:14px 16px; background:var(--card-bg,#fff); margin-bottom:12px; }
+[data-bs-theme="dark"] .sched-card { background:#1e293b; border-color:#334155; }
+.sched-when { font-weight:700; color:#1e3a8a; font-size:1.05rem; line-height:1.2; }
+[data-bs-theme="dark"] .sched-when { color:#93c5fd; }
+.sched-tz { font-size:.7rem; color:#64748b; font-weight:500; margin-left:.3rem; }
+.sched-cust-line { font-size:.86rem; }
+.sched-cust-meta { font-size:.75rem; color:#64748b; }
+.sched-status { display:inline-flex; padding:.18rem .65rem; border-radius:999px; font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+.sched-status.is-pending   { background:#fef3c7; color:#92400e; }
+.sched-status.is-confirmed { background:#dbeafe; color:#1d4ed8; }
+.sched-status.is-done      { background:#d1fae5; color:#047857; }
+.sched-status.is-missed    { background:#fee2e2; color:#b91c1c; }
+.sched-status.is-cancelled { background:#e2e8f0; color:#475569; }
+[data-bs-theme="dark"] .sched-status.is-pending   { background:rgba(217,119,6,.18); color:#fcd34d; }
+[data-bs-theme="dark"] .sched-status.is-confirmed { background:rgba(59,130,246,.18); color:#93c5fd; }
+[data-bs-theme="dark"] .sched-status.is-done      { background:rgba(16,185,129,.18); color:#6ee7b7; }
+[data-bs-theme="dark"] .sched-status.is-missed    { background:rgba(239,68,68,.18); color:#fca5a5; }
+[data-bs-theme="dark"] .sched-status.is-cancelled { background:rgba(71,85,105,.25); color:#cbd5e1; }
+.sched-action { font-size:.74rem; padding:.28rem .7rem; border-radius:999px; border:1px solid; background:transparent; font-weight:600; cursor:pointer; transition: all .14s ease; }
+.sched-action:hover { transform: translateY(-1px); }
+.sched-action.confirm { color:#1d4ed8; border-color:#1d4ed8; }
+.sched-action.confirm:hover { background:#1d4ed8; color:#fff; }
+.sched-action.done    { color:#047857; border-color:#047857; }
+.sched-action.done:hover { background:#047857; color:#fff; }
+.sched-action.missed  { color:#b91c1c; border-color:#b91c1c; }
+.sched-action.missed:hover { background:#b91c1c; color:#fff; }
+.sched-action.cancel  { color:#475569; border-color:#475569; }
+.sched-action.cancel:hover { background:#475569; color:#fff; }
+</style>
+
+<?php if (!$schedules): ?>
+  <div class="card-e p-4 text-center" data-testid="schedule-empty">
+    <i class="bi bi-calendar2-x text-secondary" style="font-size:2rem;"></i>
+    <div class="mt-2 fw-semibold">No <?= $sStatus === 'all' ? '' : esc($sStatus) ?> install calls yet</div>
+    <div class="small text-secondary">Customers who select ProAssist at checkout will book a slot from their chat widget — it'll land here automatically.</div>
+  </div>
+<?php else: ?>
+  <div data-testid="schedule-list">
+    <?php foreach ($schedules as $s):
+        $sLocal = strtotime($s['scheduled_at']);
+        $statusClass = 'is-' . $s['status'];
+    ?>
+      <div class="sched-card" data-testid="sched-card-<?= (int)$s['id'] ?>" data-schedule-id="<?= (int)$s['id'] ?>">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+          <div>
+            <div class="sched-when"><?= esc(date('D, M j', $sLocal)) ?> · <?= esc(date('g:i A', $sLocal)) ?><span class="sched-tz">EST</span></div>
+            <div class="sched-cust-line mt-1">
+              <strong><?= esc($s['customer_name'] ?: 'ProAssist customer') ?></strong>
+              <?php if ($s['order_number']): ?>
+                · Order <a href="admin.php?tab=orders" class="text-decoration-none">#<?= esc($s['order_number']) ?></a>
+              <?php endif; ?>
+            </div>
+            <div class="sched-cust-meta mt-1">
+              <i class="bi bi-envelope"></i> <?= esc($s['customer_email']) ?>
+              <?php if ($s['customer_phone']): ?>
+                · <i class="bi bi-telephone"></i> <a href="tel:<?= esc($s['customer_phone']) ?>" class="text-decoration-none"><?= esc($s['customer_phone']) ?></a>
+              <?php endif; ?>
+            </div>
+          </div>
+          <div class="text-end">
+            <span class="sched-status <?= esc($statusClass) ?>" id="status-pill-<?= (int)$s['id'] ?>" data-testid="sched-status-<?= (int)$s['id'] ?>"><?= esc($s['status']) ?></span>
+            <div class="small text-secondary mt-1">Booked <?= esc(date('M j · g:i A', strtotime($s['created_at']))) ?></div>
+          </div>
+        </div>
+        <div class="d-flex gap-2 mt-3 flex-wrap" data-testid="sched-actions-<?= (int)$s['id'] ?>">
+          <?php if ($s['status'] === 'pending'): ?>
+            <button type="button" class="sched-action confirm" onclick="schedUpdateStatus(<?= (int)$s['id'] ?>,'confirmed')" data-testid="sched-confirm-<?= (int)$s['id'] ?>"><i class="bi bi-check2-circle me-1"></i>Mark Confirmed</button>
+          <?php endif; ?>
+          <?php if (in_array($s['status'], ['pending','confirmed'], true)): ?>
+            <button type="button" class="sched-action done" onclick="schedUpdateStatus(<?= (int)$s['id'] ?>,'done')" data-testid="sched-done-<?= (int)$s['id'] ?>"><i class="bi bi-check-all me-1"></i>Mark Done</button>
+            <button type="button" class="sched-action missed" onclick="schedUpdateStatus(<?= (int)$s['id'] ?>,'missed')" data-testid="sched-missed-<?= (int)$s['id'] ?>"><i class="bi bi-x-circle me-1"></i>Mark Missed</button>
+            <button type="button" class="sched-action cancel"  onclick="schedUpdateStatus(<?= (int)$s['id'] ?>,'cancelled')" data-testid="sched-cancel-<?= (int)$s['id'] ?>"><i class="bi bi-x me-1"></i>Cancel</button>
+          <?php endif; ?>
+          <?php if ($s['lead_id']): ?>
+            <a href="admin.php?tab=leads&autochat=<?= (int)$s['lead_id'] ?>" class="sched-action" style="color:#7c3aed;border-color:#7c3aed;text-decoration:none;" data-testid="sched-chat-<?= (int)$s['id'] ?>"><i class="bi bi-chat-dots me-1"></i>Open Chat</a>
+          <?php endif; ?>
+        </div>
+      </div>
+    <?php endforeach; ?>
+  </div>
+<?php endif; ?>
+
+<script>
+function schedUpdateStatus(id, status) {
+  if (!confirm('Update this schedule to "' + status + '"?')) return;
+  fetch((window.MAVEN_BASE||'/') + 'ajax/proassist-schedule-admin.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'update_status', id: id, status: status }),
+  })
+    .then(r => r.json())
+    .then(j => {
+      if (!j || !j.ok) { alert((j && j.error) || 'Update failed'); return; }
+      // Reload to reflect the new counts + action availability.
+      window.location.reload();
+    })
+    .catch(() => alert('Network error — please retry.'));
+}
+</script>
+
+<?php
+// ============================================================================
 // KEY INVENTORY
 // ============================================================================
 elseif ($tab === 'keys'):
