@@ -182,6 +182,11 @@ Create a comprehensive and user-friendly Admin Panel for Maventech Software with
   - **Hover-gap bug fixed** on the public site nav. The `Microsoft Products` and `Antivirus` mega-menus were closing mid-traversal because the cursor briefly fell into the navbar's bottom padding (≈3 px gap) between the trigger and the dropdown. Added a transparent `::before` pseudo-element on each open mega-menu (`top: -16px; height: 16px`) that bridges the gap, plus `padding-bottom: 1rem` on the trigger to extend the hover hit-area. The menu now stays open through the entire diagonal traversal.
   - **Notify When Available** restyled with a rich navy gradient (`#0b1d4f → #172554 → #1e3a8a`) matching the premium brand. White heading, indigo body text, blue-gradient bell badge with glow, blue-gradient Notify-Me button, light input on a translucent overlay. Success / error messages use `#86efac` / `#fca5a5` so they remain readable on dark navy.
 
+- **[Feb 2026]** Out-of-Stock chip moved to the top of the product page (matches user-supplied screenshot):
+  - The hard-coded "In Stock" green badge in the top chip row (next to Windows / Lifetime License) now flips to a red **"Out of Stock"** badge (soft red `#fee2e2 / #b91c1c`) when `available_keys_count() === 0`. Never both — the page now shows exactly one stock chip in the correct prominent position near the title and price area.
+  - Removed the duplicate `pc-stock-pill is-out` element that was rendering below the price — the price area is now clean (price, qty selector, then the "Out of Stock" disabled CTA + Notify When Available card).
+  - Status updates automatically based on live inventory (`available_keys_count(slug)`) — no caching, always accurate.
+
 ## Test Credentials
 See `/app/memory/test_credentials.md`.
 

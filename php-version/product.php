@@ -78,9 +78,14 @@ include __DIR__ . '/includes/header.php';
       </div>
     </div>
     <div class="col-lg-7">
+      <?php $stockN = available_keys_count($product['slug']); ?>
       <div class="d-flex gap-2 flex-wrap mb-2">
         <span class="badge os-badge"><img src="assets/images/os/<?= $product['platform'] === 'Mac' ? 'macos' : 'windows' ?>.svg" alt="<?= esc($product['platform']) ?>" class="os-icon me-1"><?= esc($product['platform']) ?></span>
-        <span class="badge text-bg-success"><i class="bi bi-check-circle me-1"></i>In Stock</span>
+        <?php if ($stockN > 0): ?>
+          <span class="badge text-bg-success" data-testid="stock-pill-in-<?= esc($product['slug']) ?>"><i class="bi bi-check-circle me-1"></i>In Stock</span>
+        <?php else: ?>
+          <span class="badge pd-stock-out-badge" data-testid="stock-pill-out-<?= esc($product['slug']) ?>"><i class="bi bi-x-octagon-fill me-1"></i>Out of Stock</span>
+        <?php endif; ?>
         <span class="badge text-bg-info text-dark"><i class="bi bi-infinity me-1"></i>Lifetime License</span>
       </div>
       <h1 class="h3 fw-bold" data-testid="product-name"><?= esc($product['name']) ?></h1>
@@ -113,14 +118,7 @@ include __DIR__ . '/includes/header.php';
         <?php endif; ?>
       </div>
 
-      <?php $stockN = available_keys_count($product['slug']); ?>
-      <?php if ($stockN <= 0): ?>
-        <div class="mb-3" data-testid="pd-stock-wrap">
-          <span class="pc-stock-pill pc-stock-lg is-out" data-testid="stock-out-<?= esc($product['slug']) ?>">
-            <i class="bi bi-x-octagon-fill me-1"></i>Out of Stock
-          </span>
-        </div>
-      <?php endif; ?>
+      <?php /* Stock status is shown as a chip near the title above; no duplicate label here. */ ?>
 
       <div class="d-flex gap-3 align-items-center mb-4 flex-wrap">
         <div class="input-group" style="width: 130px;">
@@ -270,4 +268,19 @@ include __DIR__ . '/includes/header.php';
     </div>
   <?php endif; ?>
 </div>
+
+<style>
+  /* Out-of-stock chip styling — soft red pill matching brand */
+  .pd-stock-out-badge {
+    background: #fee2e2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+    font-weight: 600;
+  }
+  [data-bs-theme="dark"] .pd-stock-out-badge {
+    background: rgba(239,68,68,.15);
+    color: #fca5a5;
+    border-color: rgba(239,68,68,.35);
+  }
+</style>
 <?php include __DIR__ . '/includes/footer.php'; ?>
