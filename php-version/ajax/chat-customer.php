@@ -37,10 +37,34 @@ if ($action === 'typing') {
 if ($action === 'send') {
     $msg = trim($in['message'] ?? '');
     if ($msg === '') { echo json_encode(['ok'=>false,'error'=>'empty']); exit; }
+
+    // Detect whether this is the customer's FIRST message in this lead's
+    // chat thread — used to fire the one-time "Thanks for contacting us"
+    // auto-reply right after we record the message.
+    $cnt = $pdo->prepare("SELECT COUNT(*) FROM chat_messages WHERE lead_id=? AND sender='customer'");
+    $cnt->execute([$leadId]);
+    $isFirstCustomerMsg = ((int)$cnt->fetchColumn() === 0);
+
     $pdo->prepare('INSERT INTO chat_messages (lead_id, sender, message) VALUES (?,?,?)')
         ->execute([$leadId, 'customer', mb_substr($msg, 0, 2000, 'UTF-8')]);
     // Sending a message implies done typing — clear the beacon immediately.
     $pdo->prepare('UPDATE chat_leads SET typing_customer_at = NULL WHERE id=?')->execute([$leadId]);
+
+    // First-message auto-reply — set the tone, let the customer know
+    // they've been heard, and prompt them to share more detail so the
+    // admin has context the moment they open the chat.  Inserted as
+    // sender='admin' so the customer-side poller picks it up on the
+    // very next tick and renders it as a green agent bubble.
+    if ($isFirstCustomerMsg) {
+        // Don't double-up if a ProAssist welcome (or any other admin
+        // message) was already seeded for this lead.
+        $hasAdmin = (int)$pdo->query("SELECT COUNT(*) FROM chat_messages WHERE lead_id=" . (int)$leadId . " AND sender='admin'")->fetchColumn();
+        if ($hasAdmin === 0) {
+            $autoReply = "Thanks for contacting us! Please tell us how we can assist you further.";
+            $pdo->prepare('INSERT INTO chat_messages (lead_id, sender, message) VALUES (?,?,?)')
+                ->execute([$leadId, 'admin', $autoReply]);
+        }
+    }
 }
 
 $since = (int)($in['since'] ?? 0);

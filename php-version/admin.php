@@ -3421,6 +3421,43 @@ elseif ($tab === 'leads'):
     document.addEventListener('keydown', function(e){
       if (e.key === 'Escape' && overlay.style.display === 'flex') window.admChatClose();
     });
+
+    // ----------------------------------------------------------------------
+    // 30-sec auto-refresh of the Lead Management tab so new leads and new
+    // customer messages surface live without admins having to manually
+    // refresh.  Pauses while the chat drawer is open (so the admin's
+    // mid-conversation context never gets blown away by a reload), and
+    // also pauses while the page tab is in the background (saves CPU +
+    // avoids stacking up retries when the laptop wakes from sleep).
+    // ----------------------------------------------------------------------
+    (function leadsAutoRefresh(){
+      let timer = null;
+      function tick(){
+        // Skip if chat drawer is open (overlay visible) — don't yank the
+        // admin out of an in-flight conversation.
+        const drawerOpen = overlay && overlay.style.display === 'flex';
+        if (drawerOpen) return;
+        // Skip if the tab isn't visible (e.g. background tab / phone sleep).
+        if (document.hidden) return;
+        // Skip if user is interacting with a form/select (avoids stomping on
+        // half-typed status changes or filter dropdowns).
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT')) return;
+        window.location.reload();
+      }
+      timer = setInterval(tick, 30000);
+      // Re-arm immediately when the tab comes back into focus after being
+      // hidden for a while — so admins see fresh data right away.
+      document.addEventListener('visibilitychange', function(){
+        if (!document.hidden) {
+          // Only refresh on focus-back if we've been hidden long enough
+          // for there to plausibly be new activity (>=20s).
+          if (Date.now() - (window._leadsLastHide || 0) >= 20000) tick();
+        } else {
+          window._leadsLastHide = Date.now();
+        }
+      });
+    })();
   })();
   </script>
 
