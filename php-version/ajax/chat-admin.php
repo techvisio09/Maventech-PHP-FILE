@@ -40,6 +40,25 @@ if ($action === 'typing') {
     echo json_encode(['ok'=>true]); exit;
 }
 
+// Presence — bulk online/offline map for the Leads tab so chat-pill
+// colours flip green → metallic-gray within a single polling tick
+// once the customer leaves / idles for 2 min.  Accepts a list of lead
+// IDs; returns only the rows that have changed visible since last
+// page-load.  120-sec threshold matches the table's server-side check.
+if ($action === 'presence') {
+    $ids = array_slice(array_map('intval', $in['lead_ids'] ?? []), 0, 200);
+    if (!$ids) { echo json_encode(['ok'=>true,'presence'=>[]]); exit; }
+    $ph = implode(',', array_fill(0, count($ids), '?'));
+    $stmt = $pdo->prepare("SELECT id, last_seen FROM chat_leads WHERE id IN ($ph)");
+    $stmt->execute($ids);
+    $out = [];
+    foreach ($stmt as $r) {
+        $online = $r['last_seen'] && (time() - strtotime($r['last_seen'])) <= 120;
+        $out[] = ['id'=>(int)$r['id'], 'online'=>$online, 'last_seen'=>$r['last_seen']];
+    }
+    echo json_encode(['ok'=>true, 'presence'=>$out]); exit;
+}
+
 if ($action === 'unread') {
     $r = $pdo->query("SELECT COUNT(*) FROM chat_messages WHERE sender='customer' AND read_at IS NULL")->fetchColumn();
     // Get last unread message's lead+name for toast

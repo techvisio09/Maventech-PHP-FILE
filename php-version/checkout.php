@@ -64,6 +64,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         if ($proAssist) {
             $itemStmt->execute([$orderId, 'proassist-premium', 'ProAssist Premium Installation', PRO_ASSIST_PRICE, 1]);
+            // Surface this customer in Lead Management so the support team
+            // can proactively reach out and schedule the installation call.
+            // We treat ProAssist as an inbound "callback requested" lead
+            // keyed off the order number + email, so admins can search/
+            // chat / assign right from the existing Leads tab.
+            try {
+                $proName  = trim(trim($_POST['first_name']) . ' ' . trim($_POST['last_name']));
+                $proCty   = substr(trim($_POST['country'] ?? 'US'), 0, 5);
+                $proMsg   = 'ProAssist Premium Installation requested — Order #' . $orderNumber
+                          . ' · Total: ' . current_currency()['code'] . ' ' . number_format($total, 2)
+                          . ' · Schedule the install call within one business day.';
+                $proToken = bin2hex(random_bytes(20));
+                $pdo->prepare('INSERT INTO chat_leads
+                    (session_id, name, email, phone, callback_requested, message, requested_product, country, chat_token)
+                    VALUES (?,?,?,?,1,?,?,?,?)')
+                    ->execute([
+                        session_id(),
+                        $proName ?: 'ProAssist customer',
+                        trim($_POST['email']),
+                        $phoneFull,
+                        $proMsg,
+                        'ProAssist Premium Installation',
+                        $proCty,
+                        $proToken,
+                    ]);
+            } catch (Throwable $e) { /* lead-creation is best-effort */ }
         }
         $_SESSION['cart'] = [];
         unset($_SESSION['coupon']);

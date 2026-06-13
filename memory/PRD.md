@@ -387,6 +387,12 @@ See `/app/memory/test_credentials.md`.
 - **Dark-mode aware** and respects `prefers-reduced-motion`.
 - Verified end-to-end: cleared localStorage → opened chat → typed `hi` → banner appeared at top of form (`nudgeVisible: 'flex'`), form scrolled into focus, all 3 lead inputs + 3 CTAs (Request callback / Chat Now / Call) became actionable in one glance.
 
+## [June 2026] ProAssist → Lead Management + presence-aware chat pills
+- **ProAssist checkout → automatic Lead Management entry** — when a customer ticks "ProAssist Premium Installation" at checkout (`$proAssist`), a `chat_leads` row is created with `callback_requested=1`, `requested_product='ProAssist Premium Installation'`, the full order context in the `message` column, and a fresh `chat_token` so the support team can chat with them directly. Best-effort wrapped in `try/catch` so lead-creation never breaks checkout.
+- **"ProAssist" name-pill** — new `.proassist-pill` (light-blue gradient + wrench icon, dark-mode aware) renders next to the customer's name in the Leads table so the support team spots high-value concierge-install leads at a glance.
+- **Vibrant green online / metallic gray offline chat buttons** — `.chat-pill.is-online` now uses an emerald gradient (`#10b981 → #047857`) with a pulsing box-shadow keyframe (`chat-pill-glow` 2.2s). `.chat-pill.is-offline` got a "rich gunmetal" makeover — three-stop slate gradient (`#475569 → #1e293b`) with inset highlight + rim shadow so it still looks premium, not disabled. Both honour `prefers-reduced-motion`.
+- **Live presence poller** — new `presence` action on `ajax/chat-admin.php` accepts a batch of lead IDs and returns each one's online state (last_seen ≤ 120 s). A 20-sec interval JS poller in the Leads tab swaps the `.is-online` / `.is-offline` classes (and the small green name-dot) in place, so the buttons flip from emerald → gunmetal within a single tick when the customer leaves or goes idle for 2+ minutes — no page reload needed.
+
 ## Roadmap / Backlog (P2)
 - Split `admin.php` (>3700 lines) into per-tab partials under `includes/tabs/`
 - Add bulk-paste key validation (deduplicate vs. existing)

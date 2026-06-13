@@ -2818,6 +2818,9 @@ elseif ($tab === 'leads'):
                 <td class="fw-semibold">
                   <?= esc($l['name'] ?: 'Anonymous') ?>
                   <?php if ($l['callback_requested']): ?> <i class="bi bi-telephone-fill text-warning ms-1" title="Callback requested"></i><?php endif; ?>
+                  <?php if (($l['requested_product'] ?? '') === 'ProAssist Premium Installation'): ?>
+                    <span class="proassist-pill" title="Selected ProAssist Premium Installation at checkout" data-testid="lead-proassist-pill-<?= (int)$l['id'] ?>"><i class="bi bi-tools"></i> ProAssist</span>
+                  <?php endif; ?>
                   <?php if ($isOnline): ?><span class="online-dot" title="Online now"></span><?php endif; ?>
                 </td>
                 <td><small><?= esc($l['email'] ?: '—') ?><br><?= esc($l['phone'] ?: '') ?></small></td>
@@ -2963,13 +2966,70 @@ elseif ($tab === 'leads'):
     @keyframes adm-pulse { 0%,100%{box-shadow:0 0 0 3px rgba(16,185,129,.18);} 50%{box-shadow:0 0 0 6px rgba(16,185,129,.05);} }
 
     /* ------- Chat pill button on each lead row ------- */
-    .chat-pill { position:relative; display:inline-flex; align-items:center; gap:4px; border:0; padding:5px 12px; border-radius:999px; font-size:12.5px; font-weight:600; transition:transform .15s ease, box-shadow .15s ease, filter .15s ease; }
-    .chat-pill:hover { transform: translateY(-1px); filter: brightness(1.05); }
-    .chat-pill.is-online   { background:#10b981; color:#fff; box-shadow:0 1px 2px rgba(16,185,129,.35); }
-    .chat-pill.is-online:hover { background:#059669; color:#fff; }
-    .chat-pill.is-offline  { background:#4b5563; color:#fff; box-shadow:0 1px 2px rgba(75,85,99,.25); }
-    .chat-pill.is-offline:hover { background:#374151; color:#fff; }
+    .chat-pill { position:relative; display:inline-flex; align-items:center; gap:4px; border:0; padding:5px 12px; border-radius:999px; font-size:12.5px; font-weight:600; transition: transform .15s ease, box-shadow .25s ease, filter .15s ease, background .25s ease; }
+    .chat-pill:hover { transform: translateY(-1px); filter: brightness(1.06); }
     .chat-pill .bi { font-size:13px; }
+    /* ---- ONLINE: customer's last_seen is within 2 min.  Vibrant emerald
+       gradient with a soft glow + slow pulse so the admin's eye is
+       drawn to the actionable rows first. ---- */
+    .chat-pill.is-online {
+      background: linear-gradient(135deg, #10b981, #059669 55%, #047857);
+      color: #fff;
+      box-shadow:
+        0 2px 6px rgba(16,185,129,.45),
+        inset 0 1px 0 rgba(255,255,255,.20);
+      animation: chat-pill-glow 2.2s ease-in-out infinite;
+    }
+    .chat-pill.is-online:hover {
+      background: linear-gradient(135deg, #34d399, #10b981 55%, #059669);
+      box-shadow:
+        0 6px 16px rgba(16,185,129,.55),
+        inset 0 1px 0 rgba(255,255,255,.25);
+    }
+    @keyframes chat-pill-glow {
+      0%, 100% { box-shadow: 0 2px 6px rgba(16,185,129,.45), inset 0 1px 0 rgba(255,255,255,.20); }
+      50%      { box-shadow: 0 4px 14px rgba(16,185,129,.75), inset 0 1px 0 rgba(255,255,255,.30); }
+    }
+    /* ---- OFFLINE: customer hasn't pinged in 2+ min.  Rich metallic
+       gunmetal gradient with a subtle inset highlight + outer rim so the
+       button still looks premium (not "disabled"). ---- */
+    .chat-pill.is-offline {
+      background: linear-gradient(135deg, #475569 0%, #334155 45%, #1e293b 100%);
+      color: #f1f5f9;
+      box-shadow:
+        0 2px 5px rgba(15,23,42,.30),
+        inset 0 1px 0 rgba(255,255,255,.10),
+        inset 0 -1px 0 rgba(0,0,0,.30);
+    }
+    .chat-pill.is-offline:hover {
+      background: linear-gradient(135deg, #64748b 0%, #475569 45%, #334155 100%);
+      box-shadow:
+        0 4px 12px rgba(15,23,42,.40),
+        inset 0 1px 0 rgba(255,255,255,.14),
+        inset 0 -1px 0 rgba(0,0,0,.30);
+    }
+    @media (prefers-reduced-motion: reduce) { .chat-pill.is-online { animation: none; } }
+
+    /* ProAssist lead pill — visible next to the name so the support team
+       spots the high-value "concierge install" leads immediately. */
+    .proassist-pill {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 1px 7px;
+      margin-left: 4px;
+      font-size: 10.5px; font-weight: 700; letter-spacing: .25px;
+      color: #0c4a6e;
+      background: linear-gradient(135deg, #bae6fd, #7dd3fc);
+      border: 1px solid #38bdf8;
+      border-radius: 999px;
+      box-shadow: 0 1px 3px rgba(56,189,248,.30);
+      vertical-align: 1px;
+    }
+    .proassist-pill .bi { font-size: 11px; }
+    [data-bs-theme="dark"] .proassist-pill {
+      color: #bae6fd;
+      background: linear-gradient(135deg, rgba(56,189,248,.28), rgba(14,165,233,.20));
+      border-color: rgba(125,211,252,.45);
+    }
     /* Red notification dot when there are unread customer messages */
     .chat-pill-dot { position:absolute; top:-3px; right:-3px; width:10px; height:10px; border-radius:50%; background:#ef4444; border:2px solid #fff; box-shadow:0 0 0 2px rgba(239,68,68,.35); animation:adm-dot-pulse 1.5s ease-in-out infinite; }
     @keyframes adm-dot-pulse { 0%,100%{box-shadow:0 0 0 2px rgba(239,68,68,.35);} 50%{box-shadow:0 0 0 5px rgba(239,68,68,.0);} }
@@ -3280,6 +3340,51 @@ elseif ($tab === 'leads'):
     }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireChatButtons);
     else wireChatButtons();
+
+    // ---- Live presence poller for the Leads-tab chat-pill buttons ----
+    // Every 20 sec, ask the server which of the currently-rendered leads
+    // are still online (last_seen ≤ 2 min).  Swap the .is-online /
+    // .is-offline modifier classes so the pill flips from emerald-green
+    // to metallic-gray within one tick when the customer leaves the
+    // page or goes idle for 2+ minutes.
+    (function chatPresencePoller(){
+      function gatherIds(){
+        return Array.from(document.querySelectorAll('.chat-open-btn[data-lead-id]'))
+          .map(el => parseInt(el.dataset.leadId, 10))
+          .filter(n => n > 0);
+      }
+      async function refresh(){
+        const ids = gatherIds();
+        if (ids.length === 0) return;
+        try {
+          const r = await fetch((window.MAVEN_BASE||'/') + 'ajax/chat-admin.php', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({action:'presence', lead_ids: ids})
+          });
+          const j = await r.json();
+          if (!j || !j.ok) return;
+          (j.presence || []).forEach(p => {
+            const btn = document.querySelector('.chat-open-btn[data-lead-id="'+p.id+'"]');
+            if (!btn) return;
+            btn.classList.toggle('is-online',  !!p.online);
+            btn.classList.toggle('is-offline', !p.online);
+            btn.title = p.online ? 'Customer is online' : 'Customer is offline';
+            // Also flip the small online-dot next to the name in the same row.
+            const row = btn.closest('tr');
+            if (row) {
+              const dot = row.querySelector('.online-dot');
+              if (p.online && !dot) {
+                const cell = row.querySelector('td.fw-semibold');
+                if (cell) { const s = document.createElement('span'); s.className = 'online-dot'; s.title = 'Online now'; cell.appendChild(s); }
+              } else if (!p.online && dot) { dot.remove(); }
+            }
+          });
+        } catch(e){ /* offline — retry next tick */ }
+      }
+      // First refresh after 5 sec (lets the page settle), then every 20.
+      setTimeout(refresh, 5000);
+      setInterval(refresh, 20000);
+    })();
 
     // Auto-open chat if URL has ?autochat=<lead_id> (used by toast click-through)
     try {
