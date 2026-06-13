@@ -502,31 +502,60 @@ if ($tab === 'dashboard'):
     $ordDeliv   = (int)$pdo->query("SELECT COUNT(*) FROM orders WHERE status='delivered' AND region=".$pdo->quote($region_code))->fetchColumn();
     $maxFunnel = max($leadsTotal, $ord, $ordPaid, $ordDeliv, 1);
 
-    // -------- VISITOR ANALYTICS (today) --------
+    // -------- VISITOR ANALYTICS (date range filter) --------
     // All counts are over REAL visitors (bots/admin filtered at insert time).
-    $vTodayUniq   = (int)$pdo->query("SELECT COUNT(DISTINCT session_id) FROM visitor_log WHERE DATE(visited_at)=CURDATE() AND session_id<>''")->fetchColumn();
-    $vTodayHits   = (int)$pdo->query("SELECT COUNT(*) FROM visitor_log WHERE DATE(visited_at)=CURDATE()")->fetchColumn();
-    $vYestUniq    = (int)$pdo->query("SELECT COUNT(DISTINCT session_id) FROM visitor_log WHERE DATE(visited_at)=DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND session_id<>''")->fetchColumn();
-    $vDelta       = $vYestUniq > 0 ? round((($vTodayUniq - $vYestUniq) / $vYestUniq) * 100) : ($vTodayUniq > 0 ? 100 : 0);
-    // OS / device / country breakdowns (today, unique sessions)
-    $vOs = $pdo->query("SELECT os, COUNT(DISTINCT session_id) c FROM visitor_log WHERE DATE(visited_at)=CURDATE() AND session_id<>'' GROUP BY os ORDER BY c DESC LIMIT 8")->fetchAll();
-    $vDev = $pdo->query("SELECT device, COUNT(DISTINCT session_id) c FROM visitor_log WHERE DATE(visited_at)=CURDATE() AND session_id<>'' GROUP BY device ORDER BY c DESC")->fetchAll();
-    $vCountry = $pdo->query("SELECT country, COUNT(DISTINCT session_id) c FROM visitor_log WHERE DATE(visited_at)=CURDATE() AND session_id<>'' AND country<>'' GROUP BY country ORDER BY c DESC LIMIT 6")->fetchAll();
-    // Recent 8 unique visitor sessions today (latest hit per session)
-    $vRecent = $pdo->query("SELECT v.* FROM visitor_log v INNER JOIN (
-                              SELECT session_id, MAX(id) mid FROM visitor_log
-                              WHERE DATE(visited_at)=CURDATE() AND session_id<>''
-                              GROUP BY session_id
-                            ) latest ON latest.mid = v.id
-                            ORDER BY v.id DESC LIMIT 8")->fetchAll();
-    // 7-day visitor trend (for the spark bars)
-    $vTrendRows = $pdo->query("SELECT DATE(visited_at) d, COUNT(DISTINCT session_id) c
-                                FROM visitor_log
-                                WHERE visited_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY) AND session_id<>''
-                                GROUP BY DATE(visited_at)")->fetchAll();
-    $vTrendMap = []; foreach ($vTrendRows as $r) $vTrendMap[$r['d']] = (int)$r['c'];
-    $vTrend = [];
-    for ($i=6; $i>=0; $i--) { $d = date('Y-m-d', strtotime("-$i days")); $vTrend[] = ['d'=>$d, 'c'=>(int)($vTrendMap[$d] ?? 0)]; }
+    // Ranges: today | 7d | 30d | 90d | 1y — defaults to today.
+    $vRange = (string)($_GET['vrange'] ?? 'today');
+    $vRanges = ['today'=>['Today','CURDATE()'], '7d'=>['Last 7 days','DATE_SUB(CURDATE(), INTERVAL 6 DAY)'],
+                '30d'=>['Last 30 days','DATE_SUB(CURDATE(), INTERVAL 29 DAY)'], '90d'=>['Last 3 months','DATE_SUB(CURDATE(), INTERVAL 89 DAY)'],
+                '1y'=>['Last year','DATE_SUB(CURDATE(), INTERVAL 364 DAY)']];
+    if (!isset($vRanges[$vRange])) $vRange = 'today';
+    [$vRangeLabel, $vRangeStart] = $vRanges[$vRange];
+    // SQL where clause for the current range
+    if ($vRange === 'today') {
+        $vWhere = "DATE(visited_at)=CURDATE()";
+        $vPrevWhere = "DATE(visited_at)=DATE_SUB(CURDATE(), INTERVAL 1 DAY)";
+        $vRangeDays = 1;
+    } else {
+        $vWhere = "visited_at >= $vRangeStart";
+        // Previous period of same length for the delta
+        $intervalDays = ['7d'=>7,'30d'=>30,'90d'=>90,'1y'=>365][$vRange];
+        $vRangeDays = $intervalDays;
+        $vPrevWhere = "visited_at >= DATE_SUB($vRangeStart, INTERVAL $intervalDays DAY) AND visited_at < $vRangeStart";
+    }
+
+    $vTodayUniq = (int)$pdo->query("SELECT COUNT(DISTINCT session_id) FROM visitor_log WHERE $vWhere AND session_id<>''")->fetchColumn();
+    $vTodayHits = (int)$pdo->query("SELECT COUNT(*) FROM visitor_log WHERE $vWhere")->fetchColumn();
+    $vYestUniq  = (int)$pdo->query("SELECT COUNT(DISTINCT session_id) FROM visitor_log WHERE $vPrevWhere AND session_id<>''")->fetchColumn();
+    $vDelta     = $vYestUniq > 0 ? round((($vTodayUniq - $vYestUniq) / $vYestUniq) * 100) : ($vTodayUniq > 0 ? 100 : 0);
+
+    $vOs = $pdo->query("SELECT os, COUNT(DISTINCT session_id) c FROM visitor_log WHERE $vWhere AND session_id<>'' GROUP BY os ORDER BY c DESC LIMIT 8")->fetchAll();
+    $vDev = $pdo->query("SELECT device, COUNT(DISTINCT session_id) c FROM visitor_log WHERE $vWhere AND session_id<>'' GROUP BY device ORDER BY c DESC")->fetchAll();
+    $vCountry = $pdo->query("SELECT country, COUNT(DISTINCT session_id) c FROM visitor_log WHERE $vWhere AND session_id<>'' AND country<>'' GROUP BY country ORDER BY c DESC LIMIT 8")->fetchAll();
+
+    // Trend chart (always last N days appropriate to range)
+    $vTrendN = ['today'=>7,'7d'=>7,'30d'=>30,'90d'=>12,'1y'=>12][$vRange];
+    $vTrendGroup = ($vRange === '90d' || $vRange === '1y') ? 'week' : 'day';
+    if ($vTrendGroup === 'day') {
+        $vTrendRows = $pdo->query("SELECT DATE(visited_at) d, COUNT(DISTINCT session_id) c
+                                    FROM visitor_log
+                                    WHERE visited_at >= DATE_SUB(CURDATE(), INTERVAL ".($vTrendN-1)." DAY) AND session_id<>''
+                                    GROUP BY DATE(visited_at)")->fetchAll();
+        $vTrendMap = []; foreach ($vTrendRows as $r) $vTrendMap[$r['d']] = (int)$r['c'];
+        $vTrend = [];
+        for ($i=$vTrendN-1; $i>=0; $i--) { $d = date('Y-m-d', strtotime("-$i days")); $vTrend[] = ['d'=>$d, 'lbl'=>date('D', strtotime($d)), 'c'=>(int)($vTrendMap[$d] ?? 0)]; }
+    } else {
+        // group by week (last 12 weeks)
+        $vTrendRows = $pdo->query("SELECT YEARWEEK(visited_at, 3) yw, MIN(DATE(visited_at)) d, COUNT(DISTINCT session_id) c
+                                    FROM visitor_log
+                                    WHERE visited_at >= DATE_SUB(CURDATE(), INTERVAL ".(7*$vTrendN-1)." DAY) AND session_id<>''
+                                    GROUP BY YEARWEEK(visited_at, 3)
+                                    ORDER BY yw ASC")->fetchAll();
+        $vTrend = [];
+        foreach ($vTrendRows as $r) $vTrend[] = ['d'=>$r['d'], 'lbl'=>'W'.((int)substr($r['yw'],-2)), 'c'=>(int)$r['c']];
+        // pad to N if fewer
+        while (count($vTrend) < $vTrendN) array_unshift($vTrend, ['d'=>'', 'lbl'=>'', 'c'=>0]);
+    }
     $vTrendMax = max(array_column($vTrend,'c')) ?: 1;
 ?>
   <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
@@ -842,43 +871,48 @@ if ($tab === 'dashboard'):
   </div>
 
   <!-- ====================================================================
-       Today's Visitors — daily report of real human traffic with OS, device,
-       country breakdown + 7-day trend.  Bots and the admin session are
+       Visitors — daily/weekly/monthly report of real human traffic with
+       OS, device and country breakdown.  Bots and the admin session are
        filtered out at the tracker level (includes/visitor_track.php).
        ==================================================================== -->
   <div class="row g-3 mt-1" data-testid="visitors-section">
     <div class="col-12">
       <div class="card-e">
         <div class="card-head">
-          <div class="ttl"><i class="bi bi-people-fill"></i> Today's Visitors <span class="sub ms-2">real humans · bots filtered</span></div>
-          <div class="sub">
+          <div class="ttl"><i class="bi bi-people-fill"></i> Visitors <span class="sub ms-2"><?= esc($vRangeLabel) ?> · real humans · bots filtered</span></div>
+          <div class="d-flex align-items-center gap-2 flex-wrap">
+            <div class="vrange-pills" data-testid="visitors-range-pills">
+              <?php foreach ($vRanges as $rk => $rv): ?>
+                <a class="vrange-pill <?= $vRange===$rk?'active':'' ?>" href="?tab=dashboard&vrange=<?= esc($rk) ?>#visitors-section" data-testid="vrange-<?= esc($rk) ?>"><?= esc($rv[0]) ?></a>
+              <?php endforeach; ?>
+            </div>
             <span class="badge bg-success-subtle text-success" style="font-size:11px;"><i class="bi bi-eye-fill me-1"></i><?= number_format($vTodayHits) ?> page-views</span>
           </div>
         </div>
         <div class="card-body-p">
           <div class="row g-3">
-            <!-- Big visitor count + 7-day spark -->
+            <!-- Big visitor count + trend spark -->
             <div class="col-lg-4">
               <div class="vis-headline">
                 <div class="vis-num" data-testid="visitors-today-unique"><?= number_format($vTodayUniq) ?></div>
-                <div class="vis-lbl">unique visitors today</div>
+                <div class="vis-lbl">unique visitors · <?= esc($vRangeLabel) ?></div>
                 <div class="vis-delta <?= $vDelta>=0?'up':'down' ?>">
                   <i class="bi bi-arrow-<?= $vDelta>=0?'up':'down' ?>-right"></i>
                   <?= $vDelta>=0?'+':'' ?><?= $vDelta ?>%
-                  <span class="text-muted ms-1">vs yesterday (<?= number_format($vYestUniq) ?>)</span>
+                  <span class="text-muted ms-1">vs previous (<?= number_format($vYestUniq) ?>)</span>
                 </div>
-                <div class="vis-spark" title="Last 7 days unique visitors">
+                <div class="vis-spark" title="<?= esc(count($vTrend)) ?>-bar trend">
                   <?php foreach ($vTrend as $tt):
                     $h = max(8, ($tt['c']/$vTrendMax)*100);
-                    $isToday = $tt['d'] === date('Y-m-d');
+                    $isCurrent = $tt['d'] === date('Y-m-d');
                   ?>
-                    <div class="vis-spark-bar <?= $isToday?'today':'' ?>" style="height:<?= $h ?>%;" title="<?= esc(date('M j', strtotime($tt['d']))) ?>: <?= $tt['c'] ?> visitors">
-                      <span class="vis-spark-val"><?= $tt['c'] ?></span>
+                    <div class="vis-spark-bar <?= $isCurrent?'today':'' ?>" style="height:<?= $h ?>%;" title="<?= esc($tt['d']) ?>: <?= $tt['c'] ?> visitors">
+                      <span class="vis-spark-val"><?= $tt['c']>0 ? $tt['c'] : '' ?></span>
                     </div>
                   <?php endforeach; ?>
                 </div>
                 <div class="vis-spark-x">
-                  <?php foreach ($vTrend as $tt): ?><span><?= esc(date('D', strtotime($tt['d']))) ?></span><?php endforeach; ?>
+                  <?php foreach ($vTrend as $tt): ?><span><?= esc($tt['lbl'] ?? '') ?></span><?php endforeach; ?>
                 </div>
               </div>
             </div>
@@ -888,7 +922,7 @@ if ($tab === 'dashboard'):
               <div class="vis-block" data-testid="visitors-os-block">
                 <div class="vis-block-ttl"><i class="bi bi-display me-1"></i> Operating System</div>
                 <?php if (empty($vOs)): ?>
-                  <div class="text-muted small py-3 text-center">No visitors yet today.</div>
+                  <div class="text-muted small py-3 text-center">No visitors in this range.</div>
                 <?php else:
                   $osIcons = [
                     'Windows 10/11'=>['bi-windows','#0078D4'], 'Windows 8.1'=>['bi-windows','#0078D4'],
@@ -951,54 +985,29 @@ if ($tab === 'dashboard'):
               </div>
             </div>
           </div>
-
-          <!-- Recent visits feed (latest hit per session) -->
-          <?php if (!empty($vRecent)): ?>
-          <div class="mt-3 pt-3" style="border-top:1px solid var(--border);">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <div class="small fw-semibold text-muted"><i class="bi bi-clock-history me-1"></i> Recent visits today</div>
-              <span class="small text-muted">latest <?= count($vRecent) ?> sessions</span>
-            </div>
-            <div class="table-responsive">
-              <table class="table table-sm align-middle mb-0" style="font-size:12.5px;" data-testid="visitors-recent-table">
-                <thead><tr class="text-muted"><th>Time</th><th>Page</th><th>OS</th><th>Browser</th><th>Device</th><th>Country</th></tr></thead>
-                <tbody>
-                  <?php foreach ($vRecent as $v):
-                    $devIcon = ['Desktop'=>'bi-display','Mobile'=>'bi-phone','Tablet'=>'bi-tablet'][$v['device']] ?? 'bi-question-circle';
-                  ?>
-                  <tr>
-                    <td class="text-muted" style="white-space:nowrap;"><?= esc(date('H:i', strtotime($v['visited_at']))) ?></td>
-                    <td class="text-truncate" style="max-width:260px;"><code style="font-size:11px;"><?= esc($v['page_url'] ?: '/') ?></code></td>
-                    <td><?= esc($v['os']) ?></td>
-                    <td><?= esc($v['browser']) ?></td>
-                    <td><i class="bi <?= esc($devIcon) ?> me-1"></i><?= esc($v['device']) ?></td>
-                    <td><?= esc($v['country'] ?: '—') ?></td>
-                  </tr>
-                  <?php endforeach; ?>
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <?php endif; ?>
         </div>
       </div>
     </div>
   </div>
 
   <style>
+    .vrange-pills { display:inline-flex; gap:4px; background:var(--bg); padding:3px; border-radius:999px; border:1px solid var(--border); }
+    .vrange-pill { padding:4px 12px; border-radius:999px; font-size:11.5px; font-weight:600; color:var(--muted); text-decoration:none; transition:all .15s ease; white-space:nowrap; }
+    .vrange-pill:hover { background:rgba(59,130,246,.08); color:var(--brand); }
+    .vrange-pill.active { background:var(--brand); color:#fff; box-shadow:0 1px 2px rgba(59,130,246,.3); }
     .vis-headline { padding:8px 4px; }
     .vis-num { font-size:38px; font-weight:800; line-height:1; color:var(--text); letter-spacing:-1px; }
     .vis-lbl { font-size:12px; color:var(--muted); margin-top:4px; }
     .vis-delta { margin-top:8px; font-size:13px; font-weight:600; }
     .vis-delta.up   { color:#16a34a; }
     .vis-delta.down { color:#dc2626; }
-    .vis-spark { display:flex; align-items:flex-end; gap:6px; height:60px; margin-top:14px; padding:0 2px; }
-    .vis-spark-bar { flex:1; min-width:14px; background:linear-gradient(180deg,#60a5fa,#2563eb); border-radius:3px 3px 0 0; position:relative; transition:filter .15s ease; }
+    .vis-spark { display:flex; align-items:flex-end; gap:4px; height:60px; margin-top:14px; padding:0 2px; }
+    .vis-spark-bar { flex:1; min-width:8px; background:linear-gradient(180deg,#60a5fa,#2563eb); border-radius:3px 3px 0 0; position:relative; transition:filter .15s ease; }
     .vis-spark-bar:hover { filter:brightness(1.15); }
     .vis-spark-bar.today { background:linear-gradient(180deg,#10b981,#059669); }
     .vis-spark-val { position:absolute; top:-16px; left:50%; transform:translateX(-50%); font-size:10px; color:var(--muted); }
-    .vis-spark-x { display:flex; gap:6px; padding:4px 2px 0; }
-    .vis-spark-x span { flex:1; min-width:14px; text-align:center; font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
+    .vis-spark-x { display:flex; gap:4px; padding:4px 2px 0; }
+    .vis-spark-x span { flex:1; min-width:8px; text-align:center; font-size:9.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .vis-block { padding:6px 0; }
     .vis-block-ttl { font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; margin-bottom:8px; }
     .vis-row { display:flex; align-items:center; gap:10px; padding:6px 0; }
@@ -2203,12 +2212,11 @@ elseif ($tab === 'leads'):
         <div class="d-flex align-items-center gap-2 min-w-0">
           <div class="adm-chat-avatar"><i class="bi bi-person-fill"></i></div>
           <div class="min-w-0">
-            <div class="fw-semibold text-truncate" id="adm-chat-name" style="font-size:13.5px; color:#0f172a;">Customer</div>
+            <div class="fw-semibold text-truncate" id="adm-chat-name" style="font-size:12.5px; color:#0f172a;">Customer</div>
             <div class="d-flex align-items-center gap-2" id="adm-chat-meta">
               <span id="adm-chat-status" class="adm-chat-status-pill">
                 <span class="dot"></span> <span class="lbl">Checking…</span>
               </span>
-              <span class="text-truncate" id="adm-chat-contact"></span>
             </div>
           </div>
         </div>
@@ -2258,14 +2266,14 @@ elseif ($tab === 'leads'):
     /* ------- Slide-over chat drawer ------- */
     .adm-chat-overlay { position:fixed; inset:0; background:rgba(15,23,42,.45); z-index:3000; display:flex; justify-content:flex-end; animation:adm-fade .18s ease-out; }
     @keyframes adm-fade { from{opacity:0;} to{opacity:1;} }
-    .adm-chat-panel { width:min(400px, 100vw); height:100vh; background:#fff; display:flex; flex-direction:column; box-shadow:-12px 0 32px rgba(15,23,42,.18); animation:adm-slide .25s cubic-bezier(.16,1,.3,1); }
+    .adm-chat-panel { width:min(340px, 100vw); height:100vh; background:#fff; display:flex; flex-direction:column; box-shadow:-12px 0 32px rgba(15,23,42,.18); animation:adm-slide .25s cubic-bezier(.16,1,.3,1); }
     @keyframes adm-slide { from{transform:translateX(100%);} to{transform:translateX(0);} }
     [data-bs-theme="dark"] .adm-chat-panel { background:#0f1729; color:#e2e8f0; }
 
     /* Compact header */
-    .adm-chat-head { padding:10px 14px; border-bottom:1px solid #e5e7eb; display:flex; align-items:center; justify-content:space-between; gap:8px; background:#f8fafc; }
+    .adm-chat-head { padding:8px 12px; border-bottom:1px solid #e5e7eb; display:flex; align-items:center; justify-content:space-between; gap:8px; background:#f8fafc; }
     [data-bs-theme="dark"] .adm-chat-head { background:#0a1020; border-bottom-color:#1f2a44; }
-    .adm-chat-avatar { width:32px; height:32px; border-radius:50%; background:#e5e7eb; color:#475569; display:flex; align-items:center; justify-content:center; font-size:15px; flex-shrink:0; }
+    .adm-chat-avatar { width:28px; height:28px; border-radius:50%; background:#e5e7eb; color:#475569; display:flex; align-items:center; justify-content:center; font-size:13px; flex-shrink:0; }
     [data-bs-theme="dark"] .adm-chat-avatar { background:#1f2a44; color:#cbd5e1; }
     .adm-chat-status-pill { display:inline-flex; align-items:center; gap:5px; padding:1px 7px; border-radius:999px; font-size:10.5px; font-weight:600; background:#e5e7eb; color:#475569; }
     .adm-chat-status-pill .dot { width:6px; height:6px; border-radius:50%; background:#9ca3af; }
@@ -2281,16 +2289,16 @@ elseif ($tab === 'leads'):
     [data-bs-theme="dark"] .adm-chat-banner { background:#1a2335; color:#94a3b8; border-bottom-color:#2a3550; }
 
     /* Conversation body */
-    .adm-chat-body { flex:1 1 auto; overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:6px; background:#f8fafc; }
+    .adm-chat-body { flex:1 1 auto; overflow-y:auto; padding:10px 12px; display:flex; flex-direction:column; gap:5px; background:#f8fafc; }
     [data-bs-theme="dark"] .adm-chat-body { background:#0a1020; }
     .adm-chat-empty { margin:auto; text-align:center; }
 
     /* Message bubbles
        NOTE: per request — customer messages appear on RIGHT, admin (me) on LEFT.
        Both use LIGHT background colors, distinct from each other. */
-    .adm-msg { max-width:78%; padding:8px 12px; border-radius:14px; font-size:13px; line-height:1.45; word-wrap:break-word; white-space:pre-wrap; box-shadow:0 1px 2px rgba(15,23,42,.05); animation:adm-msg-in .2s ease-out; }
+    .adm-msg { max-width:82%; padding:6px 10px; border-radius:12px; font-size:12.5px; line-height:1.4; word-wrap:break-word; white-space:pre-wrap; box-shadow:0 1px 2px rgba(15,23,42,.05); animation:adm-msg-in .2s ease-out; }
     @keyframes adm-msg-in { from{opacity:0;transform:translateY(4px);} to{opacity:1;transform:translateY(0);} }
-    .adm-msg .ts { display:block; font-size:10px; opacity:.55; margin-top:2px; }
+    .adm-msg .ts { display:block; font-size:9.5px; opacity:.55; margin-top:1px; }
     /* Customer (right side) — light blue */
     .adm-msg.customer { align-self:flex-end; background:#dbeafe; color:#1e3a8a; border-bottom-right-radius:4px; }
     [data-bs-theme="dark"] .adm-msg.customer { background:rgba(59,130,246,.18); color:#bfdbfe; }
@@ -2301,13 +2309,13 @@ elseif ($tab === 'leads'):
     .adm-chat-day { align-self:center; font-size:10.5px; color:#94a3b8; margin:4px 0; background:rgba(148,163,184,.15); padding:2px 10px; border-radius:999px; }
 
     /* Simple footer — just textarea + send button */
-    .adm-chat-foot { padding:8px 10px; border-top:1px solid #e5e7eb; display:flex; gap:6px; align-items:flex-end; background:#fff; }
+    .adm-chat-foot { padding:6px 8px; border-top:1px solid #e5e7eb; display:flex; gap:5px; align-items:flex-end; background:#fff; }
     [data-bs-theme="dark"] .adm-chat-foot { background:#0f1729; border-top-color:#1f2a44; }
-    .adm-chat-foot textarea { flex:1; resize:none; font-size:13px; padding:8px 12px; border-radius:18px; border:1px solid #d1d5db; background:#f9fafb; min-height:36px; max-height:90px; line-height:1.4; }
+    .adm-chat-foot textarea { flex:1; resize:none; font-size:12.5px; padding:6px 10px; border-radius:16px; border:1px solid #d1d5db; background:#f9fafb; min-height:30px; max-height:80px; line-height:1.35; }
     .adm-chat-foot textarea:focus { outline:none; background:#fff; border-color:#9ca3af; box-shadow:none; }
     [data-bs-theme="dark"] .adm-chat-foot textarea { background:#0a1020; border-color:#1f2a44; color:#e2e8f0; }
     [data-bs-theme="dark"] .adm-chat-foot textarea:focus { background:#0f1729; border-color:#334155; }
-    .adm-chat-foot .send-btn { background:#2563eb; border:0; color:#fff; width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; padding:0; font-size:14px; flex-shrink:0; transition:background .15s ease; }
+    .adm-chat-foot .send-btn { background:#2563eb; border:0; color:#fff; width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; padding:0; font-size:12px; flex-shrink:0; transition:background .15s ease; }
     .adm-chat-foot .send-btn:hover { background:#1d4ed8; }
     .adm-chat-foot .send-btn:disabled { background:#cbd5e1; cursor:not-allowed; }
 
@@ -2324,7 +2332,7 @@ elseif ($tab === 'leads'):
     const $input  = document.getElementById('adm-chat-input');
     const $name   = document.getElementById('adm-chat-name');
     const $status = document.getElementById('adm-chat-status');
-    const $contact= document.getElementById('adm-chat-contact');
+    const $contact= document.getElementById('adm-chat-contact'); // optional (compact UI removes it)
     const $banner = document.getElementById('adm-chat-banner');
     let currentLeadId = 0, pollTimer = null, lastIds = new Set();
 
@@ -2396,7 +2404,7 @@ elseif ($tab === 'leads'):
       currentLeadId = parseInt(leadId, 10) || 0;
       if (!currentLeadId) return;
       $name.textContent = name || 'Customer';
-      $contact.textContent = [email, phone].filter(Boolean).join(' · ');
+      if ($contact) $contact.textContent = [email, phone].filter(Boolean).join(' · ');
       $body.innerHTML = '<div class="adm-chat-empty"><div class="spinner-border spinner-border-sm text-muted"></div><div class="mt-2 small text-muted">Loading conversation…</div></div>';
       $banner.style.display = 'none';
       $status.className = 'adm-chat-status-pill offline';
@@ -2690,17 +2698,17 @@ elseif ($tab === 'emails'):
   <?php $emailFilter = $_GET['filter'] ?? 'all'; ?>
 
   <ul class="nav nav-pills nav-pills-sm mb-3" data-testid="email-filter-pills">
-    <li class="nav-item"><a class="nav-link <?= $emailFilter==='all'?'active':'' ?> py-1 px-3" href="?tab=emails" data-testid="filter-all">All <span class="badge bg-light text-dark ms-1"><?= (int)$c['t'] ?></span></a></li>
-    <li class="nav-item"><a class="nav-link <?= $emailFilter==='failed'?'active':'' ?> py-1 px-3" href="?tab=emails&filter=failed" data-testid="filter-failed"><i class="bi bi-exclamation-triangle me-1"></i>Failed <span class="badge bg-danger text-white ms-1"><?= (int)$c['f'] ?></span></a></li>
-    <li class="nav-item"><a class="nav-link <?= $emailFilter==='sent'?'active':'' ?> py-1 px-3" href="?tab=emails&filter=sent" data-testid="filter-sent">Sent <span class="badge bg-light text-dark ms-1"><?= (int)$c['s'] ?></span></a></li>
-    <li class="nav-item"><a class="nav-link <?= $emailFilter==='queued'?'active':'' ?> py-1 px-3" href="?tab=emails&filter=queued" data-testid="filter-queued">Queued <span class="badge bg-light text-dark ms-1"><?= (int)$c['q'] ?></span></a></li>
+    <li class="nav-item"><a class="nav-link <?= $emailFilter==='all'?'active':'' ?> py-1 px-3" href="?tab=emails" data-testid="filter-all">All <span class="badge bg-light text-dark ms-1" data-counter="all"><?= (int)$c['t'] ?></span></a></li>
+    <li class="nav-item"><a class="nav-link <?= $emailFilter==='failed'?'active':'' ?> py-1 px-3" href="?tab=emails&filter=failed" data-testid="filter-failed"><i class="bi bi-exclamation-triangle me-1"></i>Failed <span class="badge bg-danger text-white ms-1" data-counter="failed"><?= (int)$c['f'] ?></span></a></li>
+    <li class="nav-item"><a class="nav-link <?= $emailFilter==='sent'?'active':'' ?> py-1 px-3" href="?tab=emails&filter=sent" data-testid="filter-sent">Sent <span class="badge bg-light text-dark ms-1" data-counter="sent"><?= (int)$c['s'] ?></span></a></li>
+    <li class="nav-item"><a class="nav-link <?= $emailFilter==='queued'?'active':'' ?> py-1 px-3" href="?tab=emails&filter=queued" data-testid="filter-queued">Queued <span class="badge bg-light text-dark ms-1" data-counter="queued"><?= (int)$c['q'] ?></span></a></li>
   </ul>
 
   <div class="row g-3 mb-3">
-    <div class="col-6 col-md-3"><div class="card-e p-3"><small class="text-muted text-uppercase fw-semibold" style="font-size:10px;letter-spacing:1px;">Sent</small><div class="fs-4 fw-bold" style="color:#3b82f6;"><?= (int)$c['s'] ?></div></div></div>
+    <div class="col-6 col-md-3"><div class="card-e p-3"><small class="text-muted text-uppercase fw-semibold" style="font-size:10px;letter-spacing:1px;">Sent</small><div class="fs-4 fw-bold" style="color:#3b82f6;" data-counter="sent"><?= (int)$c['s'] ?></div></div></div>
     <div class="col-6 col-md-3"><div class="card-e p-3"><small class="text-muted text-uppercase fw-semibold" style="font-size:10px;letter-spacing:1px;">Opened</small><div class="fs-4 fw-bold text-success"><?= (int)$c['o'] ?></div></div></div>
-    <div class="col-6 col-md-3"><div class="card-e p-3"><small class="text-muted text-uppercase fw-semibold" style="font-size:10px;letter-spacing:1px;">Queued</small><div class="fs-4 fw-bold" style="color:#d97706;"><?= (int)$c['q'] ?></div></div></div>
-    <div class="col-6 col-md-3"><div class="card-e p-3"><small class="text-muted text-uppercase fw-semibold" style="font-size:10px;letter-spacing:1px;">Failed</small><div class="fs-4 fw-bold text-danger"><?= (int)$c['f'] ?></div></div></div>
+    <div class="col-6 col-md-3"><div class="card-e p-3"><small class="text-muted text-uppercase fw-semibold" style="font-size:10px;letter-spacing:1px;">Queued</small><div class="fs-4 fw-bold" style="color:#d97706;" data-counter="queued"><?= (int)$c['q'] ?></div></div></div>
+    <div class="col-6 col-md-3"><div class="card-e p-3"><small class="text-muted text-uppercase fw-semibold" style="font-size:10px;letter-spacing:1px;">Failed</small><div class="fs-4 fw-bold text-danger" data-counter="failed"><?= (int)$c['f'] ?></div></div></div>
   </div>
 
   <div data-testid="email-activity-list">
@@ -2762,13 +2770,13 @@ elseif ($tab === 'emails'):
         <div class="ec-actions">
           <a href="email-view.php?id=<?= (int)$e['id'] ?>" target="_blank" class="btn btn-soft-blue btn-sm"><i class="bi bi-eye"></i> View Email</a>
           <?php if ($e['status'] === 'failed' || $e['status'] === 'bounced'): ?>
-            <form method="post" class="d-inline" onsubmit="return confirm('Resend this email to '+<?= json_encode($e['recipient'], JSON_HEX_QUOT|JSON_HEX_APOS) ?>+'?');">
-              <input type="hidden" name="action" value="resend_outbox">
-              <input type="hidden" name="email_id" value="<?= (int)$e['id'] ?>">
-              <button type="submit" class="btn btn-danger btn-sm fw-semibold" data-testid="resend-failed-btn-<?= (int)$e['id'] ?>">
-                <i class="bi bi-arrow-clockwise me-1"></i> Resend Email
-              </button>
-            </form>
+            <button type="button"
+                    class="btn btn-danger btn-sm fw-semibold ec-resend-btn"
+                    data-email-id="<?= (int)$e['id'] ?>"
+                    data-recipient="<?= esc($e['recipient']) ?>"
+                    data-testid="resend-failed-btn-<?= (int)$e['id'] ?>">
+              <i class="bi bi-arrow-clockwise me-1"></i> Resend Email
+            </button>
           <?php endif; ?>
           <button type="button"
                   class="btn btn-soft-amber btn-sm"
@@ -2871,6 +2879,126 @@ elseif ($tab === 'emails'):
   </style>
 
   <script>
+    // ----------------------------------------------------------------------
+    //  Shared AJAX resend helper — used by both the inline "Resend Email"
+    //  button on failed cards and the Edit & Resend modal.
+    //  On success it flips the card from red → green in-place, swaps the
+    //  status badge, removes the Resend button, and decrements the topbar
+    //  bell counter — so the admin sees the resolution instantly without
+    //  any page reload.
+    // ----------------------------------------------------------------------
+    async function doEmailResend(emailId, newRecipient) {
+      const body = { email_id: emailId };
+      if (newRecipient) body.new_recipient = newRecipient;
+      const r = await fetch('/ajax/email-resend.php', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || 'Resend failed');
+      return j;
+    }
+
+    function flipCardToSent(emailId, newRecipient) {
+      const card = document.querySelector('[data-testid="email-card-' + emailId + '"]');
+      if (!card) return;
+      // Strip the failed visual treatment + status dot
+      card.classList.remove('is-failed');
+      const dot = card.querySelector('.ec-status-dot');
+      if (dot) { dot.classList.remove('ec-failed','ec-queued'); dot.classList.add('ec-sent'); dot.setAttribute('title','Sent'); }
+      const badge = card.querySelector('.ec-head-r .s-badge');
+      if (badge) { badge.className = 's-badge sent'; badge.textContent = 'sent'; }
+      // Recipient row — if admin changed it via Edit & Resend, update the display value
+      if (newRecipient) {
+        const recipientCell = card.querySelector('.ec-field:first-of-type .ec-v');
+        if (recipientCell) recipientCell.innerHTML = '<span class="text-muted">' + newRecipient.replace(/[<>"'&]/g, c => ({'<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','&':'&amp;'}[c])) + '</span>';
+      }
+      // Remove the inline "Resend Email" button + the error row
+      card.querySelectorAll('.ec-resend-btn').forEach(b => b.remove());
+      card.querySelectorAll('.ec-field').forEach(f => {
+        const k = f.querySelector('.ec-k');
+        if (k && /error/i.test(k.textContent)) f.remove();
+      });
+      // Highlight pulse so the admin notices the row resolved
+      card.style.transition = 'box-shadow .4s ease, border-color .4s ease, background .4s ease';
+      card.style.boxShadow = '0 0 0 2px #16a34a, 0 6px 18px rgba(22,163,74,.20)';
+      setTimeout(() => { card.style.boxShadow = ''; }, 1600);
+    }
+
+    function updateBellFailedCount(n) {
+      const bell = document.querySelector('[data-testid="adm-bell"]');
+      if (!bell) return;
+      const badge = bell.querySelector('[data-testid="adm-bell-badge"]');
+      const icon  = bell.querySelector('.bi');
+      if (n > 0) {
+        if (badge) badge.textContent = n > 99 ? '99+' : n;
+        else {
+          const s = document.createElement('span');
+          s.className = 'adm-bell-badge'; s.setAttribute('data-testid','adm-bell-badge');
+          s.textContent = n > 99 ? '99+' : n; bell.appendChild(s);
+        }
+        if (icon) { icon.classList.remove('bi-bell'); icon.classList.add('bi-bell-fill'); }
+        bell.setAttribute('title', n + ' failed email(s) need attention');
+      } else {
+        if (badge) badge.remove();
+        if (icon) { icon.classList.remove('bi-bell-fill'); icon.classList.add('bi-bell'); }
+        bell.setAttribute('title', 'No failed emails');
+      }
+    }
+
+    // Also refresh KPI tiles + the All/Failed/Sent/Queued tab counts on the page
+    function adjustTabCounts() {
+      // simplest: decrement the visible "Failed" tab count + "FAILED" KPI by 1
+      // and increment the "Sent" tab + "SENT" KPI by 1.  Numbers are wrapped
+      // in <span> with class "ev-cnt" by the page renderer; if absent we just
+      // skip and let the next navigation refresh them.
+      const adj = (sel, delta) => {
+        document.querySelectorAll(sel).forEach(el => {
+          const cur = parseInt((el.textContent || '0').replace(/[^\d]/g, ''), 10) || 0;
+          const next = Math.max(0, cur + delta);
+          el.textContent = next.toString();
+        });
+      };
+      adj('[data-counter="failed"]', -1);
+      adj('[data-counter="sent"]',   +1);
+    }
+
+    function showResendToast(msg, ok) {
+      // Lightweight in-page toast (no Bootstrap toast dependency)
+      const t = document.createElement('div');
+      t.className = 'resend-toast ' + (ok ? 'ok' : 'err');
+      t.innerHTML = '<i class="bi bi-' + (ok ? 'check-circle-fill' : 'exclamation-triangle-fill') + ' me-2"></i>' + msg;
+      document.body.appendChild(t);
+      setTimeout(() => t.classList.add('show'), 20);
+      setTimeout(() => { t.classList.remove('show'); setTimeout(()=>t.remove(), 250); }, 3500);
+    }
+
+    // Inline "Resend Email" buttons on failed cards
+    document.querySelectorAll('.ec-resend-btn').forEach(btn => {
+      btn.addEventListener('click', async function(){
+        const emailId   = parseInt(btn.dataset.emailId, 10);
+        const recipient = btn.dataset.recipient || '';
+        if (!confirm('Resend this email to ' + recipient + '?')) return;
+        btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Sending…';
+        try {
+          const j = await doEmailResend(emailId, null);
+          if (j.delivered) {
+            flipCardToSent(emailId, null);
+            updateBellFailedCount(j.failed_count);
+            adjustTabCounts();
+            showResendToast('Email resent successfully to ' + j.recipient, true);
+          } else {
+            btn.disabled = false; btn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i> Resend Email';
+            showResendToast('Email queued for retry — ' + (j.error || 'will retry in background'), false);
+          }
+        } catch (e) {
+          btn.disabled = false; btn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i> Resend Email';
+          showResendToast('Failed to resend: ' + e.message, false);
+        }
+      });
+    });
+
     function openEditResendModal(id, recipient, subject, customerName) {
       document.getElementById('er_email_id').value = id;
       document.getElementById('er_recipient').value = recipient || '';
@@ -2894,6 +3022,35 @@ elseif ($tab === 'emails'):
       m.classList.remove('d-block');
       document.body.style.overflow = '';
     }
+    // Intercept the Edit & Resend form submit — fire via AJAX instead of a
+    // POST + redirect so the originating card flips in-place to "sent".
+    document.getElementById('editResendForm').addEventListener('submit', async function(ev){
+      ev.preventDefault();
+      const emailId = parseInt(document.getElementById('er_email_id').value, 10);
+      const newTo   = (document.getElementById('er_recipient').value || '').trim();
+      const submit  = ev.target.querySelector('button[type=submit]');
+      const oldHtml = submit.innerHTML;
+      submit.disabled = true;
+      submit.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Sending…';
+      try {
+        const j = await doEmailResend(emailId, newTo);
+        closeEditResendModal();
+        if (j.delivered) {
+          flipCardToSent(emailId, newTo);
+          updateBellFailedCount(j.failed_count);
+          adjustTabCounts();
+          showResendToast('Email resent successfully to ' + j.recipient, true);
+        } else {
+          showResendToast('Email queued for retry — ' + (j.error || 'will retry in background'), false);
+        }
+      } catch (e) {
+        showResendToast('Failed to resend: ' + e.message, false);
+      } finally {
+        submit.disabled = false;
+        submit.innerHTML = oldHtml;
+      }
+    });
+
     // Close on Esc + click on backdrop
     document.addEventListener('keydown', function(e){
       if (e.key === 'Escape') closeEditResendModal();
@@ -2902,6 +3059,13 @@ elseif ($tab === 'emails'):
       if (e.target === this) closeEditResendModal();
     });
   </script>
+
+  <style>
+    .resend-toast { position:fixed; top:80px; right:22px; padding:10px 16px; border-radius:10px; color:#fff; font-size:13px; font-weight:600; box-shadow:0 8px 24px rgba(15,23,42,.25); z-index:4500; opacity:0; transform:translateY(-8px); transition:opacity .2s ease, transform .2s ease; max-width:360px; }
+    .resend-toast.show { opacity:1; transform:translateY(0); }
+    .resend-toast.ok  { background:linear-gradient(135deg,#15803d,#16a34a); }
+    .resend-toast.err { background:linear-gradient(135deg,#b91c1c,#dc2626); }
+  </style>
 
 <?php
 // ============================================================================
