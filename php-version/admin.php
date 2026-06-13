@@ -216,46 +216,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: admin.php?tab=smtp&msg=SMTP+saved'); exit;
 
     } elseif ($action === 'resend_outbox') {
-        // Re-attempt sending an outbox email — UPDATE the existing row in place
-        // (status / recipient / delivered_at) instead of creating a duplicate row.
-        $emailId = (int)$_POST['email_id'];
-        $newTo = trim($_POST['new_recipient'] ?? '');
+        // Edit & Resend — admins can change the recipient email and/or subject,
+        // then queue the email for fresh delivery via the SMTP worker.
+        // We always CREATE A NEW ROW in email_outbox so the original is preserved
+        // as audit history (per product spec).
+        require_once __DIR__ . '/includes/mailer.php';
+
+        $emailId     = (int)($_POST['email_id'] ?? 0);
+        $newTo       = trim($_POST['new_recipient'] ?? '');
+        $newSubject  = trim($_POST['new_subject']   ?? '');
+
         $row = $pdo->prepare('SELECT * FROM email_outbox WHERE id=?');
-        $row->execute([$emailId]); $em = $row->fetch();
+        $row->execute([$emailId]);
+        $em = $row->fetch();
         if (!$em) { header('Location: admin.php?tab=emails&msg=Email+not+found'); exit; }
 
-        $to = $newTo !== '' ? $newTo : $em['recipient'];
-        // Try real delivery via Resend if configured, otherwise dev-mode success
-        $apiKey = defined('RESEND_API_KEY') ? RESEND_API_KEY : '';
-        $ok = true; $note = null; $providerId = $em['provider_id'] ?? null;
-        if ($apiKey !== '') {
-            $ch = curl_init('https://api.resend.com/emails');
-            curl_setopt_array($ch, [
-                CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true,
-                CURLOPT_POSTFIELDS => json_encode(['from' => SENDER_EMAIL, 'to' => [$to], 'subject' => $em['subject'], 'html' => $em['html']]),
-                CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Authorization: Bearer ' . $apiKey],
-                CURLOPT_TIMEOUT => 20,
-            ]);
-            $res = curl_exec($ch);
-            $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-            $ok = $res !== false && $code >= 200 && $code < 300;
-            if ($ok) { $d = json_decode($res, true); $providerId = $d['id'] ?? $providerId; }
-            else { $note = 'Delivery failed (HTTP '.$code.')'; }
+        $to      = $newTo      !== '' ? $newTo      : $em['recipient'];
+        $subject = $newSubject !== '' ? $newSubject : $em['subject'];
+
+        if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
+            header('Location: admin.php?tab=emails&msg=Invalid+email+address'); exit;
         }
-        // Update existing row in place — same id, new status / recipient / timestamps
-        $pdo->prepare('UPDATE email_outbox
-                       SET recipient=?, status=?, note=?, provider_id=?, delivered_at=?, opened_at=NULL, opened_count=0, clicked_at=NULL, click_count=0, created_at=NOW()
-                       WHERE id=?')
+
+        // Clone the email into a new outbox row (status = queued)
+        $tok       = bin2hex(random_bytes(16));
+        $maxRetries = (int)(smtp_config()['max_retries'] ?? 3);
+        $pdo->prepare("INSERT INTO email_outbox
+            (recipient, subject, html, status, note, order_id, tracking_token, template_code, retry_count, max_retries, next_retry_at, priority)
+            VALUES (?,?,?,'queued',?,?,?,?,0,?,NOW(),?)")
             ->execute([
                 $to,
-                $ok ? 'sent' : 'failed',
-                $note,
-                $providerId,
-                $ok ? date('Y-m-d H:i:s') : null,
-                $emailId,
+                $subject,
+                $em['html'],
+                'Edit & Resend of email #'.$emailId.($newTo!==''?' (to '.$newTo.')':'').($newSubject!==''?' (subject changed)':''),
+                $em['order_id'],
+                $tok,
+                $em['template_code'],
+                $maxRetries,
+                3, // higher priority than batch sends
             ]);
-        header('Location: admin.php?tab=emails&msg=Email+'.($ok?'resent+to+'.urlencode($to):'failed')); exit;
+        $newId = (int)$pdo->lastInsertId();
+
+        // Attempt immediate delivery via SMTP worker
+        $delivered = false;
+        try {
+            smtp_process_queue(5);
+            $check = $pdo->prepare("SELECT status FROM email_outbox WHERE id=?");
+            $check->execute([$newId]);
+            $delivered = ($check->fetchColumn() === 'sent');
+        } catch (Throwable $e) {
+            // Swallow — row remains queued for the cron worker to retry
+        }
+
+        $flash = $delivered
+            ? 'Email resent to '.$to.' successfully'
+            : 'Email queued for delivery to '.$to;
+        header('Location: admin.php?tab=emails&msg='.urlencode($flash)); exit;
 
     } elseif ($action === 'add_keys') {
         $keys = array_filter(array_map('trim', explode("\n", $_POST['keys'] ?? '')));
@@ -2138,13 +2154,12 @@ elseif ($tab === 'emails'):
         </div>
         <div class="ec-actions">
           <a href="email-view.php?id=<?= (int)$e['id'] ?>" target="_blank" class="btn btn-soft-blue btn-sm"><i class="bi bi-eye"></i> View Email</a>
-          <?php if ($e['status'] === 'failed' || $e['status'] === 'bounced'): ?>
-            <form method="post" class="d-inline" onsubmit="return confirm('Re-queue this email for delivery?')">
-              <input type="hidden" name="action" value="resend_outbox">
-              <input type="hidden" name="id" value="<?= (int)$e['id'] ?>">
-              <button class="btn btn-soft-gray btn-sm"><i class="bi bi-arrow-clockwise"></i> Resend</button>
-            </form>
-          <?php endif; ?>
+          <button type="button"
+                  class="btn btn-soft-amber btn-sm"
+                  data-testid="edit-resend-btn-<?= (int)$e['id'] ?>"
+                  onclick='openEditResendModal(<?= (int)$e['id'] ?>, <?= json_encode($e['recipient'], JSON_HEX_QUOT|JSON_HEX_APOS|JSON_HEX_AMP|JSON_HEX_TAG) ?>, <?= json_encode($e['subject'], JSON_HEX_QUOT|JSON_HEX_APOS|JSON_HEX_AMP|JSON_HEX_TAG) ?>, <?= json_encode($custName ?: '', JSON_HEX_QUOT|JSON_HEX_APOS|JSON_HEX_AMP|JSON_HEX_TAG) ?>)'>
+            <i class="bi bi-pencil-square"></i> Edit &amp; Resend
+          </button>
           <?php if ($oid): ?><a href="order-view.php?id=<?= $oid ?>" class="btn btn-soft-gray btn-sm"><i class="bi bi-box-arrow-up-right"></i> Order</a><?php endif; ?>
         </div>
       </div>
@@ -2184,6 +2199,68 @@ elseif ($tab === 'emails'):
     }
     [data-bs-theme="dark"] .email-card { background:#0f1729; }
   </style>
+
+  <!-- Edit & Resend Modal -->
+  <div class="modal fade" id="editResendModal" tabindex="-1" aria-hidden="true" data-testid="edit-resend-modal">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content card-e" style="background:var(--card-bg);">
+        <form method="post" id="editResendForm">
+          <input type="hidden" name="action" value="resend_outbox">
+          <input type="hidden" name="email_id" id="er_email_id" value="">
+          <div class="modal-header" style="border-color:var(--border);">
+            <h5 class="modal-title"><i class="bi bi-pencil-square me-2 text-warning"></i>Edit &amp; Resend Email</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <p class="text-muted small mb-3">Update the recipient or subject below, then re-send. A new entry will be created in Email Activity — the original record stays intact for audit.</p>
+            <div class="mb-3" id="er_customer_block" style="display:none;">
+              <label class="form-label small fw-semibold text-muted">Customer</label>
+              <div id="er_customer_name" class="fw-semibold"></div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label small fw-semibold"><i class="bi bi-envelope-at me-1 text-primary"></i>Recipient email address</label>
+              <input type="email" class="form-control" name="new_recipient" id="er_recipient" required data-testid="er-recipient-input">
+              <div class="form-text">Use this to fix typos or send to a corrected address.</div>
+            </div>
+            <div class="mb-2">
+              <label class="form-label small fw-semibold"><i class="bi bi-card-heading me-1 text-primary"></i>Subject</label>
+              <input type="text" class="form-control" name="new_subject" id="er_subject" data-testid="er-subject-input">
+            </div>
+          </div>
+          <div class="modal-footer" style="border-color:var(--border);">
+            <button type="button" class="btn btn-soft-gray btn-sm" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-warning btn-sm fw-semibold" data-testid="er-submit-btn">
+              <i class="bi bi-send-check me-1"></i> Resend Email
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    .btn-soft-amber { background:#fef3c7; color:#92400e; border:1px solid #fde68a; }
+    .btn-soft-amber:hover { background:#fde68a; color:#78350f; }
+    [data-bs-theme="dark"] .btn-soft-amber { background:#78350f; color:#fef3c7; border-color:#92400e; }
+  </style>
+
+  <script>
+    function openEditResendModal(id, recipient, subject, customerName) {
+      document.getElementById('er_email_id').value = id;
+      document.getElementById('er_recipient').value = recipient || '';
+      document.getElementById('er_subject').value   = subject   || '';
+      var cb = document.getElementById('er_customer_block');
+      if (customerName && customerName.trim() !== '') {
+        document.getElementById('er_customer_name').textContent = customerName;
+        cb.style.display = '';
+      } else {
+        cb.style.display = 'none';
+      }
+      var m = bootstrap.Modal.getOrCreateInstance(document.getElementById('editResendModal'));
+      m.show();
+      setTimeout(function(){ document.getElementById('er_recipient').focus(); }, 250);
+    }
+  </script>
 
 <?php
 // ============================================================================
