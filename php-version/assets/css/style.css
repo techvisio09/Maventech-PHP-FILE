@@ -988,3 +988,36 @@ body.has-deal-bar #chat-panel { bottom: 155px; }
 .btn-orange-outline:hover, .btn-orange-outline:focus { background: linear-gradient(135deg, #ffedd5, #fed7aa); color: #9a3412; border-color: #f97316; box-shadow: 0 6px 16px rgba(249,115,22,.22); }
 [data-bs-theme="dark"] .btn-orange-outline { background: rgba(249,115,22,.10); color: #fdba74; border-color: rgba(249,115,22,.40); box-shadow: none; }
 [data-bs-theme="dark"] .btn-orange-outline:hover { background: rgba(249,115,22,.18); border-color: #f97316; color: #fff; }
+
+/* =================================================================
+   Icon-text spacing — prevents Bootstrap-Icons from touching the
+   label that follows them. Applies globally so any new button gets
+   correct spacing automatically.
+   ================================================================= */
+.btn .bi,
+.btn i[class^="bi-"],
+.s-badge .bi,
+.s-badge i[class^="bi-"],
+.kpi-label .bi,
+.sidebar a .bi,
+.adm-topbar .bi,
+nav .bi,
+.dropdown-item .bi,
+.card-head .ttl .bi,
+.card-head .ttl i[class^="bi-"] { margin-right: .45rem; }
+
+/* When the icon is the LAST thing inside the element (e.g. ".btn ... <i>↗</i>"),
+   add left margin instead of right */
+.btn > .bi:last-child,
+.btn > i[class^="bi-"]:last-child { margin-right: 0; margin-left: .45rem; }
+
+/* Sidebar items: ensure 14px gap between icon and label so labels never overlap */
+.sidebar .item { gap: .65rem; }
+.sidebar .item .bi { flex-shrink: 0; }
+
+/* Form controls: prevent icon prefix from kissing the input */
+.input-group-text .bi { margin: 0; }
+
+/* Toasts / alerts: lead-icon breathing room */
+.alert .bi,
+.toast .bi { margin-right: .55rem; }

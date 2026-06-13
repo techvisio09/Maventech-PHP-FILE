@@ -22,6 +22,13 @@ function paypal_enabled(): bool {
     return setting_get('paypal_enabled','0') === '1' && $envKey !== '';
 }
 
+function card_enabled(): bool {
+    // Card checkout is ON unless the admin explicitly switches the API → Card
+    // gateway to "inactive". `gw_card_status` is the source of truth set by the
+    // Admin → API Management → Card form.
+    return setting_get('gw_card_status', 'active') === 'active';
+}
+
 function statement_name_for(string $payment_method): string {
     // Source of truth for company / merchant name = API Management section
     // (gw_card_merchant_name / gw_paypal_account_name). Falls back to the

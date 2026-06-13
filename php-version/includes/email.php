@@ -696,6 +696,9 @@ function fulfill_order(int $orderId): void {
     $subject = strtr($subjectTpl, [
         '{{order_number}}' => $order['order_number'],
         '{{customer_name}}'=> ($order['first_name'] ?? ''),
+        '{{product_name}}' => ($items[0]['name'] ?? 'your software'),
+        '{{amount}}'       => number_format((float)($order['total'] ?? 0), 2),
+        '{{company_name}}' => company_info()['name'] ?? (defined('SITE_BRAND') ? SITE_BRAND : ''),
     ]);
     send_email($order['email'], $subject, $html, $orderId, 'order_delivery');
     $tl['email_sent'] = date('Y-m-d H:i:s');

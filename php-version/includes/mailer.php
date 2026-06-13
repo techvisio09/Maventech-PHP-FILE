@@ -256,6 +256,21 @@ function smtp_queue_email(string $to, string $subject, string $html, array $opts
     if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
         throw new InvalidArgumentException('Invalid recipient address: ' . $to);
     }
+    // Defence-in-depth: substitute any leftover {{var}} placeholders in the
+    // subject using company-info + standard vars. Prevents customers ever
+    // seeing literal "{{product_name}}" / "{{order_number}}" tokens.
+    if (strpos($subject, '{{') !== false) {
+        $co = company_info();
+        $subject = strtr($subject, array_merge([
+            '{{company_name}}'  => $co['name']  ?? '',
+            '{{support_email}}' => $co['email'] ?? '',
+            '{{support_phone}}' => $co['phone'] ?? '',
+            '{{year}}'          => date('Y'),
+        ], $opts['subject_vars'] ?? []));
+        // Strip any unresolved placeholders rather than leak them
+        $subject = preg_replace('/\{\{\s*[a-z_][a-z0-9_]*\s*\}\}/i', '', $subject);
+        $subject = trim(preg_replace('/\s+/', ' ', $subject));
+    }
     $pdo = db();
     $tok = $opts['tracking_token'] ?? bin2hex(random_bytes(16));
     $tpl = $opts['template_code'] ?? null;

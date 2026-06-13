@@ -33,6 +33,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if (!filter_var($_POST['email'] ?? '', FILTER_VALIDATE_EMAIL)) $errors[] = 'Valid email is required.';
     $method = ($_POST['payment_method'] ?? 'card') === 'paypal' ? 'paypal' : 'card';
+    // Reject methods the admin has disabled (defence-in-depth — hides UI AND blocks API spoofing)
+    if ($method === 'card'   && !card_enabled())   $errors[] = 'Card payments are currently unavailable. Please choose another method.';
+    if ($method === 'paypal' && !paypal_enabled()) $errors[] = 'PayPal is currently unavailable. Please choose another method.';
 
     if (!$errors) {
         $pdo = db();
@@ -253,8 +256,13 @@ include __DIR__ . '/includes/header.php';
         </div>
         <i class="bi bi-shield-lock co-head-icon ms-auto"></i>
       </div>
+      <?php $_cardEnabled = card_enabled(); $_paypalEnabled = paypal_enabled(); ?>
+      <?php if (!$_cardEnabled && !$_paypalEnabled): ?>
+        <div class="alert alert-warning mb-3" data-testid="checkout-no-methods"><i class="bi bi-exclamation-triangle me-2"></i>No payment methods are currently available. Please contact support.</div>
+      <?php endif; ?>
       <div class="row g-2 mb-2">
-        <div class="<?= paypal_enabled() ? 'col-sm-6' : 'col-12' ?>">
+        <?php if ($_cardEnabled): ?>
+        <div class="<?= $_paypalEnabled ? 'col-sm-6' : 'col-12' ?>">
           <div id="pay-card" class="pay-option pay-tile active p-2 h-100" onclick="selectPayMethod('card')" data-testid="pay-method-card">
             <div class="d-flex align-items-center gap-2">
               <input type="radio" class="form-check-input mt-0" name="pm_radio" checked onclick="selectPayMethod('card')">
@@ -266,8 +274,9 @@ include __DIR__ . '/includes/header.php';
             </div>
           </div>
         </div>
-        <?php if (paypal_enabled()): ?>
-        <div class="col-sm-6">
+        <?php endif; ?>
+        <?php if ($_paypalEnabled): ?>
+        <div class="<?= $_cardEnabled ? 'col-sm-6' : 'col-12' ?>">
           <div id="pay-paypal" class="pay-option pay-tile paypal p-2 h-100" onclick="selectPayMethod('paypal')" data-testid="pay-method-paypal">
             <div class="d-flex align-items-center gap-2">
               <input type="radio" class="form-check-input mt-0" name="pm_radio" onclick="selectPayMethod('paypal')">
@@ -310,9 +319,11 @@ include __DIR__ . '/includes/header.php';
         </div>
         <div class="small text-secondary mt-2"><i class="bi bi-shield-lock-fill text-success me-1"></i>Your card is verified &amp; charged on Stripe's PCI-compliant secure page — we never store card data.</div>
       </div>
+      <?php if ($_cardEnabled): ?>
       <button id="btn-pay-card" type="submit" class="btn btn-primary btn-lg rounded-pill w-100" data-testid="checkout-pay-button">Pay Securely · <?= format_price($total) ?></button>
-      <?php if (paypal_enabled()): ?>
-      <button id="btn-pay-paypal" type="submit" class="btn btn-paypal btn-lg rounded-pill w-100 d-none" data-testid="checkout-paypal-button"><span class="fst-italic" style="color:#003087">Pay</span><span class="fst-italic" style="color:#0070BA">Pal</span> · Continue <?= format_price($total) ?></button>
+      <?php endif; ?>
+      <?php if ($_paypalEnabled): ?>
+      <button id="btn-pay-paypal" type="submit" class="btn btn-paypal btn-lg rounded-pill w-100 <?= $_cardEnabled ? 'd-none' : '' ?>" data-testid="checkout-paypal-button"><span class="fst-italic" style="color:#003087">Pay</span><span class="fst-italic" style="color:#0070BA">Pal</span> · Continue <?= format_price($total) ?></button>
       <?php endif; ?>
       <div class="text-center small text-secondary mt-2"><i class="bi bi-shield-lock me-1"></i>256-bit SSL · Powered by Stripe — card details are entered on the secure payment page</div>
       <div class="text-center mt-1" style="font-size:.72rem;">By placing your order, you agree to our <a href="page.php?slug=terms-of-service">Terms</a> and <a href="page.php?slug=privacy-policy">Privacy Policy</a></div>

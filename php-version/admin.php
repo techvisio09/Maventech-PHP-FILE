@@ -307,6 +307,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!empty($_POST['public_key']))     setting_set('gw_card_public_key', trim($_POST['public_key']));
             if (!empty($_POST['secret_key']))     setting_set('gw_card_secret_key', trim($_POST['secret_key']));
             if (!empty($_POST['webhook_secret'])) setting_set('gw_card_webhook_secret', trim($_POST['webhook_secret']));
+            // Mirror status to the legacy `card_enabled` flag used by some helpers
+            setting_set('card_enabled', $_POST['status']==='active' ? '1' : '0');
         } else {
             setting_set('gw_paypal_status',       $_POST['status']);
             setting_set('gw_paypal_account_name', trim($_POST['account_name']));
@@ -472,26 +474,78 @@ if ($tab === 'dashboard'):
   </div>
 
   <div class="row g-3">
-    <!-- 30-day Revenue Trend -->
+    <!-- 30-day Revenue Donut -->
     <div class="col-xl-8">
-      <div class="card-e">
-        <div class="card-head"><div class="ttl"><i class="bi bi-bar-chart-line"></i> Revenue Trend <span class="sub ms-2">last 30 days</span></div>
+      <div class="card-e h-100" data-testid="revenue-donut-card">
+        <div class="card-head">
+          <div class="ttl"><i class="bi bi-pie-chart-fill me-2"></i>Revenue Mix <span class="sub ms-2">last 30 days</span></div>
           <div class="sub">Total <strong style="color:var(--text);"><?= esc($rg['currency_symbol']) ?><?= number_format($rev30,2) ?></strong></div>
         </div>
         <div class="card-body-p">
-          <div class="chart-bars">
-            <?php foreach ($days as $d): $h = max(2, round($d['r']/$maxDay*120)); ?>
-              <div class="b" style="height:<?= $h ?>px;opacity:<?= $d['r']>0?1:.18 ?>;" title="<?= esc($d['d']) ?> — <?= esc($rg['currency_symbol']) ?><?= number_format($d['r'],2) ?>"></div>
-            <?php endforeach; ?>
-          </div>
-          <div class="d-flex justify-content-between mt-2 small text-muted">
-            <span><?= esc(date('M j', strtotime($days[0]['d']))) ?></span>
-            <span><?= esc(date('M j', strtotime($days[15]['d']))) ?></span>
-            <span><?= esc(date('M j', strtotime(end($days)['d']))) ?></span>
+          <?php
+          // Build the donut from product-category revenue mix (last 30 days, current region).
+          $catRevRows = $pdo->prepare(
+            "SELECT COALESCE(p.category, 'Other') AS cat, SUM(oi.qty * oi.price) AS rev
+             FROM order_items oi
+             JOIN orders o ON o.id = oi.order_id
+             LEFT JOIN products p ON p.slug = oi.product_slug
+             WHERE o.region = ? AND o.status IN ('paid','delivered') AND o.created_at >= (NOW() - INTERVAL 30 DAY)
+             GROUP BY cat ORDER BY rev DESC LIMIT 6"
+          );
+          $catRevRows->execute([$rg['code']]);
+          $segments = $catRevRows->fetchAll() ?: [];
+          $segTotal = array_sum(array_column($segments, 'rev')) ?: 1;
+          $palette = ['#3b82f6','#10b981','#f59e0b','#ec4899','#8b5cf6','#06b6d4'];
+          // Build CSS conic-gradient stops
+          $stops = []; $cum = 0;
+          foreach ($segments as $i => $s) {
+              $pct = ($s['rev'] / $segTotal) * 100;
+              $color = $palette[$i % count($palette)];
+              $stops[] = $color . ' ' . number_format($cum,2) . '% ' . number_format($cum + $pct,2) . '%';
+              $cum += $pct;
+          }
+          if (!$stops) $stops[] = 'var(--border) 0% 100%';
+          $conic = 'conic-gradient(' . implode(', ', $stops) . ')';
+          ?>
+          <div class="row align-items-center g-4">
+            <div class="col-md-5 text-center">
+              <div class="revenue-donut" style="background:<?= esc($conic) ?>;" data-testid="revenue-donut-ring">
+                <div class="revenue-donut-hole">
+                  <div class="rd-amt"><?= esc($rg['currency_symbol']) ?><?= number_format($rev30,0) ?></div>
+                  <div class="rd-lbl">30-day revenue</div>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-7">
+              <?php if ($segments): foreach ($segments as $i => $s):
+                  $pct = round(($s['rev'] / $segTotal) * 100, 1);
+                  $color = $palette[$i % count($palette)]; ?>
+                <div class="d-flex justify-content-between align-items-center py-2 border-bottom" data-testid="rd-seg-<?= esc($s['cat']) ?>">
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="rd-dot" style="background:<?= esc($color) ?>;"></span>
+                    <span class="fw-semibold"><?= esc($s['cat']) ?></span>
+                  </div>
+                  <div class="text-end">
+                    <div class="fw-bold"><?= esc($rg['currency_symbol']) ?><?= number_format($s['rev'],2) ?></div>
+                    <small class="text-muted"><?= $pct ?>%</small>
+                  </div>
+                </div>
+              <?php endforeach; else: ?>
+                <div class="text-center text-muted small py-4"><i class="bi bi-inbox me-1"></i>No paid orders in the last 30 days</div>
+              <?php endif; ?>
+            </div>
           </div>
         </div>
       </div>
     </div>
+    <style>
+      .revenue-donut { width:200px; height:200px; border-radius:50%; margin:0 auto; position:relative; box-shadow:0 4px 16px rgba(15,23,42,.08); }
+      .revenue-donut-hole { position:absolute; inset:24px; border-radius:50%; background:var(--card-bg, #fff); display:flex; flex-direction:column; align-items:center; justify-content:center; box-shadow: inset 0 0 0 1px var(--border); }
+      .rd-amt { font-size:22px; font-weight:800; color:var(--text); letter-spacing:-.01em; }
+      .rd-lbl { font-size:11px; color:var(--text-muted, #64748b); letter-spacing:.4px; text-transform:uppercase; margin-top:2px; }
+      .rd-dot { width:10px; height:10px; border-radius:50%; display:inline-block; box-shadow:0 0 0 2px rgba(255,255,255,.6); }
+      [data-bs-theme="dark"] .revenue-donut-hole { background:#0f1729; }
+    </style>
 
     <!-- Conversion Funnel -->
     <div class="col-xl-4">
