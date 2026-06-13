@@ -17,9 +17,12 @@ function setting_set(string $key, string $val): void {
 }
 
 function paypal_enabled(): bool {
-    // PayPal is shown only when explicitly enabled AND a PAYPAL_CLIENT_ID is configured.
-    $envKey = getenv('PAYPAL_CLIENT_ID') ?: (defined('PAYPAL_CLIENT_ID') ? PAYPAL_CLIENT_ID : '');
-    return setting_get('paypal_enabled','0') === '1' && $envKey !== '';
+    // PayPal is shown when the admin toggles it ON in API Management → Update
+    // Gateway. `gw_paypal_status` is the single source of truth (matches the
+    // pattern used by `card_enabled()`). The legacy `paypal_enabled=1` flag is
+    // still honored for backwards compatibility.
+    if (setting_get('gw_paypal_status', 'inactive') === 'active') return true;
+    return setting_get('paypal_enabled', '0') === '1';
 }
 
 function card_enabled(): bool {

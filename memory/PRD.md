@@ -162,6 +162,12 @@ Create a comprehensive and user-friendly Admin Panel for Maventech Software with
   - **Submission hardened**: server validates rating 1-5 + non-empty comment; on error re-renders the form with the entered data and an inline warning. Success path writes `rating / comment / ai_generated / status='published' / submitted_at=NOW()` and shows the green "Thank you" screen.
   - Verified end-to-end via Playwright: initial state shows no stars lit + "Tap a star to rate", click star-3 lights 1-3 with label "Okay — 3 stars", "Generate suggestions" returns 3 AI options matched to the rating, click an option fills the textarea + highlights with check mark, Submit Review → "Thank you" screen → DB row updated with the right values.
 
+- **[Feb 2026]** API Management → new **"Update Gateway"** sub-section with instant Active/Deactive toggles:
+  - Added a 3rd pill at the top of `?tab=api` (now the default landing). Shows side-by-side Card Payments and PayPal cards, each with the same sliding green/red toggle bar used by the Regions tab (`.rg-toggle-bar` styles re-used). Each card shows a LIVE / PAUSED status pill, a one-line hint, a "Credentials configured: yes/not yet" badge, and a deep-link to the corresponding credentials form.
+  - One click on **Active** → enable, one click on **Deactive** → disable. AJAX POST to new `/ajax/gateway-toggle.php` (admin-only) updates `gw_card_status` / `gw_paypal_status` in the `settings` table. No page reload — UI repaints the thumb, status pill, hint, and shows a green flash toast ("PayPal enabled — live on checkout.").
+  - Each gateway automatically uses the credentials configured in its existing **Card Payment API** / **PayPal API** tabs (no duplicate inputs).
+  - **Synced across the website**: `card_enabled()` / `paypal_enabled()` in `includes/settings.php` read the same `gw_*_status` keys → `checkout.php` instantly hides or shows the matching payment tile on the next request. Verified end-to-end via curl: disabling Card removes the Card tile from checkout, re-enabling brings it back. Also Playwright-verified the sliding toggle + toast pop.
+
 ## Test Credentials
 See `/app/memory/test_credentials.md`.
 

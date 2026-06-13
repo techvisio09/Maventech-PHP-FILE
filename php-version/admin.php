@@ -3052,12 +3052,192 @@ elseif ($tab === 'api'):
   <h5 class="fw-bold mb-1">API Management</h5>
   <p class="text-muted small mb-3">Configure payment gateway credentials and view live status. Changes apply instantly — credentials live in the <code>settings</code> table.</p>
 
-  <!-- Card / PayPal tab switcher -->
-  <?php $apiTab = $_GET['gw'] ?? 'card'; ?>
+  <!-- Sub-section switcher: Update Gateway / Card Payment / PayPal -->
+  <?php $apiTab = $_GET['gw'] ?? 'toggles'; ?>
   <ul class="nav nav-pills mb-3" role="tablist" data-testid="api-tab-switcher">
+    <li class="nav-item"><a class="nav-link <?= $apiTab==='toggles'?'active':'' ?>" href="?tab=api&gw=toggles" data-testid="api-tab-toggles"><i class="bi bi-toggles me-1"></i> Update Gateway</a></li>
     <li class="nav-item"><a class="nav-link <?= $apiTab==='card'?'active':'' ?>" href="?tab=api&gw=card" data-testid="api-tab-card"><i class="bi bi-credit-card-2-front me-1"></i> Card Payment API <span class="badge bg-light text-dark ms-1"><?= $txCard ?></span></a></li>
     <li class="nav-item"><a class="nav-link <?= $apiTab==='paypal'?'active':'' ?>" href="?tab=api&gw=paypal" data-testid="api-tab-paypal"><i class="bi bi-paypal me-1"></i> PayPal API <span class="badge bg-light text-dark ms-1"><?= $txPp ?></span></a></li>
   </ul>
+
+  <?php if ($apiTab === 'toggles'):
+    $cardOn = $cardStatus === 'active';
+    $ppOn   = $ppStatus   === 'active';
+  ?>
+    <!-- ==================== UPDATE GATEWAY ==================== -->
+    <div data-testid="gateway-toggles">
+      <div class="card-e p-4 mb-3">
+        <h6 class="fw-bold mb-1"><i class="bi bi-toggles text-primary me-1"></i> Update Gateway</h6>
+        <p class="text-muted small mb-0">Enable or disable each payment gateway with a single click. Status saves instantly and propagates to the checkout page — no further configuration needed. Each gateway uses the credentials configured in its respective tab.</p>
+      </div>
+
+      <div class="row g-3">
+        <!-- Card Payments -->
+        <div class="col-md-6">
+          <div class="card-e p-4 h-100" data-testid="gw-card-card">
+            <div class="d-flex align-items-start gap-3 mb-3">
+              <div style="background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;width:50px;height:50px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;">
+                <i class="bi bi-credit-card-2-front"></i>
+              </div>
+              <div class="flex-grow-1">
+                <h6 class="fw-bold mb-0">Card Payments</h6>
+                <small class="text-muted">Provider: <strong><?= esc($cardProv ?: 'Stripe') ?></strong> · uses Card Payment API credentials</small>
+                <div class="mt-1">
+                  <span class="rg-status-pill <?= $cardOn?'on':'off' ?>" data-gw-pill="card"><i class="bi bi-<?= $cardOn?'check-circle-fill':'slash-circle-fill' ?> me-1"></i><?= $cardOn?'LIVE':'PAUSED' ?></span>
+                </div>
+              </div>
+            </div>
+
+            <div class="rg-toggle-bar mt-2" data-gw-bar="card" data-gw-state="<?= $cardOn?'on':'off' ?>" role="group" aria-label="Card gateway status">
+              <button type="button" class="rg-toggle-opt rg-on <?= $cardOn?'sel':'' ?>" data-gw-set="1" data-testid="gw-card-activate">
+                <i class="bi bi-check-circle-fill me-1"></i> Active
+              </button>
+              <button type="button" class="rg-toggle-opt rg-off <?= $cardOn?'':'sel' ?>" data-gw-set="0" data-testid="gw-card-deactivate">
+                <i class="bi bi-slash-circle me-1"></i> Deactive
+              </button>
+              <span class="rg-toggle-thumb"></span>
+            </div>
+
+            <div class="rg-toggle-hint small text-muted mt-2 text-center" data-gw-hint="card">
+              <?= $cardOn ? 'Customers <strong>can</strong> pay with Card on checkout.' : 'Card option is <strong>hidden</strong> from the checkout page.' ?>
+            </div>
+
+            <div class="mt-3 pt-3 border-top small d-flex justify-content-between">
+              <span class="text-muted">Credentials configured</span>
+              <span class="s-badge <?= $cardSec ? 'paid' : 'queued' ?>"><?= $cardSec ? 'yes' : 'not yet' ?></span>
+            </div>
+            <a href="?tab=api&gw=card" class="btn btn-soft-blue btn-sm w-100 mt-2"><i class="bi bi-pencil-square me-1"></i> Edit Card Credentials</a>
+          </div>
+        </div>
+
+        <!-- PayPal -->
+        <div class="col-md-6">
+          <div class="card-e p-4 h-100" data-testid="gw-paypal-card">
+            <div class="d-flex align-items-start gap-3 mb-3">
+              <div style="background:linear-gradient(135deg,#003087,#0070BA);color:#fff;width:50px;height:50px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;">
+                <i class="bi bi-paypal"></i>
+              </div>
+              <div class="flex-grow-1">
+                <h6 class="fw-bold mb-0">PayPal</h6>
+                <small class="text-muted">Account: <strong><?= esc($ppAcc ?: 'Maventech Software LLC') ?></strong> · uses PayPal API credentials</small>
+                <div class="mt-1">
+                  <span class="rg-status-pill <?= $ppOn?'on':'off' ?>" data-gw-pill="paypal"><i class="bi bi-<?= $ppOn?'check-circle-fill':'slash-circle-fill' ?> me-1"></i><?= $ppOn?'LIVE':'PAUSED' ?></span>
+                </div>
+              </div>
+            </div>
+
+            <div class="rg-toggle-bar mt-2" data-gw-bar="paypal" data-gw-state="<?= $ppOn?'on':'off' ?>" role="group" aria-label="PayPal gateway status">
+              <button type="button" class="rg-toggle-opt rg-on <?= $ppOn?'sel':'' ?>" data-gw-set="1" data-testid="gw-paypal-activate">
+                <i class="bi bi-check-circle-fill me-1"></i> Active
+              </button>
+              <button type="button" class="rg-toggle-opt rg-off <?= $ppOn?'':'sel' ?>" data-gw-set="0" data-testid="gw-paypal-deactivate">
+                <i class="bi bi-slash-circle me-1"></i> Deactive
+              </button>
+              <span class="rg-toggle-thumb"></span>
+            </div>
+
+            <div class="rg-toggle-hint small text-muted mt-2 text-center" data-gw-hint="paypal">
+              <?= $ppOn ? 'Customers <strong>can</strong> pay with PayPal on checkout.' : 'PayPal option is <strong>hidden</strong> from the checkout page.' ?>
+            </div>
+
+            <div class="mt-3 pt-3 border-top small d-flex justify-content-between">
+              <span class="text-muted">Credentials configured</span>
+              <span class="s-badge <?= $ppSec ? 'paid' : 'queued' ?>"><?= $ppSec ? 'yes' : 'not yet' ?></span>
+            </div>
+            <a href="?tab=api&gw=paypal" class="btn btn-soft-blue btn-sm w-100 mt-2"><i class="bi bi-pencil-square me-1"></i> Edit PayPal Credentials</a>
+          </div>
+        </div>
+      </div>
+
+      <div id="gwToast" class="alert alert-success small py-2 mt-3" style="display:none;" data-testid="gw-toast"></div>
+    </div>
+
+    <style>
+      .rg-status-pill { display:inline-flex; align-items:center; font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; letter-spacing:.6px; }
+      .rg-status-pill.on  { background:#dcfce7; color:#166534; }
+      .rg-status-pill.off { background:#fee2e2; color:#991b1b; }
+      [data-bs-theme="dark"] .rg-status-pill.on  { background:rgba(34,197,94,.15); color:#86efac; }
+      [data-bs-theme="dark"] .rg-status-pill.off { background:rgba(239,68,68,.15); color:#fca5a5; }
+      .rg-toggle-bar {
+        position: relative; display: grid; grid-template-columns: 1fr 1fr;
+        background: var(--bg); border: 1px solid var(--border);
+        border-radius: 999px; padding: 4px; overflow: hidden;
+      }
+      .rg-toggle-opt {
+        position: relative; z-index: 2; border: 0; background: transparent;
+        padding: 9px 10px; font-size: 13px; font-weight: 600;
+        color: var(--text-muted, #64748b); border-radius: 999px;
+        transition: color .25s ease; cursor: pointer;
+      }
+      .rg-toggle-opt.sel { color: #fff; }
+      .rg-toggle-opt:focus { outline: none; }
+      .rg-toggle-thumb {
+        position: absolute; top: 4px; bottom: 4px; width: calc(50% - 4px);
+        border-radius: 999px;
+        transition: transform .28s cubic-bezier(.4,.0,.2,1), background-color .25s ease, box-shadow .25s ease;
+        z-index: 1; pointer-events: none;
+      }
+      .rg-toggle-bar[data-gw-state="on"]  .rg-toggle-thumb { transform: translateX(0);    background: linear-gradient(135deg,#10b981,#059669); box-shadow: 0 4px 12px rgba(16,185,129,.35); }
+      .rg-toggle-bar[data-gw-state="off"] .rg-toggle-thumb { transform: translateX(100%); background: linear-gradient(135deg,#ef4444,#b91c1c); box-shadow: 0 4px 12px rgba(239,68,68,.35); }
+      .rg-toggle-bar.is-saving { opacity: .6; pointer-events: none; }
+    </style>
+
+    <script>
+    (function(){
+      var toast = document.getElementById('gwToast');
+      function showToast(msg, ok){
+        toast.style.display = 'block';
+        toast.className = 'alert small py-2 mt-3 ' + (ok ? 'alert-success' : 'alert-danger');
+        toast.innerHTML = '<i class="bi bi-'+(ok?'check-circle-fill':'exclamation-triangle-fill')+' me-1"></i>' + msg;
+        clearTimeout(toast._t);
+        toast._t = setTimeout(function(){ toast.style.display = 'none'; }, 3000);
+      }
+      document.querySelectorAll('[data-gw-bar]').forEach(function(bar){
+        var gw = bar.getAttribute('data-gw-bar');
+        bar.querySelectorAll('.rg-toggle-opt').forEach(function(btn){
+          btn.addEventListener('click', async function(){
+            var want = btn.getAttribute('data-gw-set') === '1';
+            if (bar.getAttribute('data-gw-state') === (want?'on':'off')) return; // no-op
+            bar.classList.add('is-saving');
+            try {
+              var res = await fetch('ajax/gateway-toggle.php', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({gateway: gw, active: want}),
+              });
+              var data = await res.json();
+              if (!data.ok) throw new Error(data.error || 'Save failed');
+              // Repaint the bar
+              bar.setAttribute('data-gw-state', want ? 'on' : 'off');
+              bar.querySelectorAll('.rg-toggle-opt').forEach(function(b){
+                b.classList.toggle('sel', (b.getAttribute('data-gw-set') === '1') === want);
+              });
+              // Repaint the status pill
+              var pill = document.querySelector('[data-gw-pill="'+gw+'"]');
+              if (pill) {
+                pill.classList.toggle('on', want);
+                pill.classList.toggle('off', !want);
+                pill.innerHTML = '<i class="bi bi-'+(want?'check-circle-fill':'slash-circle-fill')+' me-1"></i>' + (want?'LIVE':'PAUSED');
+              }
+              // Repaint the hint
+              var hint = document.querySelector('[data-gw-hint="'+gw+'"]');
+              if (hint) {
+                hint.innerHTML = want
+                  ? 'Customers <strong>can</strong> pay with ' + (gw==='card'?'Card':'PayPal') + ' on checkout.'
+                  : (gw==='card'?'Card':'PayPal') + ' option is <strong>hidden</strong> from the checkout page.';
+              }
+              showToast((gw==='card'?'Card payments':'PayPal') + (want ? ' enabled — live on checkout.' : ' disabled — hidden from checkout.'), true);
+            } catch (e) {
+              showToast('Could not save: ' + e.message, false);
+            } finally {
+              bar.classList.remove('is-saving');
+            }
+          });
+        });
+      });
+    })();
+    </script>
+  <?php else: ?>
 
   <div class="row g-3">
     <div class="col-lg-12" <?= $apiTab!=='card' ? 'style="display:none;"' : '' ?>>
@@ -3182,6 +3362,7 @@ elseif ($tab === 'api'):
       </table>
     </div>
   </div>
+  <?php endif; // end apiTab toggles/else ?>
 
 <?php
 // ============================================================================
