@@ -2173,13 +2173,6 @@ elseif ($tab === 'emails'):
   <p class="text-muted small mb-3">Every transactional email — with delivery, open and click tracking. Click <i class="bi bi-eye"></i> to view the exact email the customer received.</p>
 
   <?php $emailFilter = $_GET['filter'] ?? 'all'; ?>
-  <?php if ((int)$c['f'] > 0 && $emailFilter !== 'failed'): ?>
-    <div class="alert alert-danger d-flex align-items-center gap-2 py-2 mb-3" data-testid="failed-banner">
-      <i class="bi bi-exclamation-triangle-fill"></i>
-      <div class="flex-grow-1 small"><strong><?= (int)$c['f'] ?> email<?= $c['f']==1?'':'s' ?> failed to send.</strong> Customers may not have received their license keys or other product communication.</div>
-      <a href="?tab=emails&filter=failed" class="btn btn-sm btn-danger" data-testid="filter-failed-only">Show failed only</a>
-    </div>
-  <?php endif; ?>
 
   <ul class="nav nav-pills nav-pills-sm mb-3" data-testid="email-filter-pills">
     <li class="nav-item"><a class="nav-link <?= $emailFilter==='all'?'active':'' ?> py-1 px-3" href="?tab=emails" data-testid="filter-all">All <span class="badge bg-light text-dark ms-1"><?= (int)$c['t'] ?></span></a></li>
