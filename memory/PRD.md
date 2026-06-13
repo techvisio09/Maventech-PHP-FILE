@@ -314,6 +314,12 @@ See `/app/memory/test_credentials.md`.
 - **SMTP banner colours dark-mode safe** — the "SMTP not configured" and "From-domain mismatch" banners now use `.smtp-banner-critical` / `.smtp-banner-warn` classes with dark-mode-aware gradients (translucent red→amber and amber→yellow respectively).
 - **Footer Google Maps auto-syncs to Company Address** — confirmed end-to-end: footer's "View on Google Maps" button uses `urlencode($brandAddress)` from `company_info()['address']`. Live test returned `https://www.google.com/maps/search/?api=1&query=123+Maventech+Way%2C+Austin+TX+78701` — any update in the admin's Company Info card now reflects on the public footer + map on next page load (per-request cache).
 
+## [June 2026] Maventech "M" logo restored with bounce 360 effect
+- **`render_logo()` updated** — palette switched back to the original Maventech navy → indigo → teal gradient (`#312e81 → #1e40af → #06b6d4`) with a radial highlight on top-left and the mint-teal status dot in the bottom-right, plus the company-name initial letter (white, bold, scaled to 58% of the SVG box).
+- **Unified spin-bounce animation** — `assets/css/style.css` `.logo-3d` keyframe rewritten to `logo-spin-bounce` (matches the admin shell's 3-second `m-logo-spin-bounce` exactly: `translateY(-6px) + rotateY 90°/180°/270°/360°` cadence). Targets both the inline SVG and a custom uploaded image so admins can drop in their own logo and it still bounces.
+- **`prefers-reduced-motion`** honoured on both layers.
+- Cleared the test GIF (`company_logo = ''` + `company_name = "Maventech Software"`) so the auto-generated "M" mark renders site-wide. Admins can still upload a custom logo via the drag-and-drop card any time — the bounce animation will follow the new image.
+
 ## Roadmap / Backlog (P2)
 - Split `admin.php` (>3700 lines) into per-tab partials under `includes/tabs/`
 - Add bulk-paste key validation (deduplicate vs. existing)

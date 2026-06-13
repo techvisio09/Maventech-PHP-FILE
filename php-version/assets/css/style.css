@@ -85,17 +85,26 @@ h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6, .display-4, .display-5, .d
 .brand-grad { background: linear-gradient(90deg, #06b6d4, #2dd4bf); -webkit-background-clip: text; background-clip: text; color: transparent; }
 [data-bs-theme="dark"] .brand-grad, .footer-dark .brand-grad { background: linear-gradient(90deg, #06b6d4, #2dd4bf); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .brand-tag { display: block; font-size: .58rem; letter-spacing: .16em; font-weight: 700; color: var(--bs-secondary-color); }
-/* Animated 3D logo: periodic coin-spin + bob, cursor-follow tilt, shimmering brand text */
+/* Animated 3D logo: same 3-second spin-bounce as the admin topbar "M" so the
+   public navbar and the admin shell share one consistent brand motion.
+   Targets both the inline SVG (.brand-mark) AND a custom uploaded image
+   (the <img> element rendered by header.php when admin uploads a logo). */
 .logo-3d { perspective: 320px; }
-.logo-3d .brand-mark { transform-style: preserve-3d; will-change: transform;
-  animation: logo-coin 6.5s ease-in-out infinite; }
-@keyframes logo-coin {
-  0%   { transform: rotateY(0deg) translateY(0); }
-  14%  { transform: rotateY(360deg) translateY(0); }
-  38%  { transform: rotateY(360deg) translateY(-6px); }
-  58%  { transform: rotateY(360deg) translateY(0); }
-  76%  { transform: rotateY(360deg) translateY(-3px); }
-  100% { transform: rotateY(360deg) translateY(0); }
+.logo-3d .brand-mark,
+.logo-3d > img:first-of-type {
+  transform-style: preserve-3d;
+  will-change: transform;
+  animation: logo-spin-bounce 3s ease-in-out infinite;
+  border-radius: 12px; /* uploaded raster logos get the same chamfer */
+}
+.logo-3d:hover .brand-mark,
+.logo-3d:hover > img:first-of-type { animation-play-state: paused; cursor: pointer; }
+@keyframes logo-spin-bounce {
+  0%   { transform: translateY(0)    rotateY(0deg)   scale(1); }
+  25%  { transform: translateY(-6px) rotateY(90deg)  scale(1.05); }
+  50%  { transform: translateY(0)    rotateY(180deg) scale(1); }
+  75%  { transform: translateY(-6px) rotateY(270deg) scale(1.05); }
+  100% { transform: translateY(0)    rotateY(360deg) scale(1); }
 }
 .logo-3d.tilting .brand-mark { animation: none;
   transform: rotateY(var(--ry, 0deg)) rotateX(var(--rx, 0deg)) scale(1.12);
@@ -104,7 +113,9 @@ h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6, .display-4, .display-5, .d
   background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
   animation: brand-shimmer 7s linear infinite; }
 @keyframes brand-shimmer { to { background-position: -250% 0; } }
-@media (prefers-reduced-motion: reduce) { .logo-3d .brand-mark, .logo-3d .brand-grad { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .logo-3d .brand-mark, .logo-3d > img:first-of-type, .logo-3d .brand-grad { animation: none; }
+}
 
 /* Eyebrow section labels */
 .eyebrow { display: inline-block; font-size: .72rem; font-weight: 800; letter-spacing: .2em; color: var(--uc-blue); text-transform: uppercase; }
