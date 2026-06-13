@@ -41,10 +41,13 @@ function activation_url_for_product(string $name, string $brand = '', string $ov
 /* Default review-request template used when admin hasn't customised it. */
 function default_review_template(): string {
     // 5 clickable golden stars — each pre-fills the rating on review.php?t=...&rating=N
-    $sep = strpos('{{review_url}}', '?') !== false ? '&' : '?';
+    // NOTE: {{review_url}} already contains ?t=<token>, so the next param ALWAYS
+    // uses '&' as the separator.  The earlier `strpos` check ran on the literal
+    // placeholder string, returning '?' and producing URLs like ?t=X?rating=Y
+    // which the review page treated as an invalid token.
     $starsHtml = '';
     for ($i = 1; $i <= 5; $i++) {
-        $starsHtml .= '<a href="{{review_url}}' . $sep . 'rating=' . $i . '" '
+        $starsHtml .= '<a href="{{review_url}}&rating=' . $i . '" '
                     . 'style="text-decoration:none;display:inline-block;margin:0 4px;font-size:42px;line-height:1;color:#f59e0b;text-shadow:0 2px 6px rgba(245,158,11,0.35);" '
                     . 'title="Rate ' . $i . ' star' . ($i>1?'s':'') . '">&#9733;</a>';
     }

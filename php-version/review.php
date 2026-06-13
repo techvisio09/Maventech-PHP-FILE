@@ -20,8 +20,12 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && $review) {
     } elseif ($comment === '') {
         $saveError = 'Please write a short comment (or pick one of the AI suggestions).';
     } else {
-        $pdo->prepare('UPDATE customer_reviews SET rating=?, comment=?, ai_generated=?, status="published", submitted_at=NOW() WHERE request_token=?')
-            ->execute([$rating, $comment, $ai, $token]);
+        // Auto-hide low ratings — anything below 3 stars goes to the Hidden
+        // tab in admin's Customer Reviews and is NEVER shown on the public
+        // site.  Admin can still see + reply / publish manually if desired.
+        $autoStatus = $rating >= 3 ? 'published' : 'hidden';
+        $pdo->prepare('UPDATE customer_reviews SET rating=?, comment=?, ai_generated=?, status=?, submitted_at=NOW() WHERE request_token=?')
+            ->execute([$rating, $comment, $ai, $autoStatus, $token]);
         $saved = true;
     }
 }
