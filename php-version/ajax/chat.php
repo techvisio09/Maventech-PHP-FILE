@@ -24,9 +24,17 @@ if ($email || $phone) {
 }
 
 if (OPENAI_API_KEY === '') {
+    // Customer typed a question but the live AI is offline.  Per product
+    // requirement: do NOT spit out the full "phone + email + hours" greeting
+    // here — that long auto-reply only fires once on lead-form submission.
+    // Instead, reassure the customer that a human agent is being looped in,
+    // and signal the admin side (chat-customer.php relay already creates
+    // an unread chat_messages row, which lights up the topbar bell badge +
+    // plays the new audio chime on the admin shell).
     echo json_encode([
-        'reply' => "Thanks for reaching out! Our live AI assistant is currently offline.\n\nYou can reach our team directly:\n📞 " . SITE_PHONE . " (" . SITE_HOURS . ")\n✉️ " . SITE_EMAIL . "\n\nLeave your email or phone number here and we'll get back to you within one business day.",
+        'reply' => "Hold on a moment — let me connect you with a live person. One of our agents has just been notified and will reply right here.",
         'fallback' => true,
+        'route_to_human' => true,
     ]);
     exit;
 }

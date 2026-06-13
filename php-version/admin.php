@@ -2983,13 +2983,21 @@ elseif ($tab === 'leads'):
     [data-bs-theme="dark"] .adm-chat-head { background:linear-gradient(135deg,#0f1f4a 0%,#1e3a8a 100%); }
     .adm-chat-avatar { width:28px; height:28px; border-radius:50%; background:rgba(255,255,255,.20); color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; flex-shrink:0; }
     .adm-chat-head #adm-chat-name { color:#fff !important; font-size:13px; line-height:1.2; }
-    .adm-chat-status-pill { display:inline-flex; align-items:center; gap:4px; padding:1px 7px; border-radius:999px; font-size:10px; font-weight:600; background:rgba(255,255,255,.18); color:#e0e7ff; }
-    .adm-chat-status-pill .dot { width:5px; height:5px; border-radius:50%; background:#94a3b8; }
-    .adm-chat-status-pill.online { background:rgba(16,185,129,.30); color:#a7f3d0; }
-    .adm-chat-status-pill.online .dot { background:#10b981; box-shadow:0 0 0 3px rgba(16,185,129,.4); }
+    .adm-chat-status-pill { display:inline-flex; align-items:center; gap:5px; padding:2px 10px; border-radius:999px; font-size:10.5px; font-weight:600; background:rgba(255,255,255,.18); color:#e0e7ff; transition: background .25s ease, color .25s ease; }
+    .adm-chat-status-pill .dot { width:6px; height:6px; border-radius:50%; background:#94a3b8; transition: background .25s ease, box-shadow .25s ease; }
+    .adm-chat-status-pill.online { background:rgba(16,185,129,.32); color:#a7f3d0; }
+    .adm-chat-status-pill.online .dot { background:#10b981; box-shadow:0 0 0 3px rgba(16,185,129,.4); animation: adm-online-pulse 1.6s ease-in-out infinite; }
+    @keyframes adm-online-pulse {
+      0%, 100% { box-shadow: 0 0 0 3px rgba(16,185,129,.45); }
+      50%      { box-shadow: 0 0 0 6px rgba(16,185,129,.0); }
+    }
+    .adm-chat-status-pill.idle   { background:rgba(245,158,11,.28); color:#fde68a; }
+    .adm-chat-status-pill.idle .dot { background:#f59e0b; box-shadow:0 0 0 3px rgba(245,158,11,.35); }
     .adm-chat-status-pill.offline { /* uses default base style */ }
+    /* Tiny live-clock so admins see the customer's current local time
+       (computed against their last_seen heartbeat — refreshed each poll). */
+    #adm-chat-status .live-clock { font-variant-numeric: tabular-nums; opacity:.92; font-weight:700; margin-left:2px; }
     [data-bs-theme="dark"] .adm-chat-avatar { background:#1f2a44; color:#cbd5e1; }
-    .adm-chat-status-pill.offline { /* uses default base style */ }
     [data-bs-theme="dark"] #adm-chat-contact { color:#94a3b8; }
 
     /* Gray offline banner */
@@ -3002,17 +3010,21 @@ elseif ($tab === 'leads'):
     .adm-chat-empty { margin:auto; text-align:center; }
 
     /* Message bubbles
-       NOTE: per request — customer messages appear on RIGHT, admin (me) on LEFT.
-       Both use LIGHT background colors, distinct from each other. */
-    .adm-msg { max-width:82%; padding:6px 10px; border-radius:12px; font-size:12.5px; line-height:1.4; word-wrap:break-word; white-space:pre-wrap; box-shadow:0 1px 2px rgba(15,23,42,.05); animation:adm-msg-in .2s ease-out; }
+       NOTE: customer messages appear on the RIGHT in soft blue; admin
+       messages on the LEFT in a brand navy→teal gradient with white text.
+       The two-way colour split makes the conversation easy to scan at a
+       glance and matches the customer-facing widget. */
+    .adm-msg { max-width:82%; padding:7px 11px; border-radius:14px; font-size:12.5px; line-height:1.4; word-wrap:break-word; white-space:pre-wrap; box-shadow:0 1px 2px rgba(15,23,42,.08); animation:adm-msg-in .2s ease-out; position: relative; }
     @keyframes adm-msg-in { from{opacity:0;transform:translateY(4px);} to{opacity:1;transform:translateY(0);} }
-    .adm-msg .ts { display:block; font-size:9.5px; opacity:.55; margin-top:1px; }
-    /* Customer (right side) — light blue */
-    .adm-msg.customer { align-self:flex-end; background:#dbeafe; color:#1e3a8a; border-bottom-right-radius:4px; }
-    [data-bs-theme="dark"] .adm-msg.customer { background:rgba(59,130,246,.18); color:#bfdbfe; }
-    /* Admin / "me" (left side) — light green */
-    .adm-msg.admin { align-self:flex-start; background:#dcfce7; color:#14532d; border-bottom-left-radius:4px; }
-    [data-bs-theme="dark"] .adm-msg.admin { background:rgba(16,185,129,.16); color:#86efac; }
+    .adm-msg .ts { display:block; font-size:9.5px; opacity:.65; margin-top:2px; font-variant-numeric: tabular-nums; }
+    /* Customer (right side) — soft blue */
+    .adm-msg.customer { align-self:flex-end; background: linear-gradient(135deg, #dbeafe, #e0e7ff); color:#1e3a8a; border:1px solid rgba(59,130,246,.18); border-bottom-right-radius:5px; }
+    .adm-msg.customer .ts { color:#1e40af; }
+    [data-bs-theme="dark"] .adm-msg.customer { background: linear-gradient(135deg, rgba(59,130,246,.22), rgba(99,102,241,.18)); color:#bfdbfe; border-color: rgba(96,165,250,.30); }
+    /* Admin / "me" (left side) — brand-gradient with white text */
+    .adm-msg.admin { align-self:flex-start; background: linear-gradient(135deg, #1d4ed8, #06b6d4); color:#fff; border:1px solid rgba(29,78,216,.30); border-bottom-left-radius:5px; box-shadow:0 4px 14px rgba(29,78,216,.18); }
+    .adm-msg.admin .ts { color:rgba(255,255,255,.85); }
+    [data-bs-theme="dark"] .adm-msg.admin { background: linear-gradient(135deg, #1e40af, #0e7490); }
 
     .adm-chat-day { align-self:center; font-size:10.5px; color:#94a3b8; margin:4px 0; background:rgba(148,163,184,.15); padding:2px 10px; border-radius:999px; }
 
@@ -3081,18 +3093,38 @@ elseif ($tab === 'leads'):
       lastIds = newIds;
     }
 
+    let _liveClockTimer = null;
+    function stopLiveClock(){ if (_liveClockTimer) { clearInterval(_liveClockTimer); _liveClockTimer = null; } }
+    function fmtClock(){
+      // Customer's local time = right now (every customer is on their own
+      // clock, but a real-time read-out feels far more useful than "4 min
+      // ago" since admins want to know "is this person there RIGHT NOW".
+      const now = new Date();
+      return now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    }
     function updateStatus(online, lastSeen){
-      if (online) {
+      const lblEl = $status.querySelector('.lbl');
+      stopLiveClock();
+      let mins = null;
+      if (lastSeen) {
+        try { const d = new Date((lastSeen||'').replace(' ','T')+'Z'); if (!isNaN(d)) mins = Math.floor((Date.now()-d.getTime())/60000); } catch(e){}
+      }
+      // "Online" = heartbeat within 1 minute.  Idle = 1–15 min.  Offline =
+      // older or never seen.  Both online + idle states swap in a live
+      // ticking clock so the admin can see the customer's real time.
+      if (online || (mins !== null && mins < 1)) {
         $status.className = 'adm-chat-status-pill online';
-        $status.querySelector('.lbl').textContent = 'Online';
+        lblEl.innerHTML = 'Active now · <span class="live-clock">'+fmtClock()+'</span>';
         $banner.style.display = 'none';
+        _liveClockTimer = setInterval(()=>{ const el = $status.querySelector('.live-clock'); if (el) el.textContent = fmtClock(); }, 1000);
+      } else if (mins !== null && mins < 15) {
+        $status.className = 'adm-chat-status-pill idle';
+        lblEl.innerHTML = 'Idle · last active <span class="live-clock">'+mins+'m ago</span>';
+        $banner.style.display = 'block';
       } else {
         $status.className = 'adm-chat-status-pill offline';
-        let lbl = 'Offline';
-        if (lastSeen) {
-          try { const d = new Date((lastSeen||'').replace(' ','T')+'Z'); if (!isNaN(d)) { const mins = Math.floor((Date.now()-d.getTime())/60000); if (mins < 60) lbl = 'Last seen '+mins+'m ago'; else if (mins < 1440) lbl = 'Last seen '+Math.floor(mins/60)+'h ago'; else lbl = 'Last seen '+d.toLocaleDateString([], {month:'short', day:'numeric'}); } } catch(e){}
-        } else { lbl = 'Never seen'; }
-        $status.querySelector('.lbl').textContent = lbl;
+        let lbl = lastSeen ? ('Offline · last seen ' + fmtTime(lastSeen)) : 'Never seen';
+        lblEl.textContent = lbl;
         $banner.style.display = 'block';
       }
     }
@@ -3136,6 +3168,7 @@ elseif ($tab === 'leads'):
       overlay.style.display = 'none';
       document.body.style.overflow = '';
       clearInterval(pollTimer); pollTimer = null;
+      stopLiveClock();
       currentLeadId = 0;
     };
 

@@ -359,6 +359,13 @@ See `/app/memory/test_credentials.md`.
 - Demo data seeded: 600 visitor sessions + 25 paid orders + 6 vibe transitions spread across last 30 days so the widget shows real numbers immediately.
 - Verified end-to-end via screenshot: Classic dominates 17 days with 4.32% conv, Playful (3 days) edges out at 4.69%, Bold and Premium underperform — exactly the "Black Friday was 18% better in Playful" insight the feature was built to surface.
 
+## [June 2026] Chat UX upgrade — real-time status, 2-way colours, form-gated greeting
+- **Real-time status indicator** — replaced the "Last seen 4 min ago" string with a live, ticking clock. When the customer's heartbeat is within 60 sec the pill turns green with a pulsing dot + "Active now · 12:34:56 PM" (seconds tick every 1 s via a `setInterval`). 1-15 min → amber "Idle · last active Xm ago". Older / never seen → grey "Offline · last seen Mon 12:30 PM". Clock interval auto-cancels on `admChatClose()` to free CPU.
+- **Two-way coloured chat bubbles** — customer messages now sit on the RIGHT in a soft blue gradient (`#dbeafe → #e0e7ff`, dark-blue text); admin/me messages sit on the LEFT in the brand navy→teal gradient (`#1d4ed8 → #06b6d4`, white text). Each bubble has its own timestamp, slide-in animation, and a 4px-radius "tail" pointing to its side. Dark-mode variants use translucent overlays so contrast stays correct.
+- **Form-gated default greeting** — the long "Thanks for reaching out · 📞 · ✉️ · hours" auto-reply now fires ONLY on lead-form submission via `submitLead()` in `assets/js/main.js`. It uses the dynamic `window.SITE_PHONE` so it always matches the current Company Info phone.
+- **Typed-message → "connect to live person"** — `ajax/chat.php`'s fallback branch (when `OPENAI_API_KEY` is empty) was rewritten. It now replies *"Hold on a moment — let me connect you with a live person. One of our agents has just been notified and will reply right here."* and sets `route_to_human: true` in the JSON.
+- **Admin warning loop** — already in place: the customer's typed message goes through `relayCustomerMessageToAdmin()` → `ajax/chat-customer.php` → inserts a row in `chat_messages`. The admin shell's existing 8-s `tick()` poller picks it up, bumps the bell badge, plays a WebAudio chime, shows a deep-linkable toast ("New message · [customer name]") — which already covers the "warning on admin portal" requirement end-to-end.
+
 ## Roadmap / Backlog (P2)
 - Split `admin.php` (>3700 lines) into per-tab partials under `includes/tabs/`
 - Add bulk-paste key validation (deduplicate vs. existing)

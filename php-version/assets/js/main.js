@@ -272,16 +272,24 @@ async function submitLead(callback) {
   localStorage.setItem('uc_lead_done', '1');
   document.getElementById('chat-lead-form').style.display = 'none';
   const firstName = (v.name.split(' ')[0] || '').trim();
-  if (callback === 'chat') {
-    chatAppend('user', v.name + ' · ' + v.email + ' · ' + v.phone);
-    chatAppend('bot', 'Thanks for your information' + (firstName ? ', ' + firstName : '') + '. I\'ve saved your details — go ahead and type your question below and I\'ll help you right away. If we need a human agent, I\'ll loop one in.');
-  } else if (callback) {
-    chatAppend('user', v.name + ' · ' + v.email + ' · ' + v.phone + '  (requested a callback)');
-    chatAppend('bot', 'Thanks for your information' + (firstName ? ', ' + firstName : '') + '. Let me connect you with one of our agents now — they\'ll call you shortly on ' + v.phone + '. While you wait, feel free to ask me anything about products, pricing or activation.');
-  } else {
-    chatAppend('user', v.name + ' · ' + v.email + ' · ' + v.phone);
-    chatAppend('bot', 'Thanks for your information' + (firstName ? ', ' + firstName : '') + '. Let me connect you with one of our agents — call ' + (window.SITE_PHONE || 'our team') + ' and they\'ll pick up right away. I\'m here too if you\'d like to keep chatting.');
-  }
+  // Default greeting after lead form is filled — this is the ONLY place
+  // that surfaces the long "phone + email + hours" auto-reply, so
+  // customers always see how to reach us once they've identified
+  // themselves.  Subsequent typed messages get the shorter "connecting
+  // you with a live person" reply (handled in ajax/chat.php).
+  const phone = window.SITE_PHONE || '1-888-632-9902';
+  const hello = 'Hi' + (firstName ? ' ' + firstName : '') + '! Thanks for reaching out — our live AI assistant is currently offline.\n\n'
+              + 'You can reach our team directly:\n'
+              + '📞 ' + phone + ' (Mon-Sat, 9 AM - 6 PM EST)\n'
+              + '✉️ services@maventechsoftware.com\n\n'
+              + "We've saved your details and an agent will get back to you within one business day. "
+              + (callback === 'chat'
+                  ? "Go ahead and type your question below — I'll loop in a live person right away."
+                  : (callback
+                      ? "While you wait, an agent will call you shortly on " + v.phone + "."
+                      : "Feel free to type a question here — we'll connect you with a real person."));
+  chatAppend('user', v.name + ' · ' + v.email + ' · ' + v.phone + (callback==='chat'?'':(callback?'  (requested a callback)':'')));
+  chatAppend('bot', hello);
 }
 
 function skipLead() {
