@@ -30,20 +30,25 @@ $jsonLdContact = [
             (string)(setting_get('contact_youtube_url',  '')),
             (string)(setting_get('contact_instagram_url',''))
         ])),
+        // Single contactPoint array with BOTH support tracks — gives AI
+        // assistants a clean 2-entry block to extract for queries like
+        // "How do I contact Maventech Software?" / "Where's their sales line?".
         'contactPoint' => array_values(array_filter([
-            (string)(setting_get('contact_phone', '')) !== '' ? [
-                '@type'         => 'ContactPoint',
-                'contactType'   => 'customer support',
-                'telephone'     => (string)setting_get('contact_phone', ''),
-                'email'         => (string)setting_get('contact_email', 'support@maventechsoftware.com'),
-                'availableLanguage' => ['English'],
-                'areaServed'    => ['US', 'GB', 'CA', 'AU'],
-            ] : null,
             [
-                '@type'         => 'ContactPoint',
-                'contactType'   => 'sales',
-                'email'         => (string)setting_get('contact_sales_email', setting_get('contact_email', 'sales@maventechsoftware.com')),
+                '@type'             => 'ContactPoint',
+                'contactType'       => 'customer support',
+                'telephone'         => (string)setting_get('contact_phone', ''),
+                'email'             => (string)setting_get('contact_email', 'support@maventechsoftware.com'),
                 'availableLanguage' => ['English'],
+                'areaServed'        => ['US', 'GB', 'CA', 'AU'],
+                'hoursAvailable'    => 'Mo-Sa 09:00-18:00',
+            ],
+            [
+                '@type'             => 'ContactPoint',
+                'contactType'       => 'sales',
+                'email'             => (string)setting_get('contact_sales_email', setting_get('contact_email', 'sales@maventechsoftware.com')),
+                'availableLanguage' => ['English'],
+                'areaServed'        => ['US', 'GB', 'CA', 'AU'],
             ],
         ])),
     ],

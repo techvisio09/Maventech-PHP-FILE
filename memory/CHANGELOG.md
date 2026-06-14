@@ -1,5 +1,55 @@
 # Changelog
 
+## 2026-02-14 (iteration 6) — Full SEO / AEO / GEO upgrade across the site
+
+### Foundations
+- `/app/php-version/robots-txt.php` (already dynamic) verified — explicit allow-list for GPTBot, ClaudeBot, PerplexityBot, Google-Extended, Bingbot + Sitemap line. Disallows admin/checkout/account routes.
+- `/app/php-version/index.php` — homepage now emits **WebSite + SearchAction** JSON-LD so Google offers the sitelinks search box AND AI assistants can deep-link search results.
+- `/app/php-version/contact.php` — **ContactPage** JSON-LD with a 2-entry `contactPoint` array (customer support + sales) and Organization social links.
+- `/app/php-version/about-us.php` — **AboutPage** JSON-LD with E-E-A-T signals: foundingDate, knowsAbout, aggregateRating, awards.
+
+### AEO (Answer Engine Optimization)
+- New helper `render_aeo_answer()` — visible 40-60 word "Quick Answer" callout that AI Overviews / Bing Chat / ChatGPT / Perplexity quote verbatim.
+- New helper `render_paa_block()` — visible "People also ask" accordion.
+- New helper `product_paa_faqs()` — 6 deterministic product-aware Q&A pairs (where to buy, delivery time, platform support, subscription vs one-time, activation failure, multi-device).
+- Product page now emits BOTH a Quick Answer card AND a People-Also-Ask block — visible to users, serialised to a **second FAQPage JSON-LD**. Result: product pages now ship 7 valid JSON-LD blocks.
+- Category page has its own Quick Answer card with the dynamic lowest-price call-out.
+
+### GEO (Generative Engine Optimization)
+- `/app/php-version/blog-post.php` schema upgraded:
+  - @type now `Article` for trends, `BlogPosting` for regular posts.
+  - `author` is a Person (or Organization for AI posts) with `knowsAbout`, `worksFor`, `jobTitle` (E-E-A-T).
+  - `publisher` references Organization @id `#organization` for graph cohesion.
+  - Adds `wordCount`, `timeRequired` (ISO 8601), `articleSection` from product category, `speakable` selectors.
+  - `dateModified` now tracks the real `updated_at` column, not the publish date.
+- Visible: `data-testid=blog-post-byline` with calendar + read time + AI Editorial Team badge + Updated stamp + country badge.
+- LLM prompt for regional blog generator rewritten:
+  - `lead` field now an explicit 40-60 word DIRECT ANSWER (AEO).
+  - Must "include at least ONE concrete statistic with attribution".
+  - Body must START with H2 sections (lead is rendered separately above).
+- LLM prompt for trends generator hardened to demand pure JSON output (carryover from iter4).
+- New schema columns `blog_posts.lead`, `blog_posts.faq_json`, `blog_posts.updated_at` (idempotent via `seo_bot_ensure_schema()`).
+- Both regional + trends INSERTs persist the LLM-emitted `lead` value + bump `updated_at = NOW()`.
+
+### Automated content freshness
+- New backend function `seo_bot_freshness_tick()` in seo-bot.php:
+  - Runs from the shutdown handler at the bottom of every admin/auto-blogger page load.
+  - Gated on (a) 23-hour cooldown so we only refresh ONE post per day, (b) post must be NULL `updated_at` OR older than 90 days.
+  - Picks the SINGLE oldest stale AI post.
+  - Re-runs the LLM (short 700-token call) for a fresh `lead` + 3-item FAQ.
+  - UPDATEs `lead`, `faq_json`, `updated_at = NOW()` → bumps the JSON-LD `dateModified` → freshest-content signal.
+  - Persists `seo_freshness_last_tick_at` + `seo_freshness_last_refreshed_id` so the operator can audit.
+
+### Visible breadcrumbs
+- New helper `render_breadcrumb_nav()`.
+- `/app/php-version/category.php` now renders the visible `<nav aria-label="breadcrumb">` block above the H1 (matches the existing BreadcrumbList JSON-LD).
+- Other pages already had visible breadcrumbs (product.php) or don't need them (homepage).
+
+### Testing
+- 184/184 pytest passing.  111 baseline + 73 new tests in `/app/backend/tests/test_iteration5_features.py` across 16 classes covering every JSON-LD shape, visible testid, prompt directive, schema migration, and the freshness tick state machine.
+
+---
+
 ## 2026-02-14 (iteration 5) — Per-country posts + dedicated Trending Articles section
 
 ### Quick Actions country picker
