@@ -37,7 +37,7 @@ $ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.sv
   <meta charset="UTF-8">
   <script>
     // Apply saved theme BEFORE styles render — prevents light-mode flicker on every navigation
-    (function () { try { document.documentElement.setAttribute('data-bs-theme', localStorage.getItem('uc_theme') || 'light'); } catch (e) {} })();
+    (function () { try { document.documentElement.setAttribute('data-bs-theme', localStorage.getItem('uc_theme') || 'dark'); } catch (e) {} })();
   </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?= esc($pageTitle) ?></title>

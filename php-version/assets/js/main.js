@@ -2,7 +2,7 @@
 
 /* ---------- Dark mode ---------- */
 (function () {
-  const saved = localStorage.getItem('uc_theme') || 'light';
+  const saved = localStorage.getItem('uc_theme') || 'dark';
   document.documentElement.setAttribute('data-bs-theme', saved);
 })();
 function toggleTheme() {

@@ -14,7 +14,7 @@ if (isset($_GET['theme']) && in_array($_GET['theme'], ['dark','light'], true)) {
     exit;
 }
 
-$adminMode = $_COOKIE['adm_mode'] ?? 'light';
+$adminMode = $_COOKIE['adm_mode'] ?? 'dark';
 $rg = active_region();
 // Ensure all auxiliary tables exist on first admin page-load.  This makes
 // the panel self-healing when uploaded to a fresh server where start.sh's

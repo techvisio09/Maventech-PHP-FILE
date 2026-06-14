@@ -1987,6 +1987,38 @@ elseif ($tab === 'ai-blogger'):
     .ai-section > summary:hover { background:#f8fafc; }
     .ai-section > .ai-body { padding:0 20px 20px; }
     .ai-section > summary .ai-badge { margin-left:auto; font-size:11px; font-weight:600; padding:3px 10px; border-radius:999px; }
+    /* Dark mode overrides for AI sections */
+    [data-bs-theme="dark"] .ai-section { background:var(--card-bg, #1e293b); border-color:#334155; }
+    [data-bs-theme="dark"] .ai-section > summary:hover { background:rgba(255,255,255,.04); }
+    [data-bs-theme="dark"] .ai-section > summary::before { color:#64748b; }
+    [data-bs-theme="dark"] .ai-section[open] > summary::before { color:#60a5fa; }
+    [data-bs-theme="dark"] .ai-section .form-control { background:#1e293b; border-color:#475569; color:#e2e8f0; }
+    [data-bs-theme="dark"] .ai-section .form-control::placeholder { color:#64748b; }
+    [data-bs-theme="dark"] .ai-section .btn-outline-secondary { border-color:#475569; color:#94a3b8; }
+    [data-bs-theme="dark"] .ai-key-uploaded { background:rgba(16,185,129,.12) !important; border-color:rgba(16,185,129,.3) !important; }
+    [data-bs-theme="dark"] .ai-key-uploaded .text-success, [data-bs-theme="dark"] .ai-key-uploaded .fw-semibold { color:#34d399 !important; }
+    [data-bs-theme="dark"] .card-e { background:var(--card-bg, #1e293b); border-color:#334155; }
+    [data-bs-theme="dark"] .card { background:var(--card-bg, #1e293b); border-color:#334155; }
+    /* Dark mode: blog post rows */
+    [data-bs-theme="dark"] .ai-body a[data-testid^="ai-blogger-row"] { background:#1e293b !important; border-color:#334155 !important; color:#e2e8f0 !important; }
+    [data-bs-theme="dark"] .ai-body a[data-testid^="ai-blogger-row"]:hover { background:#1e3a5f !important; border-color:#3b82f6 !important; }
+    [data-bs-theme="dark"] .ai-body a[data-testid^="ai-blogger-row"] .fw-semibold { color:#f1f5f9 !important; }
+    /* Dark mode: quick action cards */
+    [data-bs-theme="dark"] .card.text-decoration-none { background:#1e293b !important; }
+    [data-bs-theme="dark"] .card.text-decoration-none .fw-bold { color:#f1f5f9 !important; }
+    [data-bs-theme="dark"] .card.text-decoration-none .text-secondary { color:#94a3b8 !important; }
+    /* Dark mode: stat boxes */
+    [data-bs-theme="dark"] .row .card-e.text-center { background:#1e293b; border-color:#334155; }
+    /* Dark mode: health check items */
+    [data-bs-theme="dark"] .ai-body [style*="background:#f0fdf4"] { background:rgba(16,185,129,.1) !important; border-color:rgba(16,185,129,.25) !important; }
+    [data-bs-theme="dark"] .ai-body [style*="background:#fef2f2"] { background:rgba(239,68,68,.1) !important; border-color:rgba(239,68,68,.25) !important; }
+    /* Dark mode: scrollable post list border */
+    [data-bs-theme="dark"] .ai-body > div[style*="overflow-y"] { border-color:#334155 !important; }
+    [data-bs-theme="dark"] .ai-body > div[style*="overflow-y"] a { border-color:#1e293b !important; }
+    [data-bs-theme="dark"] .ai-body > div[style*="overflow-y"] a:hover { background:rgba(59,130,246,.08) !important; }
+    .ai-section > summary:hover { background:#f8fafc; }
+    .ai-section > .ai-body { padding:0 20px 20px; }
+    .ai-section > summary .ai-badge { margin-left:auto; font-size:11px; font-weight:600; padding:3px 10px; border-radius:999px; }
   </style>
 
   <!-- ====== 1. QUICK ACTIONS — always visible ====== -->
@@ -2092,40 +2124,36 @@ elseif ($tab === 'ai-blogger'):
           <div class="col-md-4">
             <label class="form-label small fw-semibold">AI Key (Emergent / OpenAI)</label>
             <?php if ($hasLlmKey): ?>
-              <!-- Key is uploaded — show status + change option -->
-              <div id="ai-key-display" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;">
+              <div id="ai-key-display" class="ai-key-uploaded" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;">
                 <div class="d-flex align-items-center justify-content-between">
                   <div>
                     <i class="bi bi-check-circle-fill text-success me-1"></i>
                     <span class="fw-semibold" style="font-size:13px;color:#065f46;">Key Uploaded</span>
-                    <div class="text-secondary" style="font-size:11px;font-family:monospace;margin-top:2px;"><?= esc($maskedKey) ?></div>
+                    <div style="font-size:11px;font-family:monospace;margin-top:2px;opacity:.7;"><?= esc($maskedKey) ?></div>
                   </div>
-                  <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" onclick="document.getElementById('ai-key-display').style.display='none';document.getElementById('ai-key-edit').style.display='block';">
-                    <i class="bi bi-pencil me-1"></i>Change
-                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" onclick="document.getElementById('ai-key-display').style.display='none';document.getElementById('ai-key-edit').style.display='block';"><i class="bi bi-pencil me-1"></i>Change</button>
                 </div>
               </div>
               <div id="ai-key-edit" style="display:none;">
                 <div class="input-group mt-1">
-                  <input type="password" name="llm_api_key" class="form-control" placeholder="Paste new key here" style="font-size:13px;" data-testid="ai-key-input">
+                  <input type="password" name="llm_api_key" class="form-control" placeholder="Paste new key" style="font-size:13px;">
                   <button type="button" class="btn btn-outline-secondary btn-sm" onclick="var i=this.previousElementSibling;i.type=i.type==='password'?'text':'password';"><i class="bi bi-eye"></i></button>
                 </div>
                 <button type="button" class="btn btn-sm btn-link text-secondary p-0 mt-1" onclick="document.getElementById('ai-key-edit').style.display='none';document.getElementById('ai-key-display').style.display='block';">Cancel</button>
               </div>
             <?php else: ?>
-              <!-- No key — show input -->
               <div class="input-group">
-                <input type="password" name="llm_api_key" class="form-control" placeholder="Paste your AI key here" style="font-size:13px;" data-testid="ai-key-input">
+                <input type="password" name="llm_api_key" class="form-control" placeholder="Paste your AI key here" style="font-size:13px;">
                 <button type="button" class="btn btn-outline-secondary btn-sm" onclick="var i=this.previousElementSibling;i.type=i.type==='password'?'text':'password';"><i class="bi bi-eye"></i></button>
               </div>
-              <div class="small mt-1 text-danger"><i class="bi bi-exclamation-circle-fill me-1"></i>Required — AI features won't work without this</div>
+              <div class="small mt-1 text-danger"><i class="bi bi-exclamation-circle-fill me-1"></i>Required — AI won't work without this</div>
             <?php endif; ?>
           </div>
           <!-- Google Search Console -->
           <div class="col-md-4">
             <label class="form-label small fw-semibold">Google Search Console</label>
             <?php if (($seoGsc ?? '') !== ''): ?>
-              <div id="gsc-display" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;">
+              <div id="gsc-display" class="ai-key-uploaded" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;">
                 <div class="d-flex align-items-center justify-content-between">
                   <span><i class="bi bi-check-circle-fill text-success me-1"></i><span class="fw-semibold" style="font-size:13px;color:#065f46;">Uploaded</span></span>
                   <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" onclick="document.getElementById('gsc-display').style.display='none';document.getElementById('gsc-edit').style.display='block';"><i class="bi bi-pencil me-1"></i>Change</button>
@@ -2144,7 +2172,7 @@ elseif ($tab === 'ai-blogger'):
           <div class="col-md-4">
             <label class="form-label small fw-semibold">Bing Webmaster</label>
             <?php if (($seoBing ?? '') !== ''): ?>
-              <div id="bing-display" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;">
+              <div id="bing-display" class="ai-key-uploaded" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;">
                 <div class="d-flex align-items-center justify-content-between">
                   <span><i class="bi bi-check-circle-fill text-success me-1"></i><span class="fw-semibold" style="font-size:13px;color:#065f46;">Uploaded</span></span>
                   <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" onclick="document.getElementById('bing-display').style.display='none';document.getElementById('bing-edit').style.display='block';"><i class="bi bi-pencil me-1"></i>Change</button>
@@ -2160,7 +2188,10 @@ elseif ($tab === 'ai-blogger'):
             <?php endif; ?>
           </div>
         </div>
-        <div class="mt-3"><button type="submit" class="btn btn-primary rounded-pill px-4"><i class="bi bi-check-lg me-1"></i>Save Settings</button></div>
+        <div class="d-flex align-items-center gap-3 mt-3 flex-wrap">
+          <button type="submit" class="btn btn-primary rounded-pill px-4"><i class="bi bi-check-lg me-1"></i>Save Settings</button>
+          <a href="admin.php?tab=ai-blogger&submit_sitemaps=1" class="btn btn-success rounded-pill px-4" onclick="return confirm('Submit your sitemap to Google, Bing & all search engines now?')"><i class="bi bi-send-check me-1"></i>Submit Sitemap to Search Engines</a>
+        </div>
       </form>
     </div>
   </details>
