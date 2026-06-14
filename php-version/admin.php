@@ -889,7 +889,134 @@ if ($tab === 'dashboard'):
   $pmTotalRev = 0; foreach ($pmRows as $r) $pmTotalRev += (float)$r['rev'];
   $cardMerch = setting_get('gw_card_merchant_name','Maventech Software');
   $ppMerch   = setting_get('gw_paypal_account_name','Maventech Software LLC');
+
+  // ------------------------------------------------------------------
+  // Recent post-purchase email activity — latest 5 events
+  // (delivered / failed / bounced) so admins notice delivery problems
+  // the moment they open the dashboard.
+  // ------------------------------------------------------------------
+  $recentEmails = $pdo->query("
+      SELECT em.id, em.recipient, em.subject, em.status, em.template_code,
+             em.created_at, em.delivered_at, em.opened_at, em.last_error,
+             o.order_number, o.first_name, o.last_name
+        FROM email_outbox em
+        LEFT JOIN orders o ON o.id = em.order_id
+       WHERE em.template_code IN ('order_delivery','order_confirmation','order_pending','refund_confirm')
+       ORDER BY COALESCE(em.delivered_at, em.created_at) DESC, em.id DESC
+       LIMIT 5")->fetchAll();
   ?>
+  <div class="row g-3 mt-1">
+    <div class="col-12">
+      <div class="card-e" data-testid="dashboard-recent-activity">
+        <div class="card-head">
+          <div class="ttl"><i class="bi bi-activity"></i> Recent Activity <span class="sub ms-2">last 5 post-purchase emails</span></div>
+          <a href="admin.php?tab=emails" class="sub" style="color:var(--brand);" data-testid="dashboard-recent-view-all">View all →</a>
+        </div>
+        <div class="card-body-p p-0">
+          <?php if (!$recentEmails): ?>
+            <div class="p-4 text-center text-muted small">No post-purchase emails yet. Your first paid order will show up here.</div>
+          <?php else: ?>
+          <ul class="list-unstyled mb-0 mini-feed">
+            <?php
+            $tplLabel = [
+              'order_delivery'    => 'License delivery',
+              'order_confirmation'=> 'Order confirmation',
+              'order_pending'     => 'Payment pending',
+              'refund_confirm'    => 'Refund',
+            ];
+            foreach ($recentEmails as $r):
+              $status = $r['status'];
+              $isFailed = in_array($status, ['failed','bounced'], true);
+              $isOpened = !empty($r['opened_at']);
+              $pillCls  = $isFailed ? 'mf-pill-failed' : ($isOpened ? 'mf-pill-opened' : ($status === 'sent' ? 'mf-pill-sent' : 'mf-pill-queued'));
+              $pillTxt  = $isFailed ? strtoupper($status) : ($isOpened ? 'OPENED' : strtoupper($status));
+              $pillIcon = $isFailed ? 'bi-x-circle-fill' : ($isOpened ? 'bi-envelope-open-fill' : ($status === 'sent' ? 'bi-check-circle-fill' : 'bi-hourglass-split'));
+              $when     = $r['delivered_at'] ?: $r['created_at'];
+              $whenRel  = '';
+              if ($when) {
+                  $delta = max(0, time() - strtotime($when));
+                  if ($delta < 60)        $whenRel = $delta . 's ago';
+                  elseif ($delta < 3600)  $whenRel = floor($delta/60) . 'm ago';
+                  elseif ($delta < 86400) $whenRel = floor($delta/3600) . 'h ago';
+                  else                    $whenRel = floor($delta/86400) . 'd ago';
+              }
+              $custName = trim(($r['first_name'] ?? '') . ' ' . ($r['last_name'] ?? '')) ?: $r['recipient'];
+              $href = 'admin.php?tab=emails&hl=' . (int)$r['id'] . '#email-' . (int)$r['id'];
+            ?>
+              <li>
+                <a href="<?= esc($href) ?>" class="mf-row" data-testid="dashboard-recent-row-<?= (int)$r['id'] ?>">
+                  <span class="mf-pill <?= $pillCls ?>"><i class="bi <?= $pillIcon ?>"></i> <?= $pillTxt ?></span>
+                  <div class="mf-body">
+                    <div class="mf-line1">
+                      <strong><?= esc($custName) ?></strong>
+                      <span class="mf-sep">·</span>
+                      <span class="text-muted small"><?= esc($r['recipient']) ?></span>
+                      <?php if (!empty($r['order_number'])): ?>
+                        <span class="mf-sep">·</span>
+                        <span class="mf-order">#<?= esc($r['order_number']) ?></span>
+                      <?php endif; ?>
+                    </div>
+                    <div class="mf-line2">
+                      <span class="mf-tpl"><?= esc($tplLabel[$r['template_code']] ?? $r['template_code']) ?></span>
+                      <?php if ($isFailed && !empty($r['last_error'])): ?>
+                        <span class="mf-err"><i class="bi bi-info-circle me-1"></i><?= esc(mb_strimwidth((string)$r['last_error'], 0, 80, '…')) ?></span>
+                      <?php endif; ?>
+                    </div>
+                  </div>
+                  <span class="mf-when text-muted small"><?= esc($whenRel) ?></span>
+                  <i class="bi bi-chevron-right text-muted mf-arrow"></i>
+                </a>
+              </li>
+            <?php endforeach; ?>
+          </ul>
+          <?php endif; ?>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    .mini-feed li + li { border-top: 1px solid var(--border, #e2e8f0); }
+    .mini-feed .mf-row {
+      display: flex; align-items: center; gap: 14px; padding: 12px 16px;
+      text-decoration: none; color: inherit; transition: background-color .15s ease;
+    }
+    .mini-feed .mf-row:hover { background: rgba(59,130,246,.06); }
+    [data-bs-theme="dark"] .mini-feed .mf-row:hover { background: rgba(96,165,250,.10); }
+    .mini-feed .mf-pill {
+      display:inline-flex; align-items:center; gap:5px;
+      font-size: 10.5px; font-weight: 700; letter-spacing: .4px;
+      padding: 4px 10px; border-radius: 999px; flex-shrink: 0; min-width: 88px; justify-content:center;
+    }
+    .mini-feed .mf-pill i { font-size: 11px; }
+    .mf-pill-sent    { background:#dbeafe; color:#1d4ed8; }
+    .mf-pill-opened  { background:#d1fae5; color:#047857; }
+    .mf-pill-failed  { background:#fee2e2; color:#b91c1c; animation: mf-pulse 1.6s ease-in-out infinite; }
+    .mf-pill-queued  { background:#fef3c7; color:#92400e; }
+    [data-bs-theme="dark"] .mf-pill-sent   { background: rgba(96,165,250,.18); color: #93c5fd; }
+    [data-bs-theme="dark"] .mf-pill-opened { background: rgba(52,211,153,.18); color: #6ee7b7; }
+    [data-bs-theme="dark"] .mf-pill-failed { background: rgba(248,113,113,.20); color: #fca5a5; }
+    [data-bs-theme="dark"] .mf-pill-queued { background: rgba(251,191,36,.18); color: #fcd34d; }
+    @keyframes mf-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,.5);} 50% { box-shadow: 0 0 0 6px rgba(239,68,68,0);} }
+    .mini-feed .mf-body { flex-grow:1; min-width: 0; }
+    .mini-feed .mf-line1 { font-size: 13.5px; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .mini-feed .mf-line2 { font-size: 12px; color: var(--muted, #64748b); margin-top: 2px; }
+    .mini-feed .mf-sep   { color: var(--muted, #94a3b8); margin: 0 6px; }
+    .mini-feed .mf-order { font-family:'SF Mono', Menlo, monospace; font-size:11.5px; color: #475569; background: rgba(100,116,139,.08); padding: 1px 7px; border-radius: 5px; }
+    [data-bs-theme="dark"] .mini-feed .mf-order { color: #cbd5e1; background: rgba(148,163,184,.15); }
+    .mini-feed .mf-tpl   { font-weight: 600; color: #334155; }
+    [data-bs-theme="dark"] .mini-feed .mf-tpl { color: #cbd5e1; }
+    .mini-feed .mf-err   { margin-left: 10px; color: #b91c1c; font-style: italic; }
+    [data-bs-theme="dark"] .mini-feed .mf-err { color: #fca5a5; }
+    .mini-feed .mf-when  { flex-shrink: 0; min-width: 60px; text-align: right; }
+    .mini-feed .mf-arrow { flex-shrink: 0; opacity: .55; transition: transform .15s ease, opacity .15s ease; }
+    .mini-feed .mf-row:hover .mf-arrow { transform: translateX(3px); opacity: 1; }
+    @media (max-width: 640px) {
+      .mini-feed .mf-when  { display: none; }
+      .mini-feed .mf-line1 { white-space: normal; }
+    }
+  </style>
+
   <div class="row g-3 mt-1">
     <div class="col-12">
       <div class="card-e">
@@ -3898,7 +4025,7 @@ elseif ($tab === 'emails'):
       $tplLabel = $tplLabels[$e['template_code']] ?? ($e['template_code'] ?: 'inline');
       $statusClass = $e['opened_at'] ? 'opened' : ($e['status'] === 'sent' ? 'sent' : ($e['status'] === 'failed' || $e['status']==='bounced' ? 'failed' : 'queued'));
     ?>
-      <div class="email-card <?= ($e['status']==='failed' || $e['status']==='bounced') ? 'is-failed' : '' ?>" data-testid="email-card-<?= (int)$e['id'] ?>">
+      <div id="email-<?= (int)$e['id'] ?>" class="email-card <?= ($e['status']==='failed' || $e['status']==='bounced') ? 'is-failed' : '' ?>" data-testid="email-card-<?= (int)$e['id'] ?>">
         <div class="ec-head">
           <div class="ec-head-l">
             <div class="ec-status-dot ec-<?= $statusClass ?>" title="<?= esc(ucfirst($statusClass)) ?>"></div>
@@ -3993,7 +4120,29 @@ elseif ($tab === 'emails'):
       .ec-k { min-width:0; font-size:11px; }
     }
     [data-bs-theme="dark"] .email-card { background:#0f1729; }
+    /* When deep-linked from Dashboard Recent Activity (?hl=ID), pulse-highlight the target card briefly. */
+    .email-card.is-highlight { animation: ec-hl 2.6s ease-out 1; }
+    @keyframes ec-hl {
+      0%   { box-shadow: 0 0 0 0 rgba(59,130,246,.7), 0 0 24px rgba(59,130,246,.0); }
+      30%  { box-shadow: 0 0 0 4px rgba(59,130,246,.45), 0 0 28px rgba(59,130,246,.35); }
+      100% { box-shadow: 0 0 0 0 rgba(59,130,246,0),    0 0 0    rgba(59,130,246,0); }
+    }
   </style>
+  <script>
+  (function() {
+    // Deep-link from Dashboard Recent Activity → highlight the matching card.
+    const params = new URLSearchParams(location.search);
+    const hl = parseInt(params.get('hl') || '0', 10);
+    if (!hl) return;
+    const target = document.getElementById('email-' + hl);
+    if (!target) return;
+    setTimeout(() => {
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      target.classList.add('is-highlight');
+      setTimeout(() => target.classList.remove('is-highlight'), 2800);
+    }, 80);
+  })();
+  </script>
 
   <!-- Edit & Resend Modal (uses admin's modal pattern — no Bootstrap backdrop conflicts) -->
   <div class="modal" id="editResendModal" tabindex="-1" data-testid="edit-resend-modal" style="background:rgba(0,0,0,.55); display:none;">

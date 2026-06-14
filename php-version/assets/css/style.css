@@ -141,14 +141,56 @@ body .btn-primary { background: linear-gradient(135deg, var(--vibe-g1, #1d4ed8),
 body .btn-primary:hover { filter: brightness(1.06); }
 body[data-brand-motion="bounce"] .logo-3d .brand-mark,
 body[data-brand-motion="bounce"] .logo-3d > img:first-of-type {
-  /* Premium bounce-and-spin — 3D rotateY for a coin-flip feel + a soft
-     vertical bounce + a subtle scale pulse on landing.  Cubic-bezier
-     gives a snappier ease in/out than plain ease-in-out. */
+  /* Premium 360° bounce-spin — coin-flip rotateY + soft vertical bounce
+     + landing scale pulse. Wrapped by a glowing halo ring that breathes
+     in sync with the spin (see .logo-3d::before below). */
   animation: logo-spin-bounce 3.2s cubic-bezier(.55,.05,.25,1) infinite;
   transform-style: preserve-3d;
   backface-visibility: hidden;
-  filter: drop-shadow(0 4px 10px rgba(6, 182, 212, 0.28));
+  filter: drop-shadow(0 6px 14px rgba(6, 182, 212, 0.42));
   will-change: transform, filter;
+}
+/* Theme-aware halo ring behind the brand mark — pulses with the bounce,
+   picks up the active vibe's accent colour so the logo always feels at
+   home with the rest of the storefront. */
+body[data-brand-motion="bounce"] .navbar .logo-3d {
+  position: relative;
+}
+body[data-brand-motion="bounce"] .navbar .logo-3d::before {
+  content: ''; position: absolute; left: -6px; top: 50%;
+  width: 54px; height: 54px; transform: translateY(-50%);
+  border-radius: 50%; pointer-events: none; z-index: 0;
+  background: radial-gradient(closest-side,
+              rgba(6, 182, 212, 0.30) 0%,
+              rgba(45, 212, 191, 0.18) 45%,
+              rgba(6, 182, 212, 0) 75%);
+  filter: blur(2px);
+  animation: logo-halo-pulse 3.2s cubic-bezier(.55,.05,.25,1) infinite;
+}
+body[data-brand-motion="bounce"] .navbar .logo-3d .brand-mark,
+body[data-brand-motion="bounce"] .navbar .logo-3d > img:first-of-type {
+  position: relative; z-index: 1;
+}
+@keyframes logo-halo-pulse {
+  0%, 100% { transform: translateY(-50%) scale(0.85); opacity: .55; }
+  20%      { transform: translateY(-50%) scale(1.10); opacity: .95; }
+  50%      { transform: translateY(-50%) scale(1.00); opacity: .70; }
+  80%      { transform: translateY(-50%) scale(1.10); opacity: .95; }
+}
+/* Dark-mode halo picks up a brighter cyan so it stays visible. */
+[data-bs-theme="dark"] body[data-brand-motion="bounce"] .navbar .logo-3d::before {
+  background: radial-gradient(closest-side,
+              rgba(94, 234, 212, 0.45) 0%,
+              rgba(45, 212, 191, 0.25) 45%,
+              rgba(6, 182, 212, 0) 75%);
+}
+/* Honour the user's "reduce motion" OS preference for accessibility. */
+@media (prefers-reduced-motion: reduce) {
+  body[data-brand-motion="bounce"] .logo-3d .brand-mark,
+  body[data-brand-motion="bounce"] .logo-3d > img:first-of-type,
+  body[data-brand-motion="bounce"] .navbar .logo-3d::before {
+    animation: none;
+  }
 }
 body[data-brand-motion="spin"] .logo-3d .brand-mark,
 body[data-brand-motion="spin"] .logo-3d > img:first-of-type {
