@@ -229,3 +229,150 @@
 [data-bs-theme="dark"] .aeo-quick-answer .aeo-answer-body,
 [data-bs-theme="dark"] .aeo-quick-answer .fw-bold { color: #e2e8f0 !important; }
 [data-bs-theme="dark"] .aeo-quick-answer strong { color: #93c5fd !important; }
+
+/* =====================================================================
+ *  FULL DARK-MODE SWEEP (Feb 2026 — iteration 9)
+ *  --------------------------------------------------------------------
+ *  Hard inline styles across category.php, product.php, hub.php and the
+ *  deep-cluster blocks shipped with light-only colours.  These rules
+ *  force-override them in dark mode so every light bg / dark text combo
+ *  becomes a dark bg / light text combo.  Using attribute selectors +
+ *  !important is intentional — inline styles can only be defeated this
+ *  way.
+ * ===================================================================== */
+
+/* ---- category.php — "Part of a wider topic hub" callout (the obvious bug). */
+[data-bs-theme="dark"] .cat-topic-hub,
+[data-bs-theme="dark"] [data-testid="category-topic-hub"] {
+  background: linear-gradient(135deg, rgba(59,130,246,.16), rgba(16,185,129,.10)) !important;
+  border-color: rgba(96,165,250,.35) !important;
+}
+[data-bs-theme="dark"] .cat-topic-hub h2,
+[data-bs-theme="dark"] .cat-topic-hub .h5,
+[data-bs-theme="dark"] [data-testid="category-topic-hub"] h2 { color: #f1f5f9 !important; }
+[data-bs-theme="dark"] .cat-topic-hub p,
+[data-bs-theme="dark"] .cat-topic-hub .text-secondary { color: #cbd5e1 !important; }
+[data-bs-theme="dark"] [data-testid="category-hub-link"],
+[data-bs-theme="dark"] [data-testid="product-hub-link"] {
+  background: rgba(30,41,59,.85) !important;
+  border-color: rgba(148,163,184,.30) !important;
+}
+
+/* ---- category.php — deep-cluster Popular Searches badges. */
+[data-bs-theme="dark"] [data-testid="cluster-popular"] {
+  background: rgba(30,58,138,.55) !important;
+  color: #bfdbfe !important;
+  border-color: rgba(96,165,250,.45) !important;
+}
+[data-bs-theme="dark"] .cat-deep-cluster h2,
+[data-bs-theme="dark"] .cat-deep-cluster .text-secondary { color: #e2e8f0 !important; }
+[data-bs-theme="dark"] .cat-deep-cluster a:not(.badge) { color: #93c5fd !important; }
+[data-bs-theme="dark"] .cat-deep-cluster a:not(.badge):hover { color: #bfdbfe !important; }
+[data-bs-theme="dark"] .cat-deep-cluster .fw-bold.text-uppercase.text-secondary {
+  color: #94a3b8 !important;
+}
+
+/* ---- product.php — deep-cluster + topic-hub badge row. */
+[data-bs-theme="dark"] [data-testid="product-topic-hub-row"] {
+  background: rgba(30,41,59,.70) !important;
+  border-color: rgba(148,163,184,.30) !important;
+}
+[data-bs-theme="dark"] [data-testid="product-topic-hub-row"] .fw-semibold,
+[data-bs-theme="dark"] [data-testid="product-topic-hub-row"] .text-secondary { color: #cbd5e1 !important; }
+[data-bs-theme="dark"] .pd-deep-cluster h2,
+[data-bs-theme="dark"] .pd-deep-cluster .text-secondary { color: #e2e8f0 !important; }
+[data-bs-theme="dark"] .pd-deep-cluster a:not(.badge) { color: #93c5fd !important; }
+
+/* ---- hub.php — related topic chips, breadcrumbs, badges. */
+[data-bs-theme="dark"] [data-testid="hub-related-link"] {
+  background: #1e293b !important;
+  color: #e2e8f0 !important;
+  border-color: #334155 !important;
+}
+[data-bs-theme="dark"] [data-testid="hub-toc"] .badge,
+[data-bs-theme="dark"] [data-testid="hub-stats"] .badge {
+  background: rgba(30,41,59,.85) !important;
+  color: #e2e8f0 !important;
+  border-color: rgba(148,163,184,.25) !important;
+}
+
+/* ---- AEO Quick-Answer card (works everywhere it renders — product,
+        category, hub).  Inline color #1e293b is invisible on dark bg. */
+[data-bs-theme="dark"] .aeo-quick-answer,
+[data-bs-theme="dark"] [data-testid$="-quick-answer"] {
+  background: linear-gradient(180deg, rgba(59,130,246,.12), rgba(15,23,42,.55)) !important;
+  border-left-color: #3b82f6 !important;
+  border-color: rgba(96,165,250,.25) !important;
+}
+[data-bs-theme="dark"] .aeo-quick-answer .aeo-answer-body,
+[data-bs-theme="dark"] .aeo-quick-answer .fw-bold,
+[data-bs-theme="dark"] [data-testid$="-quick-answer"] .fw-bold,
+[data-bs-theme="dark"] [data-testid$="-quick-answer-body"] {
+  color: #e2e8f0 !important;
+}
+[data-bs-theme="dark"] .aeo-quick-answer strong { color: #93c5fd !important; }
+
+/* ---- Toolbar (shop-toolbar) — light grey bg breaks in dark mode. */
+[data-bs-theme="dark"] .shop-toolbar {
+  background: rgba(30,41,59,.55) !important;
+  border-color: rgba(148,163,184,.20) !important;
+}
+[data-bs-theme="dark"] .shop-toolbar h2,
+[data-bs-theme="dark"] .shop-toolbar .text-secondary,
+[data-bs-theme="dark"] .shop-toolbar small { color: #e2e8f0 !important; }
+[data-bs-theme="dark"] .platform-seg {
+  background: rgba(15,23,42,.55) !important;
+  border-color: rgba(148,163,184,.20) !important;
+}
+[data-bs-theme="dark"] .platform-pill { color: #cbd5e1 !important; }
+[data-bs-theme="dark"] .platform-pill.active {
+  background: #3b82f6 !important;
+  color: #fff !important;
+}
+[data-bs-theme="dark"] .sort-select,
+[data-bs-theme="dark"] .form-select {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+  color: #e2e8f0 !important;
+}
+
+/* ---- buying-guide H2/H3 hierarchy — pure dark text in light mode. */
+[data-bs-theme="dark"] .cat-buying-guide h2,
+[data-bs-theme="dark"] .cat-buying-guide h3 { color: #f1f5f9 !important; }
+[data-bs-theme="dark"] .cat-buying-guide p,
+[data-bs-theme="dark"] .cat-buying-guide li { color: #cbd5e1 !important; }
+
+/* ---- Category FAQ accordion in dark mode. */
+[data-bs-theme="dark"] .cat-faq .accordion-button {
+  background: #1e293b !important;
+  color: #f1f5f9 !important;
+}
+[data-bs-theme="dark"] .cat-faq .accordion-body {
+  background: #1e293b !important;
+  color: #cbd5e1 !important;
+  border-top: 1px solid #334155 !important;
+}
+[data-bs-theme="dark"] .cat-faq .accordion-item { background: #0f172a !important; border-color: #334155 !important; }
+
+/* ---- alert-light (used for "No products found" empty state). */
+[data-bs-theme="dark"] .alert-light {
+  background: rgba(30,41,59,.85) !important;
+  color: #e2e8f0 !important;
+  border-color: #334155 !important;
+}
+
+/* ---- Generic anchor inside dark mode containers (e2e8f0 text). */
+[data-bs-theme="dark"] .container a:not(.btn):not(.badge):not(.nav-link):not([class*=text-]) { color: #93c5fd; }
+
+/* ---- Product page reviews + spec bg. */
+[data-bs-theme="dark"] .pd-reviews,
+[data-bs-theme="dark"] .pd-spec,
+[data-bs-theme="dark"] .pd-summary {
+  background: rgba(30,41,59,.45) !important;
+  border-color: rgba(148,163,184,.20) !important;
+  color: #e2e8f0 !important;
+}
+[data-bs-theme="dark"] .pd-reviews h2,
+[data-bs-theme="dark"] .pd-spec h2,
+[data-bs-theme="dark"] .pd-summary h2 { color: #f1f5f9 !important; }
+

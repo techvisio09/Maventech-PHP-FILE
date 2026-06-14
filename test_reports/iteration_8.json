@@ -1,0 +1,58 @@
+{
+  "summary": "Iteration 9 verification — Admin Dashboard donut chart, Quick Answer reorder, full dark-mode sweep. 324/324 pytest assertions pass. Frontend dark-mode visual checks confirm all called-out elements render with dark backgrounds and light readable text (topic-hub callout, popular-searches badges, FAQ accordion, deep-cluster, dashboard donut). Quick Answer is correctly positioned below the product grid. Donut chart renders with Chart.js + legend + total revenue (conditionally loaded only when paid orders exist).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "category.php topic-hub callout", "issues": ["Hub-link badge ([data-testid=category-hub-link]) uses brand red rgb(220,38,38) on dark rgba(30,41,59,0.85) bg — readable but slightly low contrast vs the WCAG AA target. Optional polish: switch to a lighter brand hue (e.g. #ef4444 or pure white) on the dark variant for better punch."]}
+    ]
+  },
+  "verified_assertions": {
+    "quick_answer_after_products": {"qa_top_px": 1055, "products_top_px": 627, "qa_after_products": true},
+    "topic_hub_dark_mode": {
+      "bg_image": "linear-gradient(135deg, rgba(59,130,246,0.16), rgba(16,185,129,0.1))",
+      "color": "rgb(236,236,240)",
+      "bg_near_white": false
+    },
+    "category_hub_link": {"bg": "rgba(30,41,59,0.85)", "color": "rgb(220,38,38)"},
+    "cluster_popular_dark_mode": {"container_bg": "rgba(59,130,246,0.16)", "container_color": "rgb(147,197,253)"},
+    "cat_faq_accordion_dark_mode": {"bg": "rgb(30,41,59)", "color": "rgb(241,245,249)"},
+    "deep_cluster_dark_mode": {"h2_color": "rgb(226,232,240)", "link_color": "rgb(147,197,253)"},
+    "dashboard_donut": {
+      "has_chart": true, "has_legend": true, "has_total": true, "row_count": 1,
+      "chartjs_loaded_conditionally": true,
+      "total_text": "TOTAL REVENUE / $229 / 1 category",
+      "total_color_dark_mode": "rgb(241,245,249)",
+      "legend_row_color_dark_mode": "rgb(241,245,249)"
+    },
+    "admin_tabs_200_no_php_errors": {"dashboard": true, "ai-blogger": true, "products": true, "orders": true, "sales": true},
+    "hubs_count_badge_on_ai_blogger": true,
+    "css_cache_bust": "dark-mode-polish.css?v=1781480494",
+    "hub_page_dark_mode_regression": {"hub-hero": true, "hub-related-link": true},
+    "product_page_dark_mode_regression": {"product-topic-hub-row": true, "pd-deep-cluster": true, "tested_slug": "microsoft-office-home-2024-pc"}
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration9_dashboard_dark_mode.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Optional polish) Consider raising contrast of [data-testid=category-hub-link] text in dark mode — current brand red on dark bg works but is the lowest-contrast element seen."
+  ],
+  "critical_code_review_comments": [
+    "Sales-by-Category SQL correctly uses oi.qty * oi.price (verified via /admin.php?tab=dashboard returning 200 with no order_items column warnings in body).",
+    "Chart.js CDN is gated on $catTotalRev > 0 — confirmed by test that chart.umd.min.js presence === has_data flag.",
+    "CSS cache-busting works: ?v=<filemtime> appended to dark-mode-polish.css link in every page tested."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "admin@maventechsoftware.com / Admin@123",
+  "seed_data_creation": "None — used existing seed data (1 paid order = $229 in office-2024-pc category).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Playwright UI login via form.fill is flaky on this preview (the login button click does not persist the session — fields show as empty after Sign In). Workaround: use requests.Session() to authenticate, extract PHPSESSID, then inject via page.context.add_cookies(). All backend tests use requests.Session() which works fine. Dark-mode toggle requires BOTH localStorage.setItem('uc_theme','dark') AND document.documentElement.setAttribute('data-bs-theme','dark') because the inline header script reads localStorage on hydration but the data attribute is what CSS uses.",
+  "rca_of_the_issue": "N/A — no defects found in this iteration."
+}

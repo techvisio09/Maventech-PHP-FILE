@@ -1732,6 +1732,165 @@ if ($tab === 'dashboard'):
     </div>
   </div>
 
+  <?php
+  // ---- Sales-by-category donut chart data ------------------------------
+  // Aggregates paid-order revenue by product category for the current
+  // region; renders as a Chart.js doughnut on dashboard load.  Limited to
+  // the top 8 categories so the legend doesn't overflow — everything else
+  // collapses into "Other".
+  $catRows = [];
+  try {
+      $catStmt = $pdo->prepare(
+          "SELECT COALESCE(NULLIF(p.category,''),'Uncategorised') AS cat,
+                  SUM(oi.qty * oi.price) AS rev,
+                  SUM(oi.qty)             AS qty
+             FROM order_items oi
+             JOIN orders     o ON o.id = oi.order_id AND o.status = 'paid' AND o.region = ?
+             LEFT JOIN products p ON p.slug = oi.product_slug
+            GROUP BY cat
+            ORDER BY rev DESC"
+      );
+      $catStmt->execute([$region_code]);
+      $catRows = $catStmt->fetchAll();
+  } catch (Throwable $e) {}
+  $catTotalRev = 0; foreach ($catRows as $r) $catTotalRev += (float)$r['rev'];
+  // Collapse tail into "Other" if more than 8 categories.
+  $catTop = array_slice($catRows, 0, 8);
+  if (count($catRows) > 8) {
+      $otherRev = 0; $otherQty = 0;
+      foreach (array_slice($catRows, 8) as $r) { $otherRev += (float)$r['rev']; $otherQty += (int)$r['qty']; }
+      $catTop[] = ['cat' => 'Other', 'rev' => $otherRev, 'qty' => $otherQty];
+  }
+  $catLabels = array_map(static fn($r) => ucwords(str_replace('-', ' ', (string)$r['cat'])), $catTop);
+  $catValues = array_map(static fn($r) => round((float)$r['rev'], 2), $catTop);
+  // Distinctive palette that survives both dark + light mode.
+  $catPalette = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#84cc16','#94a3b8'];
+  ?>
+
+  <div class="row g-3 mt-1" data-testid="sales-by-category-row">
+    <div class="col-12">
+      <div class="card-e">
+        <div class="card-head">
+          <div class="ttl"><i class="bi bi-pie-chart-fill"></i> Sales by Category <span class="sub ms-2">(<?= esc($rg['name']) ?>, paid orders)</span></div>
+          <a href="admin.php?tab=sales" class="sub" style="color:var(--brand);">All sales →</a>
+        </div>
+        <div class="card-body-p">
+          <?php if ($catTotalRev <= 0): ?>
+            <div class="text-center py-4 text-muted" data-testid="sales-by-category-empty">
+              <i class="bi bi-inbox" style="font-size:32px;opacity:.55;"></i>
+              <div class="mt-2 small">No paid orders in <?= esc($rg['name']) ?> yet — once orders come in this chart will populate automatically.</div>
+            </div>
+          <?php else: ?>
+            <div class="row g-3 align-items-center">
+              <div class="col-lg-5">
+                <div style="position:relative;max-width:340px;margin:0 auto;">
+                  <canvas id="salesByCategoryChart" data-testid="sales-by-category-chart" style="max-height:340px;"></canvas>
+                  <div class="sbc-center" data-testid="sales-by-category-total">
+                    <div class="sbc-tot-label">Total revenue</div>
+                    <div class="sbc-tot-value"><?= esc($rg['currency_symbol']) ?><?= number_format(region_price($catTotalRev), 0) ?></div>
+                    <div class="sbc-tot-sub"><?= number_format(count($catRows)) ?> categor<?= count($catRows) === 1 ? 'y' : 'ies' ?></div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-lg-7">
+                <div class="sbc-legend" data-testid="sales-by-category-legend">
+                  <?php foreach ($catTop as $i => $r):
+                      $share = $catTotalRev > 0 ? ($r['rev'] / $catTotalRev) * 100 : 0;
+                      $color = $catPalette[$i % count($catPalette)];
+                  ?>
+                    <div class="sbc-row" data-testid="sbc-row-<?= esc(strtolower(str_replace(' ', '-', (string)$r['cat']))) ?>">
+                      <span class="sbc-dot" style="background:<?= esc($color) ?>;"></span>
+                      <span class="sbc-cat" title="<?= esc((string)$r['cat']) ?>"><?= esc(ucwords(str_replace('-', ' ', (string)$r['cat']))) ?></span>
+                      <span class="sbc-bar"><span class="sbc-bar-fill" style="width:<?= number_format($share, 1) ?>%;background:<?= esc($color) ?>;"></span></span>
+                      <span class="sbc-pct"><?= number_format($share, 1) ?>%</span>
+                      <span class="sbc-rev"><?= esc($rg['currency_symbol']) ?><?= number_format(region_price((float)$r['rev']), 0) ?></span>
+                    </div>
+                  <?php endforeach; ?>
+                </div>
+              </div>
+            </div>
+          <?php endif; ?>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <?php if ($catTotalRev > 0): ?>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script>
+    (function () {
+      const ctx = document.getElementById('salesByCategoryChart');
+      if (!ctx || typeof Chart === 'undefined') return;
+      const dark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
+      new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: <?= json_encode($catLabels, JSON_UNESCAPED_UNICODE) ?>,
+          datasets: [{
+            data: <?= json_encode($catValues) ?>,
+            backgroundColor: <?= json_encode(array_slice($catPalette, 0, count($catTop))) ?>,
+            borderColor: dark ? '#0f172a' : '#ffffff',
+            borderWidth: 3,
+            hoverOffset: 14
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '62%',
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function (c) {
+                  const v = c.parsed;
+                  const tot = c.dataset.data.reduce((a, b) => a + b, 0);
+                  const pct = tot > 0 ? ((v / tot) * 100).toFixed(1) : '0.0';
+                  return c.label + ': <?= esc($rg['currency_symbol']) ?>' + v.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:0}) + '  (' + pct + '%)';
+                }
+              }
+            }
+          },
+          animation: { animateRotate: true, duration: 700 }
+        }
+      });
+    })();
+  </script>
+  <style>
+    /* Sales-by-Category donut — center label + custom legend rows. */
+    .sbc-center {
+      position:absolute; inset:0; pointer-events:none; display:flex; flex-direction:column;
+      align-items:center; justify-content:center; text-align:center;
+    }
+    .sbc-tot-label { font-size:10.5px; text-transform:uppercase; letter-spacing:.6px; color:#64748b; }
+    .sbc-tot-value { font-size:24px; font-weight:800; color:var(--text, #0f172a); line-height:1.1; }
+    .sbc-tot-sub   { font-size:11px; color:#94a3b8; margin-top:2px; }
+    [data-bs-theme="dark"] .sbc-tot-value { color:#f1f5f9; }
+    [data-bs-theme="dark"] .sbc-tot-label { color:#94a3b8; }
+
+    .sbc-legend { display:flex; flex-direction:column; gap:6px; max-height:320px; overflow:auto; padding-right:4px; }
+    .sbc-row {
+      display:grid; grid-template-columns:14px 1.4fr 2fr 60px 90px; align-items:center; gap:10px;
+      padding:6px 10px; border-radius:8px; transition:background-color .15s ease;
+    }
+    .sbc-row:hover { background:rgba(59,130,246,.08); }
+    [data-bs-theme="dark"] .sbc-row:hover { background:rgba(59,130,246,.18); }
+    .sbc-dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
+    .sbc-cat { font-size:12.5px; font-weight:600; color:#0f172a; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    [data-bs-theme="dark"] .sbc-cat { color:#e2e8f0; }
+    .sbc-bar { position:relative; height:6px; background:rgba(148,163,184,.20); border-radius:3px; overflow:hidden; }
+    .sbc-bar-fill { display:block; height:100%; border-radius:3px; transition:width .4s ease; }
+    .sbc-pct { font-size:11.5px; font-weight:700; text-align:right; color:#64748b; }
+    [data-bs-theme="dark"] .sbc-pct { color:#cbd5e1; }
+    .sbc-rev { font-size:12px; font-weight:700; text-align:right; color:#0f172a; }
+    [data-bs-theme="dark"] .sbc-rev { color:#f1f5f9; }
+    @media (max-width: 991px) {
+      .sbc-row { grid-template-columns:14px 1.2fr 1.6fr 50px 80px; gap:8px; }
+      .sbc-cat, .sbc-rev { font-size:11.5px; }
+    }
+  </style>
+  <?php endif; ?>
+
   <div class="row g-3 mt-1">
     <!-- Top Sellers -->
     <div class="col-lg-4">

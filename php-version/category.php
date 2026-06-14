@@ -64,13 +64,6 @@ include __DIR__ . '/includes/header.php';
 <?= render_page_head($title . ' Products', count($products) . ' products — genuine licenses, delivered in minutes', [$title => null], 'category-title') ?>
 <div class="container py-4 py-lg-5">
 
-  <!-- AEO: 40-60 word direct answer for AI Overviews + Featured Snippets -->
-  <?= render_aeo_answer(
-        'What does ' . esc($title) . ' cost on ' . esc(SITE_BRAND) . '?',
-        esc(SITE_BRAND) . ' offers genuine <strong>' . esc($title) . '</strong> licence keys starting at ' . (count($products) ? esc(format_price((float)min(array_column($products, 'price')))) : '$24') . ' &mdash; up to 81% below retail. Each key is a perpetual one-time purchase (no subscription), delivered by email in 15&ndash;30 minutes, activates inside the official software, and is protected by a 30-day money-back guarantee.',
-        'category-quick-answer'
-    ) ?>
-
   <!-- SEO hero intro: indexable copy that primes the page with mid-tail intent. -->
   <p class="lead text-secondary mb-4" data-testid="category-intro-copy" style="max-width:880px;">
     <?= category_intro_seo($slug, $title) ?>
@@ -119,6 +112,17 @@ include __DIR__ . '/includes/header.php';
       <?php endforeach; ?>
     </div>
   <?php endif; ?>
+
+  <!-- AEO Quick Answer — placed AFTER the product grid so shoppers see
+       inventory first, then the AI/AEO-optimised price + delivery answer
+       that's also serialised to FAQPage JSON-LD for AI Overviews. -->
+  <div class="mt-4 mb-3">
+    <?= render_aeo_answer(
+          'What does ' . esc($title) . ' cost on ' . esc(SITE_BRAND) . '?',
+          esc(SITE_BRAND) . ' offers genuine <strong>' . esc($title) . '</strong> licence keys starting at ' . (count($products) ? esc(format_price((float)min(array_column($products, 'price')))) : '$24') . ' &mdash; up to 81% below retail. Each key is a perpetual one-time purchase (no subscription), delivered by email in 15&ndash;30 minutes, activates inside the official software, and is protected by a 30-day money-back guarantee.',
+          'category-quick-answer'
+      ) ?>
+  </div>
 
   <!-- ============ Long-form SEO copy: buying guide with H2/H3
        hierarchy that targets mid-tail and long-tail searches. ============ -->
