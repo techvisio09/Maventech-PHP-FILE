@@ -987,10 +987,16 @@ function fulfill_order(int $orderId, bool $forceAdminOverride = false): void {
         }
         $subj = render_template_subject('review_request', $vars)
               ?: ('How was your ' . $item['name'] . '? · Quick 30-second review');
-        // Send the review request immediately after the order-confirmation
-        // email — per product requirement.  Both land back-to-back so the
-        // customer sees the receipt + a "How was it?" prompt right away.
-        send_email($order['email'], $subj, $reviewHtml, $orderId, 'review_request', 0);
+        // Queue the review request to land AFTER the customer has received
+        // and read their order-delivery email.  A 10-minute delay is the
+        // sweet spot — long enough for the customer to install + activate
+        // their license (or at least open the order email and form an
+        // initial impression), short enough to still feel "fresh" when the
+        // review prompt arrives.  The cron worker honours `next_retry_at`,
+        // so the review email is held in the queue until 10 minutes have
+        // passed since fulfillment — guaranteed to never overtake the
+        // order_delivery email in the customer's inbox.
+        send_email($order['email'], $subj, $reviewHtml, $orderId, 'review_request', 10);
     }
 }
 
