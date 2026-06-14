@@ -197,14 +197,58 @@ class TestAutoSitemapHint:
         assert domain in href, f"auto-sitemap-url href should contain the configured domain — got {href}"
 
 
-# ===== 5. SUBMIT SITEMAP BUTTON =====
+import subprocess
+
+def _mysql_exec(sql: str):
+    """Run a SQL statement via the mysql CLI (PyMySQL is blocked by the
+    unix_socket auth plugin on root in this pod)."""
+    try:
+        subprocess.run(["mysql", "-uroot", "ucode_store", "-e", sql],
+                       check=False, capture_output=True, timeout=5)
+    except Exception:
+        pass
+
+def _clear_sitemap_submitted_state():
+    _mysql_exec("DELETE FROM settings WHERE k IN ('last_sitemap_submit_at','last_sitemap_submit_count')")
+
+def _set_sitemap_submitted_state(count=45):
+    _mysql_exec(
+        "INSERT INTO settings (k,v) VALUES ('last_sitemap_submit_at', NOW()), "
+        "('last_sitemap_submit_count', '" + str(int(count)) + "') "
+        "ON DUPLICATE KEY UPDATE v=VALUES(v)"
+    )
+
+
+# ===== 5. SUBMIT SITEMAP BUTTON — dual-state =====
 class TestSitemapButton:
-    def test_button_label_and_testid(self, admin_session):
+    def test_button_pre_submit_state(self, admin_session):
+        """When no recent submission, button should say 'Submit Sitemap to All Search Engines'."""
+        _clear_sitemap_submitted_state()
         r = admin_session.get(f"{BASE_URL}/admin.php", params={"tab": "ai-blogger"}, timeout=20)
         assert r.status_code == 200
         html = r.text
         assert 'data-testid="checklist-submit-sitemaps"' in html
         assert "Submit Sitemap to All Search Engines" in html
+        # The "Submitted" state should NOT be present yet
+        assert 'data-testid="checklist-sitemap-submitted-btn"' not in html
+
+    def test_button_post_submit_state(self, admin_session):
+        """After a successful submission within the last 30 min, the button flips to 'Sitemap Submitted'."""
+        _set_sitemap_submitted_state(45)
+        r = admin_session.get(f"{BASE_URL}/admin.php", params={"tab": "ai-blogger"}, timeout=20)
+        assert r.status_code == 200
+        html = r.text
+        # Both submitted-state buttons (top + lower) should render
+        assert 'data-testid="sitemap-submitted-btn"' in html
+        assert 'data-testid="checklist-sitemap-submitted-btn"' in html
+        assert "Sitemap Submitted" in html
+        # Resubmit affordance must still be reachable
+        assert 'data-testid="sitemap-resubmit-link"' in html
+        assert 'data-testid="checklist-sitemap-resubmit-btn"' in html
+        # URL count badge should reflect the persisted count
+        assert "45 URLs" in html
+        # Cleanup so other tests see a fresh state
+        _clear_sitemap_submitted_state()
 
 
 # ===== 6. BLOG FILTER (light regression — deeper in test_seo_php.py) =====

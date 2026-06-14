@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-02-14 (iteration 3) — Token UX parity + submitted-state button
+
+### Token "Uploaded" pattern parity (Google Search Console + Bing Webmaster)
+- `/app/php-version/admin.php` API Keys card now reads `$gscToken`/`$bingToken` (defined earlier on the page) instead of `$seoGsc`/`$seoBing` which were lower-scoped and always undefined at that point — fixed the bug where the green "Uploaded" state never triggered no matter how many times tokens were saved.
+- Both tokens now match the AI Key card's UX exactly: green panel + masked value + "Change" button (data-testids `gsc-uploaded-card` / `gsc-change-btn` / `gsc-masked` and the Bing equivalents).
+
+### "Sitemap Submitted" state for the green Submit button
+- Successful sitemap submissions persist `last_sitemap_submit_at` + `last_sitemap_submit_count` in the settings table.
+- For 30 minutes after a successful submission, BOTH submit buttons (top API-Keys card + lower Search-Engine-Visibility card) flip to a disabled green "Sitemap Submitted · N URLs · Xm ago" pill with a sidebar "Resubmit" link/button.
+- After 30 minutes the original "Submit Sitemap to (All) Search Engines" buttons return automatically.
+- New helper `human_time_diff_compact()` in `includes/functions.php`.
+
+### Testing
+- 48/48 pytest passing (24 baseline + 24 iteration-2/3 tests).
+- Two new dual-state tests: `test_button_pre_submit_state` + `test_button_post_submit_state`.
+
+---
+
 ## 2026-02-14 (later) — Dark mode polish + sitemap UX + review stars + AI summary
 
 ### Customer Review stars (interactive)

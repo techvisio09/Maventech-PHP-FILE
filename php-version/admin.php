@@ -721,6 +721,10 @@ if ($tab === 'ai-blogger') {
         // raw technical statuses.  Success = 2xx from IndexNow.
         $host = parse_url($siteUrl, PHP_URL_HOST);
         if ($indexNowStatus === 'ok') {
+            // Persist the success timestamp so the button below can flip to
+            // a "Sitemap Submitted" state on the next page load.
+            setting_set('last_sitemap_submit_at', date('Y-m-d H:i:s'));
+            setting_set('last_sitemap_submit_count', (string)$indexNowCount);
             $msg = '✓ Sitemap submitted successfully — ' . $indexNowCount . ' URL'
                  . ($indexNowCount === 1 ? '' : 's') . ' sent to Bing, Yandex, Naver & Seznam via IndexNow. '
                  . 'Google & Bing auto-discover your sitemap from robots.txt and Search Console. '
@@ -2279,45 +2283,75 @@ elseif ($tab === 'ai-blogger'):
           <!-- Google Search Console -->
           <div class="col-md-4">
             <label class="form-label small fw-semibold">Google Search Console</label>
-            <?php if (($seoGsc ?? '') !== ''): ?>
-              <div id="gsc-display" class="ai-key-uploaded" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;">
+            <?php if (($gscToken ?? '') !== ''): ?>
+              <div id="gsc-display" class="ai-key-uploaded" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;" data-testid="gsc-uploaded-card">
                 <div class="d-flex align-items-center justify-content-between">
-                  <span><i class="bi bi-check-circle-fill text-success me-1"></i><span class="fw-semibold" style="font-size:13px;color:#065f46;">Uploaded</span></span>
-                  <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" onclick="document.getElementById('gsc-display').style.display='none';document.getElementById('gsc-edit').style.display='block';"><i class="bi bi-pencil me-1"></i>Change</button>
+                  <div>
+                    <i class="bi bi-check-circle-fill text-success me-1"></i>
+                    <span class="fw-semibold" style="font-size:13px;color:#065f46;">Token Uploaded</span>
+                    <div style="font-size:11px;font-family:monospace;margin-top:2px;opacity:.7;" data-testid="gsc-masked"><?= esc(substr($gscToken, 0, 6) . '••••••' . substr($gscToken, -2)) ?></div>
+                  </div>
+                  <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" data-testid="gsc-change-btn" onclick="document.getElementById('gsc-display').style.display='none';document.getElementById('gsc-edit').style.display='block';"><i class="bi bi-pencil me-1"></i>Change</button>
                 </div>
               </div>
               <div id="gsc-edit" style="display:none;">
-                <input type="text" name="google_search_console" class="form-control mt-1" placeholder="Paste new token" style="font-size:13px;">
+                <input type="text" name="google_search_console" class="form-control mt-1" placeholder="Paste new token" style="font-size:13px;" data-testid="gsc-edit-input">
                 <button type="button" class="btn btn-sm btn-link text-secondary p-0 mt-1" onclick="document.getElementById('gsc-edit').style.display='none';document.getElementById('gsc-display').style.display='block';">Cancel</button>
               </div>
             <?php else: ?>
-              <input type="text" name="google_search_console" class="form-control" placeholder="Paste verification token" style="font-size:13px;">
+              <input type="text" name="google_search_console" class="form-control" placeholder="Paste verification token" style="font-size:13px;" data-testid="gsc-input">
               <div class="small mt-1 text-secondary"><i class="bi bi-info-circle me-1"></i>Optional — helps Google find your posts</div>
             <?php endif; ?>
           </div>
           <!-- Bing Webmaster -->
           <div class="col-md-4">
             <label class="form-label small fw-semibold">Bing Webmaster</label>
-            <?php if (($seoBing ?? '') !== ''): ?>
-              <div id="bing-display" class="ai-key-uploaded" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;">
+            <?php if (($bingToken ?? '') !== ''): ?>
+              <div id="bing-display" class="ai-key-uploaded" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;" data-testid="bing-uploaded-card">
                 <div class="d-flex align-items-center justify-content-between">
-                  <span><i class="bi bi-check-circle-fill text-success me-1"></i><span class="fw-semibold" style="font-size:13px;color:#065f46;">Uploaded</span></span>
-                  <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" onclick="document.getElementById('bing-display').style.display='none';document.getElementById('bing-edit').style.display='block';"><i class="bi bi-pencil me-1"></i>Change</button>
+                  <div>
+                    <i class="bi bi-check-circle-fill text-success me-1"></i>
+                    <span class="fw-semibold" style="font-size:13px;color:#065f46;">Token Uploaded</span>
+                    <div style="font-size:11px;font-family:monospace;margin-top:2px;opacity:.7;" data-testid="bing-masked"><?= esc(substr($bingToken, 0, 6) . '••••••' . substr($bingToken, -2)) ?></div>
+                  </div>
+                  <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" data-testid="bing-change-btn" onclick="document.getElementById('bing-display').style.display='none';document.getElementById('bing-edit').style.display='block';"><i class="bi bi-pencil me-1"></i>Change</button>
                 </div>
               </div>
               <div id="bing-edit" style="display:none;">
-                <input type="text" name="bing_webmaster" class="form-control mt-1" placeholder="Paste new token" style="font-size:13px;">
+                <input type="text" name="bing_webmaster" class="form-control mt-1" placeholder="Paste new token" style="font-size:13px;" data-testid="bing-edit-input">
                 <button type="button" class="btn btn-sm btn-link text-secondary p-0 mt-1" onclick="document.getElementById('bing-edit').style.display='none';document.getElementById('bing-display').style.display='block';">Cancel</button>
               </div>
             <?php else: ?>
-              <input type="text" name="bing_webmaster" class="form-control" placeholder="Paste verification token" style="font-size:13px;">
+              <input type="text" name="bing_webmaster" class="form-control" placeholder="Paste verification token" style="font-size:13px;" data-testid="bing-input">
               <div class="small mt-1 text-secondary"><i class="bi bi-info-circle me-1"></i>Optional — Bing & AI search</div>
             <?php endif; ?>
           </div>
         </div>
         <div class="d-flex align-items-center gap-3 mt-3 flex-wrap">
-          <button type="submit" class="btn btn-primary rounded-pill px-4"><i class="bi bi-check-lg me-1"></i>Save Settings</button>
-          <a href="admin.php?tab=ai-blogger&submit_sitemaps=1" class="btn btn-success rounded-pill px-4" onclick="return confirm('Submit your sitemap to Google, Bing & all search engines now?')"><i class="bi bi-send-check me-1"></i>Submit Sitemap to Search Engines</a>
+          <button type="submit" class="btn btn-primary rounded-pill px-4" data-testid="save-ai-keys-btn"><i class="bi bi-check-lg me-1"></i>Save Settings</button>
+          <?php
+            // Reflect a recent successful sitemap submission in the button label.
+            // "Recent" = within the last 30 minutes — long enough for the user
+            // to see the result, short enough that they can re-submit later.
+            $lastSubmitTs = setting_get('last_sitemap_submit_at', '');
+            $lastSubmitCnt = (int)setting_get('last_sitemap_submit_count', '0');
+            $recentlySubmitted = false;
+            if ($lastSubmitTs !== '') {
+                $age = time() - strtotime($lastSubmitTs);
+                if ($age >= 0 && $age < 1800) $recentlySubmitted = true;
+            }
+          ?>
+          <?php if ($recentlySubmitted): ?>
+            <button type="button" class="btn btn-success rounded-pill px-4" disabled data-testid="sitemap-submitted-btn" style="opacity:.92;cursor:default;">
+              <i class="bi bi-check2-circle me-1"></i>Sitemap Submitted
+              <span class="badge ms-2" style="background:rgba(255,255,255,.25);color:#fff;font-size:10px;font-weight:600;">
+                <?= $lastSubmitCnt ?> URLs &middot; <?= esc(human_time_diff_compact($lastSubmitTs)) ?> ago
+              </span>
+            </button>
+            <a href="admin.php?tab=ai-blogger&submit_sitemaps=1" class="small text-decoration-none" data-testid="sitemap-resubmit-link" onclick="return confirm('Resubmit your sitemap now?')"><i class="bi bi-arrow-clockwise me-1"></i>Resubmit</a>
+          <?php else: ?>
+            <a href="admin.php?tab=ai-blogger&submit_sitemaps=1" class="btn btn-success rounded-pill px-4" data-testid="submit-sitemap-btn" onclick="return confirm('Submit your sitemap to Google, Bing &amp; all search engines now?')"><i class="bi bi-send-check me-1"></i>Submit Sitemap to Search Engines</a>
+          <?php endif; ?>
         </div>
       </form>
     </div>
@@ -2356,8 +2390,29 @@ elseif ($tab === 'ai-blogger'):
     <p class="text-secondary small mb-3">Connect your website to search engines and shopping platforms. Fill in the verification tokens below and click <strong>Save All</strong>. Your website will start appearing in search results.</p>
 
     <!-- Submit Sitemap Button -->
-    <div class="d-flex flex-wrap gap-2 mb-3 pb-3" style="border-bottom:1px solid #f1f5f9;">
-      <a href="admin.php?tab=ai-blogger&submit_sitemaps=1" class="btn btn-primary rounded-pill px-4" data-testid="checklist-submit-sitemaps" onclick="return confirm('Submit your sitemap to Google, Bing & other search engines now?')"><i class="bi bi-send-check me-1"></i>Submit Sitemap to All Search Engines</a>
+    <div class="d-flex flex-wrap gap-2 mb-3 pb-3 align-items-center" style="border-bottom:1px solid #f1f5f9;">
+      <?php
+        // Same "recently submitted" detection as the top section so the
+        // lower button mirrors the upper button's state.
+        $lastSubmitTs2  = setting_get('last_sitemap_submit_at', '');
+        $lastSubmitCnt2 = (int)setting_get('last_sitemap_submit_count', '0');
+        $recentlySubmitted2 = false;
+        if ($lastSubmitTs2 !== '') {
+            $age2 = time() - strtotime($lastSubmitTs2);
+            if ($age2 >= 0 && $age2 < 1800) $recentlySubmitted2 = true;
+        }
+      ?>
+      <?php if ($recentlySubmitted2): ?>
+        <button type="button" class="btn btn-success rounded-pill px-4" disabled data-testid="checklist-sitemap-submitted-btn" style="opacity:.92;cursor:default;">
+          <i class="bi bi-check2-circle me-1"></i>Sitemap Submitted
+          <span class="badge ms-2" style="background:rgba(255,255,255,.25);color:#fff;font-size:10px;font-weight:600;">
+            <?= $lastSubmitCnt2 ?> URLs &middot; <?= esc(human_time_diff_compact($lastSubmitTs2)) ?> ago
+          </span>
+        </button>
+        <a href="admin.php?tab=ai-blogger&submit_sitemaps=1" class="btn btn-outline-secondary rounded-pill px-3" data-testid="checklist-sitemap-resubmit-btn" onclick="return confirm('Resubmit your sitemap now?')"><i class="bi bi-arrow-clockwise me-1"></i>Resubmit</a>
+      <?php else: ?>
+        <a href="admin.php?tab=ai-blogger&submit_sitemaps=1" class="btn btn-primary rounded-pill px-4" data-testid="checklist-submit-sitemaps" onclick="return confirm('Submit your sitemap to Google, Bing &amp; other search engines now?')"><i class="bi bi-send-check me-1"></i>Submit Sitemap to All Search Engines</a>
+      <?php endif; ?>
       <a href="blog.php" target="_blank" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-journal-text me-1"></i>View Blog</a>
       <a href="sitemap.xml" target="_blank" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-filetype-xml me-1"></i>View Sitemap</a>
     </div>

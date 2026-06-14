@@ -966,3 +966,22 @@ function render_variant_row(string $title, string $testPrefix, array $options, ?
     }
     return $html . '</div></div>';
 }
+
+/**
+ * Compact "time ago" formatter used by the admin sitemap-status pill.
+ * Returns strings like "3s", "12m", "2h", "5d".  Designed for tight
+ * UI surfaces; pair with a separate ARIA label when long text is needed.
+ */
+function human_time_diff_compact($whenIso): string
+{
+    if (!$whenIso) return '';
+    $ts  = is_int($whenIso) ? $whenIso : strtotime((string)$whenIso);
+    if ($ts === false || $ts === -1) return '';
+    $sec = max(0, time() - $ts);
+    if ($sec < 60)        return $sec . 's';
+    if ($sec < 3600)      return (int)floor($sec / 60) . 'm';
+    if ($sec < 86400)     return (int)floor($sec / 3600) . 'h';
+    if ($sec < 86400 * 7) return (int)floor($sec / 86400) . 'd';
+    return date('M j', $ts);
+}
+
