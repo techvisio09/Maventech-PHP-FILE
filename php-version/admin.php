@@ -2295,76 +2295,54 @@ elseif ($tab === 'ai-blogger'):
       <span class="ai-badge" style="background:#dbeafe;color:#1e40af;"><?= $totalAiAll ?> posts</span>
     </summary>
     <div class="ai-body">
-    <div class="d-flex align-items-center gap-1 flex-wrap mb-3">
+      <!-- Country filter pills -->
+      <div class="d-flex align-items-center gap-1 flex-wrap mb-2">
         <a href="admin.php?tab=ai-blogger" class="btn btn-sm <?= $regionFilter === '' ? 'btn-primary' : 'btn-outline-secondary' ?> rounded-pill px-3" data-testid="country-tab-all">All <span class="badge text-bg-light text-dark ms-1"><?= $totalAiAll ?></span></a>
         <?php foreach ($regionsList as $rc => $ri): ?>
           <a href="admin.php?tab=ai-blogger&region_filter=<?= esc($rc) ?>" class="btn btn-sm <?= $regionFilter === $rc ? 'btn-primary' : 'btn-outline-secondary' ?> rounded-pill px-3" data-testid="country-tab-<?= esc($rc) ?>"><?= $ri['flag'] ?> <?= esc($rc) ?> <span class="badge text-bg-light text-dark ms-1"><?= (int)($perRegionCounts[$rc] ?? 0) ?></span></a>
         <?php endforeach; ?>
       </div>
-      </div>
-    </div>
 
-    <?php if ($aiAll): ?>
-      <div class="d-flex flex-column gap-2">
+      <?php if ($aiAll): ?>
+      <!-- Scrollable post list — max 400px before scroll -->
+      <div style="max-height:420px;overflow-y:auto;border:1px solid #eef2f7;border-radius:8px;">
         <?php $i = 0; foreach (array_slice($aiAll, 0, 30) as $bp): $i++; ?>
           <?php
             $httpOk   = (int)($bp['verified_http'] ?? 0) === 200;
             $postImg  = $bp['image'] ?? '';
             $rFlag    = $regionsList[$bp['target_region'] ?? '']['flag'] ?? '';
-            $rName    = $regionsList[$bp['target_region'] ?? '']['name'] ?? ($bp['target_region'] ?? '');
-            $postDate = date('M j, Y', strtotime($bp['created_at'] ?? $bp['date']));
+            $postDate = date('M j', strtotime($bp['created_at'] ?? $bp['date']));
             $prodName = $bp['product_name'] ?? '';
           ?>
           <a href="blog-post.php?id=<?= urlencode($bp['id']) ?>" target="_blank" rel="noopener" data-testid="ai-blogger-row-<?= $i ?>"
-             class="d-flex align-items-center gap-3 text-decoration-none"
-             style="padding:10px 14px;border-radius:10px;border:1px solid #eef2f7;background:#fafbfd;transition:all .15s;"
-             onmouseover="this.style.borderColor='#93c5fd';this.style.background='#f0f7ff'"
-             onmouseout="this.style.borderColor='#eef2f7';this.style.background='#fafbfd'">
-            <!-- Number -->
-            <div style="width:24px;text-align:center;flex-shrink:0;font-size:11px;font-weight:700;color:#94a3b8;"><?= $i ?></div>
-            <!-- Image -->
+             class="d-flex align-items-center gap-2 text-decoration-none"
+             style="padding:7px 10px;border-bottom:1px solid #f1f5f9;font-size:12px;color:#334155;transition:background .1s;"
+             onmouseover="this.style.background='#f0f7ff'"
+             onmouseout="this.style.background='transparent'">
+            <span style="width:18px;text-align:center;color:#94a3b8;font-size:10px;flex-shrink:0;"><?= $i ?></span>
             <?php if ($postImg): ?>
-              <img src="<?= esc($postImg) ?>" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:8px;flex-shrink:0;">
+              <img src="<?= esc($postImg) ?>" alt="" style="width:28px;height:28px;object-fit:cover;border-radius:5px;flex-shrink:0;">
             <?php else: ?>
-              <div style="width:40px;height:40px;border-radius:8px;background:#e2e8f0;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="bi bi-journal-text text-secondary" style="font-size:16px;"></i></div>
+              <span style="width:28px;height:28px;border-radius:5px;background:#e2e8f0;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;color:#94a3b8;"><i class="bi bi-journal-text"></i></span>
             <?php endif; ?>
-            <!-- Title + product -->
-            <div style="flex:1;min-width:0;">
-              <div class="fw-semibold text-body" style="font-size:13px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= esc($bp['title']) ?></div>
-              <?php if ($prodName): ?>
-                <div class="text-secondary" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= esc($prodName) ?></div>
-              <?php endif; ?>
-            </div>
-            <!-- Market flag -->
-            <div style="flex-shrink:0;text-align:center;min-width:50px;">
-              <div style="font-size:16px;"><?= $rFlag ?></div>
-              <div style="font-size:9px;font-weight:600;color:#64748b;"><?= esc($bp['target_region'] ?? '') ?></div>
-            </div>
-            <!-- Date -->
-            <div style="flex-shrink:0;min-width:70px;text-align:right;">
-              <div class="text-secondary" style="font-size:11px;"><?= $postDate ?></div>
-            </div>
-            <!-- Status -->
-            <div style="flex-shrink:0;min-width:60px;text-align:center;">
-              <span class="badge rounded-pill" style="background:<?= $httpOk ? '#d1fae5' : '#fef3c7' ?>;color:<?= $httpOk ? '#065f46' : '#92400e' ?>;font-size:9px;padding:3px 10px;"><?= $httpOk ? 'Live' : 'Pending' ?></span>
-            </div>
-            <!-- Arrow -->
-            <i class="bi bi-chevron-right text-secondary" style="font-size:12px;flex-shrink:0;"></i>
+            <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;color:#1e293b;"><?= esc($bp['title']) ?></span>
+            <span style="flex-shrink:0;font-size:14px;"><?= $rFlag ?></span>
+            <span style="flex-shrink:0;color:#94a3b8;min-width:45px;text-align:right;"><?= $postDate ?></span>
+            <span class="badge rounded-pill" style="flex-shrink:0;background:<?= $httpOk ? '#d1fae5' : '#fef3c7' ?>;color:<?= $httpOk ? '#065f46' : '#92400e' ?>;font-size:8px;padding:2px 6px;"><?= $httpOk ? 'Live' : 'Pending' ?></span>
+            <i class="bi bi-chevron-right" style="font-size:10px;color:#cbd5e1;flex-shrink:0;"></i>
           </a>
         <?php endforeach; ?>
       </div>
       <?php if (count($aiAll) > 30): ?>
-        <div class="text-center mt-3">
-          <span class="text-secondary small">Showing first 30 of <?= count($aiAll) ?> posts</span>
-        </div>
+        <div class="text-center mt-2"><span class="text-secondary" style="font-size:11px;">Showing 30 of <?= count($aiAll) ?></span></div>
       <?php endif; ?>
-    <?php else: ?>
-      <div class="text-center py-4" style="color:#94a3b8;">
-        <div style="font-size:48px;"><i class="bi bi-journal-x"></i></div>
-        <div class="fw-semibold mt-2">No blog posts yet</div>
-        <div class="small mt-1">Click <strong>"Write One Post"</strong> or <strong>"Publish Full Batch"</strong> above to get started.</div>
+      <?php else: ?>
+      <div class="text-center py-3" style="color:#94a3b8;">
+        <i class="bi bi-journal-x" style="font-size:28px;"></i>
+        <div class="fw-semibold mt-1" style="font-size:13px;">No blog posts yet</div>
+        <div style="font-size:11px;">Click "Write One Post" above to get started.</div>
       </div>
-    <?php endif; ?>
+      <?php endif; ?>
     </div>
   </details>
 
