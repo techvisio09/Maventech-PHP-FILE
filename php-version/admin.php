@@ -630,6 +630,80 @@ if ($tab === 'ai-blogger') {
         exit;
     }
 
+    // ----- "Publish a random post now" — pick ONE random product + region,
+    // write a single blog post and index it instantly. Separate from the
+    // daily 24-post batch so the operator can ship an ad-hoc article without
+    // touching the daily cooldown. 60-sec mini-cooldown stops button-mashing.
+    if (!empty($_GET['run_random_post'])) {
+        $lastRand = setting_get('seo_bot_random_post_last_at', '');
+        if ($lastRand && (time() - strtotime($lastRand)) < 60) {
+            $_SESSION['seo_bot_flash'] = 'Just published a random post a moment ago — give it ~60 seconds before publishing the next.';
+        } else {
+            try {
+                $apiKey  = defined('OPENAI_API_KEY')  ? OPENAI_API_KEY  : (getenv('EMERGENT_LLM_KEY') ?: '');
+                $baseUrl = defined('OPENAI_BASE_URL') ? OPENAI_BASE_URL : '';
+                if (!$apiKey || !$baseUrl) {
+                    throw new RuntimeException('LLM key not configured');
+                }
+                $regions  = array_values(array_filter(array_map('trim', explode(',', SEOBOT_BLOG_REGIONS))));
+                $region   = $regions[array_rand($regions)];
+                $rep      = ['errors' => []];
+                $one = _seo_generate_one_blog_post(db(), $apiKey, $baseUrl, $region, [], $rep);
+                if (!empty($one['blog_post_id'])) {
+                    setting_set('seo_bot_random_post_last_at', date('Y-m-d H:i:s'));
+                    $_SESSION['seo_bot_flash'] = 'Random post published — featured ' . ($one['product_name'] ?: 'a product') . ' for ' . $region . ' market.';
+                    $_SESSION['seo_bot_blog_flash'] = [
+                        'posts' => [[
+                            'blog_post_id'    => $one['blog_post_id'],
+                            'blog_post_title' => $one['blog_post_title'],
+                            'blog_post_image' => $one['blog_post_image'] ?? '',
+                            'product_name'    => $one['product_name'] ?? '',
+                            'target_region'   => $region,
+                        ]],
+                    ];
+                } else {
+                    $errMsg = $rep['errors'][0] ?? 'unknown error';
+                    $_SESSION['seo_bot_flash'] = 'Random post failed — ' . $errMsg;
+                }
+            } catch (Throwable $e) {
+                $_SESSION['seo_bot_flash'] = 'Random post error: ' . $e->getMessage();
+            }
+        }
+        header('Location: admin.php?tab=ai-blogger');
+        exit;
+    }
+
+    // ----- "Publish daily featured trends article" — separate from the
+    // 24-post batch. One editorial-style article per day focusing on
+    // industry trends around a different product each day. 24 h cooldown.
+    if (!empty($_GET['run_trends_article'])) {
+        try {
+            $report = ['errors' => []];
+            $res = seo_publish_featured_trends_article($report, !empty($_GET['force']));
+            if (!empty($res['skipped'])) {
+                $_SESSION['seo_bot_flash'] = 'Featured trends article skipped — ' . $res['reason'];
+            } elseif (!empty($res['blog_post_id'])) {
+                $_SESSION['seo_bot_flash'] = 'Featured trends article published — ' . $res['blog_post_title'];
+                $_SESSION['seo_bot_blog_flash'] = [
+                    'posts' => [[
+                        'blog_post_id'    => $res['blog_post_id'],
+                        'blog_post_title' => $res['blog_post_title'],
+                        'blog_post_image' => $res['blog_post_image'] ?? '',
+                        'product_name'    => $res['product_name'] ?? '',
+                        'target_region'   => 'TRENDS',
+                    ]],
+                ];
+            } else {
+                $errMsg = $report['errors'][0] ?? ($res['error'] ?? 'unknown error');
+                $_SESSION['seo_bot_flash'] = 'Featured trends article failed — ' . $errMsg;
+            }
+        } catch (Throwable $e) {
+            $_SESSION['seo_bot_flash'] = 'Featured trends error: ' . $e->getMessage();
+        }
+        header('Location: admin.php?tab=ai-blogger');
+        exit;
+    }
+
     if (!empty($_GET['seo_run'])) {
         try {
             $r = seo_bot_run_if_due(true);
@@ -1759,7 +1833,11 @@ elseif ($tab === 'ai-blogger'):
       <h1 class="h4 fw-bold mb-1" data-testid="ai-blogger-page-title"><i class="bi bi-robot me-1 text-primary"></i> AI Auto-Blogger</h1>
       <small class="text-muted">Six products picked every 24&nbsp;h <strong>for each country (US · UK · AU · CA)</strong> = 24 fresh blog posts daily · Claude Haiku writes each one in the local currency &amp; voice · published instantly to <code>/blog.php</code> · auto-pinged to Google, Bing, IndexNow, listed in <code>/llms.txt</code> + <code>/ai.txt</code>. Each post is verified (HTTP 200 + IndexNow + backlink count) the moment it's written.</small>
     </div>
-    <a href="admin.php?tab=ai-blogger&seo_run=1" class="btn btn-primary rounded-pill px-4" data-testid="ai-blogger-run-now" onclick="return confirm('Publish today\'s full batch — 6 posts × 4 countries = 24 articles? (~$0.08 in LLM credits, ~3 minutes)')"><i class="bi bi-play-fill me-1"></i>Publish today\'s batch now</a>
+    <div class="d-flex gap-2 flex-wrap">
+      <a href="admin.php?tab=ai-blogger&run_random_post=1" class="btn btn-outline-primary rounded-pill px-3" data-testid="ai-blogger-run-random" onclick="return confirm('Pick a RANDOM product + RANDOM country and publish ONE blog post right now (with instant IndexNow push)?')" title="Picks one random product + random country, writes a blog and indexes it instantly. Does not affect the daily batch."><i class="bi bi-shuffle me-1"></i>Publish a random post</a>
+      <a href="admin.php?tab=ai-blogger&run_trends_article=1" class="btn btn-outline-primary rounded-pill px-3" data-testid="ai-blogger-run-trends" onclick="return confirm('Publish today\'s editorial trends article? Picks one product and writes a 700-1000 word opinion piece about 2026 trends in its category.')" title="Daily featured editorial · 700-1000 words about 2026 industry trends · separate from the 24-post regional batch"><i class="bi bi-newspaper me-1"></i>Publish trends article</a>
+      <a href="admin.php?tab=ai-blogger&seo_run=1" class="btn btn-primary rounded-pill px-4" data-testid="ai-blogger-run-now" onclick="return confirm('Publish today\'s full batch — 6 posts × 4 countries = 24 articles? (~$0.08 in LLM credits, ~3 minutes)')"><i class="bi bi-play-fill me-1"></i>Publish today\'s batch now</a>
+    </div>
   </div>
 
   <?php if (!empty($_SESSION['seo_bot_flash'])): ?>

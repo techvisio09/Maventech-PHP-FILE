@@ -777,3 +777,14 @@ Massive upgrade to the global JSON-LD blob in `includes/header.php` (served on e
 The Emergent Universal LLM Key gateway returned HTTP 400 with `"Budget has been exceeded! Current cost: 1.03, Max budget: 1.001"` when we tried to run the 24-post test batch. **User must top up the Universal Key** (Profile → Universal Key → Add Balance, or enable auto-topup). All code is in place and will work on the next run after the budget is restored.
 
 
+
+
+## [Feb 14, 2026] brand.php Articles tab — P0 bug fixed
+- **Root cause**: `brand.php` SELECT referenced `bp.is_featured_trends`, but the column was only created lazily inside `includes/seo-bot.php`'s bootstrap. On installs/pods where the AI Auto-Blogger had never run with that migration (or where the migration silently failed), the column was missing, the SELECT threw a PDOException, the `catch (Throwable) {}` swallowed it, and `$articles = []` → "0 articles".
+- **Fix 1**: Added missing blog_posts columns (`ai_generated, product_id, created_at, target_region, indexnow_status, verified_http, verified_at, internal_links_count, content_fingerprint, is_featured_trends`) to the central `ensure_db_schema()` in `includes/functions.php` so admin pages self-heal.
+- **Fix 2**: Added a localized `SHOW COLUMNS` guard at the top of the `brand.php` articles fetch — runs ALTER only if the column is missing. Public pages don't call `ensure_db_schema()`, so this guarantees the brand profile self-heals on a fresh install.
+- **Verified** (curl): Microsoft → 10 articles, Bitdefender → 3 articles, unknown brand → HTTP 404. Screenshot confirms the Articles tab renders the full grid with region badges, dates and product attribution.
+
+## Files changed (this session)
+- `/app/php-version/brand.php` — schema guard + articles query
+- `/app/php-version/includes/functions.php` — central `ensure_db_schema()` now covers `blog_posts` columns

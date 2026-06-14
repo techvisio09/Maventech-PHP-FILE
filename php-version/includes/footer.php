@@ -100,6 +100,18 @@
           <li><a href="page.php?slug=why-choose-us">Why Choose Us</a></li>
           <li><a href="reviews.php">Customer Reviews</a></li>
           <li><a href="blog.php">Blog</a></li>
+          <?php
+            // Auto-render a Brands sub-menu so users can reach each brand
+            // profile (Microsoft, Bitdefender, McAfee...) and its dedicated
+            // Articles tab from any page.
+            try {
+                $allBrands = db()->query("SELECT DISTINCT brand FROM products WHERE brand IS NOT NULL AND brand != '' AND is_active = 1 ORDER BY brand")->fetchAll(PDO::FETCH_COLUMN);
+            } catch (Throwable $e) { $allBrands = []; }
+            foreach ($allBrands as $bn):
+                $bSlug = strtolower(preg_replace('/[^a-z0-9]+/i', '-', (string)$bn));
+          ?>
+            <li><a href="brand.php?slug=<?= esc($bSlug) ?>" data-testid="footer-brand-<?= esc($bSlug) ?>"><?= esc($bn) ?> Hub</a></li>
+          <?php endforeach; ?>
           <li><a href="affiliate.php">Affiliate Program</a></li>
         </ul>
       </div>

@@ -175,6 +175,23 @@ function ensure_db_schema(): void
             "ALTER TABLE orders ADD COLUMN risk_level   VARCHAR(20) NOT NULL DEFAULT ''",
             "ALTER TABLE orders ADD COLUMN company_name VARCHAR(120) NOT NULL DEFAULT ''",
             "ALTER TABLE orders ADD COLUMN payment_intent_id VARCHAR(120) NOT NULL DEFAULT ''",
+            // blog_posts — AI Auto-Blogger columns.  These are added in
+            // seo-bot.php's own bootstrap, but seo-bot.php is only loaded
+            // when publishing runs.  Public pages (brand.php, blog.php)
+            // also SELECT these columns, so we mirror the migration here
+            // so a fresh install or a host that hasn't run the publisher
+            // yet never breaks the public Articles list.
+            "ALTER TABLE blog_posts ADD COLUMN ai_generated TINYINT(1) NOT NULL DEFAULT 0",
+            "ALTER TABLE blog_posts ADD COLUMN product_id INT NULL DEFAULT NULL",
+            "ALTER TABLE blog_posts ADD COLUMN created_at DATETIME NULL DEFAULT NULL",
+            "ALTER TABLE blog_posts ADD COLUMN target_region VARCHAR(4) NOT NULL DEFAULT 'US'",
+            "ALTER TABLE blog_posts ADD COLUMN indexnow_status VARCHAR(20) NOT NULL DEFAULT ''",
+            "ALTER TABLE blog_posts ADD COLUMN verified_http SMALLINT NULL DEFAULT NULL",
+            "ALTER TABLE blog_posts ADD COLUMN verified_at DATETIME NULL DEFAULT NULL",
+            "ALTER TABLE blog_posts ADD COLUMN internal_links_count INT NOT NULL DEFAULT 0",
+            "ALTER TABLE blog_posts ADD COLUMN content_fingerprint VARCHAR(64) NOT NULL DEFAULT ''",
+            "ALTER TABLE blog_posts ADD COLUMN is_featured_trends TINYINT(1) NOT NULL DEFAULT 0",
+            "ALTER TABLE blog_posts ADD KEY idx_featured_trends (is_featured_trends)",
         ] as $sql) {
             try { $pdo->exec($sql); } catch (Throwable $e) { /* column already exists */ }
         }

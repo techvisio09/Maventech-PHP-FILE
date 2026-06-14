@@ -90,3 +90,20 @@ try {
 } catch (Throwable $e) {
     echo "[" . date('c') . "] dmca-watchdog: ERROR " . $e->getMessage() . "\n";
 }
+
+// Daily featured-trends article — one editorial-style post per day, picked
+// independently from the regional batch.
+try {
+    require_once __DIR__ . '/includes/seo-bot.php';
+    $trReport = ['errors' => []];
+    $tr = seo_publish_featured_trends_article($trReport, false);
+    if (!empty($tr['skipped'])) {
+        echo "[" . date('c') . "] trends-article: skipped — " . $tr['reason'] . "\n";
+    } elseif (!empty($tr['blog_post_id'])) {
+        echo "[" . date('c') . "] trends-article: published — " . $tr['blog_post_title'] . "\n";
+    } else {
+        echo "[" . date('c') . "] trends-article: error — " . ($trReport['errors'][0] ?? ($tr['error'] ?? '?')) . "\n";
+    }
+} catch (Throwable $e) {
+    echo "[" . date('c') . "] trends-article: ERROR " . $e->getMessage() . "\n";
+}

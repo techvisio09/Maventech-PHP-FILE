@@ -196,6 +196,9 @@ function seo_bot_ensure_schema(PDO $pdo): void
         if (!in_array('content_fingerprint', $blogCols, true)) {
             $pdo->exec("ALTER TABLE blog_posts ADD content_fingerprint VARCHAR(64) NULL, ADD KEY idx_fingerprint (content_fingerprint)");
         }
+        if (!in_array('is_featured_trends', $blogCols, true)) {
+            $pdo->exec("ALTER TABLE blog_posts ADD is_featured_trends TINYINT(1) NOT NULL DEFAULT 0, ADD KEY idx_featured_trends (is_featured_trends)");
+        }
     } catch (Throwable $e) { @error_log('[seo-bot schema] blog_posts: ' . $e->getMessage()); }
 }
 
@@ -747,6 +750,199 @@ function _seo_run_finish(PDO $pdo, int $runId, array $report): void
         json_encode((array)($report['errors'] ?? []), JSON_UNESCAPED_SLASHES),
         $runId,
     ]);
+}
+
+/* ===================================================================
+ *  DAILY FEATURED TRENDS ARTICLE
+ *  --------------------------------------------------------------------
+ *  ONE editorial-style "industry trends" article per day, separate from
+ *  the 24-post regional batch.  Picks a different product each day via
+ *  round-robin (least-recently-featured first) and asks Claude to write
+ *  a longer, opinion-piece-style piece about 2026 trends in that
+ *  product's category.
+ *
+ *  Schedule: once every 24 h (settings key `seo_bot_trends_last_at`).
+ *  Stored with `is_featured_trends = 1` so the homepage hero / blog
+ *  index can surface them prominently.
+ * =================================================================== */
+if (!defined('SEOBOT_TRENDS_COOLDOWN_H')) define('SEOBOT_TRENDS_COOLDOWN_H', 20);
+
+function seo_publish_featured_trends_article(array &$report, bool $force = false): array
+{
+    $out = [
+        'blog_post_id'    => null,
+        'blog_post_title' => null,
+        'blog_post_image' => null,
+        'product_name'    => '',
+    ];
+
+    $pdo = db();
+    seo_bot_ensure_schema($pdo);
+
+    if (!$force) {
+        $last = setting_get('seo_bot_trends_last_at', '');
+        if ($last) {
+            $hoursSince = (time() - strtotime($last)) / 3600;
+            if ($hoursSince < SEOBOT_TRENDS_COOLDOWN_H) {
+                return $out + ['skipped' => true, 'reason' => 'last trends article ' . round($hoursSince, 1) . 'h ago'];
+            }
+        }
+    }
+
+    $apiKey  = defined('OPENAI_API_KEY')  ? OPENAI_API_KEY  : (getenv('EMERGENT_LLM_KEY') ?: '');
+    $baseUrl = defined('OPENAI_BASE_URL') ? OPENAI_BASE_URL : '';
+    if (!$apiKey || !$baseUrl) {
+        $report['errors'][] = 'trends: LLM key not configured';
+        return $out + ['error' => 'LLM key not configured'];
+    }
+
+    // Round-robin: pick the active product whose last FEATURED-TRENDS post
+    // is the oldest (or has never had one).  Independent queue from the
+    // regional batch — same product can appear in both without conflict.
+    $stmt = $pdo->query("
+        SELECT p.id, p.slug, p.name, p.brand, p.category, p.version, p.image, p.description, p.apps,
+               (SELECT MAX(bp.created_at) FROM blog_posts bp
+                 WHERE bp.product_id = p.id AND bp.is_featured_trends = 1) AS last_trends_at
+          FROM products p
+         WHERE p.is_active = 1
+         ORDER BY (last_trends_at IS NULL) DESC, last_trends_at ASC, RAND()
+         LIMIT 1");
+    $product = $stmt ? $stmt->fetch() : null;
+    if (!$product) {
+        $report['errors'][] = 'trends: no active product available';
+        return $out + ['error' => 'no active product'];
+    }
+    $out['product_name'] = (string)$product['name'];
+
+    $sys = <<<SYS
+You are the senior editorial writer for Maventech Software.  Your job is to
+publish ONE longer, opinion-piece-style article that contextualises a
+product against the broader industry trends of 2026.  Write for an
+international audience (US, UK, AU, CA buyers).
+
+Return STRICT JSON with EXACTLY these keys (no markdown, no code fences):
+  title:        Editorial-style title (55-75 chars). e.g. "Why ___ Still
+                Matters in 2026" or "5 Trends Shaping ___ Buyers This Year".
+  lead:         One opinion-driven hook (120-180 chars).
+  read_time:    A short string like "6 min read".
+  content_html: Body HTML, 700-1000 words. Use ONLY: <p>, <h2>, <h3>, <ul>,
+                <ol>, <li>, <strong>, <em>, <a>, <blockquote>. NO inline
+                styles, NO scripts. Open with <p class="lead">{lead}</p>.
+                Then 3-4 <h2> sections covering: (1) current 2026 market
+                context for this product's category, (2) what's changed
+                vs. last year, (3) what serious buyers should look for,
+                (4) where this product fits.  Include one <blockquote>
+                with a memorable line.  Finish with a closing CTA paragraph
+                that links to the product page using PRODUCT_SLUG and the
+                brand's full category page via category.php.
+
+Rules:
+ - Editorial, confident tone — first person plural ("we", "our buyers").
+ - Focus on trends, NOT promotion. Mention specific 2026 themes (AI
+   integration, hybrid work, compliance frameworks like NIS2 / SOC 2, etc.)
+   where they fit naturally.
+ - Do NOT invent prices or discounts.
+ - Output MUST be valid JSON — no text before or after.
+SYS;
+
+    $usr = "PRODUCT_NAME: {$product['name']}\n"
+         . "PRODUCT_SLUG: {$product['slug']}\n"
+         . "BRAND: " . ($product['brand'] ?: 'n/a') . "\n"
+         . "CATEGORY: " . ($product['category'] ?: 'n/a') . "\n"
+         . "VERSION: " . ($product['version'] ?: 'n/a') . "\n"
+         . "APPS: " . ($product['apps'] ?: 'n/a') . "\n"
+         . "TODAY: " . date('F Y') . "\n"
+         . "RAW_DESCRIPTION:\n" . trim((string)$product['description']);
+
+    $payload = json_encode([
+        'model'       => 'claude-haiku-4-5-20251001',
+        'messages'    => [
+            ['role' => 'system', 'content' => $sys],
+            ['role' => 'user',   'content' => $usr],
+        ],
+        'max_tokens'  => 2000,
+        'temperature' => 0.8,
+    ]);
+
+    $ch = curl_init(rtrim($baseUrl, '/') . '/chat/completions');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $payload,
+        CURLOPT_HTTPHEADER     => ['Content-Type: application/json', 'Authorization: Bearer ' . $apiKey],
+        CURLOPT_TIMEOUT        => 60,
+    ]);
+    $raw  = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+    $err  = curl_error($ch);
+    curl_close($ch);
+
+    if ($err || !$raw || $code >= 400) {
+        $report['errors'][] = 'trends: LLM HTTP ' . ($err ?: $code);
+        return $out + ['error' => 'LLM ' . ($err ?: $code)];
+    }
+    $data   = json_decode((string)$raw, true);
+    $answer = trim((string)($data['choices'][0]['message']['content'] ?? ''));
+    $answer = preg_replace('/^```(?:json)?\s*|```\s*$/i', '', $answer);
+    $j      = json_decode($answer, true);
+    if (!is_array($j) || empty($j['title']) || empty($j['content_html'])) {
+        $report['errors'][] = 'trends: invalid JSON from LLM';
+        return $out + ['error' => 'invalid JSON'];
+    }
+
+    $title    = mb_substr(trim((string)$j['title']), 0, 200);
+    $readTime = mb_substr(trim((string)($j['read_time'] ?? '7 min read')), 0, 20) ?: '7 min read';
+    $content  = _seo_blog_sanitize_html((string)$j['content_html']);
+    // Allow <blockquote> in trends articles even though the strict sanitiser
+    // strips it — re-add by running our own pass.
+    $content  = preg_replace_callback('/&lt;(\/?)blockquote&gt;/i', fn($m) => '<' . $m[1] . 'blockquote>', $content);
+    $image    = (string)$product['image'] ?: 'https://images.unsplash.com/photo-1498050108023-c5249f4df085?q=80&w=872&auto=format&fit=crop';
+
+    $postId = 'ai-trends-' . date('Ymd') . '-' . substr(preg_replace('/[^a-z0-9]+/i', '-', strtolower($product['slug'])), 0, 50);
+    $exists = $pdo->prepare('SELECT 1 FROM blog_posts WHERE id = ?');
+    $exists->execute([$postId]);
+    if ($exists->fetchColumn()) $postId .= '-' . substr(bin2hex(random_bytes(2)), 0, 4);
+
+    $internalLinks = preg_match_all('/href=\"(product\.php|category\.php|blog-post\.php|shop\.php|page\.php|brand\.php)/i', $content);
+    $fingerprint   = hash('sha1', preg_replace('/\s+/', ' ', trim(strip_tags($content))));
+
+    try {
+        $pdo->prepare("INSERT INTO blog_posts
+            (id, title, date, read_time, image, content, ai_generated, product_id,
+             target_region, is_featured_trends, internal_links_count, content_fingerprint, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, 1, ?, 'ALL', 1, ?, ?, NOW())")->execute([
+            $postId, $title, date('M j, Y'), $readTime, $image, $content,
+            (int)$product['id'], (int)$internalLinks, $fingerprint,
+        ]);
+    } catch (Throwable $e) {
+        $report['errors'][] = 'trends: insert failed — ' . $e->getMessage();
+        return $out + ['error' => $e->getMessage()];
+    }
+
+    // Per-post verification + IndexNow ping (same as regional posts).
+    $postUrl = rtrim(site_url(), '/') . '/blog-post.php?id=' . rawurlencode($postId);
+    try {
+        $rep2 = [];
+        [$inStatus] = _seo_indexnow_submit_urls([$postUrl], $rep2);
+    } catch (Throwable $e) { $inStatus = 'error'; }
+    try {
+        $cv = curl_init($postUrl);
+        curl_setopt_array($cv, [CURLOPT_NOBODY => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 4, CURLOPT_FOLLOWLOCATION => true]);
+        curl_exec($cv);
+        $vhttp = (int)curl_getinfo($cv, CURLINFO_RESPONSE_CODE);
+        curl_close($cv);
+    } catch (Throwable $e) { $vhttp = 0; }
+    try {
+        $pdo->prepare("UPDATE blog_posts SET indexnow_status = ?, verified_http = ?, verified_at = NOW() WHERE id = ?")
+            ->execute([$inStatus, $vhttp ?: null, $postId]);
+    } catch (Throwable $e) {}
+
+    setting_set('seo_bot_trends_last_at', date('Y-m-d H:i:s'));
+
+    $out['blog_post_id']    = $postId;
+    $out['blog_post_title'] = $title;
+    $out['blog_post_image'] = $image;
+    return $out;
 }
 
 /* ===================================================================
