@@ -18,6 +18,20 @@ AddDefaultCharset UTF-8
 # ---- Block direct access to the includes/ and lib/ directories ----
 RedirectMatch 404 ^/includes/
 RedirectMatch 404 ^/lib/
+RedirectMatch 404 ^/vendor/
+
+# ---- Block raw access to customer-PII PDFs (receipts/invoices).
+#      These must only be served via order-history.php which checks
+#      the email + order-number session unlock. ----
+RewriteEngine On
+RewriteRule ^uploads/order-pdfs/.* - [F,L]
+
+# ---- Disable PHP / shell execution inside uploads/ ----
+<Directory "uploads">
+    <FilesMatch "\.(php|phtml|phar|sh|cgi|pl)$">
+        Require all denied
+    </FilesMatch>
+</Directory>
 
 # ---- Security headers ----
 <IfModule mod_headers.c>

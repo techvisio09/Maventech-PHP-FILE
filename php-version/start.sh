@@ -1,5 +1,4 @@
 #!/bin/bash
-export EMERGENT_LLM_KEY="sk-emergent-8Ad362c4681F5B58f7"
 # ============================================================
 # Emergent preview launcher — serves the PHP store on port 3000
 # (replaces the React dev server; supervisor runs this via `yarn start`)
@@ -7,6 +6,10 @@ export EMERGENT_LLM_KEY="sk-emergent-8Ad362c4681F5B58f7"
 # on a fresh pod. NOT needed on normal PHP hosting (cPanel etc.)
 # ============================================================
 set -e
+
+# Secrets ARE NOT HARDCODED HERE.  They are loaded from /app/backend/.env
+# (which is git-ignored).  In production, set the same env vars in your
+# hosting control panel.  See section "Export integration keys" below.
 
 # 1) Ensure MariaDB is running
 if ! mysqladmin ping --silent 2>/dev/null; then
@@ -49,14 +52,25 @@ mysql -uroot ucode_store -e "CREATE TABLE IF NOT EXISTS visitor_log (
     KEY idx_device (device)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci" 2>/dev/null || true
 
-# 3) Export integration keys from the backend .env (preview convenience)
-ENVF=/app/backend/.env
-if [ -f "$ENVF" ]; then
-  for K in STRIPE_API_KEY EMERGENT_LLM_KEY RESEND_API_KEY SENDER_EMAIL; do
-    V=$(grep "^${K}=" "$ENVF" | head -1 | cut -d'=' -f2- | sed 's/^"//; s/"$//')
-    [ -n "$V" ] && export "$K=$V"
-  done
-fi
+# 3) Export integration keys from .env files (preview convenience)
+# Load /app/php-version/.env first (PHP-store-specific secrets like Emergent
+# LLM key, Stripe, Resend), then /app/backend/.env (only kept for legacy
+# MongoDB defaults — protected variables MUST NOT be removed).
+for ENVF in /app/php-version/.env /app/backend/.env; do
+  if [ -f "$ENVF" ]; then
+    while IFS='=' read -r K V; do
+      # Skip comments + empty lines
+      [ -z "$K" ] && continue
+      case "$K" in \#*) continue;; esac
+      # Strip surrounding quotes
+      V=$(echo "$V" | sed 's/^"//; s/"$//')
+      export "$K=$V"
+    done < "$ENVF"
+  fi
+done
+
+# Tighten permissions on /app/php-version/.env so only the running user can read it.
+chmod 600 /app/php-version/.env 2>/dev/null || true
 
 # 4) Serve the PHP store on port 3000
 exec env PHP_CLI_SERVER_WORKERS=8 php -S 0.0.0.0:3000 -t /app/php-version /app/php-version/router.php
