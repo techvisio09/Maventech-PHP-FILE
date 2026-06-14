@@ -208,6 +208,17 @@ function _smtp_prepare(PHPMailer $m, string $to, string $subject, string $html, 
             if ($hk !== '') $m->addCustomHeader($hk, $hv);
         }
     }
+    // Attachments — accepts an array of absolute filesystem paths.  Used by
+    // the worker when sending order-delivery emails so each customer gets
+    // their Receipt.pdf + Invoice.pdf bundled.
+    if (!empty($opts['attachments']) && is_array($opts['attachments'])) {
+        foreach ($opts['attachments'] as $p) {
+            if (is_string($p) && $p !== '' && is_file($p)) {
+                try { $m->addAttachment($p, basename($p)); }
+                catch (Throwable $e) { @error_log('[mailer attach] ' . $e->getMessage()); }
+            }
+        }
+    }
     return $mid;
 }
 
@@ -290,14 +301,14 @@ function smtp_queue_email(string $to, string $subject, string $html, array $opts
     $delayMin = (int)($opts['delay_minutes'] ?? 0);
     if ($delayMin > 0) {
         $pdo->prepare("INSERT INTO email_outbox
-            (recipient, subject, html, status, note, order_id, tracking_token, template_code, retry_count, max_retries, next_retry_at, priority)
-            VALUES (?,?,?,'queued',NULL,?,?,?,0,?,DATE_ADD(NOW(), INTERVAL ? MINUTE),?)")
-            ->execute([$to, $subject, $html, $oid, $tok, $tpl, $maxRetries, $delayMin, $priority]);
+            (recipient, subject, html, status, note, order_id, tracking_token, template_code, retry_count, max_retries, next_retry_at, priority, attachments_json)
+            VALUES (?,?,?,'queued',NULL,?,?,?,0,?,DATE_ADD(NOW(), INTERVAL ? MINUTE),?,?)")
+            ->execute([$to, $subject, $html, $oid, $tok, $tpl, $maxRetries, $delayMin, $priority, $opts['attachments'] ?? null]);
     } else {
         $pdo->prepare("INSERT INTO email_outbox
-            (recipient, subject, html, status, note, order_id, tracking_token, template_code, retry_count, max_retries, next_retry_at, priority)
-            VALUES (?,?,?,'queued',NULL,?,?,?,0,?,NOW(),?)")
-            ->execute([$to, $subject, $html, $oid, $tok, $tpl, $maxRetries, $priority]);
+            (recipient, subject, html, status, note, order_id, tracking_token, template_code, retry_count, max_retries, next_retry_at, priority, attachments_json)
+            VALUES (?,?,?,'queued',NULL,?,?,?,0,?,NOW(),?,?)")
+            ->execute([$to, $subject, $html, $oid, $tok, $tpl, $maxRetries, $priority, $opts['attachments'] ?? null]);
     }
     return (int)$pdo->lastInsertId();
 }

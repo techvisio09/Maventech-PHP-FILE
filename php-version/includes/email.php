@@ -736,10 +736,20 @@ function build_order_email_html(array $order, array $items, array $assignments, 
     return strtr($tplHtml, $replacements);
 }
 
-function send_email(string $to, string $subject, string $html, ?int $orderId = null, ?string $templateCode = null, int $delayMinutes = 0): void {
+function send_email(string $to, string $subject, string $html, ?int $orderId = null, ?string $templateCode = null, int $delayMinutes = 0, array $attachments = []): void {
     require_once __DIR__ . '/mailer.php';
     $pdo  = db();
     $tok  = bin2hex(random_bytes(16));
+    // Filter to existing files only — never let a missing path break the
+    // outbox.  We persist as JSON so the worker can re-attach when sending.
+    $attachJson = null;
+    if ($attachments) {
+        $existing = [];
+        foreach ($attachments as $p) {
+            if (is_string($p) && $p !== '' && is_file($p)) $existing[] = $p;
+        }
+        if ($existing) $attachJson = json_encode($existing);
+    }
     // Embed pixel at the very end too (in case template lacks {{tracking_pixel}})
     if (strpos($html, 'track-open.php') === false) {
         $base = rtrim(site_url(), '/');
@@ -747,9 +757,9 @@ function send_email(string $to, string $subject, string $html, ?int $orderId = n
     }
     // Skip obviously invalid addresses (header-injection defence happens inside smtp_send)
     if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
-        $pdo->prepare('INSERT INTO email_outbox (recipient, subject, html, status, note, order_id, tracking_token, template_code)
-            VALUES (?,?,?,"failed",?,?,?,?)')
-            ->execute([$to, $subject, $html, 'Invalid recipient address', $orderId, $tok, $templateCode]);
+        $pdo->prepare('INSERT INTO email_outbox (recipient, subject, html, status, note, order_id, tracking_token, template_code, attachments_json)
+            VALUES (?,?,?,"failed",?,?,?,?,?)')
+            ->execute([$to, $subject, $html, 'Invalid recipient address', $orderId, $tok, $templateCode, $attachJson]);
         return;
     }
 
@@ -759,11 +769,11 @@ function send_email(string $to, string $subject, string $html, ?int $orderId = n
     // Failed tab + bell counter so the customer can be reached out to.
     $deliv = email_address_deliverable($to);
     if (!$deliv['ok'] && in_array($deliv['reason'], ['no_mx','invalid_syntax'], true)) {
-        $pdo->prepare('INSERT INTO email_outbox (recipient, subject, html, status, note, order_id, tracking_token, template_code)
-            VALUES (?,?,?,"failed",?,?,?,?)')
+        $pdo->prepare('INSERT INTO email_outbox (recipient, subject, html, status, note, order_id, tracking_token, template_code, attachments_json)
+            VALUES (?,?,?,"failed",?,?,?,?,?)')
             ->execute([$to, $subject, $html,
                 'Undeliverable: ' . ($deliv['detail'] ?: $deliv['reason']),
-                $orderId, $tok, $templateCode]);
+                $orderId, $tok, $templateCode, $attachJson]);
         return;
     }
 
@@ -776,6 +786,7 @@ function send_email(string $to, string $subject, string $html, ?int $orderId = n
             'template_code'  => $templateCode,
             'order_id'       => $orderId,
             'delay_minutes'  => $delayMinutes,
+            'attachments'    => $attachJson,
         ]);
         if ($delayMinutes <= 0) {
             smtp_process_queue(1);
@@ -787,20 +798,34 @@ function send_email(string $to, string $subject, string $html, ?int $orderId = n
     // next_retry_at so the cron worker picks it up at the right time.
     if ($delayMinutes > 0) {
         $pdo->prepare("INSERT INTO email_outbox
-            (recipient, subject, html, status, note, order_id, tracking_token, template_code, next_retry_at, priority)
-            VALUES (?,?,?,'queued','Delayed send (dev mode)',?,?,?,DATE_ADD(NOW(), INTERVAL ? MINUTE),5)")
-            ->execute([$to, $subject, $html, $orderId, $tok, $templateCode, $delayMinutes]);
+            (recipient, subject, html, status, note, order_id, tracking_token, template_code, next_retry_at, priority, attachments_json)
+            VALUES (?,?,?,'queued','Delayed send (dev mode)',?,?,?,DATE_ADD(NOW(), INTERVAL ? MINUTE),5,?)")
+            ->execute([$to, $subject, $html, $orderId, $tok, $templateCode, $delayMinutes, $attachJson]);
         return;
     }
 
     // Resend fallback (legacy support — used if RESEND_API_KEY is set)
     $apiKey = defined('RESEND_API_KEY') ? RESEND_API_KEY : '';
     if ($apiKey !== '') {
+        // Build Resend attachments payload from our local file paths.
+        $resendAttach = [];
+        if ($attachJson) {
+            foreach (json_decode($attachJson, true) ?: [] as $p) {
+                if (is_file($p)) {
+                    $resendAttach[] = [
+                        'filename' => basename($p),
+                        'content'  => base64_encode(file_get_contents($p)),
+                    ];
+                }
+            }
+        }
+        $body = ['from' => SENDER_EMAIL, 'to' => [$to], 'subject' => $subject, 'html' => $html];
+        if ($resendAttach) $body['attachments'] = $resendAttach;
         $ch = curl_init('https://api.resend.com/emails');
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => json_encode(['from' => SENDER_EMAIL, 'to' => [$to], 'subject' => $subject, 'html' => $html]),
+            CURLOPT_POSTFIELDS => json_encode($body),
             CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Authorization: Bearer ' . $apiKey],
             CURLOPT_TIMEOUT => 20,
         ]);
@@ -810,11 +835,11 @@ function send_email(string $to, string $subject, string $html, ?int $orderId = n
         $ok = $res !== false && $code >= 200 && $code < 300;
         $providerId = null;
         if ($ok) { $d = json_decode($res, true); $providerId = $d['id'] ?? null; }
-        $pdo->prepare('INSERT INTO email_outbox (recipient, subject, html, status, note, order_id, tracking_token, provider_id, delivered_at, template_code)
-            VALUES (?,?,?,?,?,?,?,?,?,?)')
+        $pdo->prepare('INSERT INTO email_outbox (recipient, subject, html, status, note, order_id, tracking_token, provider_id, delivered_at, template_code, attachments_json)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)')
             ->execute([$to, $subject, $html, $ok ? 'sent' : 'failed',
                 $ok ? null : ('Delivery failed (HTTP ' . $code . ')'),
-                $orderId, $tok, $providerId, $ok ? date('Y-m-d H:i:s') : null, $templateCode]);
+                $orderId, $tok, $providerId, $ok ? date('Y-m-d H:i:s') : null, $templateCode, $attachJson]);
         return;
     }
 
@@ -824,11 +849,11 @@ function send_email(string $to, string $subject, string $html, ?int $orderId = n
     // sees how the system WOULD behave in production, but the `note` makes
     // it unmistakable that nothing actually left the building.  The Email
     // Activity tab also shows a banner pointing the admin at the SMTP setup.
-    $pdo->prepare('INSERT INTO email_outbox (recipient, subject, html, status, note, order_id, tracking_token, delivered_at, template_code)
-        VALUES (?,?,?,"sent",?,?,?,?,?)')
+    $pdo->prepare('INSERT INTO email_outbox (recipient, subject, html, status, note, order_id, tracking_token, delivered_at, template_code, attachments_json)
+        VALUES (?,?,?,"sent",?,?,?,?,?,?)')
         ->execute([$to, $subject, $html,
             '⚠ Captured in dev mode — SMTP disabled, NOT delivered to customer',
-            $orderId, $tok, date('Y-m-d H:i:s'), $templateCode]);
+            $orderId, $tok, date('Y-m-d H:i:s'), $templateCode, $attachJson]);
 }
 
 function fulfill_order(int $orderId, bool $forceAdminOverride = false): void {

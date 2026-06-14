@@ -139,6 +139,12 @@ function ensure_db_schema(): void
             // throttle the "New chat message from {name}" admin alerts to
             // one per lead per 5 minutes during a fast back-and-forth.
             "ALTER TABLE chat_leads ADD COLUMN admin_notified_at DATETIME NULL DEFAULT NULL",
+            // Paths to PDF attachments (Receipt + Invoice) generated per
+            // paid order.  Stored as JSON array of absolute filesystem
+            // paths; smtp_send_one() reads it and calls addAttachment()
+            // for each, so the customer's order-delivery email arrives
+            // with proper receipt + invoice PDFs.
+            "ALTER TABLE email_outbox ADD COLUMN attachments_json TEXT NULL DEFAULT NULL",
             // Persistent log of every "Ask AI" turn on the product page.
             // Lets admins (a) review what customers ask, (b) train the
             // system prompt over time, (c) capture lead intent (the
