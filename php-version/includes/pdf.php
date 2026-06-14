@@ -84,6 +84,83 @@ function _pdf_brand_for_items(array $items): string
 }
 
 /**
+ * Build the HTML for a colourful product-icon "scatter" watermark.
+ *
+ * For Microsoft orders we tile actual app icons (Word/Excel/PowerPoint/
+ * Outlook/OneNote/Teams/Windows) in their real brand colours at ~14%
+ * opacity, rotated lightly and positioned at deterministic but
+ * scattered-looking coordinates across the page.  Feels like a Microsoft
+ * marketing piece rather than a sterile invoice.
+ *
+ * For non-Microsoft brands we fall back to repeating the single brand
+ * silhouette (already pre-rendered in /assets/images/brand-watermarks/)
+ * in a softer scatter — still adds the "brand feel" but without 7 different
+ * logos that don't exist for non-Microsoft brands.
+ */
+function _pdf_brand_scatter_html(string $brandKey): string
+{
+    $brandKey = strtolower($brandKey);
+    // Deterministic scatter positions (top, left in %).  Picked by hand to
+    // look balanced across the page — slight rotation per piece adds life.
+    // Format: [top_pct, left_pct, size_px, rotate_deg, icon_filename].
+    if ($brandKey === 'microsoft') {
+        $dir = __DIR__ . '/../assets/images/brand-watermarks/microsoft-suite';
+        $scatter = [
+            // Top band
+            [ 7,  6, 56, -10, 'word.png'],
+            [12, 78, 68,   6, 'excel.png'],
+            // Upper-middle
+            [22, 32, 60,  12, 'outlook.png'],
+            [27, 64, 54,  -8, 'powerpoint.png'],
+            // Middle band
+            [38, 12, 64,  -4, 'teams.png'],
+            [42, 50, 70,  18, 'windows.png'],
+            [48, 84, 56,  -6, 'onenote.png'],
+            // Lower-middle
+            [60, 22, 58,   8, 'access.png'],
+            [64, 70, 62, -14, 'word.png'],
+            // Bottom band
+            [78, 10, 54,  10, 'excel.png'],
+            [82, 46, 60,  -3, 'powerpoint.png'],
+            [86, 78, 56,  16, 'outlook.png'],
+        ];
+        $items = [];
+        foreach ($scatter as $s) {
+            [$top, $left, $size, $rot, $icon] = $s;
+            $path = $dir . '/' . $icon;
+            if (!is_file($path)) continue;
+            $items[] = sprintf(
+                '<img class="scatter-icon" style="top:%d%%;left:%d%%;width:%dpx;height:%dpx;transform:rotate(%ddeg);" src="%s" alt="">',
+                $top, $left, $size, $size, $rot, $path
+            );
+        }
+        return '<div class="scatter-wrap">' . implode('', $items) . '</div>';
+    }
+
+    // Non-Microsoft brands — softer 5-icon scatter using the single brand
+    // silhouette.  Still adds branded feel; no need to manufacture fake
+    // sub-brand icons.
+    $path = _pdf_brand_watermark_path($brandKey);
+    if (!is_file($path)) return '';
+    $scatter = [
+        [10, 12, 72, -10],
+        [22, 70, 84,  12],
+        [44, 32, 96,  -5],
+        [62, 76, 80,  16],
+        [78, 18, 76,  -8],
+    ];
+    $items = [];
+    foreach ($scatter as $s) {
+        [$top, $left, $size, $rot] = $s;
+        $items[] = sprintf(
+            '<img class="scatter-icon" style="top:%d%%;left:%d%%;width:%dpx;height:%dpx;transform:rotate(%ddeg);" src="%s" alt="">',
+            $top, $left, $size, $size, $rot, $path
+        );
+    }
+    return '<div class="scatter-wrap">' . implode('', $items) . '</div>';
+}
+
+/**
  * Return the absolute filesystem path to the brand-watermark PNG for the
  * given brand key.  All watermarks are 600×600 dark-grey silhouettes
  * pre-rendered into /assets/images/brand-watermarks/ so Dompdf can embed
@@ -149,12 +226,20 @@ function _pdf_shell(array $ctx, string $bodyHtml): string
     $logoUrl  = $ctx['logo']  ?? '';   // local file path is fine for Dompdf
     $docTitle = htmlspecialchars($ctx['title'] ?? 'Document',            ENT_QUOTES, 'UTF-8');
     $invNo    = htmlspecialchars($ctx['invoice_number'] ?? '',           ENT_QUOTES, 'UTF-8');
-    // Brand-specific dark watermark PNG (falls back to Maventech 'M').
+    // Brand-specific colourful scattered watermark (Microsoft suite icons
+    // for Microsoft orders; soft repeated brand mark for other brands).
     $brandKey  = $ctx['brand_key'] ?? 'maventech';
-    $watermarkPath = _pdf_brand_watermark_path($brandKey);
-    $watermarkTag  = is_file($watermarkPath)
-        ? '<img src="' . $watermarkPath . '" alt="">'
-        : '';
+    $scatterHtml = _pdf_brand_scatter_html($brandKey);
+    // Personalised greeting at the top of the document — pulled from the
+    // customer's first name.  Adds a human touch without changing any
+    // structural layout.
+    $firstName = trim((string)($ctx['first_name'] ?? ''));
+    $greetHtml = '';
+    if ($firstName !== '') {
+        $greetHtml = '<div class="thank-you">Thank you, '
+                   . htmlspecialchars($firstName, ENT_QUOTES, 'UTF-8')
+                   . '!</div>';
+    }
     // Diagonal "PAID" / "INVOICE" / "DUE" stamp under the brand logo —
     // accounting-software vibe.  Caller passes `stamp_text` + `stamp_color`
     // (defaults to dark grey; green for PAID, amber for DUE).
@@ -249,20 +334,29 @@ function _pdf_shell(array $ctx, string $bodyHtml): string
     font-size: 8pt; color: #94a3b8; line-height: 1.6;
   }
 
-  /* Dark brand watermark — anchored to the page so it sits behind the
-     content.  Dompdf doesn't always honour `z-index:-1`; instead we put
-     the watermark FIRST in the body source order and rely on subsequent
-     content boxes (which have white-ish backgrounds) overlapping it.
-     7% opacity keeps the page readable. */
-  .watermark {
+  /* Colourful scattered brand watermark — Microsoft suite icons (or the
+     single brand silhouette for non-Microsoft) tiled at low opacity behind
+     the content.  Position:absolute on each <img> with deterministic top/
+     left % values gives a "scattered marketing piece" feel without hurting
+     readability.  Light opacity (≈14%) keeps text fully legible. */
+  .scatter-wrap {
     position: absolute;
-    top: 220px; left: 50%;
-    width: 360px; height: 360px;
-    margin-left: -180px;
-    opacity: 0.08;
-    text-align: center;
+    top: 0; left: 0; right: 0; bottom: 0;
+    width: 100%; height: 100%;
   }
-  .watermark img { width: 360px; height: 360px; }
+  .scatter-icon {
+    position: absolute;
+    opacity: 0.14;
+  }
+
+  /* Personalised greeting above the doc title — friendly, premium touch. */
+  .thank-you {
+    font-size: 11pt;
+    font-weight: 600;
+    color: #0f766e;        /* teal — picks up the brand accent */
+    margin: 0 0 4px;
+    letter-spacing: .2px;
+  }
 
   /* Diagonal "PAID" / "INVOICE" / "DUE" stamp sitting underneath the
      brand watermark — accounting-software vibe.  Subtle (12% opacity)
@@ -317,8 +411,9 @@ function _pdf_shell(array $ctx, string $bodyHtml): string
 </style>
 </head>
 <body>
-  <div class="watermark">{$watermarkTag}</div>
+  {$scatterHtml}
   {$stampHtml}
+  {$greetHtml}
   <h1>{$docTitle}</h1>
   <table class="head-grid"><tr>
     <td class="head-meta">
@@ -433,6 +528,7 @@ function generate_receipt_pdf(array $order, array $items, ?array $payment = null
         'date_paid'       => $datePaid,
         'bill_to'         => $billTo,
         'brand_key'       => _pdf_brand_for_items($items),
+        'first_name'      => (string)($order['first_name'] ?? ''),
         'stamp_text'      => 'PAID',
         'stamp_color'     => '#047857', // emerald — universal "all good"
         'qr_data_uri'     => _pdf_order_history_qr($order),
@@ -513,6 +609,7 @@ function generate_invoice_pdf(array $order, array $items): string
         'date_due'        => $dateDue,
         'bill_to'         => $billTo,
         'brand_key'       => _pdf_brand_for_items($items),
+        'first_name'      => (string)($order['first_name'] ?? ''),
         // Stamp reads "PAID" if the invoice is already settled, otherwise "DUE".
         'stamp_text'      => $isPaid ? 'PAID' : 'DUE',
         'stamp_color'     => $isPaid ? '#047857' : '#b91c1c', // emerald vs red
