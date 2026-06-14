@@ -64,6 +64,7 @@ $adm_brand_logo   = function_exists('company_info') ? (company_info()['logo'] ??
 <title><?= esc($pageTitle) ?></title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+<link href="assets/css/dark-mode-polish.css" rel="stylesheet">
 <script>
   // Base URL the panel was loaded from — every fetch() to ajax/... uses this
   // so the admin works whether installed at "/" or in a subfolder like "/admin/".
@@ -1122,11 +1123,11 @@ hr { border-color: var(--border); opacity:.5; }
     </button>
   </div>
 
-  <div class="brand-center" data-testid="adm-brand">
+  <div class="brand-center logo-3d" data-testid="adm-brand">
     <?php if ($adm_brand_logo !== ''): ?>
       <img src="<?= esc($adm_brand_logo) ?>" alt="<?= esc($adm_brand_name) ?>" class="m-logo-img" style="height:34px;width:auto;max-width:120px;object-fit:contain;border-radius:9px;">
     <?php else: ?>
-      <span class="m-logo" data-testid="adm-brand-letter"><?= esc($adm_brand_letter) ?></span>
+      <span class="m-logo brand-mark" data-testid="adm-brand-letter"><?= esc($adm_brand_letter) ?></span>
     <?php endif; ?>
     <div>
       <small class="adm-brand-cp">ADMIN CONTROL PANEL</small>

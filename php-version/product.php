@@ -152,6 +152,14 @@ $jsonLdFaq = [
 // step-by-step answers for activation queries.
 $jsonLdHowTo = product_howto_jsonld($product);
 
+// AI-friendly summary article — a dedicated Article schema entity that
+// concisely describes what this product is, who it's for and how it
+// activates.  ChatGPT, Perplexity, Bing Chat and Google AI Overviews
+// preferentially quote `Article > about > Product` blocks because they
+// give the LLM a self-contained, citation-safe paragraph plus a strong
+// graph link back to the underlying Product entity.
+$jsonLdAiSummary = product_ai_summary_jsonld($product);
+
 $pageKeywords = product_long_tail_keywords($product);
 $related = get_products([$product['category']]);
 $related = array_values(array_filter($related, fn($r) => $r['slug'] !== $product['slug']));

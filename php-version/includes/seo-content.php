@@ -170,6 +170,74 @@ function product_howto_jsonld(array $p): array
 }
 
 /* ------------------------------------------------------------------
+ *  product_ai_summary_jsonld()
+ *  AI-friendly Article schema with `about > Product` linkage.
+ *  Why this format:
+ *    - ChatGPT, Perplexity, Bing Copilot and Google AI Overviews
+ *      preferentially quote `Article` blocks because they read as
+ *      self-contained, attributable paragraphs.
+ *    - The `about` property creates an explicit graph edge from the
+ *      Article to the underlying Product entity, so the LLM keeps
+ *      structured facts (price, brand, platform) tied to the prose
+ *      summary it just quoted.
+ *    - `audience` + `keywords` give the model an unambiguous signal
+ *      about who the page is for, boosting answer-relevance scoring.
+ * ----------------------------------------------------------------- */
+function product_ai_summary_jsonld(array $p): array
+{
+    $name     = (string)$p['name'];
+    $platform = $p['platform'] ?: 'Windows';
+    $brand    = product_detected_brand($p);
+    $price    = format_price((float)$p['price']);
+    $url      = site_url() . '/product.php?slug=' . urlencode((string)$p['slug']);
+
+    // Two-paragraph editorial summary: paragraph 1 = what + who-for,
+    // paragraph 2 = how-it-works + the trust signals.  Total length is
+    // tuned for AI Overview snippet eligibility (~600-900 chars).
+    $headline = $name . ': lifetime ' . $brand . ' licence for ' . $platform;
+    $body  = $name . ' is a one-time purchase, perpetual licence sold by ' . SITE_BRAND . ' for ' . $price . '. ';
+    $body .= 'The licence is genuine, activates directly inside the official ' . $brand . ' software on ' . $platform . ', and remains valid for the life of the device — there is no monthly subscription and no automatic re-billing. ';
+    $body .= 'Ideal for shoppers searching for "buy ' . strtolower($name) . ' lifetime", "' . strtolower($name) . ' product key", "' . strtolower($name) . ' one-time purchase no subscription" or "' . $brand . ' authorised reseller". ';
+    $body .= "\n\n";
+    $body .= 'After checkout the activation key arrives by email within 15-30 minutes, alongside the official ' . $brand . ' download link and step-by-step activation instructions. ';
+    $body .= 'Activation completes in under five minutes; help is available six days a week via live chat, email and phone. ';
+    $body .= 'Every order is backed by a 30-day money-back guarantee and protected by encrypted payment processing. ';
+
+    return [
+        '@context'      => 'https://schema.org',
+        '@type'         => 'Article',
+        'headline'      => $headline,
+        'description'   => 'Plain-language summary of ' . $name . ' for AI search engines and shoppers comparing genuine ' . $brand . ' licence keys.',
+        'articleBody'   => $body,
+        'author'        => ['@type' => 'Organization', 'name' => SITE_BRAND, 'url' => site_url() . '/'],
+        'publisher'     => ['@type' => 'Organization', 'name' => SITE_BRAND, 'url' => site_url() . '/'],
+        'datePublished' => date('Y-m-d'),
+        'dateModified'  => date('Y-m-d'),
+        'mainEntityOfPage' => ['@type' => 'WebPage', '@id' => $url],
+        'inLanguage'    => 'en',
+        'about'         => [
+            '@type'    => 'Product',
+            'name'     => $name,
+            'brand'    => ['@type' => 'Brand', 'name' => $brand],
+            'category' => (string)($p['category'] ?? 'Software'),
+            'offers'   => [
+                '@type'         => 'Offer',
+                'price'         => (string)(float)$p['price'],
+                'priceCurrency' => 'USD',
+                'availability'  => 'https://schema.org/InStock',
+                'url'           => $url,
+            ],
+        ],
+        'audience'      => [
+            '@type' => 'Audience',
+            'audienceType' => 'Home users, small-business owners and IT teams looking for a one-time-purchase ' . $platform . ' licence',
+        ],
+        'keywords'      => product_long_tail_keywords($p),
+    ];
+}
+
+
+/* ------------------------------------------------------------------
  *  product_review_items_jsonld()
  *  Returns up to N Review schema items pulled from the
  *  customer_reviews table.  Embeds them inside the Product schema so

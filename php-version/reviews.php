@@ -14,12 +14,17 @@ $reviewErr = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['write_review'])) {
     $text = trim($_POST['text'] ?? '');
     $location = trim($_POST['location'] ?? '');
-    $rating = min(5, max(1, (int)($_POST['rating'] ?? 5)));
+    // Customer must explicitly pick a star — no default fallback to 5.  When
+    // no rating is submitted, the form will show an inline error and reopen.
+    $ratingRaw = $_POST['rating'] ?? '';
+    $rating = is_numeric($ratingRaw) ? min(5, max(1, (int)$ratingRaw)) : 0;
     $product = (string)($_POST['product'] ?? '');
     if (!$user) {
         $reviewErr = 'Please sign in to write a review.';
     } elseif (!$purchased) {
         $reviewErr = 'Only verified buyers can write reviews.';
+    } elseif ($rating < 1) {
+        $reviewErr = 'Please pick a star rating before submitting.';
     } elseif (strlen($text) < 10) {
         $reviewErr = 'Please write at least 10 characters.';
     } else {
@@ -194,14 +199,18 @@ include __DIR__ . '/includes/header.php';
       <?php if ($user && $purchased): ?>
       <form method="post" data-testid="write-review-form">
         <div class="modal-body">
+          <?php if ($reviewErr): ?>
+            <div class="alert alert-warning py-2 small" data-testid="review-error"><i class="bi bi-exclamation-triangle-fill me-1"></i><?= esc($reviewErr) ?></div>
+          <?php endif; ?>
           <input type="hidden" name="write_review" value="1">
-          <div class="mb-1 small fw-semibold">Your rating</div>
-          <div class="star-input mb-3" data-testid="review-star-input">
+          <div class="mb-1 small fw-semibold">Your rating <span class="text-danger">*</span></div>
+          <div class="star-input mb-1" data-testid="review-star-input" role="radiogroup" aria-label="Star rating">
             <?php for ($s = 5; $s >= 1; $s--): ?>
-              <input type="radio" name="rating" id="star<?= $s ?>" value="<?= $s ?>" <?= $s === 5 ? 'checked' : '' ?>>
-              <label for="star<?= $s ?>" title="<?= $s ?> star<?= $s > 1 ? 's' : '' ?>">★</label>
+              <input type="radio" name="rating" id="star<?= $s ?>" value="<?= $s ?>" data-testid="star-radio-<?= $s ?>">
+              <label for="star<?= $s ?>" title="<?= $s ?> star<?= $s > 1 ? 's' : '' ?>" data-testid="star-label-<?= $s ?>">★</label>
             <?php endfor; ?>
           </div>
+          <div class="small text-secondary mb-3" data-testid="star-hint">Tap a star — left to right. The picked count fills in gold; the rest stay empty.</div>
           <div class="mb-3">
             <label class="form-label small fw-semibold">Product purchased</label>
             <select name="product" class="form-select" data-testid="review-product-select">

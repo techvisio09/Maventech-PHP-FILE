@@ -685,14 +685,16 @@ if ($tab === 'ai-blogger') {
         $sitemapUrl = $siteUrl . '/sitemap.xml';
         $results    = [];
 
-        // NOTE: Google retired /ping in June 2023 and Bing followed.  Both
-        // search engines now auto-discover sitemaps via robots.txt + Search
-        // Console / Webmaster Tools.  We mark them informational so the
-        // operator isn't alarmed by a "deprecated" label.
-        $g = @file_get_contents('https://www.google.com/ping?sitemap=' . urlencode($sitemapUrl));
-        $results['Google'] = ($g !== false) ? 'auto-discovered' : 'auto-discovered (robots.txt)';
-        $b = @file_get_contents('https://www.bing.com/ping?sitemap=' . urlencode($sitemapUrl));
-        $results['Bing']   = ($b !== false) ? 'auto-discovered' : 'auto-discovered (robots.txt)';
+        // Modern protocol stack (Feb 2026):
+        //   - Google retired the /ping endpoint in June 2023; sitemaps are now
+        //     auto-discovered via robots.txt and verified via Search Console.
+        //   - Bing followed in May 2024; same story — Webmaster Tools verified.
+        //   - IndexNow is the actively-supported instant-push protocol
+        //     (Bing, Yandex, Naver, Seznam — Microsoft Copilot + ChatGPT rely on it).
+        // We intentionally DO NOT call the deprecated ping URLs anymore —
+        // those would only generate noise + 404s in the success message.
+        $results['Google'] = 'Auto-discovered via robots.txt + Search Console';
+        $results['Bing']   = 'Auto-discovered via robots.txt + Webmaster Tools';
 
         // IndexNow is the modern primary channel — instant push to Bing,
         // Yandex, Naver, Seznam.
@@ -738,10 +740,11 @@ if ($tab === 'ai-blogger') {
         } elseif ($indexNowStatus === 'no_urls') {
             $msg = 'ℹ No URLs were collected to submit — add some products or blog posts first, then try again.';
         } else {
-            $msg = 'ℹ Submission attempted — ';
-            foreach ($results as $svc => $stat) $msg .= "$svc: $stat · ";
-            $msg = rtrim($msg, ' ·');
-            $msg .= '. Google & Bing auto-discover sitemaps from robots.txt — no manual ping needed.';
+            // Catch-all friendly message — never expose raw HTTP error codes
+            // ("deprecated", "http_500", etc.) to the operator.
+            $msg = 'ℹ Sitemap submission triggered. IndexNow status: ' . esc($indexNowStatus)
+                 . ' (' . $indexNowCount . ' URL' . ($indexNowCount === 1 ? '' : 's') . '). '
+                 . 'Google &amp; Bing auto-discover your sitemap from robots.txt and Search Console — no manual ping needed.';
         }
 
         $_SESSION['seo_bot_flash']      = $msg;
@@ -2107,13 +2110,39 @@ elseif ($tab === 'ai-blogger'):
     [data-bs-theme="dark"] .ai-body > div[style*="overflow-y"] { border-color:#334155 !important; }
     [data-bs-theme="dark"] .ai-body > div[style*="overflow-y"] a { border-color:#1e293b !important; }
     [data-bs-theme="dark"] .ai-body > div[style*="overflow-y"] a:hover { background:rgba(59,130,246,.08) !important; }
-    /* SEO platform cards */
-    .seo-platform-card { background:#f8fafc; border:1px solid #e2e8f0; }
-    [data-bs-theme="dark"] .seo-platform-card { background:rgba(255,255,255,.04); border-color:#334155; }
-    [data-bs-theme="dark"] .seo-platform-card strong { color:#e2e8f0; }
-    [data-bs-theme="dark"] .seo-platform-card .text-secondary { color:#94a3b8 !important; }
-    [data-bs-theme="dark"] .seo-platform-card .form-control { background:#0f172a; border-color:#334155; color:#e2e8f0; }
-    [data-bs-theme="dark"] .seo-platform-card .form-control::placeholder { color:#475569; }
+    /* SEO platform cards — modern, elegant look in both light & dark mode.
+       In dark mode the cards used to inherit a nearly-transparent white,
+       which made the white card title invisible against the dark page.
+       The new rules give us a clearly-readable elevated surface. */
+    .seo-platform-card {
+      background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 1px 3px rgba(15,23,42,.04);
+      transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+    }
+    .seo-platform-card:hover { border-color: #93c5fd; box-shadow: 0 4px 14px rgba(59,130,246,.12); transform: translateY(-1px); }
+    [data-bs-theme="dark"] .seo-platform-card {
+      background: linear-gradient(180deg, #243049 0%, #1e293b 100%);
+      border-color: #475569;
+      box-shadow: 0 1px 3px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04);
+    }
+    [data-bs-theme="dark"] .seo-platform-card:hover {
+      border-color: #60a5fa;
+      box-shadow: 0 6px 20px rgba(59,130,246,.22), inset 0 1px 0 rgba(255,255,255,.06);
+    }
+    [data-bs-theme="dark"] .seo-platform-card strong,
+    [data-bs-theme="dark"] .seo-platform-card .platform-name { color: #f1f5f9 !important; }
+    [data-bs-theme="dark"] .seo-platform-card .text-secondary,
+    [data-bs-theme="dark"] .seo-platform-card .small.text-secondary { color: #cbd5e1 !important; }
+    [data-bs-theme="dark"] .seo-platform-card a { color: #93c5fd !important; }
+    [data-bs-theme="dark"] .seo-platform-card a:hover { color: #bfdbfe !important; }
+    [data-bs-theme="dark"] .seo-platform-card .form-control {
+      background: #0f172a; border-color: #475569; color: #f1f5f9;
+    }
+    [data-bs-theme="dark"] .seo-platform-card .form-control::placeholder { color: #64748b; }
+    [data-bs-theme="dark"] .seo-platform-card .form-control:focus {
+      background: #0f172a; border-color: #3b82f6; box-shadow: 0 0 0 .2rem rgba(59,130,246,.25); color: #f1f5f9;
+    }
     .ai-section > summary:hover { background:#f8fafc; }
     .ai-section > .ai-body { padding:0 20px 20px; }
     .ai-section > summary .ai-badge { margin-left:auto; font-size:11px; font-weight:600; padding:3px 10px; border-radius:999px; }
@@ -2342,13 +2371,22 @@ elseif ($tab === 'ai-blogger'):
         <div class="col-12">
           <div class="d-flex align-items-center gap-2 mb-2">
             <i class="bi bi-link-45deg" style="font-size:18px;color:#6366f1;"></i>
-            <strong style="font-size:13px;">Your Website Domain</strong>
+            <strong class="platform-name" style="font-size:13px;">Your Website Domain</strong>
             <?php if ($seoDomain): ?>
               <span class="badge rounded-pill" style="background:#d1fae5;color:#065f46;font-size:10px;">Active</span>
             <?php endif; ?>
           </div>
-          <input type="url" name="site_domain_url" class="form-control" value="<?= esc($seoDomain) ?>" placeholder="https://yourdomain.com" style="font-size:13px;max-width:500px;">
+          <input type="url" name="site_domain_url" class="form-control" value="<?= esc($seoDomain) ?>" placeholder="https://yourdomain.com" style="font-size:13px;max-width:500px;" data-testid="seo-site-domain-input">
           <div class="text-secondary small mt-1">Your live website URL — used for sitemap submissions and verification.</div>
+          <?php if ($seoDomain): $autoSitemap = rtrim($seoDomain, '/') . '/sitemap.xml'; ?>
+            <div class="d-flex align-items-center gap-2 mt-2 p-2 rounded" data-testid="auto-sitemap-hint" style="background:linear-gradient(90deg,rgba(16,185,129,.10),rgba(59,130,246,.08));border:1px solid rgba(16,185,129,.30);">
+              <i class="bi bi-magic" style="color:#10b981;"></i>
+              <div class="small">
+                <span class="text-secondary">Auto-detected sitemap:</span>
+                <a href="<?= esc($autoSitemap) ?>" target="_blank" rel="noopener" class="fw-semibold" data-testid="auto-sitemap-url" style="word-break:break-all;"><?= esc($autoSitemap) ?> <i class="bi bi-box-arrow-up-right" style="font-size:10px;"></i></a>
+              </div>
+            </div>
+          <?php endif; ?>
         </div>
       </div>
 
@@ -2358,7 +2396,7 @@ elseif ($tab === 'ai-blogger'):
           <div class="p-3 seo-platform-card" style="border-radius:10px;">
             <div class="d-flex align-items-center gap-2 mb-2">
               <img src="https://www.google.com/favicon.ico" alt="" style="width:18px;height:18px;">
-              <strong style="font-size:13px;">Google Search Console</strong>
+              <strong class="platform-name" style="font-size:13px;">Google Search Console</strong>
               <?php if ($seoGsc): ?>
                 <span class="badge rounded-pill" style="background:#d1fae5;color:#065f46;font-size:9px;">Connected</span>
               <?php else: ?>
@@ -2379,7 +2417,7 @@ elseif ($tab === 'ai-blogger'):
           <div class="p-3 seo-platform-card" style="border-radius:10px;">
             <div class="d-flex align-items-center gap-2 mb-2">
               <img src="https://www.bing.com/favicon.ico" alt="" style="width:18px;height:18px;">
-              <strong style="font-size:13px;">Bing Webmaster Tools</strong>
+              <strong class="platform-name" style="font-size:13px;">Bing Webmaster Tools</strong>
               <?php if ($seoBing): ?>
                 <span class="badge rounded-pill" style="background:#d1fae5;color:#065f46;font-size:9px;">Connected</span>
               <?php else: ?>
@@ -2400,7 +2438,7 @@ elseif ($tab === 'ai-blogger'):
           <div class="p-3 seo-platform-card" style="border-radius:10px;">
             <div class="d-flex align-items-center gap-2 mb-2">
               <i class="bi bi-search" style="font-size:16px;color:#ff0000;"></i>
-              <strong style="font-size:13px;">Yandex Webmaster</strong>
+              <strong class="platform-name" style="font-size:13px;">Yandex Webmaster</strong>
               <?php if ($seoYandex): ?>
                 <span class="badge rounded-pill" style="background:#d1fae5;color:#065f46;font-size:9px;">Connected</span>
               <?php else: ?>
@@ -2421,7 +2459,7 @@ elseif ($tab === 'ai-blogger'):
           <div class="p-3 seo-platform-card" style="border-radius:10px;">
             <div class="d-flex align-items-center gap-2 mb-2">
               <i class="bi bi-pinterest" style="font-size:16px;color:#e60023;"></i>
-              <strong style="font-size:13px;">Pinterest</strong>
+              <strong class="platform-name" style="font-size:13px;">Pinterest</strong>
               <?php if ($seoPint): ?>
                 <span class="badge rounded-pill" style="background:#d1fae5;color:#065f46;font-size:9px;">Connected</span>
               <?php else: ?>
@@ -2442,7 +2480,7 @@ elseif ($tab === 'ai-blogger'):
           <div class="p-3 seo-platform-card" style="border-radius:10px;">
             <div class="d-flex align-items-center gap-2 mb-2">
               <i class="bi bi-bag-check" style="font-size:16px;color:#4285f4;"></i>
-              <strong style="font-size:13px;">Google Merchant Center</strong>
+              <strong class="platform-name" style="font-size:13px;">Google Merchant Center</strong>
               <?php if ($seoGmc): ?>
                 <span class="badge rounded-pill" style="background:#d1fae5;color:#065f46;font-size:9px;">Connected</span>
               <?php else: ?>

@@ -1354,11 +1354,41 @@ body.has-deal-bar #chat-panel { bottom: 155px; }
 .mobile-contact-strip .btn { white-space: nowrap; }
 
 /* ---------- Star rating input (Write a Review) ---------- */
-.star-input { display: inline-flex; flex-direction: row-reverse; gap: .2rem; font-size: 1.7rem; line-height: 1; }
-.star-input input { display: none; }
-.star-input label { color: #cbd5e1; cursor: pointer; transition: color .15s ease, transform .15s ease; }
-.star-input label:hover { transform: scale(1.12); }
-.star-input label:hover, .star-input label:hover ~ label, .star-input input:checked ~ label { color: #14b8a6; }
+/* ---------- Interactive star rating input (write-a-review modal) ----------
+   Default: every star is empty (light grey outline).
+   Hover: hovered star + all stars to its right (lower values, due to
+   row-reverse) preview-fill in gold.
+   Selected: same fill carries through after release.
+   This is the classic "pick N stars" UX — never shows pre-filled stars. */
+.star-input { display: inline-flex; flex-direction: row-reverse; gap: .25rem; font-size: 1.9rem; line-height: 1; user-select: none; }
+.star-input input { position: absolute; opacity: 0; pointer-events: none; }
+.star-input label {
+  color: #d1d5db;
+  cursor: pointer;
+  transition: color .12s ease, transform .12s ease, text-shadow .12s ease;
+  -webkit-text-stroke: 1px #94a3b8;
+}
+.star-input label:hover { transform: scale(1.18); }
+.star-input label:hover,
+.star-input label:hover ~ label,
+.star-input input:checked ~ label {
+  color: #f59e0b;
+  -webkit-text-stroke: 1px #d97706;
+  text-shadow: 0 1px 2px rgba(217,119,6,.35);
+}
+.star-input input:focus-visible + label {
+  outline: 2px solid #f59e0b;
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+[data-bs-theme="dark"] .star-input label { color: #475569; -webkit-text-stroke: 1px #64748b; }
+[data-bs-theme="dark"] .star-input label:hover,
+[data-bs-theme="dark"] .star-input label:hover ~ label,
+[data-bs-theme="dark"] .star-input input:checked ~ label {
+  color: #fbbf24;
+  -webkit-text-stroke: 1px #f59e0b;
+  text-shadow: 0 1px 2px rgba(251,191,36,.45);
+}
 
 /* ---------- Ask AI compact pill ---------- */
 .ask-ai-pill { border-radius: 999px; background: linear-gradient(90deg, rgba(6, 182, 212, .1), rgba(6, 182, 212, .08));

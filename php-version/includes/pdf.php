@@ -19,6 +19,35 @@ use Dompdf\Dompdf;
 use Dompdf\Options;
 
 /**
+ * Resolve the company logo to a local file path that Dompdf can embed.
+ * Falls back to the bundled email logo if no company logo is configured
+ * (or the configured URL points to an external host — Dompdf is sandboxed
+ * to the local filesystem via isRemoteEnabled=false).
+ */
+function _pdf_company_logo_path(): string
+{
+    $fallback = __DIR__ . '/../assets/images/brand/email-logo.gif';
+    $logoSetting = function_exists('company_info') ? (string)(company_info()['logo'] ?? '') : '';
+    if ($logoSetting === '') return $fallback;
+
+    // Already an absolute filesystem path?
+    if ($logoSetting[0] === '/' && file_exists($logoSetting)) return $logoSetting;
+
+    // Strip the site URL prefix if the operator pasted a full URL.
+    $rel = $logoSetting;
+    $candidates = [
+        function_exists('site_url') ? rtrim((string)site_url(), '/') : '',
+        function_exists('base_url') ? rtrim((string)base_url(), '/') : '',
+    ];
+    foreach (array_filter($candidates) as $c) {
+        if (str_starts_with($rel, $c)) { $rel = substr($rel, strlen($c)); break; }
+    }
+    $rel = ltrim((string)$rel, '/');
+    $abs = __DIR__ . '/../' . $rel;
+    return (file_exists($abs) && !is_dir($abs)) ? $abs : $fallback;
+}
+
+/**
  * Build a Dompdf instance with sane defaults for our receipts/invoices.
  */
 function _pdf_dompdf(): Dompdf
@@ -521,7 +550,7 @@ function generate_receipt_pdf(array $order, array $items, ?array $payment = null
 
     $html = _pdf_shell([
         'co'              => $co,
-        'logo'            => __DIR__ . '/../assets/images/brand/email-logo.gif',
+        'logo'            => _pdf_company_logo_path(),
         'title'           => 'Receipt',
         'invoice_number'  => $invoiceNo,
         'receipt_number'  => $receiptNo,
@@ -602,7 +631,7 @@ function generate_invoice_pdf(array $order, array $items): string
 
     $html = _pdf_shell([
         'co'              => $co,
-        'logo'            => __DIR__ . '/../assets/images/brand/email-logo.gif',
+        'logo'            => _pdf_company_logo_path(),
         'title'           => 'Invoice',
         'invoice_number'  => $invoiceNo,
         'date_issued'     => $dateIssued,
