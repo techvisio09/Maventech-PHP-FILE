@@ -106,6 +106,23 @@ $jsonLdBreadcrumb = [
         ['@type' => 'ListItem', 'position' => 4, 'name' => $product['name']],
     ],
 ];
+
+// FAQPage — brand-aware Q&A pairs that AI search engines (ChatGPT,
+// Perplexity, Google's AI Overviews, Bing Chat) quote verbatim AND that
+// Google promotes in "People also ask" / "Things to know" panels.
+require_once __DIR__ . '/includes/email.php';
+$pageFaqs = product_faqs($product);
+$jsonLdFaq = [
+    '@context'   => 'https://schema.org',
+    '@type'      => 'FAQPage',
+    'mainEntity' => array_map(function($f) {
+        return [
+            '@type'          => 'Question',
+            'name'           => $f['question'],
+            'acceptedAnswer' => ['@type' => 'Answer', 'text' => $f['answer']],
+        ];
+    }, $pageFaqs),
+];
 $pageKeywords = product_keywords($product);
 $related = get_products([$product['category']]);
 $related = array_values(array_filter($related, fn($r) => $r['slug'] !== $product['slug']));
@@ -326,6 +343,36 @@ include __DIR__ . '/includes/header.php';
     </div>
   </div>
 
+  <!-- Brand-aware FAQ accordion — visible to humans + structured for AI
+       crawlers (FAQPage JSON-LD emitted via $jsonLdFaq).  Answers are
+       quotable verbatim by ChatGPT / Perplexity / Google AI Overviews. -->
+  <section class="mt-5 pd-faq" aria-labelledby="pd-faq-heading" data-testid="product-faq">
+    <div class="d-flex align-items-center gap-2 mb-3">
+      <i class="bi bi-patch-question-fill" style="font-size:22px;color:#2563eb;"></i>
+      <h2 id="pd-faq-heading" class="fw-bold h4 mb-0">Questions about <?= esc($product['name']) ?></h2>
+    </div>
+    <p class="text-secondary small mb-3">Quick answers about delivery, activation and our guarantee — straight from our support team.</p>
+    <div class="accordion pd-faq-accordion" id="pd-faq-accordion">
+      <?php foreach ($pageFaqs as $idx => $f): $itemId = 'pd-faq-item-' . $idx; ?>
+        <div class="accordion-item">
+          <h3 class="accordion-header">
+            <button class="accordion-button <?= $idx > 0 ? 'collapsed' : '' ?>" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#<?= esc($itemId) ?>" aria-expanded="<?= $idx === 0 ? 'true' : 'false' ?>"
+                    aria-controls="<?= esc($itemId) ?>" data-testid="pd-faq-q-<?= $idx ?>">
+              <?= esc($f['question']) ?>
+            </button>
+          </h3>
+          <div id="<?= esc($itemId) ?>" class="accordion-collapse collapse <?= $idx === 0 ? 'show' : '' ?>"
+               data-bs-parent="#pd-faq-accordion">
+            <div class="accordion-body" data-testid="pd-faq-a-<?= $idx ?>">
+              <?= nl2br(esc($f['answer'])) ?>
+            </div>
+          </div>
+        </div>
+      <?php endforeach; ?>
+    </div>
+  </section>
+
   <?php if ($related): ?>
     <h2 class="fw-bold h4 mt-5 mb-4">Related Products</h2>
     <div class="row g-4">
@@ -349,5 +396,45 @@ include __DIR__ . '/includes/header.php';
     color: #fca5a5;
     border-color: rgba(239,68,68,.35);
   }
+  /* Product FAQ accordion — clean cards with subtle blue accent */
+  .pd-faq-accordion .accordion-item {
+    border: 1px solid #e2e8f0;
+    border-radius: 12px !important;
+    margin-bottom: 10px;
+    overflow: hidden;
+    background: #ffffff;
+  }
+  [data-bs-theme="dark"] .pd-faq-accordion .accordion-item {
+    border-color: #334155;
+    background: #1e293b;
+  }
+  .pd-faq-accordion .accordion-button {
+    font-weight: 600;
+    font-size: 15px;
+    color: #0f172a;
+    background: #ffffff;
+    padding: 16px 20px;
+  }
+  [data-bs-theme="dark"] .pd-faq-accordion .accordion-button {
+    background: #1e293b;
+    color: #e2e8f0;
+  }
+  .pd-faq-accordion .accordion-button:not(.collapsed) {
+    background: linear-gradient(135deg, #eff6ff, #dbeafe);
+    color: #1e3a8a;
+    box-shadow: none;
+  }
+  [data-bs-theme="dark"] .pd-faq-accordion .accordion-button:not(.collapsed) {
+    background: linear-gradient(135deg, #1c2541, #1e293b);
+    color: #93c5fd;
+  }
+  .pd-faq-accordion .accordion-button:focus { box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15); }
+  .pd-faq-accordion .accordion-body {
+    font-size: 14px;
+    color: #475569;
+    line-height: 1.7;
+    padding: 14px 20px 20px;
+  }
+  [data-bs-theme="dark"] .pd-faq-accordion .accordion-body { color: #cbd5e1; }
 </style>
 <?php include __DIR__ . '/includes/footer.php'; ?>

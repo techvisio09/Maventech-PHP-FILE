@@ -405,6 +405,72 @@ function installation_steps_for(array $product): string {
          . $extra;
 }
 
+/**
+ * Brand-aware product FAQ pairs — used by:
+ *   1. product.php to render a visible accordion section, AND
+ *   2. product.php to emit a Schema.org FAQPage JSON-LD block.
+ *
+ * Why brand-aware: ChatGPT/Perplexity quote the exact answer text we
+ * provide.  A Norton customer asking "is my Norton key genuine?" needs
+ * Norton-specific wording — not Microsoft.  The installation FAQ pulls
+ * directly from `installation_steps_for()` so all surfaces stay in sync.
+ *
+ * @param array $product  Same row used elsewhere — needs `name`,
+ *                        optional `category`, optional `activation_url`.
+ * @return array<int, array{question:string, answer:string}>
+ */
+function product_faqs(array $product): array {
+    $name   = trim((string)($product['name'] ?? 'this product'));
+    $nameLc = strtolower($name);
+    // Detect brand to personalise wording — same dictionary as the
+    // install-guide helper to avoid drift.
+    $brandLookup = [
+        'bitdefender' => 'Bitdefender', 'norton' => 'Norton', 'mcafee' => 'McAfee',
+        'kaspersky'   => 'Kaspersky',   'eset'   => 'ESET',   'avast'  => 'Avast',
+        'avg'         => 'AVG',         'webroot'=> 'Webroot','trend micro' => 'Trend Micro',
+        'malwarebytes'=> 'Malwarebytes','adobe'  => 'Adobe',  'autocad'=> 'Autodesk',
+        'autodesk'    => 'Autodesk',    'corel'  => 'Corel',  'parallels' => 'Parallels',
+        'windows'     => 'Microsoft',   'office' => 'Microsoft','visio' => 'Microsoft',
+        'project'     => 'Microsoft',
+    ];
+    $brand = 'the vendor';
+    foreach ($brandLookup as $kw => $br) {
+        if (strpos($nameLc, $kw) !== false) { $brand = $br; break; }
+    }
+    // Pretty install steps without HTML (FAQ answers are plain text on
+    // the page + we re-render JSON-LD safely).
+    $installStepsPlain = strip_tags(str_replace('<br>', "\n", installation_steps_for($product)));
+    $installStepsPlain = preg_replace('/\s+/', ' ', trim($installStepsPlain));
+
+    $co = function_exists('company_info') ? company_info() : ['name' => 'Maventech Software', 'phone' => '', 'email' => ''];
+    $brandStore = $co['name'] ?? 'Maventech Software';
+    $supportHrs = defined('SITE_HOURS') ? SITE_HOURS : 'Mon-Sat, 9 AM - 6 PM EST';
+
+    return [
+        [
+            'question' => 'How long does delivery take for ' . $name . '?',
+            'answer'   => 'Your ' . $name . ' license key is delivered by email almost instantly — typically within 15-30 minutes of completing payment, often in seconds. The email includes the activation key, the official ' . $brand . ' download link, and step-by-step activation instructions. There is no physical shipping — everything is digital and reaches the email address you provided at checkout.',
+        ],
+        [
+            'question' => 'Is this a genuine ' . $brand . ' license key?',
+            'answer'   => 'Yes. ' . $brandStore . ' only sells genuine, activation-ready ' . $brand . ' license keys sourced through authorised channels. The key you receive activates the official ' . $brand . ' software downloaded directly from the ' . $brand . ' website — it is never a cracked, repackaged, or modified installer. Every key is verified before dispatch and backed by our 30-day money-back guarantee if it fails to activate.',
+        ],
+        [
+            'question' => 'What if my ' . $name . ' license key does not activate?',
+            'answer'   => 'In the rare case a key does not activate, contact our support team within 30 days and we will either provide a working replacement key at no extra cost or issue a full refund — your choice. Support is available via live chat on the site, email, or phone (' . $supportHrs . '). Most activation issues are resolved in under 10 minutes by our concierge team.',
+        ],
+        [
+            'question' => 'How do I activate ' . $name . ' after purchase?',
+            'answer'   => $installStepsPlain . ' If you would prefer we do it for you, our ProAssist Premium Installation add-on books a specialist to set everything up over a 30-minute video call.',
+        ],
+        [
+            'question' => 'Can I use the same ' . $name . ' key on more than one device?',
+            'answer'   => 'Each license key activates one device under the ' . $brand . ' end-user license agreement. For multi-device coverage, pick a multi-seat product (e.g. 3-device or 5-device variants when available) or buy additional keys with the volume discount applied automatically at checkout for 5+ units.',
+        ],
+    ];
+}
+
+
 function default_email_template(): string {
     return '<!doctype html><html><body style="margin:0;padding:0;background:#fbfcfd;font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#1f2937;">
 <div style="position:relative;max-width:640px;margin:0 auto;background:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 6px 28px rgba(15,23,42,.06);">
