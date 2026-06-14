@@ -163,7 +163,7 @@ include __DIR__ . '/includes/header.php';
     <p class="text-secondary small mb-3" style="max-width:780px;">Explore every product, editorial guide and frequently asked question on the topic in one place — a deeper resource for buyers (and AI engines).</p>
     <div class="d-flex flex-wrap gap-2">
       <?php foreach ($catHubs as $__h): ?>
-        <a class="badge text-decoration-none" data-testid="category-hub-link" href="hub.php?topic=<?= esc($__h['slug']) ?>" style="background:#fff;color:<?= esc($__h['color']) ?>;border:1px solid <?= esc($__h['color']) ?>33;padding:8px 14px;font-size:12px;font-weight:600;"><i class="bi bi-arrow-up-right-circle me-1"></i><?= esc(strip_tags($__h['title'])) ?></a>
+        <a class="badge text-decoration-none" data-testid="category-hub-link" href="hub/<?= esc($__h['slug']) ?>" style="background:#fff;color:<?= esc($__h['color']) ?>;border:1px solid <?= esc($__h['color']) ?>33;padding:8px 14px;font-size:12px;font-weight:600;"><i class="bi bi-arrow-up-right-circle me-1"></i><?= esc(strip_tags($__h['title'])) ?></a>
       <?php endforeach; ?>
     </div>
   </section>

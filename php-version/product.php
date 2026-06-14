@@ -513,7 +513,7 @@ include __DIR__ . '/includes/header.php';
     <div class="d-flex flex-wrap align-items-center gap-2 mb-3" data-testid="product-topic-hub-row" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px;">
       <span class="fw-semibold small text-secondary"><i class="bi bi-collection-fill text-primary me-1"></i>Topic hub:</span>
       <?php foreach (array_slice($prodHubs, 0, 3) as $__h): ?>
-        <a class="badge text-decoration-none" data-testid="product-hub-link" href="hub.php?topic=<?= esc($__h['slug']) ?>" style="background:#fff;color:<?= esc($__h['color']) ?>;border:1px solid <?= esc($__h['color']) ?>33;padding:6px 12px;font-size:11.5px;font-weight:600;"><?= esc(strip_tags(explode(' — ', $__h['title'])[0])) ?> <i class="bi bi-arrow-right-short"></i></a>
+        <a class="badge text-decoration-none" data-testid="product-hub-link" href="hub/<?= esc($__h['slug']) ?>" style="background:#fff;color:<?= esc($__h['color']) ?>;border:1px solid <?= esc($__h['color']) ?>33;padding:6px 12px;font-size:11.5px;font-weight:600;"><?= esc(strip_tags(explode(' — ', $__h['title'])[0])) ?> <i class="bi bi-arrow-right-short"></i></a>
       <?php endforeach; ?>
     </div>
     <?php endif; ?>
