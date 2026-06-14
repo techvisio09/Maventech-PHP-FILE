@@ -11,13 +11,40 @@ define('DB_USER', 'root');
 define('DB_PASS', '');
 
 // --- Optional: AI chat (OpenAI-compatible API) ---
-// On Emergent preview these are auto-filled from the environment (Emergent LLM key).
-// For your own hosting: put your OpenAI key in the fallback string below
-// (get one at https://platform.openai.com/api-keys). Leave empty to show a
-// phone/email contact box instead.
-define('OPENAI_API_KEY', getenv('OPENAI_API_KEY') ?: (getenv('EMERGENT_LLM_KEY') ?: ''));
-define('OPENAI_BASE_URL', getenv('OPENAI_BASE_URL') ?: (getenv('EMERGENT_LLM_KEY') ? 'https://integrations.emergentagent.com/llm/v1' : 'https://api.openai.com/v1'));
+// The system checks multiple sources for the AI key:
+// 1) Environment variable  2) .env file  3) Database (admin panel)
+// You can set the key from the admin panel (AI Auto-Blogger → API Keys)
+// and it will work automatically — no file editing needed.
+$_llm_key = getenv('OPENAI_API_KEY') ?: (getenv('EMERGENT_LLM_KEY') ?: '');
+// Read from .env file if env var is not set (works on cPanel / shared hosting)
+if ($_llm_key === '') {
+    $_env_path = __DIR__ . '/.env';
+    if (is_file($_env_path)) {
+        $_env_lines = @file($_env_path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        if ($_env_lines) {
+            foreach ($_env_lines as $_el) {
+                $_el = trim($_el);
+                if ($_el === '' || $_el[0] === '#') continue;
+                if (preg_match('/^(EMERGENT_LLM_KEY|OPENAI_API_KEY)\s*=\s*(.+)$/', $_el, $_em)) {
+                    $_v = trim($_em[2], "\"' \t\n\r");
+                    if ($_v !== '') { $_llm_key = $_v; break; }
+                }
+            }
+        }
+    }
+}
+// Determine the correct API base URL from the key type
+if ($_llm_key !== '' && (str_contains($_llm_key, 'emergent') || str_starts_with($_llm_key, 'ek-'))) {
+    $_llm_url = 'https://integrations.emergentagent.com/llm/v1';
+} elseif ($_llm_key !== '') {
+    $_llm_url = getenv('OPENAI_BASE_URL') ?: 'https://api.openai.com/v1';
+} else {
+    $_llm_url = getenv('OPENAI_BASE_URL') ?: '';
+}
+define('OPENAI_API_KEY', $_llm_key);
+define('OPENAI_BASE_URL', $_llm_url);
 define('OPENAI_MODEL', 'gpt-4o-mini');
+unset($_llm_key, $_llm_url, $_env_path, $_env_lines, $_el, $_em, $_v);
 
 // --- Optional: Stripe secret key (https://dashboard.stripe.com/apikeys) ---
 // Auto-filled from the environment on Emergent preview.
