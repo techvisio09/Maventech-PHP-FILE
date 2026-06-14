@@ -34,16 +34,15 @@ if (!defined('SEOBOT_BLOG_REGIONS'))    define('SEOBOT_BLOG_REGIONS',   'US,UK,A
  */
 function _seo_resolve_llm_credentials(): array
 {
-    // 1) Config constants (set in config.php from env vars)
-    $key = defined('OPENAI_API_KEY') ? OPENAI_API_KEY : '';
-    $url = defined('OPENAI_BASE_URL') ? OPENAI_BASE_URL : '';
+    $key = '';
+    $url = '';
 
-    // 2) Direct env check
-    if ($key === '') {
-        $key = getenv('EMERGENT_LLM_KEY') ?: (getenv('OPENAI_API_KEY') ?: '');
-    }
+    // 1) Database settings table FIRST (saved from admin panel — highest priority)
+    try {
+        $key = function_exists('setting_get') ? setting_get('ai_blogger_llm_key', '') : '';
+    } catch (Throwable $e) {}
 
-    // 3) Read .env file directly (works on any hosting, even without start.sh)
+    // 2) Read .env file directly (works on any hosting, even without start.sh)
     if ($key === '') {
         $envPath = __DIR__ . '/../.env';
         if (is_file($envPath)) {
@@ -52,25 +51,34 @@ function _seo_resolve_llm_credentials(): array
                 $line = trim($line);
                 if ($line === '' || $line[0] === '#') continue;
                 if (preg_match('/^(EMERGENT_LLM_KEY|OPENAI_API_KEY)\s*=\s*(.+)$/', $line, $m)) {
-                    $val = trim($m[2], '"\'');
+                    $val = trim($m[2], "\"' \t\n\r");
                     if ($val !== '') { $key = $val; break; }
                 }
             }
         }
     }
 
-    // 4) Database settings table (saved from admin panel)
+    // 3) Environment variables
     if ($key === '') {
-        try {
-            $key = function_exists('setting_get') ? setting_get('ai_blogger_llm_key', '') : '';
-        } catch (Throwable $e) {}
+        $key = getenv('EMERGENT_LLM_KEY') ?: (getenv('OPENAI_API_KEY') ?: '');
     }
 
-    // Resolve base URL based on key type
-    if ($url === '' || $url === 'https://api.openai.com/v1') {
-        if ($key !== '' && (str_starts_with($key, 'sk-emergent') || str_starts_with($key, 'ek-'))) {
+    // 4) Config constants (fallback)
+    if ($key === '') {
+        $key = defined('OPENAI_API_KEY') ? OPENAI_API_KEY : '';
+    }
+
+    // Clean key — remove accidental whitespace/newlines
+    $key = trim($key);
+
+    // ALWAYS resolve base URL from the key type — never trust config.php's URL
+    // because on real hosting without env vars, it defaults to api.openai.com which is WRONG for Emergent keys
+    if ($key !== '') {
+        if (str_contains($key, 'emergent') || str_starts_with($key, 'ek-')) {
             $url = 'https://integrations.emergentagent.com/llm/v1';
-        } elseif ($key !== '') {
+        } elseif (str_starts_with($key, 'sk-ant-')) {
+            $url = 'https://api.anthropic.com/v1';
+        } else {
             $url = 'https://api.openai.com/v1';
         }
     }

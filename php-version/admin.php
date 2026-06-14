@@ -2082,30 +2082,82 @@ elseif ($tab === 'ai-blogger'):
   <details class="ai-section" open>
     <summary>
       <i class="bi bi-key-fill text-warning"></i> API Keys & Settings
-      <span class="ai-badge" style="background:<?= $hasLlmKey ? '#d1fae5' : '#fee2e2' ?>;color:<?= $hasLlmKey ? '#065f46' : '#991b1b' ?>;"><?= $hasLlmKey ? 'Key Set' : 'Key Missing' ?></span>
+      <span class="ai-badge" style="background:<?= $hasLlmKey ? '#d1fae5' : '#fee2e2' ?>;color:<?= $hasLlmKey ? '#065f46' : '#991b1b' ?>;"><?= $hasLlmKey ? 'Uploaded' : 'Key Missing' ?></span>
     </summary>
     <div class="ai-body">
-      <p class="text-secondary small mb-3">Enter your API keys below. The AI blogger needs an AI key to write posts.</p>
       <form method="post" action="admin.php?tab=ai-blogger">
         <input type="hidden" name="save_ai_keys" value="1">
         <div class="row g-3">
+          <!-- AI Key -->
           <div class="col-md-4">
             <label class="form-label small fw-semibold">AI Key (Emergent / OpenAI)</label>
-            <div class="input-group">
-              <input type="password" name="llm_api_key" class="form-control" placeholder="<?= $hasLlmKey ? $maskedKey : 'Paste your AI key here' ?>" style="font-size:13px;" data-testid="ai-key-input">
-              <button type="button" class="btn btn-outline-secondary btn-sm" onclick="var i=this.previousElementSibling;i.type=i.type==='password'?'text':'password';"><i class="bi bi-eye"></i></button>
-            </div>
-            <div class="small mt-1 <?= $hasLlmKey ? 'text-success' : 'text-danger' ?>"><i class="bi bi-<?= $hasLlmKey ? 'check-circle-fill' : 'exclamation-circle-fill' ?> me-1"></i><?= $hasLlmKey ? 'Key configured' : 'No key — AI won\'t work' ?></div>
+            <?php if ($hasLlmKey): ?>
+              <!-- Key is uploaded — show status + change option -->
+              <div id="ai-key-display" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;">
+                <div class="d-flex align-items-center justify-content-between">
+                  <div>
+                    <i class="bi bi-check-circle-fill text-success me-1"></i>
+                    <span class="fw-semibold" style="font-size:13px;color:#065f46;">Key Uploaded</span>
+                    <div class="text-secondary" style="font-size:11px;font-family:monospace;margin-top:2px;"><?= esc($maskedKey) ?></div>
+                  </div>
+                  <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" onclick="document.getElementById('ai-key-display').style.display='none';document.getElementById('ai-key-edit').style.display='block';">
+                    <i class="bi bi-pencil me-1"></i>Change
+                  </button>
+                </div>
+              </div>
+              <div id="ai-key-edit" style="display:none;">
+                <div class="input-group mt-1">
+                  <input type="password" name="llm_api_key" class="form-control" placeholder="Paste new key here" style="font-size:13px;" data-testid="ai-key-input">
+                  <button type="button" class="btn btn-outline-secondary btn-sm" onclick="var i=this.previousElementSibling;i.type=i.type==='password'?'text':'password';"><i class="bi bi-eye"></i></button>
+                </div>
+                <button type="button" class="btn btn-sm btn-link text-secondary p-0 mt-1" onclick="document.getElementById('ai-key-edit').style.display='none';document.getElementById('ai-key-display').style.display='block';">Cancel</button>
+              </div>
+            <?php else: ?>
+              <!-- No key — show input -->
+              <div class="input-group">
+                <input type="password" name="llm_api_key" class="form-control" placeholder="Paste your AI key here" style="font-size:13px;" data-testid="ai-key-input">
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="var i=this.previousElementSibling;i.type=i.type==='password'?'text':'password';"><i class="bi bi-eye"></i></button>
+              </div>
+              <div class="small mt-1 text-danger"><i class="bi bi-exclamation-circle-fill me-1"></i>Required — AI features won't work without this</div>
+            <?php endif; ?>
           </div>
+          <!-- Google Search Console -->
           <div class="col-md-4">
-            <label class="form-label small fw-semibold">Google Search Console Token</label>
-            <input type="text" name="google_search_console" class="form-control" placeholder="<?= ($seoGsc ?? '') ? 'Configured' : 'Paste token' ?>" style="font-size:13px;">
-            <div class="small mt-1 <?= ($seoGsc ?? '') ? 'text-success' : 'text-secondary' ?>"><i class="bi bi-<?= ($seoGsc ?? '') ? 'check-circle-fill' : 'info-circle' ?> me-1"></i><?= ($seoGsc ?? '') ? 'Token set' : 'Optional' ?></div>
+            <label class="form-label small fw-semibold">Google Search Console</label>
+            <?php if (($seoGsc ?? '') !== ''): ?>
+              <div id="gsc-display" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;">
+                <div class="d-flex align-items-center justify-content-between">
+                  <span><i class="bi bi-check-circle-fill text-success me-1"></i><span class="fw-semibold" style="font-size:13px;color:#065f46;">Uploaded</span></span>
+                  <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" onclick="document.getElementById('gsc-display').style.display='none';document.getElementById('gsc-edit').style.display='block';"><i class="bi bi-pencil me-1"></i>Change</button>
+                </div>
+              </div>
+              <div id="gsc-edit" style="display:none;">
+                <input type="text" name="google_search_console" class="form-control mt-1" placeholder="Paste new token" style="font-size:13px;">
+                <button type="button" class="btn btn-sm btn-link text-secondary p-0 mt-1" onclick="document.getElementById('gsc-edit').style.display='none';document.getElementById('gsc-display').style.display='block';">Cancel</button>
+              </div>
+            <?php else: ?>
+              <input type="text" name="google_search_console" class="form-control" placeholder="Paste verification token" style="font-size:13px;">
+              <div class="small mt-1 text-secondary"><i class="bi bi-info-circle me-1"></i>Optional — helps Google find your posts</div>
+            <?php endif; ?>
           </div>
+          <!-- Bing Webmaster -->
           <div class="col-md-4">
-            <label class="form-label small fw-semibold">Bing Webmaster Token</label>
-            <input type="text" name="bing_webmaster" class="form-control" placeholder="<?= ($seoBing ?? '') ? 'Configured' : 'Paste token' ?>" style="font-size:13px;">
-            <div class="small mt-1 <?= ($seoBing ?? '') ? 'text-success' : 'text-secondary' ?>"><i class="bi bi-<?= ($seoBing ?? '') ? 'check-circle-fill' : 'info-circle' ?> me-1"></i><?= ($seoBing ?? '') ? 'Token set' : 'Optional' ?></div>
+            <label class="form-label small fw-semibold">Bing Webmaster</label>
+            <?php if (($seoBing ?? '') !== ''): ?>
+              <div id="bing-display" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;">
+                <div class="d-flex align-items-center justify-content-between">
+                  <span><i class="bi bi-check-circle-fill text-success me-1"></i><span class="fw-semibold" style="font-size:13px;color:#065f46;">Uploaded</span></span>
+                  <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" onclick="document.getElementById('bing-display').style.display='none';document.getElementById('bing-edit').style.display='block';"><i class="bi bi-pencil me-1"></i>Change</button>
+                </div>
+              </div>
+              <div id="bing-edit" style="display:none;">
+                <input type="text" name="bing_webmaster" class="form-control mt-1" placeholder="Paste new token" style="font-size:13px;">
+                <button type="button" class="btn btn-sm btn-link text-secondary p-0 mt-1" onclick="document.getElementById('bing-edit').style.display='none';document.getElementById('bing-display').style.display='block';">Cancel</button>
+              </div>
+            <?php else: ?>
+              <input type="text" name="bing_webmaster" class="form-control" placeholder="Paste verification token" style="font-size:13px;">
+              <div class="small mt-1 text-secondary"><i class="bi bi-info-circle me-1"></i>Optional — Bing & AI search</div>
+            <?php endif; ?>
           </div>
         </div>
         <div class="mt-3"><button type="submit" class="btn btn-primary rounded-pill px-4"><i class="bi bi-check-lg me-1"></i>Save Settings</button></div>
