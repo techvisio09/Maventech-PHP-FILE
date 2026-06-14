@@ -174,40 +174,6 @@
       <i class="bi bi-chat-dots-fill me-1"></i>Chat now
     </button>
   </div>
-  <!-- Friendly little robot mascot — pure CSS/SVG, no emoji, theme-matched. -->
-  <div class="ai-intro-bot" aria-hidden="true">
-    <svg viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg" width="92" height="92">
-      <defs>
-        <linearGradient id="aiBotBody" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%"  stop-color="#ffffff"/>
-          <stop offset="100%" stop-color="#dbe2f0"/>
-        </linearGradient>
-        <linearGradient id="aiBotGlow" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%"  stop-color="#6366f1"/>
-          <stop offset="100%" stop-color="#3b82f6"/>
-        </linearGradient>
-      </defs>
-      <!-- antenna -->
-      <circle cx="48" cy="10" r="3" fill="url(#aiBotGlow)"/>
-      <rect   x="47" y="11" width="2" height="9" fill="#94a3b8"/>
-      <!-- head -->
-      <rect x="20" y="20" width="56" height="46" rx="14" ry="14" fill="url(#aiBotBody)" stroke="#cbd5e1" stroke-width="1.2"/>
-      <!-- visor / face plate -->
-      <rect x="28" y="30" width="40" height="26" rx="6" ry="6" fill="#0f172a"/>
-      <!-- eyes -->
-      <circle cx="40" cy="43" r="4" fill="#67e8f9"/>
-      <circle cx="56" cy="43" r="4" fill="#67e8f9"/>
-      <circle cx="41" cy="42" r="1.3" fill="#ffffff"/>
-      <circle cx="57" cy="42" r="1.3" fill="#ffffff"/>
-      <!-- mouth -->
-      <rect x="42" y="50" width="12" height="2" rx="1" fill="#67e8f9" opacity=".7"/>
-      <!-- side ears / speakers -->
-      <rect x="14" y="34" width="6" height="14" rx="3" fill="#cbd5e1"/>
-      <rect x="76" y="34" width="6" height="14" rx="3" fill="#cbd5e1"/>
-      <!-- collar -->
-      <rect x="32" y="66" width="32" height="6" rx="3" fill="#a5b4fc" opacity=".55"/>
-    </svg>
-  </div>
 </div>
 
 <button id="chat-bubble" onclick="toggleChat()" aria-label="Open chat" data-testid="chat-bubble">
@@ -347,41 +313,17 @@
 }
 .ai-intro-btn-primary:hover { filter: brightness(1.06); box-shadow: 0 8px 24px rgba(99, 102, 241, .45); }
 
-/* Floating robot mascot — sits half-outside the card on the bottom right
-   so it feels alive.  Subtle float animation. */
-.ai-intro-bot {
-  position: absolute;
-  right: -18px; bottom: -22px;
-  width: 76px; height: 76px;
-  background: radial-gradient(closest-side, rgba(99, 102, 241, .35), rgba(99, 102, 241, 0));
-  border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  animation: ai-bot-float 3.6s ease-in-out infinite;
-  filter: drop-shadow(0 8px 18px rgba(99, 102, 241, .35));
-  pointer-events: none;
-}
-.ai-intro-bot svg { width: 72px; height: 72px; }
-@keyframes ai-bot-float {
-  0%, 100% { transform: translateY(0)   rotate(-3deg); }
-  50%      { transform: translateY(-6px) rotate(3deg); }
-}
-.ai-intro-bot svg { will-change: transform; }
-
-/* Robot is visible when popup is open — hide chat bubble to avoid overlap. */
-body.ai-intro-active #chat-bubble { display: none !important; }
-
 /* Mobile — sit clear of the navbar + chat bubble, full-width minus gutter. */
 @media (max-width: 520px) {
   .ai-intro { right: 12px; left: 12px; width: auto; bottom: 96px; padding: 18px 18px 16px; }
   .ai-intro-title { font-size: 19px; }
   .ai-intro-body  { font-size: 13.5px; }
-  .ai-intro-bot   { right: -14px; bottom: -20px; width: 78px; height: 78px; }
   .ai-intro-actions { gap: 8px; }
   .ai-intro-btn   { padding: 10px 18px; font-size: 13px; }
 }
 /* Respect reduce-motion */
 @media (prefers-reduced-motion: reduce) {
-  .ai-intro, .ai-intro-bot { animation: none; }
+  .ai-intro { animation: none; }
 }
 </style>
 <script>
@@ -406,7 +348,6 @@ body.ai-intro-active #chat-bubble { display: none !important; }
     var chatPanel = document.getElementById('chat-panel');
     if (chatPanel && chatPanel.classList.contains('open')) return;
     pop.style.display = 'block';
-    document.body.classList.add('ai-intro-active');
   }, 2000);
 })();
 
@@ -418,7 +359,6 @@ function aiIntroDismiss() {
   setTimeout(function () {
     pop.style.display = 'none';
     pop.classList.remove('is-leaving');
-    document.body.classList.remove('ai-intro-active');
   }, 380);
 }
 function aiIntroOpen() {
