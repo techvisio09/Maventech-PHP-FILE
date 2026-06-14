@@ -27,6 +27,79 @@ if (!defined('SEOBOT_BLOG_POSTS_PER_REGION_PER_DAY')) define('SEOBOT_BLOG_POSTS_
 // Markets the auto-blogger targets — keep in sync with regions table.
 if (!defined('SEOBOT_BLOG_REGIONS'))    define('SEOBOT_BLOG_REGIONS',   'US,UK,AU,CA');
 
+
+/**
+ * Robust JSON extractor for LLM responses.  Handles:
+ *   - bare JSON ({"...": "..."})
+ *   - JSON wrapped in ```json fences
+ *   - JSON preceded by chatty prose ("Here is the JSON:\n{...}")
+ *   - JSON followed by trailing markdown / explanation
+ *   - Smart quotes, BOM, leading whitespace
+ *   - Newlines INSIDE string values (control chars that break json_decode)
+ *
+ * Returns the decoded array on success, or null when no valid JSON can
+ * be recovered.  Callers should still validate required fields.
+ */
+function _seo_llm_json_decode(string $raw): ?array
+{
+    if ($raw === '') return null;
+
+    // 1) Strip BOM + obvious leading/trailing prose around the JSON object.
+    $s = preg_replace('/^\xEF\xBB\xBF/', '', $raw);
+    // Strip every fenced-code marker (``` or ```json) anywhere in the text.
+    $s = preg_replace('/```(?:json|JSON)?/u', '', (string)$s);
+    $s = trim((string)$s);
+
+    // 2) First attempt — straight decode.
+    $j = json_decode($s, true);
+    if (is_array($j)) return $j;
+
+    // 3) Substring between the FIRST `{` and the LAST `}` — handles the
+    //    common "Here's the JSON:\n{...}\n\nThat should help!" pattern.
+    $firstBrace = strpos($s, '{');
+    $lastBrace  = strrpos($s, '}');
+    if ($firstBrace !== false && $lastBrace !== false && $lastBrace > $firstBrace) {
+        $slice = substr($s, $firstBrace, $lastBrace - $firstBrace + 1);
+        $j = json_decode($slice, true);
+        if (is_array($j)) return $j;
+
+        // 4) Normalise smart quotes that LLMs love to insert.
+        $norm = strtr($slice, [
+            "\u{2018}" => "'",  "\u{2019}" => "'",
+            "\u{201C}" => '"',  "\u{201D}" => '"',
+            "\u{00A0}" => ' ',
+        ]);
+        $j = json_decode($norm, true);
+        if (is_array($j)) return $j;
+
+        // 5) Escape raw newlines/tabs that appear INSIDE string values.
+        //    Walk the string with a tiny state machine: inside a double-
+        //    quoted string, replace \n/\r/\t with \\n/\\r/\\t so json_decode
+        //    accepts them (per spec, control chars are illegal inside
+        //    JSON strings, but LLMs frequently emit them).
+        $fixed   = '';
+        $inStr   = false;
+        $escNext = false;
+        $len     = strlen($norm);
+        for ($i = 0; $i < $len; $i++) {
+            $ch = $norm[$i];
+            if ($escNext) { $fixed .= $ch; $escNext = false; continue; }
+            if ($ch === '\\' && $inStr) { $fixed .= $ch; $escNext = true; continue; }
+            if ($ch === '"') { $inStr = !$inStr; $fixed .= $ch; continue; }
+            if ($inStr) {
+                if ($ch === "\n") { $fixed .= '\\n'; continue; }
+                if ($ch === "\r") { $fixed .= '\\r'; continue; }
+                if ($ch === "\t") { $fixed .= '\\t'; continue; }
+            }
+            $fixed .= $ch;
+        }
+        $j = json_decode($fixed, true);
+        if (is_array($j)) return $j;
+    }
+
+    return null;
+}
+
 /**
  * Resolve the LLM API key + base URL from ALL possible sources.
  * Priority: 1) config.php constants  2) environment  3) .env file  4) database settings
@@ -826,7 +899,7 @@ SYS;
     $out['tokens_out'] = (int)($data['usage']['completion_tokens'] ?? 0);
 
     $answer = preg_replace('/^```(?:json)?\s*|```\s*$/i', '', $answer);
-    $j = json_decode($answer, true);
+    $j = _seo_llm_json_decode($answer);
     if (!is_array($j) || empty($j['title']) || empty($j['content_html'])) {
         $report['errors'][] = "blog[$targetRegion]: invalid JSON from LLM";
         return $out;
@@ -1077,7 +1150,9 @@ Rules:
    integration, hybrid work, compliance frameworks like NIS2 / SOC 2, etc.)
    where they fit naturally.
  - Do NOT invent prices or discounts.
- - Output MUST be valid JSON — no text before or after.
+ - CRITICAL: Output MUST start with `{` and end with `}` — pure JSON only.
+   No explanation, no preface ("Here is..."), no markdown code fences,
+   no trailing remarks. The first character of your response must be `{`.
 SYS;
 
     $usr = "PRODUCT_NAME: {$product['name']}\n"
@@ -1118,10 +1193,12 @@ SYS;
     }
     $data   = json_decode((string)$raw, true);
     $answer = trim((string)($data['choices'][0]['message']['content'] ?? ''));
-    $answer = preg_replace('/^```(?:json)?\s*|```\s*$/i', '', $answer);
-    $j      = json_decode($answer, true);
+    $j      = _seo_llm_json_decode($answer);
     if (!is_array($j) || empty($j['title']) || empty($j['content_html'])) {
-        $report['errors'][] = 'trends: invalid JSON from LLM';
+        // Include a short snippet of what the LLM returned to make
+        // debugging the failure mode much easier from the admin panel.
+        $snippet = mb_substr(preg_replace('/\s+/', ' ', (string)$answer), 0, 160);
+        $report['errors'][] = 'trends: invalid JSON from LLM' . ($snippet !== '' ? ' (got: ' . $snippet . '…)' : '');
         return $out + ['error' => 'invalid JSON'];
     }
 
@@ -1250,8 +1327,52 @@ function seo_bot_autotick(): void
             seo_bot_run_if_due(false);
         } catch (Throwable $e) {
             @error_log('[seo-bot autotick] ' . $e->getMessage());
+        }
+        try {
+            seo_bot_weekly_sitemap_tick();
+        } catch (Throwable $e) {
+            @error_log('[seo-bot weekly-sitemap] ' . $e->getMessage());
         } finally {
             @unlink($lockFile);
         }
     });
+}
+
+/* =====================================================================
+ *  WEEKLY AUTO-RESUBMIT
+ *  -----------------------------------------------------------------
+ *  When the operator enables "Auto-resubmit weekly" in the admin SEO
+ *  panel, this function re-pings IndexNow with the fresh sitemap URLs
+ *  every 7 days.  Idempotent — gated on:
+ *    - setting `auto_sitemap_weekly` == '1'
+ *    - last submission timestamp > 7 days old
+ *  Runs in the same background shutdown handler as the auto-blogger so
+ *  it never blocks a page-load.
+ * =================================================================== */
+function seo_bot_weekly_sitemap_tick(): void
+{
+    if ((string)setting_get('auto_sitemap_weekly', '0') !== '1') return;
+
+    $lastAt = setting_get('last_sitemap_submit_at', '');
+    if ($lastAt) {
+        $age = time() - strtotime($lastAt);
+        if ($age >= 0 && $age < 7 * 86400) return; // submitted less than 7 days ago
+    }
+
+    if (!function_exists('_seo_collect_index_urls') || !function_exists('_seo_indexnow_submit_urls')) return;
+    $urls = _seo_collect_index_urls(100);
+    if (!$urls) return;
+
+    $rep = [];
+    try {
+        [$status, $count] = _seo_indexnow_submit_urls($urls, $rep);
+    } catch (Throwable $e) {
+        @error_log('[weekly-sitemap] ' . $e->getMessage());
+        return;
+    }
+    if ($status === 'ok') {
+        setting_set('last_sitemap_submit_at',    date('Y-m-d H:i:s'));
+        setting_set('last_sitemap_submit_count', (string)$count);
+        setting_set('last_sitemap_submit_kind',  'auto_weekly');
+    }
 }

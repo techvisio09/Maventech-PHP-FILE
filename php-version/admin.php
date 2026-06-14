@@ -571,7 +571,17 @@ if ($tab === 'ai-blogger') {
 
     // ----- Save Search Engine Visibility tokens -----
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['save_seo_tokens'])) {
+        // Capture the auto-resubmit toggle EVERY save (a checkbox is absent
+        // from the POST body when unchecked, so we set it explicitly).
+        $autoWeekly = !empty($_POST['auto_sitemap_weekly']) ? '1' : '0';
+        $prevAutoWeekly = (string)setting_get('auto_sitemap_weekly', '0');
+        setting_set('auto_sitemap_weekly', $autoWeekly);
         $updated = [];
+        if ($autoWeekly !== $prevAutoWeekly) {
+            $updated[] = $autoWeekly === '1'
+                ? 'Auto-resubmit weekly enabled'
+                : 'Auto-resubmit weekly disabled';
+        }
         $fields = [
             'google_site_verification_token'    => 'Google Search Console',
             'bing_site_verification_token'      => 'Bing Webmaster',
@@ -725,6 +735,7 @@ if ($tab === 'ai-blogger') {
             // a "Sitemap Submitted" state on the next page load.
             setting_set('last_sitemap_submit_at', date('Y-m-d H:i:s'));
             setting_set('last_sitemap_submit_count', (string)$indexNowCount);
+            setting_set('last_sitemap_submit_kind', 'manual');
             $msg = '✓ Sitemap submitted successfully — ' . $indexNowCount . ' URL'
                  . ($indexNowCount === 1 ? '' : 's') . ' sent to Bing, Yandex, Naver & Seznam via IndexNow. '
                  . 'Google & Bing auto-discover your sitemap from robots.txt and Search Console. '
@@ -2390,12 +2401,14 @@ elseif ($tab === 'ai-blogger'):
     <p class="text-secondary small mb-3">Connect your website to search engines and shopping platforms. Fill in the verification tokens below and click <strong>Save All</strong>. Your website will start appearing in search results.</p>
 
     <!-- Submit Sitemap Button -->
-    <div class="d-flex flex-wrap gap-2 mb-3 pb-3 align-items-center" style="border-bottom:1px solid #f1f5f9;">
+    <div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
       <?php
         // Same "recently submitted" detection as the top section so the
         // lower button mirrors the upper button's state.
         $lastSubmitTs2  = setting_get('last_sitemap_submit_at', '');
         $lastSubmitCnt2 = (int)setting_get('last_sitemap_submit_count', '0');
+        $lastSubmitKind = (string)setting_get('last_sitemap_submit_kind', '');
+        $autoWeeklyEnabled = ((string)setting_get('auto_sitemap_weekly', '0') === '1');
         $recentlySubmitted2 = false;
         if ($lastSubmitTs2 !== '') {
             $age2 = time() - strtotime($lastSubmitTs2);
@@ -2406,7 +2419,7 @@ elseif ($tab === 'ai-blogger'):
         <button type="button" class="btn btn-success rounded-pill px-4" disabled data-testid="checklist-sitemap-submitted-btn" style="opacity:.92;cursor:default;">
           <i class="bi bi-check2-circle me-1"></i>Sitemap Submitted
           <span class="badge ms-2" style="background:rgba(255,255,255,.25);color:#fff;font-size:10px;font-weight:600;">
-            <?= $lastSubmitCnt2 ?> URLs &middot; <?= esc(human_time_diff_compact($lastSubmitTs2)) ?> ago
+            <?= $lastSubmitCnt2 ?> URLs &middot; <?= esc(human_time_diff_compact($lastSubmitTs2)) ?> ago<?= $lastSubmitKind === 'auto_weekly' ? ' &middot; auto' : '' ?>
           </span>
         </button>
         <a href="admin.php?tab=ai-blogger&submit_sitemaps=1" class="btn btn-outline-secondary rounded-pill px-3" data-testid="checklist-sitemap-resubmit-btn" onclick="return confirm('Resubmit your sitemap now?')"><i class="bi bi-arrow-clockwise me-1"></i>Resubmit</a>
@@ -2416,6 +2429,27 @@ elseif ($tab === 'ai-blogger'):
       <a href="blog.php" target="_blank" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-journal-text me-1"></i>View Blog</a>
       <a href="sitemap.xml" target="_blank" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-filetype-xml me-1"></i>View Sitemap</a>
     </div>
+
+    <!-- Auto-resubmit weekly toggle — drives seo_bot_weekly_sitemap_tick() -->
+    <form method="post" action="admin.php?tab=ai-blogger" class="d-flex align-items-center gap-2 mb-3 pb-3 flex-wrap" style="border-bottom:1px solid #f1f5f9;" data-testid="auto-weekly-form">
+      <input type="hidden" name="save_seo_tokens" value="1">
+      <input type="hidden" name="site_domain_url" value="<?= esc($seoDomain) ?>">
+      <div class="form-check form-switch mb-0">
+        <input class="form-check-input" type="checkbox" role="switch" id="autoWeeklyToggle"
+               name="auto_sitemap_weekly" value="1" <?= $autoWeeklyEnabled ? 'checked' : '' ?>
+               onchange="this.form.submit()" data-testid="auto-weekly-toggle">
+        <label class="form-check-label small fw-semibold" for="autoWeeklyToggle">
+          <i class="bi bi-arrow-clockwise me-1 text-primary"></i>Auto-resubmit sitemap weekly
+        </label>
+      </div>
+      <div class="text-secondary small" data-testid="auto-weekly-hint">
+        <?php if ($autoWeeklyEnabled): ?>
+          <i class="bi bi-check-circle-fill text-success me-1"></i><strong>On</strong> &mdash; IndexNow will be re-pinged every 7 days automatically. No manual clicks needed.
+        <?php else: ?>
+          Off &mdash; you'll need to click <em>Submit Sitemap</em> manually to keep search engines fresh.
+        <?php endif; ?>
+      </div>
+    </form>
 
     <!-- Platform Setup Form -->
     <form method="post" action="admin.php?tab=ai-blogger">
@@ -2591,17 +2625,24 @@ elseif ($tab === 'ai-blogger'):
         } catch (Throwable $e) {}
       ?>
       <?php if ($aiAllUnfiltered): ?>
-      <div id="post-list-box" style="max-height:420px;overflow-y:auto;border-radius:8px;">
+      <div id="post-list-box" style="max-height:420px;overflow-y:auto;border-radius:8px;" data-testid="published-blog-list">
         <?php $i = 0; foreach ($aiAllUnfiltered as $bp): $i++; ?>
           <?php
             $httpOk   = (int)($bp['verified_http'] ?? 0) === 200;
             $postImg  = $bp['image'] ?? '';
-            $rCode    = $bp['target_region'] ?? '';
-            $rFlag    = $regionsList[$rCode]['flag'] ?? '';
+            $rCode    = (string)($bp['target_region'] ?? '');
+            // Trends posts use `ALL`; seed posts use NULL → empty.  Both
+            // are visible across every country filter.  Show a globe so
+            // the operator can tell the post is region-agnostic.
+            $isGlobal = ($rCode === 'ALL' || $rCode === '');
+            $rFlag    = $isGlobal ? '🌍' : ($regionsList[$rCode]['flag'] ?? '');
+            $rLabel   = $isGlobal ? 'Global' : (string)$rCode;
             $postDate = date('M j', strtotime($bp['created_at'] ?? $bp['date']));
           ?>
           <a href="blog-post.php?id=<?= urlencode($bp['id']) ?>" target="_blank" rel="noopener"
-             class="post-row d-flex align-items-center gap-2 text-decoration-none" data-region="<?= esc($rCode) ?>">
+             class="post-row d-flex align-items-center gap-2 text-decoration-none"
+             data-region="<?= esc($rCode) ?>" data-is-global="<?= $isGlobal ? '1' : '0' ?>"
+             data-testid="published-blog-row">
             <span class="post-num"><?= $i ?></span>
             <?php if ($postImg): ?>
               <img src="<?= esc($postImg) ?>" alt="" class="post-thumb">
@@ -2609,7 +2650,7 @@ elseif ($tab === 'ai-blogger'):
               <span class="post-thumb post-thumb-empty"><i class="bi bi-journal-text"></i></span>
             <?php endif; ?>
             <span class="post-title"><?= esc($bp['title']) ?></span>
-            <span class="post-flag"><?= $rFlag ?></span>
+            <span class="post-flag" title="Targeted country: <?= esc($rLabel) ?>"><?= $rFlag ?> <span class="post-flag-label"><?= esc($rLabel) ?></span></span>
             <span class="post-date"><?= $postDate ?></span>
             <span class="badge rounded-pill post-status" style="background:<?= $httpOk ? '#166534' : '#92400e' ?>;color:<?= $httpOk ? '#bbf7d0' : '#fef3c7' ?>;"><?= $httpOk ? 'Live' : 'Pending' ?></span>
             <i class="bi bi-chevron-right post-arrow"></i>
@@ -2636,7 +2677,9 @@ elseif ($tab === 'ai-blogger'):
     .post-thumb { width:28px; height:28px; object-fit:cover; border-radius:5px; flex-shrink:0; }
     .post-thumb-empty { display:inline-flex; align-items:center; justify-content:center; background:rgba(255,255,255,.08); color:#64748b; font-size:12px; }
     .post-title { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; color:#e2e8f0; }
-    .post-flag { flex-shrink:0; font-size:14px; }
+    .post-flag { flex-shrink:0; font-size:14px; display:inline-flex; align-items:center; gap:4px; }
+    .post-flag-label { font-size:10px; font-weight:700; letter-spacing:.4px; color:#94a3b8; text-transform:uppercase; }
+    [data-bs-theme="light"] .post-flag-label { color:#64748b; }
     .post-date { flex-shrink:0; color:#64748b; min-width:45px; text-align:right; }
     .post-status { flex-shrink:0; font-size:8px; padding:2px 6px; }
     .post-arrow { font-size:10px; color:#475569; flex-shrink:0; }
@@ -2666,11 +2709,17 @@ elseif ($tab === 'ai-blogger'):
         btns.forEach(function(b){ b.classList.remove('active','btn-primary'); b.classList.add('btn-outline-secondary'); });
         btn.classList.add('active','btn-primary');
         btn.classList.remove('btn-outline-secondary');
-        // Filter rows
+        // Filter rows.  A row is visible when:
+        //   - the "All" pill is active, OR
+        //   - the row's region matches the picked region, OR
+        //   - the row is a global post (ALL / empty target_region).
         var rows = document.querySelectorAll('.post-row');
         var num = 0;
         rows.forEach(function(r){
-          if (region === 'all' || r.getAttribute('data-region') === region) {
+          var rRegion   = r.getAttribute('data-region');
+          var isGlobal  = r.getAttribute('data-is-global') === '1';
+          var visible   = (region === 'all') || (rRegion === region) || isGlobal;
+          if (visible) {
             r.style.display = '';
             num++;
             r.querySelector('.post-num').textContent = num;

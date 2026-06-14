@@ -29,7 +29,10 @@ if ($q !== '') {
     $params[] = '%' . $q . '%';
 }
 if ($region !== '' && $hasRegionCol) {
-    $where[]  = 'target_region = ?';
+    // Show posts targeted at the selected region PLUS any "ALL" / NULL
+    // (region-agnostic) posts.  Without this, picking a region returned 0
+    // rows whenever seed posts hadn't been tagged with a region yet.
+    $where[]  = "(target_region = ? OR target_region = 'ALL' OR target_region IS NULL)";
     $params[] = $region;
 }
 $whereSql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
