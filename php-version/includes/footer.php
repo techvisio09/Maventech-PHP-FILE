@@ -152,6 +152,59 @@
 </footer>
 
 <!-- AI chat widget -->
+<!-- AI welcome popup — first-visit only, styled to match the brand.
+     Slides in from the bottom-right after page load, sitting just above
+     the chat bubble.  "Close" dismisses + remembers, "Learn more" opens
+     the existing chat panel so the customer drops into a live conversation.
+-->
+<div id="ai-intro-popup" class="ai-intro" style="display:none;" data-testid="ai-intro-popup" role="dialog" aria-labelledby="ai-intro-title">
+  <button type="button" class="ai-intro-x" aria-label="Dismiss" onclick="aiIntroDismiss()" data-testid="ai-intro-close-x"><i class="bi bi-x"></i></button>
+  <h3 id="ai-intro-title" class="ai-intro-title">
+    Hi, I'm <span class="ai-intro-title-brand"><?= esc($brandName) ?></span><span class="ai-intro-title-suffix"> AI</span>
+  </h3>
+  <p class="ai-intro-body">
+    Just bought a license &mdash; or thinking about it? I can walk you through <strong>activation steps</strong>, find the right edition for your device, share live deals, and resend your <strong>order receipt &amp; invoice PDFs</strong> in seconds.
+  </p>
+  <div class="ai-intro-actions">
+    <button type="button" class="ai-intro-btn ai-intro-btn-secondary" onclick="aiIntroDismiss()" data-testid="ai-intro-close-btn">Close</button>
+    <button type="button" class="ai-intro-btn ai-intro-btn-primary" onclick="aiIntroOpen()" data-testid="ai-intro-learn-btn">Learn more</button>
+  </div>
+  <!-- Friendly little robot mascot — pure CSS/SVG, no emoji, theme-matched. -->
+  <div class="ai-intro-bot" aria-hidden="true">
+    <svg viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg" width="92" height="92">
+      <defs>
+        <linearGradient id="aiBotBody" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"  stop-color="#ffffff"/>
+          <stop offset="100%" stop-color="#dbe2f0"/>
+        </linearGradient>
+        <linearGradient id="aiBotGlow" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%"  stop-color="#6366f1"/>
+          <stop offset="100%" stop-color="#3b82f6"/>
+        </linearGradient>
+      </defs>
+      <!-- antenna -->
+      <circle cx="48" cy="10" r="3" fill="url(#aiBotGlow)"/>
+      <rect   x="47" y="11" width="2" height="9" fill="#94a3b8"/>
+      <!-- head -->
+      <rect x="20" y="20" width="56" height="46" rx="14" ry="14" fill="url(#aiBotBody)" stroke="#cbd5e1" stroke-width="1.2"/>
+      <!-- visor / face plate -->
+      <rect x="28" y="30" width="40" height="26" rx="6" ry="6" fill="#0f172a"/>
+      <!-- eyes -->
+      <circle cx="40" cy="43" r="4" fill="#67e8f9"/>
+      <circle cx="56" cy="43" r="4" fill="#67e8f9"/>
+      <circle cx="41" cy="42" r="1.3" fill="#ffffff"/>
+      <circle cx="57" cy="42" r="1.3" fill="#ffffff"/>
+      <!-- mouth -->
+      <rect x="42" y="50" width="12" height="2" rx="1" fill="#67e8f9" opacity=".7"/>
+      <!-- side ears / speakers -->
+      <rect x="14" y="34" width="6" height="14" rx="3" fill="#cbd5e1"/>
+      <rect x="76" y="34" width="6" height="14" rx="3" fill="#cbd5e1"/>
+      <!-- collar -->
+      <rect x="32" y="66" width="32" height="6" rx="3" fill="#a5b4fc" opacity=".55"/>
+    </svg>
+  </div>
+</div>
+
 <button id="chat-bubble" onclick="toggleChat()" aria-label="Open chat" data-testid="chat-bubble">
   <i class="bi bi-chat-dots"></i>
   <!-- Tiny bell + unread count overlay; surfaces the moment an admin replies
@@ -162,6 +215,184 @@
     <span id="chat-bell-count" class="chat-bell-count" data-testid="chat-bell-count">1</span>
   </span>
 </button>
+
+<style>
+/* ============================================================
+   AI welcome popup — matches the brand-blue palette + halo theme
+   ============================================================ */
+.ai-intro {
+  position: fixed; right: 20px; bottom: 100px;
+  width: 360px; max-width: calc(100vw - 32px);
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid rgba(99, 102, 241, .18);
+  border-radius: 22px;
+  padding: 22px 22px 20px;
+  box-shadow:
+    0 24px 60px rgba(30, 41, 99, .22),
+    0 4px 18px rgba(59, 130, 246, .10),
+    0 0 0 1px rgba(255, 255, 255, .65) inset;
+  z-index: 1080;
+  animation: ai-intro-in .55s cubic-bezier(.18,.89,.32,1.28) both;
+  opacity: 1;
+}
+.ai-intro.is-leaving { animation: ai-intro-out .35s ease-in forwards; }
+@keyframes ai-intro-in {
+  0%   { opacity: 0; transform: translateY(28px) scale(.92); }
+  60%  { opacity: 1; transform: translateY(-6px)  scale(1.03); }
+  100% { opacity: 1; transform: translateY(0)    scale(1); }
+}
+@keyframes ai-intro-out {
+  to { opacity: 0; transform: translateY(20px) scale(.95); }
+}
+.ai-intro-x {
+  position: absolute; top: 10px; right: 12px;
+  width: 28px; height: 28px; border-radius: 50%;
+  border: none; background: rgba(15, 23, 42, .04); color: #475569;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: background-color .15s ease, color .15s ease;
+}
+.ai-intro-x:hover { background: rgba(15, 23, 42, .12); color: #0f172a; }
+.ai-intro-x i { font-size: 16px; line-height: 1; }
+
+.ai-intro-title {
+  font-size: 22px; font-weight: 800;
+  color: #1e3a8a; letter-spacing: -.3px;
+  margin: 4px 0 10px;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+.ai-intro-title .ai-intro-title-brand {
+  color: #2563eb;
+  background: linear-gradient(90deg, #1e40af, #6366f1, #3b82f6);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.ai-intro-title .ai-intro-title-suffix { color: #6366f1; font-weight: 600; }
+
+.ai-intro-body {
+  font-size: 14px; line-height: 1.55;
+  color: #334155;
+  margin: 0 0 18px;
+}
+[data-bs-theme="dark"] .ai-intro {
+  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  border-color: rgba(99, 102, 241, .35);
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, .55),
+    0 0 0 1px rgba(99, 102, 241, .12) inset;
+}
+[data-bs-theme="dark"] .ai-intro-title       { color: #93c5fd; }
+[data-bs-theme="dark"] .ai-intro-body        { color: #cbd5e1; }
+[data-bs-theme="dark"] .ai-intro-x           { background: rgba(255, 255, 255, .06); color: #cbd5e1; }
+[data-bs-theme="dark"] .ai-intro-x:hover     { background: rgba(255, 255, 255, .12); color: #fff; }
+[data-bs-theme="dark"] .ai-intro-btn-secondary { background: rgba(255,255,255,.05); color: #cbd5e1; border-color: rgba(255,255,255,.10); }
+[data-bs-theme="dark"] .ai-intro-btn-secondary:hover { background: rgba(255,255,255,.10); }
+
+.ai-intro-actions {
+  display: flex; gap: 10px; align-items: center;
+  justify-content: flex-end;
+}
+.ai-intro-btn {
+  border: none; cursor: pointer;
+  padding: 11px 24px; border-radius: 999px;
+  font-weight: 700; font-size: 14px;
+  font-family: inherit;
+  transition: transform .15s ease, box-shadow .2s ease, filter .15s ease;
+  white-space: nowrap;
+}
+.ai-intro-btn:active { transform: translateY(1px); }
+.ai-intro-btn-secondary {
+  background: #ffffff; color: #1e293b;
+  border: 1px solid #e2e8f0;
+}
+.ai-intro-btn-secondary:hover { background: #f8fafc; border-color: #cbd5e1; }
+.ai-intro-btn-primary {
+  background: linear-gradient(135deg, #3b82f6 0%, #6366f1 60%, #8b5cf6 100%);
+  color: #ffffff;
+  box-shadow: 0 6px 20px rgba(99, 102, 241, .35);
+}
+.ai-intro-btn-primary:hover { filter: brightness(1.06); box-shadow: 0 8px 24px rgba(99, 102, 241, .45); }
+
+/* Floating robot mascot — sits half-outside the card on the bottom right
+   so it feels alive.  Subtle float animation. */
+.ai-intro-bot {
+  position: absolute;
+  right: -22px; bottom: -28px;
+  width: 92px; height: 92px;
+  background: radial-gradient(closest-side, rgba(99, 102, 241, .35), rgba(99, 102, 241, 0));
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  animation: ai-bot-float 3.6s ease-in-out infinite;
+  filter: drop-shadow(0 8px 18px rgba(99, 102, 241, .35));
+  pointer-events: none;
+}
+@keyframes ai-bot-float {
+  0%, 100% { transform: translateY(0)   rotate(-3deg); }
+  50%      { transform: translateY(-6px) rotate(3deg); }
+}
+.ai-intro-bot svg { will-change: transform; }
+
+/* Robot is visible when popup is open — hide chat bubble to avoid overlap. */
+body.ai-intro-active #chat-bubble { display: none !important; }
+
+/* Mobile — sit clear of the navbar + chat bubble, full-width minus gutter. */
+@media (max-width: 520px) {
+  .ai-intro { right: 12px; left: 12px; width: auto; bottom: 96px; padding: 18px 18px 16px; }
+  .ai-intro-title { font-size: 19px; }
+  .ai-intro-body  { font-size: 13.5px; }
+  .ai-intro-bot   { right: -14px; bottom: -20px; width: 78px; height: 78px; }
+  .ai-intro-actions { gap: 8px; }
+  .ai-intro-btn   { padding: 10px 18px; font-size: 13px; }
+}
+/* Respect reduce-motion */
+@media (prefers-reduced-motion: reduce) {
+  .ai-intro, .ai-intro-bot { animation: none; }
+}
+</style>
+<script>
+(function () {
+  // First-visit reveal + dismissal memory.  Don't show on checkout / cart
+  // / order-success / order-history pages — the customer is mid-funnel,
+  // and we don't want to distract them with a chat invite.
+  var blockedScripts = ['checkout.php','cart.php','order-success.php','order-history.php','login.php','register.php','account.php'];
+  var script = (location.pathname.split('/').pop() || 'index.php').toLowerCase();
+  if (blockedScripts.indexOf(script) !== -1) return;
+
+  try {
+    if (localStorage.getItem('mvt_ai_intro_dismissed') === '1') return;
+  } catch (e) { /* private-mode browsers throw on localStorage; show anyway */ }
+
+  var pop = document.getElementById('ai-intro-popup');
+  if (!pop) return;
+  // 2-second delay so the page has time to settle before we pop in.
+  setTimeout(function () {
+    if (document.hidden) return;
+    // Don't show if the chat panel is already open (rare race).
+    var chatPanel = document.getElementById('chat-panel');
+    if (chatPanel && chatPanel.classList.contains('open')) return;
+    pop.style.display = 'block';
+    document.body.classList.add('ai-intro-active');
+  }, 2000);
+})();
+
+function aiIntroDismiss() {
+  var pop = document.getElementById('ai-intro-popup');
+  if (!pop) return;
+  pop.classList.add('is-leaving');
+  try { localStorage.setItem('mvt_ai_intro_dismissed', '1'); } catch (e) {}
+  setTimeout(function () {
+    pop.style.display = 'none';
+    pop.classList.remove('is-leaving');
+    document.body.classList.remove('ai-intro-active');
+  }, 380);
+}
+function aiIntroOpen() {
+  aiIntroDismiss();
+  // Defer opening so the dismiss animation runs first.
+  setTimeout(function () {
+    if (typeof toggleChat === 'function') toggleChat();
+  }, 200);
+}
+</script>
+
 <!-- Messenger-style admin-reply preview — slides in to the LEFT of the
      chat bubble whenever an admin reply lands while the panel is closed,
      so the customer can see what the agent said before opening chat.
