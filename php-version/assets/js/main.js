@@ -313,11 +313,51 @@ function toggleChat() {
   if (panel.classList.contains('open')) {
     // Customer opened the chat → clear the unread bell.
     clearChatBell();
+    // First open per session → show a "support is typing…" bubble for
+    // ~1.2 s before revealing the welcome message + quick-reply chips.
+    // Psychological cue: feels like a real person composing a reply,
+    // which lifts first-message reply rates.
+    try {
+      if (!sessionStorage.getItem('uc_chat_intro_played')) {
+        playChatTypingIntro();
+        sessionStorage.setItem('uc_chat_intro_played', '1');
+      }
+    } catch (e) { /* private-mode browsers: skip the intro silently */ }
     if (!localStorage.getItem('uc_lead_done')) {
       const form = document.getElementById('chat-lead-form');
       if (form) form.style.display = 'block';
     }
   }
+}
+
+// First-open typing-dots intro — hides the static welcome + chips, drops
+// a `.typing` bubble at the top of the chat body, then ~1.2 s later swaps
+// it for a fade-in of the real welcome and quick-reply chips.
+function playChatTypingIntro() {
+  const welcome = document.getElementById('chat-welcome-msg');
+  const chips   = document.getElementById('chat-chips');
+  if (!welcome) return;
+  welcome.style.display = 'none';
+  if (chips) chips.style.display = 'none';
+  // Build the typing bubble — same `.typing` styling used after sendChat().
+  const typing = document.createElement('div');
+  typing.className = 'chat-msg bot typing';
+  typing.id = 'chat-intro-typing';
+  typing.setAttribute('data-testid', 'chat-intro-typing');
+  typing.innerHTML = '<span></span><span></span><span></span>';
+  const body = document.getElementById('chat-body');
+  if (body) body.insertBefore(typing, body.firstChild);
+  // After ~1.2 s, remove the dots and reveal the welcome content with a
+  // soft fade-in so it doesn't snap into existence.
+  setTimeout(() => {
+    typing.remove();
+    welcome.style.display = '';
+    welcome.classList.add('is-fade-in');
+    if (chips) {
+      chips.style.display = '';
+      chips.classList.add('is-fade-in');
+    }
+  }, 1200);
 }
 
 /* ---------- Chat unread bell helpers (customer side) ---------- */

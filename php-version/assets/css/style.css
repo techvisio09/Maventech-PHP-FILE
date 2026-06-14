@@ -892,6 +892,15 @@ body.has-deal-bar #chat-panel { bottom: 155px; }
 .chat-msg.typing span:nth-child(2) { animation-delay: .15s; }
 .chat-msg.typing span:nth-child(3) { animation-delay: .3s; }
 @keyframes typing-bounce { 0%,60%,100% { transform: translateY(0); opacity: .45; } 30% { transform: translateY(-4px); opacity: 1; } }
+/* Soft fade-in for the welcome message + chips after the typing-dots
+   intro plays.  Triggered by JS adding `.is-fade-in` once the dots fade. */
+.chat-msg.is-fade-in, .chat-chips.is-fade-in {
+  animation: chat-intro-fade .35s ease-out both;
+}
+@keyframes chat-intro-fade {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
 
 /* Quick chips */
 .chat-chips { display: flex; flex-wrap: wrap; gap: .4rem; margin: .35rem 0 .6rem; }
