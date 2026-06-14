@@ -118,8 +118,84 @@ document.addEventListener('click', async (e) => {
     const qty = parseInt(buy.dataset.qty || document.getElementById('pd-qty')?.value || '1', 10);
     await cartAction({ action: 'set', slug: buy.dataset.slug, qty });
     window.location.href = 'cart.php';
+    return;
+  }
+  // "Notify Me" — out-of-stock waitlist subscribe.  Opens a small modal
+  // asking for the customer's email, then POSTs to /ajax/notify-stock.php
+  // and shows the confirmation message inline.
+  const notify = e.target.closest('.notify-me-btn');
+  if (notify) {
+    e.preventDefault();
+    openNotifyModal(notify.dataset.slug || '', notify.dataset.name || 'this product');
   }
 });
+
+/* ---------- Notify-Me modal ---------- */
+function openNotifyModal(slug, name) {
+  // Build the modal once and reuse on subsequent clicks.
+  let modal = document.getElementById('notify-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'notify-modal';
+    modal.className = 'notify-modal-overlay';
+    modal.innerHTML = `
+      <div class="notify-modal-card" role="dialog" aria-modal="true" aria-labelledby="notify-modal-title">
+        <button type="button" class="notify-modal-close" onclick="closeNotifyModal()" aria-label="Close" data-testid="notify-modal-close"><i class="bi bi-x-lg"></i></button>
+        <div class="notify-modal-icon"><i class="bi bi-bell-fill"></i></div>
+        <h3 class="notify-modal-title" id="notify-modal-title">Get notified when it's back</h3>
+        <p class="notify-modal-sub">We'll email you the moment <strong id="notify-modal-product">this product</strong> is back in stock. No spam, ever.</p>
+        <form id="notify-modal-form" onsubmit="submitNotify(event)">
+          <input type="email" id="notify-modal-email" class="form-control" placeholder="you@company.com" required autocomplete="email" data-testid="notify-modal-email">
+          <button type="submit" class="notify-modal-submit" data-testid="notify-modal-submit"><i class="bi bi-bell-fill me-2"></i>Notify me</button>
+        </form>
+        <div id="notify-modal-msg" class="notify-modal-msg" data-testid="notify-modal-msg"></div>
+      </div>`;
+    document.body.appendChild(modal);
+    // close on overlay click
+    modal.addEventListener('click', (ev) => { if (ev.target === modal) closeNotifyModal(); });
+    document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeNotifyModal(); });
+  }
+  modal.dataset.slug = slug;
+  document.getElementById('notify-modal-product').textContent = name;
+  document.getElementById('notify-modal-email').value = '';
+  document.getElementById('notify-modal-msg').textContent = '';
+  document.getElementById('notify-modal-msg').className = 'notify-modal-msg';
+  modal.classList.add('is-open');
+  setTimeout(() => document.getElementById('notify-modal-email').focus(), 100);
+}
+function closeNotifyModal() {
+  const m = document.getElementById('notify-modal');
+  if (m) m.classList.remove('is-open');
+}
+async function submitNotify(ev) {
+  ev.preventDefault();
+  const modal = document.getElementById('notify-modal');
+  const email = document.getElementById('notify-modal-email').value.trim();
+  const msg   = document.getElementById('notify-modal-msg');
+  const slug  = modal.dataset.slug || '';
+  if (!email || !slug) return;
+  msg.textContent = 'Saving…';
+  msg.className = 'notify-modal-msg is-pending';
+  try {
+    const r = await fetch('ajax/notify-stock.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product_slug: slug, email })
+    });
+    const j = await r.json();
+    if (j && j.ok) {
+      msg.textContent = j.message || "You're on the list!";
+      msg.className = 'notify-modal-msg is-ok';
+      setTimeout(closeNotifyModal, 2200);
+    } else {
+      msg.textContent = (j && j.error) || 'Something went wrong — please try again.';
+      msg.className = 'notify-modal-msg is-err';
+    }
+  } catch (e) {
+    msg.textContent = 'Network error — please retry.';
+    msg.className = 'notify-modal-msg is-err';
+  }
+}
 
 // Cart page qty / remove
 document.addEventListener('click', async (e) => {

@@ -141,7 +141,14 @@ body .btn-primary { background: linear-gradient(135deg, var(--vibe-g1, #1d4ed8),
 body .btn-primary:hover { filter: brightness(1.06); }
 body[data-brand-motion="bounce"] .logo-3d .brand-mark,
 body[data-brand-motion="bounce"] .logo-3d > img:first-of-type {
-  animation: logo-spin-bounce 3s ease-in-out infinite;
+  /* Premium bounce-and-spin — 3D rotateY for a coin-flip feel + a soft
+     vertical bounce + a subtle scale pulse on landing.  Cubic-bezier
+     gives a snappier ease in/out than plain ease-in-out. */
+  animation: logo-spin-bounce 3.2s cubic-bezier(.55,.05,.25,1) infinite;
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+  filter: drop-shadow(0 4px 10px rgba(6, 182, 212, 0.28));
+  will-change: transform, filter;
 }
 body[data-brand-motion="spin"] .logo-3d .brand-mark,
 body[data-brand-motion="spin"] .logo-3d > img:first-of-type {
@@ -159,9 +166,11 @@ body[data-brand-motion="static"] .logo-3d > img:first-of-type {
 .logo-3d:hover > img:first-of-type { animation-play-state: paused; cursor: pointer; }
 @keyframes logo-spin-bounce {
   0%   { transform: translateY(0)    rotateY(0deg)   scale(1); }
-  25%  { transform: translateY(-6px) rotateY(90deg)  scale(1.05); }
-  50%  { transform: translateY(0)    rotateY(180deg) scale(1); }
-  75%  { transform: translateY(-6px) rotateY(270deg) scale(1.05); }
+  20%  { transform: translateY(-10px) rotateY(72deg)  scale(1.06); }
+  40%  { transform: translateY(0)    rotateY(144deg) scale(0.96); }
+  50%  { transform: translateY(-4px) rotateY(180deg) scale(1.02); }
+  60%  { transform: translateY(0)    rotateY(216deg) scale(0.96); }
+  80%  { transform: translateY(-10px) rotateY(288deg) scale(1.06); }
   100% { transform: translateY(0)    rotateY(360deg) scale(1); }
 }
 @keyframes logo-pure-spin {
@@ -687,6 +696,75 @@ body.has-deal-bar #chat-panel { bottom: 155px; }
 @media (max-width: 480px) {
   .chat-msg-preview { width: 240px; bottom: 18px; right: 80px; padding: 8px 10px 10px; }
   .chat-msg-preview-body { font-size: 12px; }
+}
+
+/* Notify-Me modal — clean centered card for out-of-stock waitlist sign-up. */
+.notify-modal-overlay {
+  position: fixed; inset: 0; z-index: 2000;
+  background: rgba(15,23,42,.55); backdrop-filter: blur(4px);
+  display: none; align-items: center; justify-content: center;
+  padding: 16px;
+}
+.notify-modal-overlay.is-open { display: flex; }
+.notify-modal-card {
+  background: #ffffff; color: #0f172a;
+  border-radius: 18px; padding: 32px 28px 26px;
+  width: 100%; max-width: 380px;
+  text-align: center; position: relative;
+  box-shadow: 0 24px 60px rgba(15,23,42,.32);
+  animation: notify-card-in 0.28s cubic-bezier(.18,.89,.32,1.28);
+}
+[data-bs-theme="dark"] .notify-modal-card { background: #1c2541; color: #e0e7ff; }
+.notify-modal-close {
+  position: absolute; top: 12px; right: 14px;
+  background: transparent; border: 0; color: #94a3b8;
+  font-size: 14px; padding: 6px 8px; cursor: pointer; border-radius: 6px;
+}
+.notify-modal-close:hover { color: #ef4444; background: rgba(239,68,68,.08); }
+.notify-modal-icon {
+  width: 56px; height: 56px; margin: 0 auto 14px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 24px;
+  box-shadow: 0 6px 18px rgba(245,158,11,.4);
+  animation: chat-bell-shake 1.6s ease-in-out 2;
+}
+.notify-modal-title {
+  font-size: 18px; font-weight: 800; margin: 0 0 6px;
+  color: #0f172a;
+}
+[data-bs-theme="dark"] .notify-modal-title { color: #e0e7ff; }
+.notify-modal-sub {
+  font-size: 13px; color: #64748b; margin: 0 0 18px;
+  line-height: 1.5;
+}
+.notify-modal-sub strong { color: #1e3a8a; }
+[data-bs-theme="dark"] .notify-modal-sub strong { color: #93c5fd; }
+#notify-modal-email {
+  margin-bottom: 12px; font-size: 14px;
+  padding: 10px 14px; border-radius: 10px;
+}
+.notify-modal-submit {
+  width: 100%;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #fff; border: 0;
+  padding: 12px 16px; border-radius: 999px;
+  font-size: 14px; font-weight: 700;
+  cursor: pointer; transition: all 0.16s ease;
+  box-shadow: 0 6px 18px rgba(29,78,216,.32);
+}
+.notify-modal-submit:hover { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(29,78,216,.44); }
+.notify-modal-msg {
+  margin-top: 12px; font-size: 12px; font-weight: 600;
+  min-height: 18px;
+}
+.notify-modal-msg.is-pending { color: #94a3b8; }
+.notify-modal-msg.is-ok      { color: #047857; }
+.notify-modal-msg.is-err     { color: #b91c1c; }
+@keyframes notify-card-in {
+  from { opacity: 0; transform: translateY(20px) scale(0.94); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
 }
 /* ---------- Chat widget (rich navy blue, refined) ---------- */
 :root {

@@ -65,6 +65,66 @@ if ($action === 'send') {
                 ->execute([$leadId, 'admin', $autoReply]);
         }
     }
+
+    // Admin notification email — fire a "New chat message from {name}"
+    // email at most once per lead per 5 minutes so admins don't get
+    // hammered during a fast back-and-forth conversation but never miss
+    // a message that arrives while they're away from the dashboard.
+    try {
+        $lead = $pdo->prepare("SELECT name, email, phone, admin_notified_at FROM chat_leads WHERE id=?");
+        $lead->execute([$leadId]);
+        $lr = $lead->fetch(PDO::FETCH_ASSOC);
+        $throttleOk = !$lr['admin_notified_at']
+                   || (time() - strtotime($lr['admin_notified_at'])) > 300;
+        if ($lr && $throttleOk) {
+            require_once __DIR__ . '/../includes/email.php';
+            $co = company_info();
+            $adminEmail = defined('ADMIN_EMAIL') ? ADMIN_EMAIL : ($co['email'] ?? '');
+            if ($adminEmail) {
+                $base   = rtrim(site_url(), '/');
+                $logo   = $base . '/assets/images/brand/email-logo.gif';
+                $link   = $base . '/admin.php?tab=leads&autochat=' . $leadId;
+                $custName  = htmlspecialchars($lr['name']  ?? 'Customer', ENT_QUOTES, 'UTF-8');
+                $custEmail = htmlspecialchars($lr['email'] ?? '',          ENT_QUOTES, 'UTF-8');
+                $custPhone = htmlspecialchars($lr['phone'] ?? '',          ENT_QUOTES, 'UTF-8');
+                $preview   = mb_substr($msg, 0, 280, 'UTF-8');
+                $preview   = nl2br(htmlspecialchars($preview, ENT_QUOTES, 'UTF-8'));
+                $body = <<<HTML
+<!doctype html><html><body style="margin:0;padding:0;background:#f1f5f9;font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#1f2937;">
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f1f5f9;padding:32px 0;"><tr><td align="center">
+  <table width="580" cellpadding="0" cellspacing="0" border="0" style="max-width:580px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 6px 24px rgba(15,23,42,.08);">
+    <tr><td style="background:linear-gradient(135deg,#1e3a8a 0%,#2563eb 100%);padding:22px 30px;color:#fff;">
+      <table cellpadding="0" cellspacing="0" border="0"><tr>
+        <td valign="middle" width="64"><img src="{$logo}" alt="{$co['name']}" width="56" height="56" style="display:block;border-radius:14px;"></td>
+        <td valign="middle" style="padding-left:14px;">
+          <div style="font-size:11px;letter-spacing:2.5px;text-transform:uppercase;opacity:.9;font-weight:700;">New chat message</div>
+          <div style="font-size:20px;font-weight:800;margin-top:3px;">{$custName}</div>
+        </td>
+      </tr></table>
+    </td></tr>
+    <tr><td style="padding:24px 30px 16px;">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#eff6ff;border-left:4px solid #2563eb;border-radius:8px;margin-bottom:18px;">
+        <tr><td style="padding:14px 18px;font-size:14px;color:#1e3a8a;line-height:1.55;font-style:italic;">"{$preview}"</td></tr>
+      </table>
+      <div style="font-size:12px;color:#64748b;margin-bottom:18px;">
+        Email: <a href="mailto:{$custEmail}" style="color:#1d4ed8;text-decoration:none;">{$custEmail}</a>
+        &middot; Phone: <a href="tel:{$custPhone}" style="color:#1d4ed8;text-decoration:none;">{$custPhone}</a>
+      </div>
+      <div style="text-align:center;margin:14px 0 4px;">
+        <a href="{$link}" style="display:inline-block;padding:12px 30px;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;border-radius:999px;text-decoration:none;font-weight:700;font-size:13.5px;box-shadow:0 8px 20px rgba(29,78,216,.32);">Reply in admin portal &rarr;</a>
+      </div>
+    </td></tr>
+    <tr><td style="background:#0f172a;padding:14px 30px;color:#94a3b8;font-size:11px;text-align:center;">{$co['name']} &middot; New-message alert (throttled to 1 email per lead per 5 minutes)</td></tr>
+  </table>
+</td></tr></table>
+</body></html>
+HTML;
+                send_email($adminEmail, 'Customer Enquiry — new message from ' . ($lr['name'] ?? 'customer'),
+                           $body, null, 'admin_chat_msg_alert', 0);
+                $pdo->prepare("UPDATE chat_leads SET admin_notified_at=NOW() WHERE id=?")->execute([$leadId]);
+            }
+        }
+    } catch (Throwable $e) { @error_log('[chat-customer admin alert] ' . $e->getMessage()); }
 }
 
 $since = (int)($in['since'] ?? 0);

@@ -116,10 +116,12 @@ try {
   </td></tr>
 </table>
 </body></html>';
-        smtp_queue_email($email, $confirmSubject, $confirmHtml, [
-            'template_code' => 'stock_waitlist_confirm',
-            'priority'      => 5,
-        ]);
+        // Use send_email() — it handles both production (queues + SMTP worker)
+        // and dev mode (marks row as 'sent' for visibility) AND runs the
+        // DNS deliverability pre-flight so typo'd addresses land in the
+        // Failed tab instead of vanishing silently.
+        require_once __DIR__ . '/../includes/email.php';
+        send_email($email, $confirmSubject, $confirmHtml, null, 'stock_waitlist_confirm', 0);
     } catch (Throwable $e) {
         // Email failure must NOT break the subscription save — log + continue.
         @error_log('[notify-stock] confirm email failed: ' . $e->getMessage());

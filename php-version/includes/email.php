@@ -344,9 +344,12 @@ function default_email_template(): string {
     </svg>
   </div>
   <div style="background:#ffffff;padding:26px 32px;border-bottom:1px solid #f1f3f5;display:flex;align-items:center;justify-content:space-between;">
-    <div>
-      <div style="font-size:20px;font-weight:800;color:#0f172a;letter-spacing:.3px;">{{company_name}}</div>
-      <div style="font-size:10px;color:#94a3b8;letter-spacing:1.8px;font-weight:600;">AUTHORIZED MICROSOFT RESELLER</div>
+    <div style="display:flex;align-items:center;gap:14px;">
+      <img src="{{site_url}}/assets/images/brand/email-logo.gif" alt="{{company_name}}" width="56" height="56" style="display:block;border-radius:14px;background:transparent;">
+      <div>
+        <div style="font-size:20px;font-weight:800;color:#0f172a;letter-spacing:.3px;">{{company_name}}</div>
+        <div style="font-size:10px;color:#94a3b8;letter-spacing:1.8px;font-weight:600;">AUTHORIZED MICROSOFT RESELLER</div>
+      </div>
     </div>
     <span style="font-size:11px;color:#10b981;font-weight:700;background:#d1fae5;padding:6px 12px;border-radius:999px;">&#10003; ORDER CONFIRMED</span>
   </div>
@@ -466,6 +469,7 @@ function render_template(string $code, array $vars = []): ?string {
         '{{company_address}}' => nl2br(esc($co['address'])),
         '{{support_email}}'   => esc($co['email']),
         '{{support_phone}}'   => esc($co['phone']),
+        '{{site_url}}'        => rtrim(site_url(), '/'),
         '{{year}}'            => date('Y'),
         '{{tracking_pixel}}'  => '',
     ];
@@ -566,6 +570,7 @@ function build_order_email_html(array $order, array $items, array $assignments, 
         '{{company_name}}'       => esc($co['name']),
         '{{company_logo}}'       => $logoHtml,
         '{{company_address}}'    => $addressHtml,
+        '{{site_url}}'           => $base,
         '{{customer_name}}'      => esc(($order['first_name'] ?? '') ?: 'there'),
         '{{customer_email}}'     => esc($order['email'] ?? ''),
         '{{order_number}}'       => esc($order['order_number'] ?? ''),
@@ -786,10 +791,10 @@ function fulfill_order(int $orderId, bool $forceAdminOverride = false): void {
         }
         $subj = render_template_subject('review_request', $vars)
               ?: ('How was your ' . $item['name'] . '? · Quick 30-second review');
-        // Send the review request 10 minutes after order fulfilment — gives the
-        // customer time to receive their license and try it before being asked
-        // for feedback.
-        send_email($order['email'], $subj, $reviewHtml, $orderId, 'review_request', 10);
+        // Send the review request immediately after the order-confirmation
+        // email — per product requirement.  Both land back-to-back so the
+        // customer sees the receipt + a "How was it?" prompt right away.
+        send_email($order['email'], $subj, $reviewHtml, $orderId, 'review_request', 0);
     }
 }
 
