@@ -459,13 +459,16 @@ function email_address_deliverable(string $address): array {
     }
 
     // Common typo dictionary — catches the bulk of real-world support tickets.
-    // We DON'T auto-correct, but we DO flag with a friendly hint for the admin.
+    // These are intentionally flagged as undeliverable EVEN when DNS resolves,
+    // because squatter / parking pages still bounce real customer email.  We
+    // surface a friendly hint so the admin can ask the customer to confirm.
     $typos = [
-        'gmial.com' => 'gmail.com',
-        'gmal.com'  => 'gmail.com',
-        'gmail.con' => 'gmail.com',
-        'gnail.com' => 'gmail.com',
-        'gmai.com'  => 'gmail.com',
+        'gmial.com'   => 'gmail.com',
+        'gmal.com'    => 'gmail.com',
+        'gmail.con'   => 'gmail.com',
+        'gnail.com'   => 'gmail.com',
+        'gmai.com'    => 'gmail.com',
+        'gmaill.com'  => 'gmail.com',
         'hotmial.com' => 'hotmail.com',
         'hotnail.com' => 'hotmail.com',
         'hotmal.com'  => 'hotmail.com',
@@ -475,7 +478,14 @@ function email_address_deliverable(string $address): array {
         'yahoo.con'   => 'yahoo.com',
         'outlok.com'  => 'outlook.com',
         'outlook.con' => 'outlook.com',
+        'iclud.com'   => 'icloud.com',
+        'icould.com'  => 'icloud.com',
     ];
+    if (isset($typos[$domain])) {
+        $result['reason'] = 'no_mx';
+        $result['detail'] = "Likely typo: {$domain}. Did the customer mean {$typos[$domain]}?";
+        return $cache[$domain] = $result;
+    }
 
     $hasMx = false; $hasA = false;
     try {

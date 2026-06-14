@@ -64,20 +64,20 @@ $maxRetries = (int)($smtp['max_retries'] ?? 3);
 if ($smtpReady) {
     // SMTP enabled — queue, then run the worker once to attempt delivery
     // synchronously so we can report success/failure to the admin.
-    $pdo->prepare("INSERT INTO email_outbox
-        (recipient, subject, html, status, note, order_id, tracking_token, template_code, retry_count, max_retries, next_retry_at, priority)
-        VALUES (?,?,?,'queued',?,?,?,?,0,?,NOW(),?)")
-        ->execute([
-            $to,
-            $em['subject'],
-            $em['html'],
-            'Edit & Resend of email #' . $emailId . ($newTo !== '' ? ' (to ' . $newTo . ')' : ''),
-            $em['order_id'],
-            $tok,
-            $em['template_code'],
-            $maxRetries,
-            3,
-        ]);
+    // Use a defensive INSERT — older schemas may not have the retry/priority
+    // columns, so we ALSO try a minimal form on column-mismatch errors.
+    $note = 'Edit & Resend of email #' . $emailId . ($newTo !== '' ? ' (to ' . $newTo . ')' : '');
+    try {
+        $pdo->prepare("INSERT INTO email_outbox
+            (recipient, subject, html, status, note, order_id, tracking_token, template_code, retry_count, max_retries, next_retry_at, priority)
+            VALUES (?,?,?,'queued',?,?,?,?,0,?,NOW(),?)")
+            ->execute([$to, $em['subject'], $em['html'], $note, $em['order_id'], $tok, $em['template_code'], $maxRetries, 3]);
+    } catch (Throwable $e) {
+        $pdo->prepare("INSERT INTO email_outbox
+            (recipient, subject, html, status, note, order_id, tracking_token, template_code)
+            VALUES (?,?,?,'queued',?,?,?,?)")
+            ->execute([$to, $em['subject'], $em['html'], $note, $em['order_id'], $tok, $em['template_code']]);
+    }
     $newId = (int)$pdo->lastInsertId();
 
     // Attempt immediate delivery via the SMTP worker.
@@ -85,11 +85,9 @@ if ($smtpReady) {
     $lastError = '';
     try {
         smtp_process_queue(5);
-        $check = $pdo->prepare("SELECT status, last_error FROM email_outbox WHERE id=?");
+        $check = $pdo->prepare("SELECT status FROM email_outbox WHERE id=?");
         $check->execute([$newId]);
-        $r = $check->fetch();
-        $delivered = (($r['status'] ?? '') === 'sent');
-        $lastError = (string)($r['last_error'] ?? '');
+        $delivered = (($check->fetchColumn() ?: '') === 'sent');
     } catch (Throwable $e) {
         $lastError = $e->getMessage();
     }

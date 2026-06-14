@@ -604,8 +604,8 @@ function send_email(string $to, string $subject, string $html, ?int $orderId = n
     // Failed tab + bell counter so the customer can be reached out to.
     $deliv = email_address_deliverable($to);
     if (!$deliv['ok'] && in_array($deliv['reason'], ['no_mx','invalid_syntax'], true)) {
-        $pdo->prepare('INSERT INTO email_outbox (recipient, subject, html, status, note, order_id, tracking_token, template_code, bounced_at)
-            VALUES (?,?,?,"failed",?,?,?,?,NOW())')
+        $pdo->prepare('INSERT INTO email_outbox (recipient, subject, html, status, note, order_id, tracking_token, template_code)
+            VALUES (?,?,?,"failed",?,?,?,?)')
             ->execute([$to, $subject, $html,
                 'Undeliverable: ' . ($deliv['detail'] ?: $deliv['reason']),
                 $orderId, $tok, $templateCode]);
