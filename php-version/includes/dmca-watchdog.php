@@ -51,8 +51,12 @@ function dmca_run_if_due(bool $force = false): array
         }
     }
 
-    $apiKey  = defined('OPENAI_API_KEY')  ? OPENAI_API_KEY  : (getenv('EMERGENT_LLM_KEY') ?: '');
-    $baseUrl = defined('OPENAI_BASE_URL') ? OPENAI_BASE_URL : '';
+    if (function_exists('_seo_resolve_llm_credentials')) {
+        [$apiKey, $baseUrl] = _seo_resolve_llm_credentials();
+    } else {
+        $apiKey  = defined('OPENAI_API_KEY')  ? OPENAI_API_KEY  : (getenv('EMERGENT_LLM_KEY') ?: '');
+        $baseUrl = defined('OPENAI_BASE_URL') ? OPENAI_BASE_URL : '';
+    }
     if ($apiKey === '' || $baseUrl === '') {
         return ['skipped' => true, 'reason' => 'LLM key not configured'];
     }

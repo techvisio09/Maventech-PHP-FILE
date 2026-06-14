@@ -28,6 +28,57 @@ if (!defined('SEOBOT_BLOG_POSTS_PER_REGION_PER_DAY')) define('SEOBOT_BLOG_POSTS_
 if (!defined('SEOBOT_BLOG_REGIONS'))    define('SEOBOT_BLOG_REGIONS',   'US,UK,AU,CA');
 
 /**
+ * Resolve the LLM API key + base URL from ALL possible sources.
+ * Priority: 1) config.php constants  2) environment  3) .env file  4) database settings
+ * This ensures the AI works on Emergent preview AND on any real hosting domain.
+ */
+function _seo_resolve_llm_credentials(): array
+{
+    // 1) Config constants (set in config.php from env vars)
+    $key = defined('OPENAI_API_KEY') ? OPENAI_API_KEY : '';
+    $url = defined('OPENAI_BASE_URL') ? OPENAI_BASE_URL : '';
+
+    // 2) Direct env check
+    if ($key === '') {
+        $key = getenv('EMERGENT_LLM_KEY') ?: (getenv('OPENAI_API_KEY') ?: '');
+    }
+
+    // 3) Read .env file directly (works on any hosting, even without start.sh)
+    if ($key === '') {
+        $envPath = __DIR__ . '/../.env';
+        if (is_file($envPath)) {
+            $lines = file($envPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+            foreach ($lines as $line) {
+                $line = trim($line);
+                if ($line === '' || $line[0] === '#') continue;
+                if (preg_match('/^(EMERGENT_LLM_KEY|OPENAI_API_KEY)\s*=\s*(.+)$/', $line, $m)) {
+                    $val = trim($m[2], '"\'');
+                    if ($val !== '') { $key = $val; break; }
+                }
+            }
+        }
+    }
+
+    // 4) Database settings table (saved from admin panel)
+    if ($key === '') {
+        try {
+            $key = function_exists('setting_get') ? setting_get('ai_blogger_llm_key', '') : '';
+        } catch (Throwable $e) {}
+    }
+
+    // Resolve base URL based on key type
+    if ($url === '' || $url === 'https://api.openai.com/v1') {
+        if ($key !== '' && (str_starts_with($key, 'sk-emergent') || str_starts_with($key, 'ek-'))) {
+            $url = 'https://integrations.emergentagent.com/llm/v1';
+        } elseif ($key !== '') {
+            $url = 'https://api.openai.com/v1';
+        }
+    }
+
+    return [$key, $url];
+}
+
+/**
  * Top-level entry point — called from cron.php after the email queue.
  * Returns an associative array summarising what happened (or
  * ['skipped' => true, 'reason' => '...'] when it's not yet due).
@@ -314,8 +365,9 @@ function _seo_refresh_stale_metadata(PDO $pdo, array &$report): array
     $stale = $stmt->fetchAll();
     if (!$stale) return $out;
 
-    $apiKey  = defined('OPENAI_API_KEY')  ? OPENAI_API_KEY  : (getenv('EMERGENT_LLM_KEY') ?: '');
-    $baseUrl = defined('OPENAI_BASE_URL') ? OPENAI_BASE_URL : '';
+    [$apiKey, $baseUrl] = _seo_resolve_llm_credentials();
+
+
     if ($apiKey === '' || $baseUrl === '') {
         $report['errors'][] = 'LLM key/base url not configured — skipping metadata refresh';
         return $out;
@@ -447,10 +499,9 @@ function seo_publish_one_post_now(?string $regionOverride = null): array
     $pdo = db();
     seo_bot_ensure_schema($pdo);
 
-    $apiKey  = defined('OPENAI_API_KEY')  ? OPENAI_API_KEY  : (getenv('EMERGENT_LLM_KEY') ?: '');
-    $baseUrl = defined('OPENAI_BASE_URL') ? OPENAI_BASE_URL : '';
+    [$apiKey, $baseUrl] = _seo_resolve_llm_credentials();
     if (!$apiKey || !$baseUrl) {
-        return ['ok' => false, 'error' => 'LLM key not configured'];
+        return ['ok' => false, 'error' => 'LLM key not configured — add your AI key in the API Keys section above'];
     }
 
     $region = $regionOverride
@@ -527,10 +578,9 @@ function _seo_generate_daily_blog_batch(PDO $pdo, array &$report): array
         }
     }
 
-    $apiKey  = defined('OPENAI_API_KEY')  ? OPENAI_API_KEY  : (getenv('EMERGENT_LLM_KEY') ?: '');
-    $baseUrl = defined('OPENAI_BASE_URL') ? OPENAI_BASE_URL : '';
+    [$apiKey, $baseUrl] = _seo_resolve_llm_credentials();
     if ($apiKey === '' || $baseUrl === '') {
-        $report['errors'][] = 'blog: LLM key/base URL not configured';
+        $report['errors'][] = 'blog: LLM key not configured — add your AI key in the admin panel';
         return $out;
     }
 
@@ -916,11 +966,10 @@ function seo_publish_featured_trends_article(array &$report, bool $force = false
         }
     }
 
-    $apiKey  = defined('OPENAI_API_KEY')  ? OPENAI_API_KEY  : (getenv('EMERGENT_LLM_KEY') ?: '');
-    $baseUrl = defined('OPENAI_BASE_URL') ? OPENAI_BASE_URL : '';
+    [$apiKey, $baseUrl] = _seo_resolve_llm_credentials();
     if (!$apiKey || !$baseUrl) {
-        $report['errors'][] = 'trends: LLM key not configured';
-        return $out + ['error' => 'LLM key not configured'];
+        $report['errors'][] = 'trends: LLM key not configured — add your AI key in the admin panel';
+        return $out + ['error' => 'LLM key not configured — add your AI key in the admin panel'];
     }
 
     // Round-robin: pick the active product whose last FEATURED-TRENDS post

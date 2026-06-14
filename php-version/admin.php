@@ -703,10 +703,9 @@ if ($tab === 'ai-blogger') {
             $_SESSION['seo_bot_flash'] = 'Just published a random post a moment ago — give it ~60 seconds before publishing the next.';
         } else {
             try {
-                $apiKey  = defined('OPENAI_API_KEY')  ? OPENAI_API_KEY  : (getenv('EMERGENT_LLM_KEY') ?: '');
-                $baseUrl = defined('OPENAI_BASE_URL') ? OPENAI_BASE_URL : '';
+                [$apiKey, $baseUrl] = _seo_resolve_llm_credentials();
                 if (!$apiKey || !$baseUrl) {
-                    throw new RuntimeException('LLM key not configured');
+                    throw new RuntimeException('LLM key not configured — add your AI key in the API Keys section');
                 }
                 $regions  = array_values(array_filter(array_map('trim', explode(',', SEOBOT_BLOG_REGIONS))));
                 $region   = $regions[array_rand($regions)];
@@ -2306,53 +2305,40 @@ elseif ($tab === 'ai-blogger'):
     </div>
 
     <?php if ($aiAll): ?>
-      <div class="table-responsive">
-        <table class="table table-sm align-middle mb-0" style="font-size:13px;">
-          <thead>
-            <tr class="text-secondary" style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">
-              <th>Title</th>
-              <th>Product</th>
-              <th>Market</th>
-              <th>Date</th>
-              <th style="width:80px;">Status</th>
-              <th style="width:60px;"></th>
-            </tr>
-          </thead>
-          <tbody>
-            <?php $i = 0; foreach (array_slice($aiAll, 0, 20) as $bp): $i++; ?>
-              <?php
-                $httpOk  = (int)($bp['verified_http'] ?? 0) === 200;
-                $inOk    = in_array((string)($bp['indexnow_status'] ?? ''), ['ok','accepted','http_200','http_202'], true);
-              ?>
-              <tr data-testid="ai-blogger-row-<?= $i ?>">
-                <td>
-                  <div class="fw-semibold" style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= esc($bp['title']) ?></div>
-                </td>
-                <td class="text-secondary" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                  <?= esc($bp['product_name'] ?? '—') ?>
-                </td>
-                <td>
-                  <?php $rFlag = $regionsList[$bp['target_region'] ?? '']['flag'] ?? ''; ?>
-                  <span><?= $rFlag ?> <?= esc($bp['target_region'] ?? '') ?></span>
-                </td>
-                <td class="text-secondary"><?= date('M j', strtotime($bp['created_at'] ?? $bp['date'])) ?></td>
-                <td>
-                  <?php if ($httpOk): ?>
-                    <span class="badge rounded-pill" style="background:#d1fae5;color:#065f46;font-size:10px;">Live</span>
-                  <?php else: ?>
-                    <span class="badge rounded-pill" style="background:#fef3c7;color:#92400e;font-size:10px;">Pending</span>
-                  <?php endif; ?>
-                </td>
-                <td>
-                  <a href="blog-post.php?id=<?= urlencode($bp['id']) ?>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary rounded-pill" data-testid="ai-blogger-row-view-<?= $i ?>"><i class="bi bi-eye"></i></a>
-                </td>
-              </tr>
-            <?php endforeach; ?>
-          </tbody>
-        </table>
+      <div class="row g-2">
+        <?php $i = 0; foreach (array_slice($aiAll, 0, 20) as $bp): $i++; ?>
+          <?php
+            $httpOk  = (int)($bp['verified_http'] ?? 0) === 200;
+            $postImg = $bp['image'] ?? '';
+            $rFlag   = $regionsList[$bp['target_region'] ?? '']['flag'] ?? '';
+            $postDate = date('M j', strtotime($bp['created_at'] ?? $bp['date']));
+          ?>
+          <div class="col-md-6 col-lg-4" data-testid="ai-blogger-row-<?= $i ?>">
+            <a href="blog-post.php?id=<?= urlencode($bp['id']) ?>" target="_blank" rel="noopener" class="d-flex align-items-center gap-3 text-decoration-none p-3" style="background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;transition:all .15s;"
+               onmouseover="this.style.borderColor='#93c5fd';this.style.background='#eff6ff'"
+               onmouseout="this.style.borderColor='#e2e8f0';this.style.background='#f8fafc'">
+              <?php if ($postImg): ?>
+                <img src="<?= esc($postImg) ?>" alt="" style="width:48px;height:48px;object-fit:cover;border-radius:8px;flex-shrink:0;">
+              <?php else: ?>
+                <div style="width:48px;height:48px;border-radius:8px;background:#e2e8f0;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="bi bi-journal-text text-secondary"></i></div>
+              <?php endif; ?>
+              <div style="min-width:0;flex:1;">
+                <div class="fw-semibold text-body" style="font-size:12.5px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= esc($bp['title']) ?></div>
+                <div class="d-flex align-items-center gap-2 mt-1" style="font-size:11px;">
+                  <span class="text-secondary"><?= $rFlag ?> <?= esc($bp['target_region'] ?? '') ?></span>
+                  <span class="text-secondary">·</span>
+                  <span class="text-secondary"><?= $postDate ?></span>
+                  <span class="badge rounded-pill" style="background:<?= $httpOk ? '#d1fae5' : '#fef3c7' ?>;color:<?= $httpOk ? '#065f46' : '#92400e' ?>;font-size:9px;padding:2px 8px;"><?= $httpOk ? 'Live' : 'Pending' ?></span>
+                </div>
+                <div class="text-secondary" style="font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;"><?= esc($bp['product_name'] ?? '') ?></div>
+              </div>
+              <i class="bi bi-box-arrow-up-right text-primary" style="font-size:12px;flex-shrink:0;"></i>
+            </a>
+          </div>
+        <?php endforeach; ?>
       </div>
       <?php if (count($aiAll) > 20): ?>
-        <div class="text-center mt-2">
+        <div class="text-center mt-3">
           <span class="text-secondary small">Showing first 20 of <?= count($aiAll) ?> posts</span>
         </div>
       <?php endif; ?>

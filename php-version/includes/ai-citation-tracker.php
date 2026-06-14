@@ -117,8 +117,13 @@ function _ai_citations_probe(string $engineName, string $model, string $query, s
         'error'          => '',
     ];
 
-    $apiKey  = defined('OPENAI_API_KEY')  ? OPENAI_API_KEY  : (getenv('EMERGENT_LLM_KEY') ?: '');
-    $baseUrl = defined('OPENAI_BASE_URL') ? OPENAI_BASE_URL : '';
+    // Resolve credentials from all sources (env, .env file, database)
+    if (function_exists('_seo_resolve_llm_credentials')) {
+        [$apiKey, $baseUrl] = _seo_resolve_llm_credentials();
+    } else {
+        $apiKey  = defined('OPENAI_API_KEY')  ? OPENAI_API_KEY  : (getenv('EMERGENT_LLM_KEY') ?: '');
+        $baseUrl = defined('OPENAI_BASE_URL') ? OPENAI_BASE_URL : '';
+    }
     if ($apiKey === '' || $baseUrl === '') {
         $out['error'] = 'LLM key/base URL not configured';
         return $out;
