@@ -267,6 +267,32 @@ function seo_bot_ensure_schema(PDO $pdo): void
 /* ===================================================================
  *  IndexNow — Bing / Yandex / Seznam / Naver
  * =================================================================== */
+
+/**
+ * Return the *public* site URL that should be used for SEO submissions
+ * (sitemap, IndexNow, canonical, etc.).  Priority:
+ *   1) `site_domain_url` setting (the user's production domain saved
+ *      from the admin panel).  This is what we want IndexNow & sitemap
+ *      submissions to use — never the ephemeral preview URL.
+ *   2) `site_url()` — derived from the current Host header.  Fine for
+ *      production deployments where the request domain IS the public one.
+ */
+function _seo_public_site_url(): string
+{
+    $configured = '';
+    try {
+        $configured = function_exists('setting_get') ? trim((string)setting_get('site_domain_url', '')) : '';
+    } catch (Throwable $e) {}
+    if ($configured !== '') {
+        // Make sure it looks like a real URL.
+        if (!preg_match('~^https?://~i', $configured)) {
+            $configured = 'https://' . ltrim($configured, '/');
+        }
+        return rtrim($configured, '/');
+    }
+    return rtrim(site_url(), '/');
+}
+
 function _seo_indexnow_key(): string
 {
     $key = setting_get('seo_indexnow_key', '');
@@ -274,16 +300,20 @@ function _seo_indexnow_key(): string
         $key = bin2hex(random_bytes(16)); // 32-char lowercase hex
         setting_set('seo_indexnow_key', $key);
     }
-    // Drop the verification file into the webroot if missing.
+    // Drop the verification file into the webroot if missing.  The file
+    // must always contain ONLY the 32-char key (no whitespace) for the
+    // IndexNow API to accept the keyLocation as proof of ownership.
     $file = __DIR__ . '/../' . $key . '.txt';
-    if (!is_file($file)) @file_put_contents($file, $key);
+    if (!is_file($file) || trim((string)@file_get_contents($file)) !== $key) {
+        @file_put_contents($file, $key);
+    }
     return $key;
 }
 
 function _seo_collect_index_urls(int $limit): array
 {
     $pdo  = db();
-    $site = rtrim(site_url(), '/');
+    $site = _seo_public_site_url();
     $urls = [];
 
     // Core pages first — these should always re-ping.
@@ -302,13 +332,32 @@ function _seo_collect_index_urls(int $limit): array
 function _seo_indexnow_submit_urls(array $urls, array &$report): array
 {
     if (!$urls) return ['no_urls', 0];
-    $key   = _seo_indexnow_key();
-    $host  = parse_url(site_url(), PHP_URL_HOST);
+    $key       = _seo_indexnow_key();
+    $publicUrl = _seo_public_site_url();
+    $host      = parse_url($publicUrl, PHP_URL_HOST);
+
+    // Make sure every URL we ship to IndexNow lives on the SAME host as
+    // our keyLocation — IndexNow rejects the whole batch with HTTP 422
+    // when even one URL is on a different host.  Rewrite any URLs that
+    // accidentally came in with a different host (e.g. preview vs
+    // production) so the keyLocation host matches.
+    $normalised = [];
+    foreach ($urls as $u) {
+        $u = trim((string)$u);
+        if ($u === '') continue;
+        $parts = @parse_url($u);
+        $path  = ($parts['path']  ?? '/') ?: '/';
+        $query = isset($parts['query']) ? ('?' . $parts['query']) : '';
+        $normalised[] = $publicUrl . $path . $query;
+    }
+    $normalised = array_values(array_unique($normalised));
+    if (!$normalised) return ['no_urls', 0];
+
     $body  = json_encode([
         'host'        => $host,
         'key'         => $key,
-        'keyLocation' => rtrim(site_url(), '/') . '/' . $key . '.txt',
-        'urlList'     => array_values($urls),
+        'keyLocation' => $publicUrl . '/' . $key . '.txt',
+        'urlList'     => $normalised,
     ], JSON_UNESCAPED_SLASHES);
 
     $ch = curl_init('https://api.indexnow.org/IndexNow');
@@ -316,8 +365,9 @@ function _seo_indexnow_submit_urls(array $urls, array &$report): array
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_POST           => true,
         CURLOPT_POSTFIELDS     => $body,
-        CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+        CURLOPT_HTTPHEADER     => ['Content-Type: application/json; charset=utf-8'],
         CURLOPT_TIMEOUT        => 12,
+        CURLOPT_USERAGENT      => 'IndexNow/1.0 (' . $host . ')',
     ]);
     $resp = curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
@@ -328,10 +378,11 @@ function _seo_indexnow_submit_urls(array $urls, array &$report): array
         $report['errors'][] = 'indexnow curl: ' . $err;
         return ['curl_error', 0];
     }
-    // 200 = accepted; 202 = accepted async; 400/422 = invalid; 429 = too many.
+    // 200 = accepted; 202 = accepted async; 400/422 = invalid; 403 = key
+    // verification failed; 429 = too many.
     $status = 'http_' . $code;
     if ($code >= 200 && $code < 300) $status = 'ok';
-    return [$status, count($urls)];
+    return [$status, count($normalised)];
 }
 
 /* ===================================================================

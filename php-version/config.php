@@ -71,7 +71,7 @@ define('SITE_PHONE', '1-888-632-9902');
 // (see site_url() in includes/functions.php). This constant is the fallback
 // used only by CLI scripts / cron — set env var SITE_URL on your production
 // host to override (e.g. https://maventechsoftware.com).
-define('SITE_URL', getenv('SITE_URL') ?: 'https://review-qr-fix.preview.emergentagent.com');
+define('SITE_URL', getenv('SITE_URL') ?: 'https://indexnow-checker.preview.emergentagent.com');
 // Google Search Console verification — paste your GSC meta-tag code here (content="..." value)
 define('GOOGLE_SITE_VERIFICATION', getenv('GOOGLE_SITE_VERIFICATION') ?: '');
 // Bing Webmaster Tools verification (unlocks Copilot + ChatGPT-via-Bing).

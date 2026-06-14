@@ -53,5 +53,5 @@ Training-Exclude: /admin.php /account.php /uploads/order-pdfs/ /order-history.ph
 
 # ----- Contact -----
 Contact: services@maventechsoftware.com
-Sitemap: https://review-qr-fix.preview.emergentagent.com/sitemap.xml
-ProductFeed: https://review-qr-fix.preview.emergentagent.com/merchant-feed.xml
+Sitemap: https://indexnow-checker.preview.emergentagent.com/sitemap.xml
+ProductFeed: https://indexnow-checker.preview.emergentagent.com/merchant-feed.xml

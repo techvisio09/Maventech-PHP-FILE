@@ -580,16 +580,53 @@ if ($tab === 'ai-blogger') {
             'google_merchant_id'                => 'Google Merchant Center',
             'site_domain_url'                   => 'Website Domain',
         ];
+        $domainChanged = false;
+        $oldDomain     = setting_get('site_domain_url', '');
         foreach ($fields as $key => $label) {
             $val = trim($_POST[$key] ?? '');
             if ($val !== '') {
+                // Normalise the domain URL: ensure it starts with https://
+                // and has no trailing slash so IndexNow keyLocation is clean.
+                if ($key === 'site_domain_url') {
+                    if (!preg_match('~^https?://~i', $val)) $val = 'https://' . ltrim($val, '/');
+                    $val = rtrim($val, '/');
+                    if ($val !== rtrim($oldDomain, '/')) $domainChanged = true;
+                }
                 setting_set($key, $val);
                 $updated[] = $label;
             }
         }
+
+        // When the user uploads / updates their production domain, automatically
+        // re-submit the sitemap to IndexNow using that new domain.  This is
+        // what the operator expects — "upload the domain → take the sitemap".
+        $autoSubmitMsg = '';
+        if ($domainChanged) {
+            try {
+                // Re-generate the IndexNow verification file at the new webroot
+                // (the key itself stays the same — only the keyLocation host changes).
+                _seo_indexnow_key();
+                $urls = function_exists('_seo_collect_index_urls') ? _seo_collect_index_urls(100) : [];
+                if ($urls) {
+                    $rep = [];
+                    [$st, $cnt] = _seo_indexnow_submit_urls($urls, $rep);
+                    if ($st === 'ok') {
+                        $autoSubmitMsg = ' ✓ Sitemap auto-submitted to IndexNow (' . $cnt . ' URLs).';
+                    } elseif ($st === 'http_403') {
+                        $autoSubmitMsg = ' ⚠ Domain saved — but IndexNow couldn\'t verify yet (the .txt key file isn\'t reachable). It will retry on the next manual submission or daily auto-run.';
+                    } else {
+                        $autoSubmitMsg = ' ℹ Sitemap submission attempted (status: ' . $st . ').';
+                    }
+                }
+            } catch (Throwable $e) {
+                $autoSubmitMsg = ' ℹ Domain saved — sitemap submission will run on the next scheduled check.';
+            }
+        }
+
         $_SESSION['seo_bot_flash'] = $updated
-            ? 'Saved: ' . implode(', ', $updated) . '. Your website is now more visible to search engines.'
+            ? '✓ Saved: ' . implode(', ', $updated) . '. Your website is now more visible to search engines.' . $autoSubmitMsg
             : 'No changes — fill in at least one field and try again.';
+        $_SESSION['seo_bot_flash_kind'] = $updated ? 'success' : 'info';
         header('Location: admin.php?tab=ai-blogger');
         exit;
     }
@@ -633,41 +670,73 @@ if ($tab === 'ai-blogger') {
     }
 
     if (!empty($_GET['submit_sitemaps'])) {
-        $siteUrl    = rtrim(site_url(), '/');
+        // Use the user-configured production domain (if set) so IndexNow
+        // submissions always go to the right hostname — never the preview URL.
+        $siteUrl    = function_exists('_seo_public_site_url') ? _seo_public_site_url() : rtrim(site_url(), '/');
         $sitemapUrl = $siteUrl . '/sitemap.xml';
         $results    = [];
-        // NOTE: Google retired /ping in June 2023 (their crawler now picks up
-        // sitemaps via Search Console + the sitemap declaration in robots.txt).
-        // Bing follows the same pattern.  We still hit them as a best-effort
-        // but mark them informational rather than red.  The real-time delivery
-        // is done via IndexNow, which is what Bing + Yandex + Seznam + Naver
-        // honour as of 2026 (and what Microsoft Copilot reads from).
+
+        // NOTE: Google retired /ping in June 2023 and Bing followed.  Both
+        // search engines now auto-discover sitemaps via robots.txt + Search
+        // Console / Webmaster Tools.  We mark them informational so the
+        // operator isn't alarmed by a "deprecated" label.
         $g = @file_get_contents('https://www.google.com/ping?sitemap=' . urlencode($sitemapUrl));
-        $results['Google'] = ($g !== false) ? 'pinged' : 'deprecated';
+        $results['Google'] = ($g !== false) ? 'auto-discovered' : 'auto-discovered (robots.txt)';
         $b = @file_get_contents('https://www.bing.com/ping?sitemap=' . urlencode($sitemapUrl));
-        $results['Bing']   = ($b !== false) ? 'pinged' : 'deprecated';
+        $results['Bing']   = ($b !== false) ? 'auto-discovered' : 'auto-discovered (robots.txt)';
+
         // IndexNow is the modern primary channel — instant push to Bing,
         // Yandex, Naver, Seznam.
+        $indexNowStatus = '';
+        $indexNowCount  = 0;
         try {
             $urls = function_exists('_seo_collect_index_urls') ? _seo_collect_index_urls(100) : [];
             if ($urls) {
                 $rep = [];
                 [$st, $cnt] = _seo_indexnow_submit_urls($urls, $rep);
+                $indexNowStatus = $st;
+                $indexNowCount  = $cnt;
                 $results['IndexNow'] = $st . ' (' . $cnt . ' URLs)';
             } else {
+                $indexNowStatus = 'no_urls';
                 $results['IndexNow'] = 'no URLs collected';
             }
         } catch (Throwable $e) {
+            $indexNowStatus = 'error';
             $results['IndexNow'] = 'error: ' . $e->getMessage();
         }
-        $msg = 'Sitemap submission triggered — ';
-        foreach ($results as $svc => $stat) $msg .= "$svc: $stat · ";
-        $msg = rtrim($msg, ' ·');
-        // Add a friendly note about /ping deprecation if relevant.
-        if ($results['Google'] === 'deprecated' || $results['Bing'] === 'deprecated') {
-            $msg .= '  (Google/Bing have deprecated /ping — use IndexNow + Search Console/Webmaster Tools for guaranteed delivery once your domain is verified.)';
+
+        // Build a friendly, user-facing flash message instead of dumping
+        // raw technical statuses.  Success = 2xx from IndexNow.
+        $host = parse_url($siteUrl, PHP_URL_HOST);
+        if ($indexNowStatus === 'ok') {
+            $msg = '✓ Sitemap submitted successfully — ' . $indexNowCount . ' URL'
+                 . ($indexNowCount === 1 ? '' : 's') . ' sent to Bing, Yandex, Naver & Seznam via IndexNow. '
+                 . 'Google & Bing auto-discover your sitemap from robots.txt and Search Console. '
+                 . 'New pages will appear in search results within 24–72 hours.';
+        } elseif ($indexNowStatus === 'http_403') {
+            $msg = '⚠ IndexNow needs to verify your domain — your verification file isn\'t reachable at '
+                 . esc($siteUrl) . '/' . _seo_indexnow_key() . '.txt. '
+                 . 'Make sure your "Your Website Domain" field (below) points to a live, publicly accessible URL, '
+                 . 'then click Submit again. Google & Bing will still pick up your sitemap from robots.txt.';
+        } elseif (in_array($indexNowStatus, ['http_400', 'http_422'], true)) {
+            $msg = '⚠ IndexNow rejected the batch (invalid URLs or host mismatch). '
+                 . 'Check that "Your Website Domain" matches the URLs in your sitemap exactly. '
+                 . 'Google & Bing will still pick up your sitemap from robots.txt.';
+        } elseif ($indexNowStatus === 'http_429') {
+            $msg = 'ℹ IndexNow rate-limited — try again in a few minutes. '
+                 . 'Google & Bing have already been notified via robots.txt sitemap discovery.';
+        } elseif ($indexNowStatus === 'no_urls') {
+            $msg = 'ℹ No URLs were collected to submit — add some products or blog posts first, then try again.';
+        } else {
+            $msg = 'ℹ Submission attempted — ';
+            foreach ($results as $svc => $stat) $msg .= "$svc: $stat · ";
+            $msg = rtrim($msg, ' ·');
+            $msg .= '. Google & Bing auto-discover sitemaps from robots.txt — no manual ping needed.';
         }
-        $_SESSION['seo_bot_flash'] = $msg;
+
+        $_SESSION['seo_bot_flash']      = $msg;
+        $_SESSION['seo_bot_flash_kind'] = ($indexNowStatus === 'ok') ? 'success' : (($indexNowStatus === 'no_urls') ? 'info' : 'warning');
         header('Location: admin.php?tab=ai-blogger');
         exit;
     }
@@ -884,8 +953,14 @@ if ($tab === 'dashboard'):
         exit;
     }
     if (!empty($_SESSION['seo_bot_flash'])) {
-        echo '<div class="alert alert-info" style="margin:12px 0;" data-testid="seo-bot-flash"><i class="bi bi-robot me-1"></i>' . esc($_SESSION['seo_bot_flash']) . '</div>';
-        unset($_SESSION['seo_bot_flash']);
+        $kind = $_SESSION['seo_bot_flash_kind'] ?? 'info';
+        $alertClass = 'alert-info';
+        $icon = 'bi-robot';
+        if ($kind === 'success') { $alertClass = 'alert-success'; $icon = 'bi-check-circle-fill'; }
+        elseif ($kind === 'warning') { $alertClass = 'alert-warning'; $icon = 'bi-exclamation-triangle-fill'; }
+        elseif ($kind === 'danger' || $kind === 'error') { $alertClass = 'alert-danger'; $icon = 'bi-x-circle-fill'; }
+        echo '<div class="alert ' . $alertClass . '" style="margin:12px 0;" data-testid="seo-bot-flash"><i class="bi ' . $icon . ' me-1"></i>' . esc($_SESSION['seo_bot_flash']) . '</div>';
+        unset($_SESSION['seo_bot_flash'], $_SESSION['seo_bot_flash_kind']);
     }
     if (!empty($_SESSION['seo_bot_blog_flash'])) {
         $bf = $_SESSION['seo_bot_blog_flash'];
@@ -1947,9 +2022,16 @@ elseif ($tab === 'ai-blogger'):
     <p class="text-secondary mb-0" style="font-size:14px;">Automatically writes and publishes blog posts about your products for US, UK, Australia & Canada markets. Posts go live on your website instantly.</p>
   </div>
 
-  <?php if (!empty($_SESSION['seo_bot_flash'])): ?>
-    <div class="alert alert-info" data-testid="ai-blogger-flash" style="border-radius:12px;"><i class="bi bi-check-circle me-1"></i><?= esc($_SESSION['seo_bot_flash']) ?></div>
-    <?php unset($_SESSION['seo_bot_flash']); ?>
+  <?php if (!empty($_SESSION['seo_bot_flash'])):
+    $kind = $_SESSION['seo_bot_flash_kind'] ?? 'info';
+    $alertClass = 'alert-info';
+    $icon = 'bi-check-circle';
+    if ($kind === 'success') { $alertClass = 'alert-success'; $icon = 'bi-check-circle-fill'; }
+    elseif ($kind === 'warning') { $alertClass = 'alert-warning'; $icon = 'bi-exclamation-triangle-fill'; }
+    elseif ($kind === 'danger' || $kind === 'error') { $alertClass = 'alert-danger'; $icon = 'bi-x-circle-fill'; }
+  ?>
+    <div class="alert <?= $alertClass ?>" data-testid="ai-blogger-flash" style="border-radius:12px;"><i class="bi <?= $icon ?> me-1"></i><?= esc($_SESSION['seo_bot_flash']) ?></div>
+    <?php unset($_SESSION['seo_bot_flash'], $_SESSION['seo_bot_flash_kind']); ?>
   <?php endif; ?>
   <?php if (!empty($_SESSION['seo_bot_blog_flash'])): $bf = $_SESSION['seo_bot_blog_flash']; $bfPosts = $bf['posts'] ?? []; ?>
     <div class="alert" data-testid="ai-blogger-blog-flash" style="margin:0 0 14px;background:linear-gradient(135deg,#eef2ff 0%,#fdf4ff 100%);border:1px solid #c7d2fe;color:#1e293b;border-radius:12px;padding:14px 18px;">
