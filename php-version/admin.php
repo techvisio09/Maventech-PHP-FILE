@@ -569,6 +569,31 @@ if ($tab === 'ai-blogger') {
         exit;
     }
 
+    // ----- Save Search Engine Visibility tokens -----
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['save_seo_tokens'])) {
+        $updated = [];
+        $fields = [
+            'google_site_verification_token'    => 'Google Search Console',
+            'bing_site_verification_token'      => 'Bing Webmaster',
+            'yandex_site_verification_token'    => 'Yandex Webmaster',
+            'pinterest_site_verification_token' => 'Pinterest',
+            'google_merchant_id'                => 'Google Merchant Center',
+            'site_domain_url'                   => 'Website Domain',
+        ];
+        foreach ($fields as $key => $label) {
+            $val = trim($_POST[$key] ?? '');
+            if ($val !== '') {
+                setting_set($key, $val);
+                $updated[] = $label;
+            }
+        }
+        $_SESSION['seo_bot_flash'] = $updated
+            ? 'Saved: ' . implode(', ', $updated) . '. Your website is now more visible to search engines.'
+            : 'No changes — fill in at least one field and try again.';
+        header('Location: admin.php?tab=ai-blogger');
+        exit;
+    }
+
     // ----- DMCA finding status updates (mark dismissed / reported / taken-down) -----
     if (!empty($_GET['dmca_set']) && !empty($_GET['id'])) {
         if (dmca_set_status((int)$_GET['id'], (string)$_GET['dmca_set'])) {
@@ -2114,16 +2139,171 @@ elseif ($tab === 'ai-blogger'):
     </div>
   </div>
 
-  <!-- ====== 5. SUBMIT TO SEARCH ENGINES ====== -->
+  <!-- ====== 5. SEARCH ENGINE VISIBILITY — full setup panel ====== -->
+  <?php
+    // Read saved tokens for display
+    $seoGsc     = setting_get('google_site_verification_token', defined('GOOGLE_SITE_VERIFICATION') ? GOOGLE_SITE_VERIFICATION : '');
+    $seoBing    = setting_get('bing_site_verification_token', defined('BING_SITE_VERIFICATION') ? BING_SITE_VERIFICATION : '');
+    $seoYandex  = setting_get('yandex_site_verification_token', defined('YANDEX_SITE_VERIFICATION') ? YANDEX_SITE_VERIFICATION : '');
+    $seoPint    = setting_get('pinterest_site_verification_token', defined('PINTEREST_SITE_VERIFICATION') ? PINTEREST_SITE_VERIFICATION : '');
+    $seoGmc     = setting_get('google_merchant_id', '');
+    $seoDomain  = setting_get('site_domain_url', rtrim(site_url(), '/'));
+    // Count how many are configured
+    $seoConfigured = 0;
+    if ($seoGsc)    $seoConfigured++;
+    if ($seoBing)   $seoConfigured++;
+    if ($seoYandex) $seoConfigured++;
+    if ($seoPint)   $seoConfigured++;
+    if ($seoGmc)    $seoConfigured++;
+  ?>
   <div class="card-e mb-3" style="border:1px solid #e2e8f0;border-radius:14px;padding:20px;">
-    <h5 class="fw-bold mb-2" style="font-size:15px;"><i class="bi bi-globe2 me-2 text-primary"></i>Search Engine Visibility</h5>
-    <p class="text-secondary small mb-3">Tell search engines about your website so customers can find your blog posts.</p>
-    <div class="d-flex flex-wrap gap-2">
-      <a href="admin.php?tab=ai-blogger&submit_sitemaps=1" class="btn btn-primary rounded-pill px-3" data-testid="checklist-submit-sitemaps" onclick="return confirm('Submit your sitemap to all search engines now?')"><i class="bi bi-send-check me-1"></i>Submit to Search Engines</a>
-      <a href="https://search.google.com/search-console" target="_blank" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-google me-1"></i>Google Search Console</a>
-      <a href="https://www.bing.com/webmasters" target="_blank" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-microsoft me-1"></i>Bing Webmaster</a>
-      <a href="blog.php" target="_blank" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-journal-text me-1"></i>View Blog</a>
+    <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+      <h5 class="fw-bold mb-0" style="font-size:15px;"><i class="bi bi-globe2 me-2 text-primary"></i>Search Engine Visibility</h5>
+      <span class="badge rounded-pill" style="background:<?= $seoConfigured >= 3 ? '#d1fae5' : ($seoConfigured > 0 ? '#fef3c7' : '#fee2e2') ?>;color:<?= $seoConfigured >= 3 ? '#065f46' : ($seoConfigured > 0 ? '#92400e' : '#991b1b') ?>;font-size:11px;padding:5px 12px;">
+        <?= $seoConfigured ?>/5 platforms connected
+      </span>
     </div>
+    <p class="text-secondary small mb-3">Connect your website to search engines and shopping platforms. Fill in the verification tokens below and click <strong>Save All</strong>. Your website will start appearing in search results.</p>
+
+    <!-- Submit Sitemap Button -->
+    <div class="d-flex flex-wrap gap-2 mb-3 pb-3" style="border-bottom:1px solid #f1f5f9;">
+      <a href="admin.php?tab=ai-blogger&submit_sitemaps=1" class="btn btn-primary rounded-pill px-4" data-testid="checklist-submit-sitemaps" onclick="return confirm('Submit your sitemap to Google, Bing & other search engines now?')"><i class="bi bi-send-check me-1"></i>Submit Sitemap to All Search Engines</a>
+      <a href="blog.php" target="_blank" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-journal-text me-1"></i>View Blog</a>
+      <a href="sitemap.xml" target="_blank" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-filetype-xml me-1"></i>View Sitemap</a>
+    </div>
+
+    <!-- Platform Setup Form -->
+    <form method="post" action="admin.php?tab=ai-blogger">
+      <input type="hidden" name="save_seo_tokens" value="1">
+
+      <!-- Website Domain -->
+      <div class="row g-3 mb-3 pb-3" style="border-bottom:1px solid #f1f5f9;">
+        <div class="col-12">
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <i class="bi bi-link-45deg" style="font-size:18px;color:#6366f1;"></i>
+            <strong style="font-size:13px;">Your Website Domain</strong>
+            <?php if ($seoDomain): ?>
+              <span class="badge rounded-pill" style="background:#d1fae5;color:#065f46;font-size:10px;">Active</span>
+            <?php endif; ?>
+          </div>
+          <input type="url" name="site_domain_url" class="form-control" value="<?= esc($seoDomain) ?>" placeholder="https://yourdomain.com" style="font-size:13px;max-width:500px;">
+          <div class="text-secondary small mt-1">Your live website URL — used for sitemap submissions and verification.</div>
+        </div>
+      </div>
+
+      <div class="row g-3">
+        <!-- Google Search Console -->
+        <div class="col-md-6">
+          <div class="p-3" style="background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;">
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <img src="https://www.google.com/favicon.ico" alt="" style="width:18px;height:18px;">
+              <strong style="font-size:13px;">Google Search Console</strong>
+              <?php if ($seoGsc): ?>
+                <span class="badge rounded-pill" style="background:#d1fae5;color:#065f46;font-size:9px;">Connected</span>
+              <?php else: ?>
+                <span class="badge rounded-pill" style="background:#fef3c7;color:#92400e;font-size:9px;">Not set</span>
+              <?php endif; ?>
+            </div>
+            <input type="text" name="google_site_verification_token" class="form-control form-control-sm" placeholder="<?= $seoGsc ? substr($seoGsc, 0, 10) . '••••' : 'Paste verification token here' ?>" style="font-size:12px;">
+            <div class="small mt-1">
+              <span class="text-secondary">Get it from </span>
+              <a href="https://search.google.com/search-console" target="_blank" class="text-primary text-decoration-none">search.google.com/search-console <i class="bi bi-box-arrow-up-right" style="font-size:10px;"></i></a>
+            </div>
+            <div class="text-secondary small mt-1">Makes your blog posts appear in Google search results.</div>
+          </div>
+        </div>
+
+        <!-- Bing Webmaster -->
+        <div class="col-md-6">
+          <div class="p-3" style="background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;">
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <img src="https://www.bing.com/favicon.ico" alt="" style="width:18px;height:18px;">
+              <strong style="font-size:13px;">Bing Webmaster Tools</strong>
+              <?php if ($seoBing): ?>
+                <span class="badge rounded-pill" style="background:#d1fae5;color:#065f46;font-size:9px;">Connected</span>
+              <?php else: ?>
+                <span class="badge rounded-pill" style="background:#fef3c7;color:#92400e;font-size:9px;">Not set</span>
+              <?php endif; ?>
+            </div>
+            <input type="text" name="bing_site_verification_token" class="form-control form-control-sm" placeholder="<?= $seoBing ? substr($seoBing, 0, 10) . '••••' : 'Paste verification token here' ?>" style="font-size:12px;">
+            <div class="small mt-1">
+              <span class="text-secondary">Get it from </span>
+              <a href="https://www.bing.com/webmasters" target="_blank" class="text-primary text-decoration-none">bing.com/webmasters <i class="bi bi-box-arrow-up-right" style="font-size:10px;"></i></a>
+            </div>
+            <div class="text-secondary small mt-1">Shows your site in Bing, Microsoft Copilot & ChatGPT search.</div>
+          </div>
+        </div>
+
+        <!-- Yandex Webmaster -->
+        <div class="col-md-6">
+          <div class="p-3" style="background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;">
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <i class="bi bi-search" style="font-size:16px;color:#ff0000;"></i>
+              <strong style="font-size:13px;">Yandex Webmaster</strong>
+              <?php if ($seoYandex): ?>
+                <span class="badge rounded-pill" style="background:#d1fae5;color:#065f46;font-size:9px;">Connected</span>
+              <?php else: ?>
+                <span class="badge rounded-pill" style="background:#f1f5f9;color:#64748b;font-size:9px;">Optional</span>
+              <?php endif; ?>
+            </div>
+            <input type="text" name="yandex_site_verification_token" class="form-control form-control-sm" placeholder="<?= $seoYandex ? substr($seoYandex, 0, 10) . '••••' : 'Paste verification token here' ?>" style="font-size:12px;">
+            <div class="small mt-1">
+              <span class="text-secondary">Get it from </span>
+              <a href="https://webmaster.yandex.com" target="_blank" class="text-primary text-decoration-none">webmaster.yandex.com <i class="bi bi-box-arrow-up-right" style="font-size:10px;"></i></a>
+            </div>
+            <div class="text-secondary small mt-1">For Yandex search & AI engines. Best for international markets.</div>
+          </div>
+        </div>
+
+        <!-- Pinterest -->
+        <div class="col-md-6">
+          <div class="p-3" style="background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;">
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <i class="bi bi-pinterest" style="font-size:16px;color:#e60023;"></i>
+              <strong style="font-size:13px;">Pinterest</strong>
+              <?php if ($seoPint): ?>
+                <span class="badge rounded-pill" style="background:#d1fae5;color:#065f46;font-size:9px;">Connected</span>
+              <?php else: ?>
+                <span class="badge rounded-pill" style="background:#f1f5f9;color:#64748b;font-size:9px;">Optional</span>
+              <?php endif; ?>
+            </div>
+            <input type="text" name="pinterest_site_verification_token" class="form-control form-control-sm" placeholder="<?= $seoPint ? substr($seoPint, 0, 10) . '••••' : 'Paste verification token here' ?>" style="font-size:12px;">
+            <div class="small mt-1">
+              <span class="text-secondary">Get it from </span>
+              <a href="https://business.pinterest.com/settings/" target="_blank" class="text-primary text-decoration-none">business.pinterest.com <i class="bi bi-box-arrow-up-right" style="font-size:10px;"></i></a>
+            </div>
+            <div class="text-secondary small mt-1">Enables rich pins on product pages shared on Pinterest.</div>
+          </div>
+        </div>
+
+        <!-- Google Merchant Center -->
+        <div class="col-md-6">
+          <div class="p-3" style="background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;">
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <i class="bi bi-bag-check" style="font-size:16px;color:#4285f4;"></i>
+              <strong style="font-size:13px;">Google Merchant Center</strong>
+              <?php if ($seoGmc): ?>
+                <span class="badge rounded-pill" style="background:#d1fae5;color:#065f46;font-size:9px;">Connected</span>
+              <?php else: ?>
+                <span class="badge rounded-pill" style="background:#fef3c7;color:#92400e;font-size:9px;">Recommended</span>
+              <?php endif; ?>
+            </div>
+            <input type="text" name="google_merchant_id" class="form-control form-control-sm" placeholder="<?= $seoGmc ? $seoGmc : 'Paste Merchant Center ID here' ?>" style="font-size:12px;">
+            <div class="small mt-1">
+              <span class="text-secondary">Get it from </span>
+              <a href="https://merchants.google.com" target="_blank" class="text-primary text-decoration-none">merchants.google.com <i class="bi bi-box-arrow-up-right" style="font-size:10px;"></i></a>
+            </div>
+            <div class="text-secondary small mt-1">Shows your products in Google Shopping results with prices.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Save button -->
+      <div class="mt-3 pt-3" style="border-top:1px solid #f1f5f9;">
+        <button type="submit" class="btn btn-success rounded-pill px-4" data-testid="save-seo-tokens-btn"><i class="bi bi-check-lg me-1"></i>Save All Settings</button>
+        <span class="text-secondary small ms-2">Tokens are applied to your website instantly after saving.</span>
+      </div>
+    </form>
   </div>
 
   <!-- ====== 6. PUBLISHED BLOG POSTS ====== -->

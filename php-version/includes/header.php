@@ -49,15 +49,23 @@ $ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.sv
   <link rel="canonical" href="<?= esc($canonicalUrl) ?>">
   <?php if (defined('GOOGLE_SITE_VERIFICATION') && GOOGLE_SITE_VERIFICATION !== ''): ?>
   <meta name="google-site-verification" content="<?= esc(GOOGLE_SITE_VERIFICATION) ?>">
+  <?php elseif (($__gsc = setting_get('google_site_verification_token', '')) !== ''): ?>
+  <meta name="google-site-verification" content="<?= esc($__gsc) ?>">
   <?php endif; ?>
   <?php if (defined('BING_SITE_VERIFICATION') && BING_SITE_VERIFICATION !== ''): ?>
   <meta name="msvalidate.01" content="<?= esc(BING_SITE_VERIFICATION) ?>">
+  <?php elseif (($__bing = setting_get('bing_site_verification_token', '')) !== ''): ?>
+  <meta name="msvalidate.01" content="<?= esc($__bing) ?>">
   <?php endif; ?>
   <?php if (defined('YANDEX_SITE_VERIFICATION') && YANDEX_SITE_VERIFICATION !== ''): ?>
   <meta name="yandex-verification" content="<?= esc(YANDEX_SITE_VERIFICATION) ?>">
+  <?php elseif (($__yandex = setting_get('yandex_site_verification_token', '')) !== ''): ?>
+  <meta name="yandex-verification" content="<?= esc($__yandex) ?>">
   <?php endif; ?>
   <?php if (defined('PINTEREST_SITE_VERIFICATION') && PINTEREST_SITE_VERIFICATION !== ''): ?>
   <meta name="p:domain_verify" content="<?= esc(PINTEREST_SITE_VERIFICATION) ?>">
+  <?php elseif (($__pin = setting_get('pinterest_site_verification_token', '')) !== ''): ?>
+  <meta name="p:domain_verify" content="<?= esc($__pin) ?>">
   <?php endif; ?>
   <?php if (defined('BAIDU_SITE_VERIFICATION') && BAIDU_SITE_VERIFICATION !== ''): ?>
   <meta name="baidu-site-verification" content="<?= esc(BAIDU_SITE_VERIFICATION) ?>">
