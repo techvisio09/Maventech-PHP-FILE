@@ -261,6 +261,20 @@ function seo_bot_ensure_schema(PDO $pdo): void
     } catch (Throwable $e) { @error_log('[seo-bot schema] products: ' . $e->getMessage()); }
 
     try {
+        // blog_posts: ensure freshness/AEO columns exist (idempotent).
+        $bpCols = $pdo->query("SHOW COLUMNS FROM blog_posts")->fetchAll(PDO::FETCH_COLUMN);
+        if (!in_array('updated_at', $bpCols, true)) {
+            $pdo->exec("ALTER TABLE blog_posts ADD updated_at DATETIME NULL AFTER created_at");
+        }
+        if (!in_array('faq_json', $bpCols, true)) {
+            $pdo->exec("ALTER TABLE blog_posts ADD faq_json MEDIUMTEXT NULL");
+        }
+        if (!in_array('lead', $bpCols, true)) {
+            $pdo->exec("ALTER TABLE blog_posts ADD lead TEXT NULL");
+        }
+    } catch (Throwable $e) { @error_log('[seo-bot schema] blog_posts: ' . $e->getMessage()); }
+
+    try {
         $pdo->exec("CREATE TABLE IF NOT EXISTS seo_runs (
             id INT(11) NOT NULL AUTO_INCREMENT,
             started_at DATETIME NOT NULL,
@@ -824,16 +838,24 @@ Return STRICT JSON with EXACTLY these keys (no markdown, no code fences):
   title:       A compelling, search-friendly title (50-70 chars). MUST include
                the country or currency naturally — e.g. "… for {$rc['country']}
                buyers" or "… (Price in {$rc['currency']})".  No quotes.
-  lead:        A single one-sentence hook (100-160 chars).
+  lead:        A 40-60 word DIRECT ANSWER to the post's title written as a
+               complete paragraph. This is the AEO snippet Google AI Overviews,
+               Bing Chat, ChatGPT and Perplexity quote verbatim. It must (a)
+               state the answer in the FIRST sentence, (b) name the product
+               by full title, (c) mention {$rc['country']} or {$rc['currency']}
+               naturally, and (d) end with one trust signal (genuine, 30-day
+               guarantee, instant email delivery).
   read_time:   A short string like "5 min read".
   content_html: Body HTML, 450-700 words. Use ONLY these tags: <p>, <h2>,
                 <ul>, <li>, <strong>, <em>, <a>. NO inline styles, NO
-                scripts. Start with a <p class="lead"> paragraph using the
-                lead above, then 2-3 <h2> sections, a <ul> with 4-5 key
-                takeaways, and finish with a closing paragraph that links
-                to the product page using the slug provided.
+                scripts. Start with the H2 sections directly (DO NOT repeat
+                the lead — it is rendered separately above the body). Then
+                2-3 <h2> sections, a <ul> with 4-5 key takeaways, and
+                finish with a closing paragraph that links to the product
+                page using the slug provided. Include at least ONE concrete
+                statistic with attribution (e.g. "according to Statista in 2025…").
   faq:         An array of exactly 3 FAQ objects, each with "q" (question)
-               and "a" (answer, 1-2 sentences). Questions should be natural
+               and "a" (answer, 40-60 words). Questions should be natural
                queries a buyer in {$rc['country']} would type into Google or
                ask an AI assistant (e.g. "Is [product] worth buying in
                {$rc['country']}?", "What apps are included in [product]?",
@@ -953,8 +975,8 @@ SYS;
     try {
         $ins = $pdo->prepare("INSERT INTO blog_posts
             (id, title, date, read_time, image, content, ai_generated, product_id,
-             target_region, internal_links_count, content_fingerprint, faq_json, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, NOW())");
+             target_region, internal_links_count, content_fingerprint, faq_json, lead, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, NOW(), NOW())");
         $ins->execute([
             $postId,
             $title,
@@ -967,6 +989,7 @@ SYS;
             (int)$internalLinks,
             $fingerprint,
             $faqJson,
+            (string)($j['lead'] ?? ''),
         ]);
     } catch (Throwable $e) {
         $report['errors'][] = "blog[$targetRegion]: insert failed — " . $e->getMessage();
@@ -1238,10 +1261,11 @@ SYS;
     try {
         $pdo->prepare("INSERT INTO blog_posts
             (id, title, date, read_time, image, content, ai_generated, product_id,
-             target_region, is_featured_trends, internal_links_count, content_fingerprint, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, 1, ?, ?, NOW())")->execute([
+             target_region, is_featured_trends, internal_links_count, content_fingerprint, lead, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, 1, ?, ?, ?, NOW(), NOW())")->execute([
             $postId, $title, date('M j, Y'), $readTime, $image, $content,
             (int)$product['id'], $targetRegion, (int)$internalLinks, $fingerprint,
+            (string)($j['lead'] ?? ''),
         ]);
     } catch (Throwable $e) {
         $report['errors'][] = 'trends: insert failed — ' . $e->getMessage();
@@ -1350,6 +1374,11 @@ function seo_bot_autotick(): void
             seo_bot_weekly_sitemap_tick();
         } catch (Throwable $e) {
             @error_log('[seo-bot weekly-sitemap] ' . $e->getMessage());
+        }
+        try {
+            seo_bot_freshness_tick();
+        } catch (Throwable $e) {
+            @error_log('[seo-bot freshness-tick] ' . $e->getMessage());
         } finally {
             @unlink($lockFile);
         }
@@ -1392,5 +1421,96 @@ function seo_bot_weekly_sitemap_tick(): void
         setting_set('last_sitemap_submit_at',    date('Y-m-d H:i:s'));
         setting_set('last_sitemap_submit_count', (string)$count);
         setting_set('last_sitemap_submit_kind',  'auto_weekly');
+    }
+}
+
+/* =====================================================================
+ *  AEO / GEO FRESHNESS TICK
+ *  ---------------------------------------------------------------------
+ *  Picks the SINGLE oldest AI-published blog post that hasn't been
+ *  touched in 90+ days and refreshes its FAQ + lead via the LLM.  We
+ *  also bump `updated_at` so the JSON-LD `dateModified` advances —
+ *  this is the strongest "freshness" signal Google's Helpful Content
+ *  framework looks for, and AI search engines weight recently-updated
+ *  citations higher.  Bounded to one post per autotick so we never
+ *  burn the API budget.
+ * =================================================================== */
+function seo_bot_freshness_tick(): void
+{
+    try {
+        [$apiKey, $baseUrl] = _seo_resolve_llm_credentials();
+    } catch (Throwable $e) { return; }
+    if (!$apiKey || !$baseUrl) return;
+
+    // Already refreshed today?  Bail.  Otherwise pick the oldest stale post.
+    $lastTickAt = setting_get('seo_freshness_last_tick_at', '');
+    if ($lastTickAt && (time() - strtotime($lastTickAt)) < 23 * 3600) return;
+
+    $pdo = db();
+    try {
+        $row = $pdo->query("SELECT id, title, content, lead, target_region
+                              FROM blog_posts
+                             WHERE ai_generated = 1
+                               AND (updated_at IS NULL OR updated_at < NOW() - INTERVAL 90 DAY)
+                          ORDER BY COALESCE(updated_at, created_at, '1970-01-01') ASC
+                             LIMIT 1")->fetch();
+    } catch (Throwable $e) { return; }
+    if (!$row) return;
+
+    // Single short LLM call: ask for a refreshed 40-60 word lead AND a
+    // 3-item FAQ.  Cheap, fast, and lifts the post's freshness signal.
+    $sys = 'You are an editor refreshing a published blog post. '
+         . 'Return STRICT JSON: { "lead": "<40-60 word direct answer>", '
+         . '"faq": [{"q":"...","a":"40-60 word answer"} ×3] }. '
+         . 'CRITICAL: Output must start with `{` and end with `}` — no markdown, no preamble.';
+    $usr = "TITLE: " . $row['title'] . "\n"
+         . "TARGET COUNTRY: " . (string)($row['target_region'] ?: 'international') . "\n"
+         . "CURRENT LEAD: " . (string)($row['lead'] ?: '(none)') . "\n"
+         . "ARTICLE (first 1200 chars):\n" . mb_substr(strip_tags((string)$row['content']), 0, 1200);
+
+    $payload = json_encode([
+        'model'      => 'claude-haiku-4-5-20251001',
+        'messages'   => [
+            ['role' => 'system', 'content' => $sys],
+            ['role' => 'user',   'content' => $usr],
+        ],
+        'max_tokens' => 700,
+        'temperature'=> 0.6,
+    ]);
+    $ch = curl_init(rtrim($baseUrl, '/') . '/chat/completions');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $payload,
+        CURLOPT_HTTPHEADER     => [
+            'Content-Type: application/json',
+            'Authorization: Bearer ' . $apiKey,
+        ],
+        CURLOPT_TIMEOUT        => 30,
+    ]);
+    $raw = curl_exec($ch);
+    $http = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($http !== 200 || !$raw) return;
+
+    $data   = json_decode((string)$raw, true);
+    $answer = (string)($data['choices'][0]['message']['content'] ?? '');
+    $j      = _seo_llm_json_decode($answer);
+    if (!is_array($j) || empty($j['lead'])) return;
+
+    $faqJson = '';
+    if (!empty($j['faq']) && is_array($j['faq'])) {
+        $faqJson = json_encode(array_values(array_filter($j['faq'], fn($x) => !empty($x['q']) && !empty($x['a']))), JSON_UNESCAPED_UNICODE);
+    }
+    try {
+        $upd = $pdo->prepare("UPDATE blog_posts SET lead = ?,
+                                 faq_json = COALESCE(NULLIF(?, ''), faq_json),
+                                 updated_at = NOW()
+                               WHERE id = ?");
+        $upd->execute([(string)$j['lead'], $faqJson, (string)$row['id']]);
+        setting_set('seo_freshness_last_tick_at', date('Y-m-d H:i:s'));
+        setting_set('seo_freshness_last_refreshed_id', (string)$row['id']);
+    } catch (Throwable $e) {
+        @error_log('[seo-bot freshness] update: ' . $e->getMessage());
     }
 }

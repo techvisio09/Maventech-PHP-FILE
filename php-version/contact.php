@@ -1,6 +1,53 @@
 <?php
 require_once __DIR__ . '/includes/functions.php';
 $pageTitle = 'Contact Us | ' . SITE_BRAND;
+$pageDescription = 'Get in touch with the ' . SITE_BRAND . ' team — sales, activation help, refunds and partnership enquiries. Live chat, email and phone support Monday to Saturday.';
+
+/* ================== SEO + AEO + GEO: ContactPage + Organization =====
+   Tells Google / Bing / ChatGPT / Perplexity exactly who to contact
+   and how.  The ContactPoint nodes power AI assistant answers like
+   "How do I reach Maventech Software support?" with a clickable
+   phone number + email + opening hours. */
+$jsonLdContact = [
+    '@context' => 'https://schema.org',
+    '@type'    => 'ContactPage',
+    '@id'      => site_url() . '/contact.php#contactpage',
+    'url'      => site_url() . '/contact.php',
+    'name'     => 'Contact ' . SITE_BRAND,
+    'description' => $pageDescription,
+    'inLanguage'  => 'en',
+    'isPartOf' => ['@id' => site_url() . '/#website'],
+    'about'    => [
+        '@type'   => 'Organization',
+        '@id'     => site_url() . '/#organization',
+        'name'    => SITE_BRAND,
+        'url'     => site_url() . '/',
+        'logo'    => site_url() . '/assets/images/badges/microsoft-verified.svg',
+        'sameAs'  => array_values(array_filter([
+            (string)(setting_get('contact_facebook_url', '')),
+            (string)(setting_get('contact_twitter_url',  '')),
+            (string)(setting_get('contact_linkedin_url', '')),
+            (string)(setting_get('contact_youtube_url',  '')),
+            (string)(setting_get('contact_instagram_url',''))
+        ])),
+        'contactPoint' => array_values(array_filter([
+            (string)(setting_get('contact_phone', '')) !== '' ? [
+                '@type'         => 'ContactPoint',
+                'contactType'   => 'customer support',
+                'telephone'     => (string)setting_get('contact_phone', ''),
+                'email'         => (string)setting_get('contact_email', 'support@maventechsoftware.com'),
+                'availableLanguage' => ['English'],
+                'areaServed'    => ['US', 'GB', 'CA', 'AU'],
+            ] : null,
+            [
+                '@type'         => 'ContactPoint',
+                'contactType'   => 'sales',
+                'email'         => (string)setting_get('contact_sales_email', setting_get('contact_email', 'sales@maventechsoftware.com')),
+                'availableLanguage' => ['English'],
+            ],
+        ])),
+    ],
+];
 
 $sent = false;
 $formError = '';

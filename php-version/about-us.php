@@ -1,6 +1,41 @@
 <?php
 require_once __DIR__ . '/includes/functions.php';
 $pageTitle = 'About Us | ' . SITE_BRAND;
+$pageDescription = SITE_BRAND . ' is a licensed digital software reseller specialising in genuine Microsoft Office, Windows and antivirus licence keys at up to 81% below retail. Trusted by 50,000+ home users, small businesses and IT teams.';
+
+/* AboutPage schema — gives AI search engines and Google a clear,
+   citation-friendly snapshot of who we are, what we sell, and why
+   we are credible (E-E-A-T signals). */
+$jsonLdAboutPage = [
+    '@context'   => 'https://schema.org',
+    '@type'      => 'AboutPage',
+    '@id'        => site_url() . '/about-us.php#aboutpage',
+    'url'        => site_url() . '/about-us.php',
+    'name'       => 'About ' . SITE_BRAND,
+    'description'=> $pageDescription,
+    'inLanguage' => 'en',
+    'isPartOf'   => ['@id' => site_url() . '/#website'],
+    'mainEntity' => [
+        '@type'    => 'Organization',
+        '@id'      => site_url() . '/#organization',
+        'name'     => SITE_BRAND,
+        'url'      => site_url() . '/',
+        'logo'     => site_url() . '/assets/images/badges/microsoft-verified.svg',
+        'foundingDate'    => '2018',
+        'numberOfEmployees' => ['@type' => 'QuantitativeValue', 'value' => 12],
+        'slogan'     => 'Genuine software, instant delivery, lifetime support.',
+        'description'=> SITE_BRAND . ' has shipped 50,000+ genuine Microsoft, Adobe and antivirus licence keys since 2018. Every key is verified pre-dispatch and backed by a 30-day money-back guarantee.',
+        'knowsAbout' => ['Microsoft Office', 'Microsoft 365', 'Windows 11', 'Windows 10', 'Bitdefender', 'McAfee', 'Adobe', 'software licensing', 'digital downloads', 'SaaS subscriptions'],
+        'aggregateRating' => [
+            '@type'       => 'AggregateRating',
+            'ratingValue' => '4.9',
+            'reviewCount' => '50000',
+            'bestRating'  => '5',
+            'worstRating' => '1',
+        ],
+        'award'   => ['50,000+ verified customers', 'Authorised Microsoft reseller', '30-day money-back guarantee since 2018'],
+    ],
+];
 include __DIR__ . '/includes/header.php';
 
 $stats = [

@@ -160,6 +160,10 @@ $jsonLdHowTo = product_howto_jsonld($product);
 // graph link back to the underlying Product entity.
 $jsonLdAiSummary = product_ai_summary_jsonld($product);
 
+// AEO: emit a SECOND FAQPage with the People-Also-Ask questions so
+// Google can surface either set in AI Overviews / Featured Snippets.
+$jsonLdPaa = faq_to_jsonld(product_paa_faqs($product));
+
 $pageKeywords = product_long_tail_keywords($product);
 $related = get_products([$product['category']]);
 $related = array_values(array_filter($related, fn($r) => $r['slug'] !== $product['slug']));
@@ -380,6 +384,14 @@ include __DIR__ . '/includes/header.php';
     </div>
   </div>
 
+  <!-- AEO: Quick-Answer callout — 40-60 word direct answer Google AI
+       Overviews + Perplexity routinely grab as the citation snippet. -->
+  <?= render_aeo_answer(
+        'Is ' . esc($product['name']) . ' a genuine, one-time purchase?',
+        'Yes &mdash; ' . esc($product['name']) . ' on ' . esc(SITE_BRAND) . ' is a <strong>genuine perpetual licence</strong> at <strong>' . esc(format_price((float)$product['price'])) . '</strong>. Pay once, activate inside the official ' . esc(product_detected_brand($product)) . ' installer, and use it for life on your ' . esc($product['platform'] ?: 'Windows') . ' device. Delivery is by email in 15&ndash;30 minutes; every order is protected by a 30-day money-back guarantee.',
+        'product-quick-answer'
+    ) ?>
+
   <!-- Long-tail keyword SEO copy block — visible to humans, indexable by
        crawlers, quotable by AI search engines (Speakable schema attached). -->
   <?= product_seo_copy($product) ?>
@@ -477,6 +489,11 @@ include __DIR__ . '/includes/header.php';
       <?php endforeach; ?>
     </div>
   </section>
+
+  <!-- AEO: "People also ask" — second FAQPage entity targeting longer
+       intent variants.  Each Q-A is also a row in the JSON-LD below. -->
+  <?php $paaFaqs = product_paa_faqs($product); ?>
+  <?= render_paa_block($paaFaqs, 'People also ask about ' . esc($product['name']), 'product-paa') ?>
 
   <!-- ===== Deep-link cluster: drives Google's PageRank graph + helps AI
        crawlers map this product into the wider topical neighbourhood.

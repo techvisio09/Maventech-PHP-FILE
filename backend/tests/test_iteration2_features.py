@@ -301,7 +301,7 @@ class TestLogoPlacements:
         assert "logo-3d" in m.group(0), "admin topbar brand missing logo-3d class"
 
 
-# ===== 8. PRODUCT 6 JSON-LD BLOCKS =====
+# ===== 8. PRODUCT 7 JSON-LD BLOCKS (iter5: added People-Also-Ask FAQPage) =====
 PRODUCT_SLUG = "bitdefender-antivirus-for-mac-1-mac-1-year"
 
 
@@ -314,7 +314,7 @@ class TestProductSixBlocks:
 
     def test_six_blocks_and_all_parse(self, product_html):
         blocks = _extract_jsonld_blocks(product_html)
-        assert len(blocks) == 6, f"Expected 6 JSON-LD blocks, got {len(blocks)}"
+        assert len(blocks) == 7, f"Expected 7 JSON-LD blocks (iter5 added People-Also-Ask FAQPage), got {len(blocks)}"
         parsed = []
         for i, b in enumerate(blocks):
             try:
@@ -324,6 +324,9 @@ class TestProductSixBlocks:
         types_found = _flatten_types(parsed)
         for expected in ("Product", "BreadcrumbList", "FAQPage", "HowTo", "Article"):
             assert expected in types_found, f"Missing schema type: {expected}. Found: {types_found}"
+        # Exactly TWO FAQPage entities now: product FAQ + People-Also-Ask
+        faqpage_count = sum(1 for p in parsed if isinstance(p, dict) and p.get("@type") == "FAQPage")
+        assert faqpage_count >= 2, f"Expected at least 2 FAQPage entities (product FAQ + People-Also-Ask), got {faqpage_count}"
 
     def test_article_ai_summary_shape(self, product_html):
         blocks = _extract_jsonld_blocks(product_html)

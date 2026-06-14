@@ -638,3 +638,138 @@ function popular_search_terms(string $context = ''): array
     ];
     return $generic;
 }
+
+/* =====================================================================
+ *  AEO HELPERS — Answer Engine Optimization
+ *  ---------------------------------------------------------------------
+ *  Helpers that emit the page elements Google AI Overviews, Bing Chat,
+ *  ChatGPT, Perplexity and voice assistants reward most: a 40-60 word
+ *  direct answer at the top of the page; a "People Also Ask"-style
+ *  related-questions block with answers visible as plain text; and
+ *  visible breadcrumb trails that complement the BreadcrumbList JSON-LD.
+ * =================================================================== */
+
+/**
+ * Render an AEO "Quick Answer" callout — a 40-60 word direct answer
+ * styled as a sky-blue card.  This is the FIRST thing a featured-snippet
+ * crawler grabs.  Pair with the page's H1 for maximum relevance.
+ *
+ * @param string $question  The short question this card answers.
+ * @param string $answer    The 40-60 word answer (plain text or trusted HTML).
+ * @param string $testid    Optional data-testid suffix.
+ */
+function render_aeo_answer(string $question, string $answer, string $testid = 'quick-answer'): string
+{
+    $q = esc(trim($question));
+    return '<aside class="aeo-quick-answer" data-testid="' . esc($testid) . '" aria-labelledby="aeo-q-' . esc($testid) . '" '
+         . 'style="border-left:4px solid #2563eb;background:linear-gradient(180deg,rgba(59,130,246,.08),rgba(59,130,246,.02));'
+         . 'border-radius:10px;padding:14px 18px;margin:0 0 1.25rem;">'
+         . '<div class="d-flex align-items-center gap-2 mb-2">'
+         . '<i class="bi bi-lightning-charge-fill" style="color:#2563eb;font-size:18px;"></i>'
+         . '<strong id="aeo-q-' . esc($testid) . '" class="small text-uppercase" style="letter-spacing:.5px;color:#1e40af;">Quick answer</strong>'
+         . '</div>'
+         . '<div class="fw-bold mb-1" style="font-size:15px;">' . $q . '</div>'
+         . '<div class="aeo-answer-body" data-testid="' . esc($testid) . '-body" style="font-size:14px;line-height:1.55;color:#1e293b;">' . $answer . '</div>'
+         . '</aside>';
+}
+
+/**
+ * Render a visible "People Also Ask" / related-questions block.
+ * Each Q→A pair becomes an accordion entry visually AND serializes
+ * to a separate FAQPage JSON-LD via faq_to_jsonld() in the caller.
+ *
+ * @param array  $faqs    [{question, answer}, ...]
+ * @param string $heading Heading text.
+ * @param string $testid  Optional data-testid suffix.
+ */
+function render_paa_block(array $faqs, string $heading = 'People also ask', string $testid = 'paa-block'): string
+{
+    if (!$faqs) return '';
+    $h  = '<section class="paa-block mt-5" aria-labelledby="paa-heading-' . esc($testid) . '" data-testid="' . esc($testid) . '">';
+    $h .= '<div class="d-flex align-items-center gap-2 mb-3">';
+    $h .= '<i class="bi bi-question-diamond-fill" style="font-size:22px;color:#2563eb;"></i>';
+    $h .= '<h2 id="paa-heading-' . esc($testid) . '" class="fw-bold h4 mb-0">' . esc($heading) . '</h2>';
+    $h .= '</div>';
+    $h .= '<div class="accordion pd-faq-accordion" id="' . esc($testid) . '-acc">';
+    foreach ($faqs as $idx => $f) {
+        $itemId = $testid . '-q-' . $idx;
+        $h .= '<div class="accordion-item">';
+        $h .= '<h3 class="accordion-header"><button class="accordion-button ' . ($idx > 0 ? 'collapsed' : '') . '" '
+            . 'type="button" data-bs-toggle="collapse" data-bs-target="#' . esc($itemId) . '" '
+            . 'aria-expanded="' . ($idx === 0 ? 'true' : 'false') . '" aria-controls="' . esc($itemId) . '" '
+            . 'data-testid="' . esc($testid) . '-q-' . $idx . '">' . esc($f['question']) . '</button></h3>';
+        $h .= '<div id="' . esc($itemId) . '" class="accordion-collapse collapse ' . ($idx === 0 ? 'show' : '') . '" '
+            . 'data-bs-parent="#' . esc($testid) . '-acc">';
+        $h .= '<div class="accordion-body" data-testid="' . esc($testid) . '-a-' . $idx . '">' . $f['answer'] . '</div>';
+        $h .= '</div></div>';
+    }
+    $h .= '</div></section>';
+    return $h;
+}
+
+/**
+ * Generate up to 6 product-aware "People Also Ask" Q→A pairs.  Plain
+ * deterministic templates so the block renders even when the AI bot
+ * hasn't filled in custom FAQs yet.  Adopt the same 40-60 word answer
+ * pattern Google promotes in AI Overviews.
+ */
+function product_paa_faqs(array $p): array
+{
+    $name     = (string)$p['name'];
+    $brand    = product_detected_brand($p);
+    $platform = $p['platform'] ?: 'Windows';
+    $price    = format_price((float)$p['price']);
+    return [
+        [
+            'question' => 'Where is the cheapest place to buy ' . $name . '?',
+            'answer'   => esc(SITE_BRAND) . ' sells ' . esc($name) . ' for ' . esc($price) . ' &mdash; up to 81% below the manufacturer&rsquo;s retail price. We work directly with authorised channels, which is how we keep prices low while guaranteeing every key is genuine, activates inside the official ' . esc($brand) . ' installer, and ships with a 30-day money-back protection.',
+        ],
+        [
+            'question' => 'How long does ' . $name . ' delivery take?',
+            'answer'   => 'Your ' . esc($name) . ' licence key arrives by email within 15&ndash;30 minutes of completing payment &mdash; often in seconds. The email contains the activation key, the official ' . esc($brand) . ' download link and step-by-step instructions. There is no physical shipping; everything is digital.',
+        ],
+        [
+            'question' => 'Will ' . $name . ' work on my ' . esc($platform) . ' device?',
+            'answer'   => 'Yes &mdash; this listing is the ' . esc($platform) . ' edition of ' . esc($name) . '. As long as your computer meets ' . esc($brand) . '&rsquo;s minimum system requirements (any ' . esc($platform) . ' machine from the last ~5 years), this key will activate without issue. We exchange any wrong-platform purchase free of charge within 30 days.',
+        ],
+        [
+            'question' => 'Is ' . $name . ' a subscription or a one-time purchase?',
+            'answer'   => 'Every ' . esc($name) . ' listing on ' . esc(SITE_BRAND) . ' is a one-time purchase with a perpetual (lifetime) licence. Pay once, activate on your device, and use the software for as long as you own the computer. There are no monthly fees, no renewals and no automatic re-billing.',
+        ],
+        [
+            'question' => 'What happens if my ' . $name . ' key fails to activate?',
+            'answer'   => 'In the rare case a key fails to activate, contact support within 30 days. We will either send a working replacement key at no extra cost or issue a full refund &mdash; your choice. Most activation issues are resolved by our specialists in under 10 minutes via live chat.',
+        ],
+        [
+            'question' => 'Can I install ' . $name . ' on more than one computer?',
+            'answer'   => 'Each ' . esc($name) . ' licence covers a single device by default. If you need to move the licence to a new computer (e.g. when upgrading your laptop), our support team transfers it for you free of charge. Multi-device family packs are listed separately on the relevant category page.',
+        ],
+    ];
+}
+
+/**
+ * Render a visible breadcrumb <nav> wired to the same crumbs the
+ * JSON-LD BreadcrumbList is built from.  Use this so Google AND
+ * AI search engines see consistent navigation context.
+ *
+ * @param array $crumbs  [['name'=>'Home', 'url'=>'/'], ...]  Last item omits url.
+ */
+function render_breadcrumb_nav(array $crumbs, string $testid = 'breadcrumb'): string
+{
+    if (!$crumbs) return '';
+    $h  = '<nav aria-label="breadcrumb" data-testid="' . esc($testid) . '">';
+    $h .= '<ol class="breadcrumb small mb-3">';
+    foreach ($crumbs as $i => $c) {
+        $isLast = $i === count($crumbs) - 1;
+        $name   = esc((string)($c['name'] ?? ''));
+        $url    = $c['url']  ?? '';
+        if ($isLast || $url === '') {
+            $h .= '<li class="breadcrumb-item active" aria-current="page">' . $name . '</li>';
+        } else {
+            $h .= '<li class="breadcrumb-item"><a href="' . esc((string)$url) . '">' . $name . '</a></li>';
+        }
+    }
+    $h .= '</ol></nav>';
+    return $h;
+}
+

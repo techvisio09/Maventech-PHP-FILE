@@ -254,11 +254,23 @@ $ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.sv
   <?php if (isset($jsonLdFaq)): ?>
   <script type="application/ld+json"><?= json_encode($jsonLdFaq, JSON_UNESCAPED_SLASHES) ?></script>
   <?php endif; ?>
+  <?php if (isset($jsonLdWebsite)): ?>
+  <script type="application/ld+json"><?= json_encode($jsonLdWebsite, JSON_UNESCAPED_SLASHES) ?></script>
+  <?php endif; ?>
+  <?php if (isset($jsonLdContact)): ?>
+  <script type="application/ld+json"><?= json_encode($jsonLdContact, JSON_UNESCAPED_SLASHES) ?></script>
+  <?php endif; ?>
+  <?php if (isset($jsonLdAboutPage)): ?>
+  <script type="application/ld+json"><?= json_encode($jsonLdAboutPage, JSON_UNESCAPED_SLASHES) ?></script>
+  <?php endif; ?>
   <?php if (isset($jsonLdHowTo)): ?>
   <script type="application/ld+json"><?= json_encode($jsonLdHowTo, JSON_UNESCAPED_SLASHES) ?></script>
   <?php endif; ?>
   <?php if (isset($jsonLdAiSummary)): ?>
   <script type="application/ld+json"><?= json_encode($jsonLdAiSummary, JSON_UNESCAPED_SLASHES) ?></script>
+  <?php endif; ?>
+  <?php if (isset($jsonLdPaa)): ?>
+  <script type="application/ld+json"><?= json_encode($jsonLdPaa, JSON_UNESCAPED_SLASHES) ?></script>
   <?php endif; ?>
   <?php if (isset($jsonLdItemList)): ?>
   <script type="application/ld+json"><?= json_encode($jsonLdItemList, JSON_UNESCAPED_SLASHES) ?></script>

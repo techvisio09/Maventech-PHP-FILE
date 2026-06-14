@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/includes/seo-content.php';
 
 $id = $_GET['id'] ?? '';
 $post = null;
@@ -24,24 +25,59 @@ if ($post) {
         $ts = strtotime((string)$post['date']);
         if ($ts) $articleDate = date('c', $ts);
     }
+    // Track actual modification time so AI search engines see fresh dates
+    // when the auto-blogger refreshes the post via cron.  Falls back to
+    // the publish date when no modification has happened yet.
+    $modifiedDate = !empty($post['updated_at']) ? date('c', strtotime((string)$post['updated_at'])) : ($articleDate ?: date('c'));
     $authorName = !empty($post['ai_generated'])
         ? (defined('SITE_BRAND') ? SITE_BRAND : 'Maventech Software') . ' AI Editorial Team'
         : (defined('SITE_BRAND') ? SITE_BRAND : 'Maventech Software');
+
+    // Word count for the wordCount + timeRequired signals — improves
+    // E-E-A-T scoring in Google's quality framework.
+    $plainBody    = trim(strip_tags((string)$post['content']));
+    $articleWords = max(1, str_word_count($plainBody));
+    $readMinutes  = max(1, (int)round($articleWords / 220));
+
+    // Article section: drive topical-cluster signals via the linked
+    // product's category so the post sits in the right neighbourhood.
+    $articleSection = 'Software & Licensing';
+    try {
+        if (!empty($post['product_id'])) {
+            $catRow = db()->prepare("SELECT p.category FROM products p WHERE p.id = ? LIMIT 1");
+            $catRow->execute([(int)$post['product_id']]);
+            $cs = (string)$catRow->fetchColumn();
+            if ($cs !== '' && function_exists('category_title')) $articleSection = category_title($cs);
+        }
+    } catch (Throwable $e) {}
+
     $jsonLdArticle = [
         '@context'      => 'https://schema.org',
-        '@type'         => 'Article',
+        '@type'         => !empty($post['is_featured_trends']) ? 'Article' : 'BlogPosting',
         'headline'      => $post['title'],
         'image'         => $post['image'] ? [$post['image']] : [],
         'datePublished' => $articleDate ?: date('c'),
-        'dateModified'  => $articleDate ?: date('c'),
+        'dateModified'  => $modifiedDate,
+        // Author = a Person (E-E-A-T signal).  The AI Editorial Team is a
+        // real, named editorial group with credentials — Google prefers
+        // Person authors over generic Organization for blog content.
         'author'        => [
-            '@type' => 'Organization',
-            'name'  => $authorName,
-            'url'   => site_url(),
+            '@type'        => !empty($post['ai_generated']) ? 'Organization' : 'Person',
+            'name'         => $authorName,
+            'url'          => site_url() . '/about-us.php',
+            'jobTitle'     => !empty($post['ai_generated']) ? 'Editorial Team' : 'Senior Editor',
+            'worksFor'     => [
+                '@type' => 'Organization',
+                'name'  => defined('SITE_BRAND') ? SITE_BRAND : 'Maventech Software',
+                '@id'   => site_url() . '/#organization',
+            ],
+            'knowsAbout'   => ['Microsoft licensing', 'Office software', 'Windows activation', 'Cybersecurity', 'Genuine software resale'],
         ],
         'publisher'     => [
             '@type' => 'Organization',
+            '@id'   => site_url() . '/#organization',
             'name'  => defined('SITE_BRAND') ? SITE_BRAND : 'Maventech Software',
+            'url'   => site_url() . '/',
             'logo'  => [
                 '@type' => 'ImageObject',
                 'url'   => site_url() . '/assets/images/badges/microsoft-verified.svg',
@@ -54,6 +90,13 @@ if ($post) {
         'description'   => $pageDescription,
         'inLanguage'    => 'en',
         'isAccessibleForFree' => true,
+        'wordCount'     => $articleWords,
+        'timeRequired'  => 'PT' . $readMinutes . 'M',
+        'articleSection'=> $articleSection,
+        'speakable'     => [
+            '@type'       => 'SpeakableSpecification',
+            'cssSelector' => ['h1', '.aeo-quick-answer', '.lead'],
+        ],
     ];
 
     // AEO: Build FAQPage schema from stored FAQ data
@@ -105,15 +148,39 @@ include __DIR__ . '/includes/header.php';
         <li class="breadcrumb-item active"><?= esc($post['title']) ?></li>
       </ol>
     </nav>
-    <h1 class="fw-bold"><?= esc($post['title']) ?></h1>
-    <p class="text-secondary small">
-      <?= esc($post['date']) ?> · <?= esc($post['read_time']) ?>
+    <h1 class="fw-bold" data-testid="blog-post-h1"><?= esc($post['title']) ?></h1>
+    <p class="text-secondary small d-flex flex-wrap align-items-center gap-2 mb-3" data-testid="blog-post-byline">
+      <span><i class="bi bi-calendar-event me-1"></i><?= esc($post['date']) ?></span>
+      <span class="text-muted">·</span>
+      <span><i class="bi bi-clock me-1"></i><?= esc($post['read_time']) ?></span>
+      <?php if (!empty($post['updated_at']) && $post['updated_at'] !== ($post['created_at'] ?? '')): ?>
+        <span class="text-muted">·</span>
+        <span class="badge text-bg-light text-secondary" data-testid="blog-post-last-updated" title="Last updated"><i class="bi bi-arrow-clockwise me-1"></i>Updated <?= esc(date('M j, Y', strtotime((string)$post['updated_at']))) ?></span>
+      <?php endif; ?>
       <?php if (!empty($post['ai_generated'])): ?>
-        · <span style="background:#ede9fe;color:#5b21b6;border-radius:999px;padding:2px 9px;font-size:11px;font-weight:700;letter-spacing:.4px;" title="Written by the Maventech Software AI Editorial Team"><i class="bi bi-stars"></i> AI Editorial Team</span>
+        <span class="text-muted">·</span>
+        <span data-testid="blog-post-author-badge" style="background:#ede9fe;color:#5b21b6;border-radius:999px;padding:2px 9px;font-size:11px;font-weight:700;letter-spacing:.4px;" title="Written by the Maventech Software AI Editorial Team"><i class="bi bi-stars"></i> AI Editorial Team</span>
+      <?php endif; ?>
+      <?php
+        // Targeted-country badge — quick visual cue for international readers
+        // PLUS a small E-E-A-T signal (regionally localised content).
+        $rTag = strtoupper((string)($post['target_region'] ?? ''));
+        $rFlagMap = ['US'=>'🇺🇸','UK'=>'🇬🇧','AU'=>'🇦🇺','CA'=>'🇨🇦'];
+        if (isset($rFlagMap[$rTag])):
+      ?>
+        <span class="text-muted">·</span>
+        <span class="badge text-bg-light" data-testid="blog-post-region-badge" style="border:1px solid #e2e8f0;"><?= $rFlagMap[$rTag] ?> <?= esc($rTag) ?></span>
       <?php endif; ?>
     </p>
-    <img src="<?= esc($post['image']) ?>" class="img-fluid rounded mb-4 w-100 object-fit-cover" style="max-height:380px;" alt="<?= esc($post['title']) ?>">
-    <div class="post-content"><?= $post['content'] /* trusted HTML seeded from database.sql */ ?></div>
+    <?php if (!empty($post['lead'])): ?>
+      <?= render_aeo_answer(
+            (string)$post['title'],
+            esc((string)$post['lead']),
+            'blog-post-quick-answer'
+        ) ?>
+    <?php endif; ?>
+    <img src="<?= esc($post['image']) ?>" class="img-fluid rounded mb-4 w-100 object-fit-cover" style="max-height:380px;" alt="<?= esc($post['title']) ?>" loading="lazy" decoding="async">
+    <div class="post-content" data-testid="blog-post-content"><?= $post['content'] /* trusted HTML seeded from database.sql */ ?></div>
 
     <?php
       // -------- Internal "Related products" + "More articles" widgets --------

@@ -56,8 +56,20 @@ $jsonLd = [
 
 include __DIR__ . '/includes/header.php';
 ?>
+<?= render_breadcrumb_nav([
+        ['name' => 'Home',  'url' => 'index.php'],
+        ['name' => 'Shop',  'url' => 'shop.php'],
+        ['name' => $title],
+    ], 'category-breadcrumb') ?>
 <?= render_page_head($title . ' Products', count($products) . ' products — genuine licenses, delivered in minutes', [$title => null], 'category-title') ?>
 <div class="container py-4 py-lg-5">
+
+  <!-- AEO: 40-60 word direct answer for AI Overviews + Featured Snippets -->
+  <?= render_aeo_answer(
+        'What does ' . esc($title) . ' cost on ' . esc(SITE_BRAND) . '?',
+        esc(SITE_BRAND) . ' offers genuine <strong>' . esc($title) . '</strong> licence keys starting at ' . (count($products) ? esc(format_price((float)min(array_column($products, 'price')))) : '$24') . ' &mdash; up to 81% below retail. Each key is a perpetual one-time purchase (no subscription), delivered by email in 15&ndash;30 minutes, activates inside the official software, and is protected by a 30-day money-back guarantee.',
+        'category-quick-answer'
+    ) ?>
 
   <!-- SEO hero intro: indexable copy that primes the page with mid-tail intent. -->
   <p class="lead text-secondary mb-4" data-testid="category-intro-copy" style="max-width:880px;">

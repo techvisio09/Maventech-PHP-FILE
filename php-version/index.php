@@ -3,6 +3,28 @@ require_once __DIR__ . '/includes/functions.php';
 $pageTitle = SITE_BRAND . ' | Genuine Microsoft Software Licenses — Instant Delivery';
 $pageDescription = 'Genuine Microsoft Office 2024/2021/2019, Windows 11 and antivirus license keys at up to 81% off. Instant digital delivery in 15-30 minutes, lifetime activation, 30-day money-back guarantee.';
 
+/* ================== SEO + GEO: WebSite + SearchAction schema =====
+   Adds the Google "sitelinks search box" to the SERP — also signals
+   to ChatGPT / Perplexity / Bing Copilot that we host a searchable
+   site, so they can deep-link to our search results page in answers. */
+$jsonLdWebsite = [
+    '@context'       => 'https://schema.org',
+    '@type'          => 'WebSite',
+    '@id'            => site_url() . '/#website',
+    'url'            => site_url() . '/',
+    'name'           => SITE_BRAND,
+    'inLanguage'     => 'en',
+    'publisher'      => ['@id' => site_url() . '/#organization'],
+    'potentialAction'=> [
+        '@type'       => 'SearchAction',
+        'target'      => [
+            '@type'        => 'EntryPoint',
+            'urlTemplate'  => site_url() . '/shop.php?q={search_term_string}',
+        ],
+        'query-input' => 'required name=search_term_string',
+    ],
+];
+
 $bestSellers = db()->query("SELECT * FROM products WHERE badge IS NOT NULL AND " . active_regions_sql_in('region') . " ORDER BY reviews DESC LIMIT 4")->fetchAll();
 $newArrivals = db()->query("SELECT * FROM products WHERE is_new = 1 AND " . active_regions_sql_in('region') . " ORDER BY reviews DESC LIMIT 4")->fetchAll();
 $pickedForYou = db()->query("SELECT * FROM products WHERE " . active_regions_sql_in('region') . " ORDER BY reviews DESC LIMIT 8")->fetchAll();

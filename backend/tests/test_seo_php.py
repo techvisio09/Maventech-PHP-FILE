@@ -97,9 +97,9 @@ class TestProductSEO:
         for tid in ("product-seo-copy", "product-review-snippets", "product-deep-cluster"):
             assert f'data-testid="{tid}"' in product_html, f"Missing data-testid={tid}"
 
-    def test_product_jsonld_six_blocks_valid(self, product_html):
+    def test_product_jsonld_seven_blocks_valid(self, product_html):
         blocks = _extract_jsonld_blocks(product_html)
-        assert len(blocks) == 6, f"Expected 6 JSON-LD blocks (Organization, Product, BreadcrumbList, FAQPage, HowTo, Article AI-summary), found {len(blocks)}"
+        assert len(blocks) == 7, f"Expected 7 JSON-LD blocks (Organization, Product, BreadcrumbList, FAQPage, HowTo, Article AI-summary, FAQPage People-Also-Ask), found {len(blocks)}"
         parsed = []
         for i, b in enumerate(blocks):
             try:
