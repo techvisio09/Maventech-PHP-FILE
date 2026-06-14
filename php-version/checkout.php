@@ -248,7 +248,8 @@ include __DIR__ . '/includes/header.php';
       <div class="row g-2">
         <div class="col-md-6">
           <label class="form-label">Email Address *</label>
-          <input type="email" name="email" required class="form-control" value="<?= esc($_POST['email'] ?? '') ?>" data-testid="checkout-email">
+          <input type="email" name="email" required class="form-control" value="<?= esc($_POST['email'] ?? '') ?>" data-testid="checkout-email" id="checkout-email">
+          <div id="checkout-email-hint" class="checkout-hint" style="display:none;" data-testid="checkout-email-hint"></div>
         </div>
         <div class="col-md-6">
           <label class="form-label">Phone Number *</label>
@@ -269,7 +270,9 @@ include __DIR__ . '/includes/header.php';
         <div class="col-md-6"><label class="form-label">First Name *</label><input name="first_name" required class="form-control" value="<?= esc($_POST['first_name'] ?? '') ?>"></div>
         <div class="col-md-6"><label class="form-label">Last Name *</label><input name="last_name" required class="form-control" value="<?= esc($_POST['last_name'] ?? '') ?>"></div>
         <div class="col-12"><label class="form-label">Company <span class="text-secondary" style="font-size:.7rem;font-weight:400;">(optional — for business invoices)</span></label><input name="company_name" class="form-control" placeholder="e.g. Acme Inc." value="<?= esc($_POST['company_name'] ?? '') ?>" data-testid="checkout-company"></div>
-        <div class="col-md-8"><label class="form-label">Address *</label><input name="address" required class="form-control" value="<?= esc($_POST['address'] ?? '') ?>"></div>
+        <div class="col-md-8"><label class="form-label">Address *</label><input name="address" required class="form-control" value="<?= esc($_POST['address'] ?? '') ?>" id="checkout-address" data-testid="checkout-address">
+          <div id="checkout-address-hint" class="checkout-hint" style="display:none;" data-testid="checkout-address-hint"></div>
+        </div>
         <div class="col-md-4"><label class="form-label">Address Line 2</label><input name="address2" class="form-control" value="<?= esc($_POST['address2'] ?? '') ?>"></div>
         <div class="col-md-3 col-6">
           <label class="form-label">Country *</label>
@@ -385,4 +388,99 @@ include __DIR__ . '/includes/header.php';
   </form>
 </div>
 </div>
+
+<style>
+.checkout-hint {
+  margin-top: 6px; padding: 8px 12px; border-radius: 8px;
+  font-size: 12.5px; line-height: 1.45;
+  border-left: 3px solid;
+  background: #fffbeb; border-color: #f59e0b; color: #92400e;
+}
+[data-bs-theme="dark"] .checkout-hint { background: #2a1f0c; color: #fde68a; }
+.checkout-hint.is-ok { background:#ecfdf5; border-color:#10b981; color:#047857; }
+.checkout-hint .hint-btn {
+  display:inline-block; margin-left:8px; padding:3px 10px;
+  border-radius:999px; font-size:11.5px; font-weight:700;
+  border:1px solid currentColor; background:transparent; cursor:pointer;
+  text-decoration:none;
+}
+.checkout-hint .hint-btn:hover { background: currentColor; color:#fff; }
+.checkout-hint .hint-btn.is-primary { background: #f59e0b; color:#fff; border-color:#f59e0b; }
+.checkout-hint .hint-btn.is-primary:hover { background:#d97706; border-color:#d97706; }
+</style>
+<script>
+(function(){
+  // ===== Email field — DNS MX + typo dictionary check on blur =====
+  const $email = document.getElementById('checkout-email');
+  const $emailHint = document.getElementById('checkout-email-hint');
+  let _emailOverride = false;
+  function showEmailHint(html, isOk) {
+    if (!$emailHint) return;
+    $emailHint.innerHTML = html;
+    $emailHint.className = 'checkout-hint' + (isOk ? ' is-ok' : '');
+    $emailHint.style.display = 'block';
+  }
+  function clearEmailHint(){ if($emailHint){ $emailHint.style.display='none'; $emailHint.innerHTML=''; } }
+  async function checkEmail() {
+    if (!$email) return;
+    const val = $email.value.trim();
+    if (!val) { clearEmailHint(); return; }
+    if (_emailOverride) return; // user explicitly chose to use this address
+    try {
+      const r = await fetch('ajax/email-check.php', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ email: val }),
+      });
+      const j = await r.json();
+      if (j.ok) { clearEmailHint(); return; }
+      const suggest = (j.suggest && j.suggest !== val) ? j.suggest : '';
+      let html = '<i class="bi bi-exclamation-triangle me-1"></i><strong>Heads up:</strong> ' + (j.detail || 'This email looks undeliverable.');
+      if (suggest) {
+        html += ' <button type="button" class="hint-btn is-primary" data-testid="email-hint-accept">Use <strong>' + suggest + '</strong></button>';
+      }
+      html += ' <button type="button" class="hint-btn" data-testid="email-hint-override">Use my address anyway</button>';
+      showEmailHint(html, false);
+      // Hook up the buttons
+      const accept = $emailHint.querySelector('[data-testid="email-hint-accept"]');
+      if (accept) accept.addEventListener('click', () => { $email.value = suggest; clearEmailHint(); _emailOverride = false; });
+      const override = $emailHint.querySelector('[data-testid="email-hint-override"]');
+      if (override) override.addEventListener('click', () => { _emailOverride = true; showEmailHint("<i class='bi bi-check2-circle me-1'></i>Got it — we'll deliver to <strong>" + val + "</strong>.", true); });
+    } catch (_) { /* network hiccup, skip silently */ }
+  }
+  if ($email) {
+    $email.addEventListener('blur', checkEmail);
+    $email.addEventListener('input', () => { _emailOverride = false; clearEmailHint(); });
+  }
+
+  // ===== Address field — basic completeness sanity-check on blur =====
+  const $addr = document.getElementById('checkout-address');
+  const $addrHint = document.getElementById('checkout-address-hint');
+  let _addrOverride = false;
+  function clearAddrHint(){ if($addrHint){ $addrHint.style.display='none'; $addrHint.innerHTML=''; } }
+  function checkAddress() {
+    if (!$addr) return;
+    const val = $addr.value.trim();
+    if (!val || _addrOverride) { clearAddrHint(); return; }
+    const issues = [];
+    // Must have a street number — almost every shippable / billing address
+    // starts with one.  P.O. Box is allowed.
+    if (!/\d/.test(val) && !/p\.?\s*o\.?\s*box/i.test(val)) {
+      issues.push('No street number detected');
+    }
+    if (val.length < 6) issues.push('Address looks too short');
+    if (/^[a-z]+$/i.test(val)) issues.push('Just letters — missing street/number?');
+    if (!issues.length) { clearAddrHint(); return; }
+    $addrHint.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i><strong>Double-check this address:</strong> ' + issues.join(', ') + '.'
+      + ' <button type="button" class="hint-btn" data-testid="addr-hint-override">Use this address anyway</button>';
+    $addrHint.className = 'checkout-hint';
+    $addrHint.style.display = 'block';
+    const o = $addrHint.querySelector('[data-testid="addr-hint-override"]');
+    if (o) o.addEventListener('click', () => { _addrOverride = true; $addrHint.innerHTML = "<i class='bi bi-check2-circle me-1'></i>Got it — using the address as entered."; $addrHint.className = 'checkout-hint is-ok'; });
+  }
+  if ($addr) {
+    $addr.addEventListener('blur', checkAddress);
+    $addr.addEventListener('input', () => { _addrOverride = false; clearAddrHint(); });
+  }
+})();
+</script>
 <?php include __DIR__ . '/includes/footer.php'; ?>

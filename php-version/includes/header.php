@@ -55,28 +55,99 @@ $ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.sv
   <meta name="twitter:title" content="<?= esc($pageTitle) ?>">
   <meta name="twitter:description" content="<?= esc($pageDescription) ?>">
   <meta name="twitter:image" content="<?= esc($ogImage) ?>">
-  <!-- Structured data: Organization + WebSite -->
-  <script type="application/ld+json"><?= json_encode([
-      '@context' => 'https://schema.org',
-      '@graph' => [
-          array_filter([
-              '@type' => 'Organization',
-              'name'  => $brandName,
-              'url'   => site_url() . '/',
-              'logo'  => $brandLogo ?: (site_url() . '/assets/images/badges/microsoft-verified.svg'),
-              'email' => $brandEmail ?: null,
-              'contactPoint' => $brandPhone ? ['@type' => 'ContactPoint', 'telephone' => $brandPhone, 'contactType' => 'customer service', 'availableLanguage' => 'English'] : null,
-          ]),
-          [
-              '@type' => 'WebSite',
-              'name' => $brandName,
-              'url' => site_url() . '/',
-              'potentialAction' => ['@type' => 'SearchAction', 'target' => site_url() . '/shop.php?q={search_term_string}', 'query-input' => 'required name=search_term_string'],
-          ],
-      ],
-  ], JSON_UNESCAPED_SLASHES) ?></script>
+  <!-- Structured data: Organization + WebSite + (optional) LocalBusiness for AEO/GEO -->
+  <script type="application/ld+json"><?php
+    // Pull aggregate rating from customer_reviews so the org/site schema
+    // surfaces star-rating to AI search engines (ChatGPT/Perplexity/etc.)
+    // and Google Knowledge Panel.
+    $orgRating = null;
+    try {
+        $r = db()->query("SELECT ROUND(AVG(rating), 1) AS avg_rating, COUNT(*) AS n FROM customer_reviews WHERE status='published' OR status='approved'")->fetch();
+        if ($r && (int)$r['n'] > 0) {
+            $orgRating = [
+                '@type'       => 'AggregateRating',
+                'ratingValue' => (string)$r['avg_rating'],
+                'reviewCount' => (int)$r['n'],
+                'bestRating'  => '5',
+                'worstRating' => '1',
+            ];
+        }
+    } catch (Throwable $e) { /* schema is best-effort */ }
+    $graph = [
+        array_filter([
+            '@type' => 'Organization',
+            '@id'   => site_url() . '/#organization',
+            'name'  => $brandName,
+            'url'   => site_url() . '/',
+            'logo'  => $brandLogo ?: (site_url() . '/assets/images/badges/microsoft-verified.svg'),
+            'email' => $brandEmail ?: null,
+            'sameAs' => array_values(array_filter([
+                $co['twitter']  ?? null,
+                $co['facebook'] ?? null,
+                $co['linkedin'] ?? null,
+                $co['instagram']?? null,
+            ])),
+            'contactPoint' => $brandPhone ? [[
+                '@type'             => 'ContactPoint',
+                'telephone'         => $brandPhone,
+                'contactType'       => 'customer service',
+                'availableLanguage' => ['English'],
+                'areaServed'        => ['US', 'GB', 'CA', 'AU', 'IN', 'AE', 'EU'],
+            ]] : null,
+            'aggregateRating' => $orgRating,
+        ]),
+        // LocalBusiness (more specific than Organization — qualifies for AI
+        // "near me" answers and Google's local panel).  Only emitted when we
+        // have a real address on file.
+        $brandAddress ? array_filter([
+            '@type' => 'LocalBusiness',
+            '@id'   => site_url() . '/#localbusiness',
+            'name'  => $brandName,
+            'url'   => site_url() . '/',
+            'image' => $brandLogo ?: (site_url() . '/assets/images/badges/microsoft-verified.svg'),
+            'telephone' => $brandPhone ?: null,
+            'email'     => $brandEmail ?: null,
+            'address'   => [
+                '@type'           => 'PostalAddress',
+                'streetAddress'   => $brandAddress,
+            ],
+            'priceRange'    => '$$',
+            'openingHoursSpecification' => [
+                '@type'     => 'OpeningHoursSpecification',
+                'dayOfWeek' => ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'],
+                'opens'     => '09:00',
+                'closes'    => '18:00',
+            ],
+            'aggregateRating' => $orgRating,
+        ]) : null,
+        [
+            '@type' => 'WebSite',
+            '@id'   => site_url() . '/#website',
+            'name'  => $brandName,
+            'url'   => site_url() . '/',
+            'publisher'       => ['@id' => site_url() . '/#organization'],
+            'inLanguage'      => 'en',
+            'potentialAction' => [
+                '@type'       => 'SearchAction',
+                'target'      => ['@type' => 'EntryPoint', 'urlTemplate' => site_url() . '/shop.php?q={search_term_string}'],
+                'query-input' => 'required name=search_term_string',
+            ],
+        ],
+    ];
+    $graph = array_values(array_filter($graph));
+    echo json_encode([
+        '@context' => 'https://schema.org',
+        '@graph'   => $graph,
+    ], JSON_UNESCAPED_SLASHES);
+  ?></script>
   <?php if (isset($jsonLd)): ?>
   <script type="application/ld+json"><?= json_encode($jsonLd, JSON_UNESCAPED_SLASHES) ?></script>
+  <?php endif; ?>
+  <?php if (isset($jsonLdBreadcrumb)): ?>
+  <script type="application/ld+json"><?= json_encode($jsonLdBreadcrumb, JSON_UNESCAPED_SLASHES) ?></script>
+  <?php endif; ?>
+  <?php if (isset($jsonLdFaq)): ?>
+  <script type="application/ld+json"><?= json_encode($jsonLdFaq, JSON_UNESCAPED_SLASHES) ?></script>
   <?php endif; ?>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">

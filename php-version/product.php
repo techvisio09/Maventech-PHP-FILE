@@ -19,26 +19,93 @@ $pageDescription = 'Buy ' . $product['name'] . ' — genuine lifetime license ke
     . '. Instant email delivery, official download and 24/7 support from ' . SITE_BRAND . '.';
 $ogImage = $product['image'];
 $ogType = 'product';
+
+// Brand auto-detection — match product name against the same catalog we use
+// for installation_steps_for() so Bitdefender products show "Bitdefender",
+// Norton shows "Norton", etc.  Falls back to "Microsoft" only for genuine
+// Microsoft products.
+$brandLookup = [
+    'bitdefender' => 'Bitdefender', 'norton' => 'Norton', 'mcafee' => 'McAfee',
+    'kaspersky'   => 'Kaspersky',   'eset'   => 'ESET',   'avast'  => 'Avast',
+    'avg'         => 'AVG',         'webroot'=> 'Webroot','trend micro' => 'Trend Micro',
+    'malwarebytes'=> 'Malwarebytes','adobe'  => 'Adobe',  'autocad'=> 'Autodesk',
+    'autodesk'    => 'Autodesk',    'corel'  => 'Corel',  'parallels' => 'Parallels',
+    'windows'     => 'Microsoft',   'office' => 'Microsoft','visio' => 'Microsoft',
+    'project'     => 'Microsoft',   'microsoft' => 'Microsoft',
+];
+$_pName = strtolower($product['name']);
+$detectedBrand = 'Microsoft';
+foreach ($brandLookup as $kw => $br) {
+    if (strpos($_pName, $kw) !== false) { $detectedBrand = $br; break; }
+}
+
+$availableNow = function_exists('available_keys_count') ? available_keys_count($product['slug']) : 0;
+$availability = $availableNow > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock';
+
 $jsonLd = [
-    '@context' => 'https://schema.org',
-    '@type' => 'Product',
-    'name' => $product['name'],
-    'image' => $product['image'],
+    '@context'    => 'https://schema.org',
+    '@type'       => 'Product',
+    'name'        => $product['name'],
+    'image'       => $product['image'],
     'description' => $pageDescription,
-    'sku' => $product['slug'],
-    'brand' => ['@type' => 'Brand', 'name' => 'Microsoft'],
-    'offers' => [
-        '@type' => 'Offer',
-        'url' => site_url() . '/product.php?slug=' . $product['slug'],
-        'priceCurrency' => 'USD',
-        'price' => (string)$product['price'],
-        'availability' => 'https://schema.org/InStock',
+    'sku'         => $product['slug'],
+    'mpn'         => $product['slug'],
+    'brand'       => ['@type' => 'Brand', 'name' => $detectedBrand],
+    'category'    => ucfirst((string)($product['category'] ?? 'Software')),
+    'offers'      => [
+        '@type'         => 'Offer',
+        'url'           => site_url() . '/product.php?slug=' . $product['slug'],
+        'priceCurrency' => current_currency()['code'] ?? 'USD',
+        'price'         => (string)$product['price'],
+        'availability'  => $availability,
         'itemCondition' => 'https://schema.org/NewCondition',
+        'priceValidUntil' => date('Y-12-31'),
+        'seller'        => [
+            '@type' => 'Organization',
+            'name'  => $brandName,
+            'url'   => site_url() . '/',
+        ],
+        'shippingDetails' => [
+            '@type' => 'OfferShippingDetails',
+            'shippingRate'    => ['@type' => 'MonetaryAmount', 'value' => '0', 'currency' => 'USD'],
+            'shippingDestination' => ['@type' => 'DefinedRegion', 'addressCountry' => ['US','GB','CA','AU','IN','AE']],
+            'deliveryTime'    => [
+                '@type' => 'ShippingDeliveryTime',
+                'handlingTime'  => ['@type' => 'QuantitativeValue', 'minValue' => 0, 'maxValue' => 0, 'unitCode' => 'HUR'],
+                'transitTime'   => ['@type' => 'QuantitativeValue', 'minValue' => 0, 'maxValue' => 1, 'unitCode' => 'HUR'],
+            ],
+        ],
+        'hasMerchantReturnPolicy' => [
+            '@type'         => 'MerchantReturnPolicy',
+            'returnPolicyCategory' => 'https://schema.org/MerchantReturnFiniteReturnWindow',
+            'merchantReturnDays'   => 30,
+            'returnMethod'         => 'https://schema.org/ReturnByMail',
+            'returnFees'           => 'https://schema.org/FreeReturn',
+        ],
     ],
 ];
 if ((float)$product['rating'] > 0 && (int)$product['reviews'] > 0) {
-    $jsonLd['aggregateRating'] = ['@type' => 'AggregateRating', 'ratingValue' => (string)$product['rating'], 'reviewCount' => (int)$product['reviews']];
+    $jsonLd['aggregateRating'] = [
+        '@type'       => 'AggregateRating',
+        'ratingValue' => (string)$product['rating'],
+        'reviewCount' => (int)$product['reviews'],
+        'bestRating'  => '5',
+        'worstRating' => '1',
+    ];
 }
+
+// BreadcrumbList — surfaces the path Home → Category → Product in Google
+// rich results AND helps AI search engines understand site hierarchy.
+$jsonLdBreadcrumb = [
+    '@context' => 'https://schema.org',
+    '@type'    => 'BreadcrumbList',
+    'itemListElement' => [
+        ['@type' => 'ListItem', 'position' => 1, 'name' => 'Home',    'item' => site_url() . '/'],
+        ['@type' => 'ListItem', 'position' => 2, 'name' => 'Shop',    'item' => site_url() . '/shop.php'],
+        ['@type' => 'ListItem', 'position' => 3, 'name' => ucfirst((string)($product['category'] ?? 'Software')), 'item' => site_url() . '/category.php?slug=' . urlencode($product['category'] ?? '')],
+        ['@type' => 'ListItem', 'position' => 4, 'name' => $product['name']],
+    ],
+];
 $pageKeywords = product_keywords($product);
 $related = get_products([$product['category']]);
 $related = array_values(array_filter($related, fn($r) => $r['slug'] !== $product['slug']));

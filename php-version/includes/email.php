@@ -331,6 +331,80 @@ function default_refund_template(): string {
 
 /** Default "light" template w/ Microsoft icon watermark. Used when admin
  *  hasn't customised it via the Email Template editor.                    */
+
+/**
+ * Brand-aware installation steps for the order-delivery email.
+ *
+ * The hardcoded "setup.office.com + Microsoft Account" fallback was
+ * sending Office-style instructions to Bitdefender / Norton / Adobe
+ * customers — confusing and damaging to trust.  This helper inspects
+ * the product name (and admin-set `activation_url` when present) and
+ * returns the correct step-by-step flow + branded URL.
+ *
+ * @param array $product  Row from order_items / products; expects keys:
+ *                        name, optional activation_url, optional category.
+ * @return string  Multi-line HTML (<br> separated) of numbered steps.
+ */
+function installation_steps_for(array $product): string {
+    $name  = strtolower((string)($product['name'] ?? ''));
+    $url   = trim((string)($product['activation_url'] ?? ''));
+    // Pick the activation flow by brand keyword.  Order matters — more
+    // specific keywords first.
+    $catalog = [
+        'bitdefender' => [
+            'url'  => 'https://central.bitdefender.com',
+            'site' => 'central.bitdefender.com',
+            'acct' => 'Bitdefender Central account',
+        ],
+        'norton'      => ['url' => 'https://norton.com/setup',  'site' => 'norton.com/setup',  'acct' => 'Norton account'],
+        'mcafee'      => ['url' => 'https://home.mcafee.com/secure/register',     'site' => 'mcafee.com/activate', 'acct' => 'McAfee account'],
+        'kaspersky'   => ['url' => 'https://my.kaspersky.com',  'site' => 'my.kaspersky.com',  'acct' => 'My Kaspersky account'],
+        'eset'        => ['url' => 'https://my.eset.com',        'site' => 'my.eset.com',       'acct' => 'My ESET account'],
+        'avast'       => ['url' => 'https://my.avast.com',       'site' => 'my.avast.com',      'acct' => 'Avast account'],
+        'avg'         => ['url' => 'https://my.avg.com',         'site' => 'my.avg.com',        'acct' => 'AVG account'],
+        'webroot'     => ['url' => 'https://my.webrootanywhere.com', 'site' => 'my.webrootanywhere.com', 'acct' => 'Webroot account'],
+        'trend micro' => ['url' => 'https://account.trendmicro.com', 'site' => 'account.trendmicro.com', 'acct' => 'Trend Micro account'],
+        'malwarebytes'=> ['url' => 'https://my.malwarebytes.com', 'site' => 'my.malwarebytes.com', 'acct' => 'Malwarebytes account'],
+        'adobe'       => ['url' => 'https://account.adobe.com/products', 'site' => 'account.adobe.com', 'acct' => 'Adobe ID'],
+        'autocad'     => ['url' => 'https://manage.autodesk.com', 'site' => 'manage.autodesk.com', 'acct' => 'Autodesk account'],
+        'autodesk'    => ['url' => 'https://manage.autodesk.com', 'site' => 'manage.autodesk.com', 'acct' => 'Autodesk account'],
+        'corel'       => ['url' => 'https://account.coreldraw.com', 'site' => 'account.coreldraw.com', 'acct' => 'Corel account'],
+        'parallels'   => ['url' => 'https://my.parallels.com',   'site' => 'my.parallels.com',  'acct' => 'Parallels account'],
+        'windows'     => ['url' => 'https://account.microsoft.com/services', 'site' => 'account.microsoft.com', 'acct' => 'Microsoft account', 'extra' => 'For Windows, you can also activate via Settings → System → Activation → Change product key.'],
+        'visio'       => ['url' => 'https://setup.office.com',   'site' => 'setup.office.com',  'acct' => 'Microsoft account'],
+        'project'     => ['url' => 'https://setup.office.com',   'site' => 'setup.office.com',  'acct' => 'Microsoft account'],
+        'office'      => ['url' => 'https://setup.office.com',   'site' => 'setup.office.com',  'acct' => 'Microsoft account'],
+        'microsoft'   => ['url' => 'https://setup.office.com',   'site' => 'setup.office.com',  'acct' => 'Microsoft account'],
+    ];
+    $match = null; $brandLabel = '';
+    foreach ($catalog as $kw => $cfg) {
+        if (strpos($name, $kw) !== false) { $match = $cfg; $brandLabel = ucwords($kw); break; }
+    }
+    // Admin override — if the product row has an explicit activation_url,
+    // use that as the primary destination but still pick the right brand
+    // copy for context.
+    if ($url !== '' && filter_var($url, FILTER_VALIDATE_URL)) {
+        $host = parse_url($url, PHP_URL_HOST) ?: $url;
+        if (!$match) $match = ['url' => $url, 'site' => $host, 'acct' => 'your vendor account'];
+        else         $match['url'] = $url;
+        $match['site'] = $host;
+    }
+    if (!$match) {
+        // Generic fallback when we genuinely don't know the brand — never
+        // mention Office.  Direct the customer to their license key + a
+        // request to use the official vendor portal printed on the box /
+        // confirmation page.
+        return '1. Visit the official vendor website for your product (link on the product\'s order page).<br>'
+             . '2. Sign in or create a free account with the vendor.<br>'
+             . '3. Enter the license key shown above and follow the on-screen activation prompts.';
+    }
+    $extra = !empty($match['extra']) ? '<br><em style="color:#64748b;font-size:12px;">' . esc($match['extra']) . '</em>' : '';
+    return '1. Visit <a href="' . esc($match['url']) . '" style="color:#1d4ed8;font-weight:600;text-decoration:underline;">' . esc($match['site']) . '</a> to download the official installer.<br>'
+         . '2. Sign in with (or create) your <strong>' . esc($match['acct']) . '</strong>.<br>'
+         . '3. Enter the license key shown above when prompted and follow the on-screen activation steps.'
+         . $extra;
+}
+
 function default_email_template(): string {
     return '<!doctype html><html><body style="margin:0;padding:0;background:#fbfcfd;font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#1f2937;">
 <div style="position:relative;max-width:640px;margin:0 auto;background:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 6px 28px rgba(15,23,42,.06);">
@@ -548,14 +622,24 @@ function build_order_email_html(array $order, array $items, array $assignments, 
     if (trim($tplHtml) === '') $tplHtml = default_email_template();
 
     $stmtName = $order['card_statement_name'] ?: statement_name_for($order['payment_method']);
-    // Build installation guide aggregated across products
+    // Build installation guide — per-product first (admin can set
+    // `installation_guide` on each product row), then a brand-aware
+    // fallback so antivirus customers don't see Office instructions.
     $guides = [];
     foreach ($assignments as $a) {
-        if (!empty($a['installation_guide'])) $guides[] = '<strong>' . esc($a['name']) . ':</strong> ' . nl2br(esc($a['installation_guide']));
+        if (!empty($a['installation_guide'])) {
+            $guides[] = '<strong>' . esc($a['name']) . ':</strong> ' . nl2br(esc($a['installation_guide']));
+        } else {
+            // Brand-aware fallback — uses the product name to detect
+            // Bitdefender / Norton / McAfee / Kaspersky / Adobe / Office /
+            // Windows / AutoCAD etc. and renders the matching activation
+            // flow.  Each block ends with the official activation URL.
+            $guides[] = '<strong>' . esc($a['name']) . ':</strong><br>' . installation_steps_for($a);
+        }
     }
     $guideHtml = $guides
         ? implode('<br><br>', $guides)
-        : '1. Visit setup.office.com (or the official download link for your product)<br>2. Sign in with a Microsoft Account<br>3. Enter the license key shown above and follow the prompts.';
+        : installation_steps_for(['name' => '']);
 
     $base = rtrim(site_url(), '/');
     $pixel = '<img src="' . $base . '/track-open.php?t=' . urlencode($trackingToken) . '" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0;">';
