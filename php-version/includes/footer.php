@@ -81,6 +81,7 @@
         <h6 class="text-white fw-bold mb-3">Support</h6>
         <ul class="list-unstyled small d-grid gap-2">
           <li><a href="account.php">My Account</a></li>
+          <li><a href="order-history.php" data-testid="footer-order-history-link">Order History &amp; Receipts</a></li>
           <li><a href="support.php">Support Center</a></li>
           <li><a href="page.php?slug=help-center">Help Center</a></li>
           <li><a href="page.php?slug=installation-guide">Installation Guide</a></li>

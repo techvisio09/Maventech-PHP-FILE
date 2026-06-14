@@ -455,3 +455,18 @@ See `/app/memory/test_credentials.md`.
   - Card details (number / exp / CVV) are NOT POSTed to our server (no `name` attributes on those inputs — they go directly to the gateway's PCI-compliant page), so card validation lives on the JS guard + gateway.
   - **Verified via curl**: 6/6 server-side guards correctly return inline `<li>` errors on the rendered form (typo email, just-letters address, 4-digit ZIP, 3-digit phone, spoofed state, plus overrides bypass test); the happy-path POST 302-redirects to `order-success.php` and order #MV26061430774 fulfilled with both PDFs attached (Receipt 31706 bytes + Invoice 30341 bytes).
 
+## [Feb 2026] Customer-facing Order History portal
+- **New page `/order-history.php`** — public, `noindex`, lets paying customers re-download their Receipt + Invoice PDFs and resend the order-delivery email without contacting support.
+  - Lookup form: email + order number (both must match an existing `orders` row).
+  - Brute-force defence: 8 failed lookups per 10-minute session, then locked out with a friendly message.
+  - On match: order summary card (number, date, status pill, total, line items) + three action buttons:
+    - **Download Receipt (PDF)** — `?action=download&kind=receipt` (regenerated fresh each call via DomPDF; uses `company_info()` as single source of truth for branding).
+    - **Download Invoice (PDF)** — `?action=download&kind=invoice`.
+    - **Resend License Key Email** — `?action=resend` (re-builds the order_delivery HTML from already-assigned license keys + queues a new outbox row with both PDFs attached). Verified: new outbox row #41 created on resend with both PDF paths.
+  - Session-bound unlock: once a customer matches their order, they can navigate freely (refresh, multi-download) without re-entering data. Cleared via `?clear=1` ("Look up a different order" link).
+  - 403 "Locked." returned when a download/resend action is attempted from a session that hasn't unlocked that order.
+- **Discovery surfaces**:
+  - Footer → Support column → "Order History & Receipts" link (`data-testid="footer-order-history-link"`).
+  - `order-success.php` shows a green Order History CTA banner directly after a successful purchase — friendly nudge so the customer never has to wonder "how do I get my PDFs later?".
+- **Verified end-to-end via curl + Playwright**: lookup form renders, bad email/order combo returns "couldn't find … (7 attempts left)", good combo unlocks the order card, both PDFs download as valid `%PDF-1.7` files (31706 / 30341 bytes), resend creates a new outbox row, a fresh session is correctly locked out (HTTP 403).
+

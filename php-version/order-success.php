@@ -96,6 +96,20 @@ include __DIR__ . '/includes/header.php';
     </div>
     <p class="small text-secondary">The charge will appear as <strong><?= SITE_LEGAL ?></strong> on your card statement.</p>
 
+    <!-- Order History self-service -->
+    <div class="card co-banner p-3 mb-4 text-start" style="background:linear-gradient(135deg,#ecfdf5,#f0fdfa);border:1px solid #a7f3d0;border-radius:14px;" data-testid="oh-cta-on-success">
+      <div class="d-flex align-items-center gap-3 flex-wrap">
+        <div class="d-none d-sm-flex align-items-center justify-content-center" style="width:44px;height:44px;background:#10b981;color:#fff;border-radius:12px;flex-shrink:0;">
+          <i class="bi bi-file-earmark-pdf" style="font-size:20px;"></i>
+        </div>
+        <div class="flex-grow-1">
+          <div class="fw-bold" style="color:#065f46;">Need to re-download your Receipt or Invoice?</div>
+          <div class="small" style="color:#047857;">Anytime, with just your email + this order number &mdash; no support ticket needed.</div>
+        </div>
+        <a href="order-history.php" class="btn btn-success btn-sm rounded-pill px-3 ms-auto" data-testid="oh-cta-button"><i class="bi bi-receipt me-1"></i>Get my PDFs</a>
+      </div>
+    </div>
+
     <?php if (!empty($order['pro_assist']) && $proChatToken): ?>
     <div class="card co-banner p-4 my-4 text-start" style="border: 1px solid #1e40af33; background: linear-gradient(135deg,#eff6ff,#dbeafe);" data-testid="proassist-chat-banner">
       <div class="d-flex align-items-center gap-2 mb-1">
