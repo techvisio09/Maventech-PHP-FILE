@@ -2305,41 +2305,57 @@ elseif ($tab === 'ai-blogger'):
     </div>
 
     <?php if ($aiAll): ?>
-      <div class="row g-2">
-        <?php $i = 0; foreach (array_slice($aiAll, 0, 20) as $bp): $i++; ?>
+      <div class="d-flex flex-column gap-2">
+        <?php $i = 0; foreach (array_slice($aiAll, 0, 30) as $bp): $i++; ?>
           <?php
-            $httpOk  = (int)($bp['verified_http'] ?? 0) === 200;
-            $postImg = $bp['image'] ?? '';
-            $rFlag   = $regionsList[$bp['target_region'] ?? '']['flag'] ?? '';
-            $postDate = date('M j', strtotime($bp['created_at'] ?? $bp['date']));
+            $httpOk   = (int)($bp['verified_http'] ?? 0) === 200;
+            $postImg  = $bp['image'] ?? '';
+            $rFlag    = $regionsList[$bp['target_region'] ?? '']['flag'] ?? '';
+            $rName    = $regionsList[$bp['target_region'] ?? '']['name'] ?? ($bp['target_region'] ?? '');
+            $postDate = date('M j, Y', strtotime($bp['created_at'] ?? $bp['date']));
+            $prodName = $bp['product_name'] ?? '';
           ?>
-          <div class="col-md-6 col-lg-4" data-testid="ai-blogger-row-<?= $i ?>">
-            <a href="blog-post.php?id=<?= urlencode($bp['id']) ?>" target="_blank" rel="noopener" class="d-flex align-items-center gap-3 text-decoration-none p-3" style="background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;transition:all .15s;"
-               onmouseover="this.style.borderColor='#93c5fd';this.style.background='#eff6ff'"
-               onmouseout="this.style.borderColor='#e2e8f0';this.style.background='#f8fafc'">
-              <?php if ($postImg): ?>
-                <img src="<?= esc($postImg) ?>" alt="" style="width:48px;height:48px;object-fit:cover;border-radius:8px;flex-shrink:0;">
-              <?php else: ?>
-                <div style="width:48px;height:48px;border-radius:8px;background:#e2e8f0;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="bi bi-journal-text text-secondary"></i></div>
+          <a href="blog-post.php?id=<?= urlencode($bp['id']) ?>" target="_blank" rel="noopener" data-testid="ai-blogger-row-<?= $i ?>"
+             class="d-flex align-items-center gap-3 text-decoration-none"
+             style="padding:10px 14px;border-radius:10px;border:1px solid #eef2f7;background:#fafbfd;transition:all .15s;"
+             onmouseover="this.style.borderColor='#93c5fd';this.style.background='#f0f7ff'"
+             onmouseout="this.style.borderColor='#eef2f7';this.style.background='#fafbfd'">
+            <!-- Number -->
+            <div style="width:24px;text-align:center;flex-shrink:0;font-size:11px;font-weight:700;color:#94a3b8;"><?= $i ?></div>
+            <!-- Image -->
+            <?php if ($postImg): ?>
+              <img src="<?= esc($postImg) ?>" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:8px;flex-shrink:0;">
+            <?php else: ?>
+              <div style="width:40px;height:40px;border-radius:8px;background:#e2e8f0;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="bi bi-journal-text text-secondary" style="font-size:16px;"></i></div>
+            <?php endif; ?>
+            <!-- Title + product -->
+            <div style="flex:1;min-width:0;">
+              <div class="fw-semibold text-body" style="font-size:13px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= esc($bp['title']) ?></div>
+              <?php if ($prodName): ?>
+                <div class="text-secondary" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= esc($prodName) ?></div>
               <?php endif; ?>
-              <div style="min-width:0;flex:1;">
-                <div class="fw-semibold text-body" style="font-size:12.5px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= esc($bp['title']) ?></div>
-                <div class="d-flex align-items-center gap-2 mt-1" style="font-size:11px;">
-                  <span class="text-secondary"><?= $rFlag ?> <?= esc($bp['target_region'] ?? '') ?></span>
-                  <span class="text-secondary">·</span>
-                  <span class="text-secondary"><?= $postDate ?></span>
-                  <span class="badge rounded-pill" style="background:<?= $httpOk ? '#d1fae5' : '#fef3c7' ?>;color:<?= $httpOk ? '#065f46' : '#92400e' ?>;font-size:9px;padding:2px 8px;"><?= $httpOk ? 'Live' : 'Pending' ?></span>
-                </div>
-                <div class="text-secondary" style="font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;"><?= esc($bp['product_name'] ?? '') ?></div>
-              </div>
-              <i class="bi bi-box-arrow-up-right text-primary" style="font-size:12px;flex-shrink:0;"></i>
-            </a>
-          </div>
+            </div>
+            <!-- Market flag -->
+            <div style="flex-shrink:0;text-align:center;min-width:50px;">
+              <div style="font-size:16px;"><?= $rFlag ?></div>
+              <div style="font-size:9px;font-weight:600;color:#64748b;"><?= esc($bp['target_region'] ?? '') ?></div>
+            </div>
+            <!-- Date -->
+            <div style="flex-shrink:0;min-width:70px;text-align:right;">
+              <div class="text-secondary" style="font-size:11px;"><?= $postDate ?></div>
+            </div>
+            <!-- Status -->
+            <div style="flex-shrink:0;min-width:60px;text-align:center;">
+              <span class="badge rounded-pill" style="background:<?= $httpOk ? '#d1fae5' : '#fef3c7' ?>;color:<?= $httpOk ? '#065f46' : '#92400e' ?>;font-size:9px;padding:3px 10px;"><?= $httpOk ? 'Live' : 'Pending' ?></span>
+            </div>
+            <!-- Arrow -->
+            <i class="bi bi-chevron-right text-secondary" style="font-size:12px;flex-shrink:0;"></i>
+          </a>
         <?php endforeach; ?>
       </div>
-      <?php if (count($aiAll) > 20): ?>
+      <?php if (count($aiAll) > 30): ?>
         <div class="text-center mt-3">
-          <span class="text-secondary small">Showing first 20 of <?= count($aiAll) ?> posts</span>
+          <span class="text-secondary small">Showing first 30 of <?= count($aiAll) ?> posts</span>
         </div>
       <?php endif; ?>
     <?php else: ?>
