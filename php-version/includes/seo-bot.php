@@ -632,3 +632,66 @@ function seo_bot_latest_run(): ?array
         return $r ?: null;
     } catch (Throwable $e) { return null; }
 }
+
+/* ===================================================================
+ *  SELF-CRON — fire-and-forget tick for every HTTP request.
+ *  --------------------------------------------------------------------
+ *  This is what makes the auto-blogger *truly* automatic: any visitor
+ *  (or an admin opening the dashboard) becomes the heartbeat that
+ *  publishes the daily blog post. No system cron, no cPanel setup,
+ *  no manual button.
+ *
+ *  How it works:
+ *    1) Tiny, single-row settings lookup ("was last run > 24 h ago?").
+ *    2) A lock file in sys_get_temp_dir() prevents two concurrent
+ *       requests from both firing the bot. The lock TTL is 10 minutes
+ *       — long enough for the LLM call, short enough to recover from
+ *       a crashed worker.
+ *    3) After the lock is taken we close the HTTP response to the
+ *       browser (so the visitor sees their page instantly) and run
+ *       the actual SEO bot in the still-alive PHP worker.
+ *
+ *  Safe to call from header.php on EVERY request — the early exit
+ *  branches add ~0.1 ms when the bot isn't due.
+ * =================================================================== */
+function seo_bot_autotick(): void
+{
+    // Don't trip during CLI scripts, the dedicated cron worker, or bots.
+    if (PHP_SAPI === 'cli') return;
+    $script = basename($_SERVER['SCRIPT_NAME'] ?? '');
+    if (in_array($script, ['cron.php'], true)) return;
+    $ua = strtolower((string)($_SERVER['HTTP_USER_AGENT'] ?? ''));
+    if ($ua === '' || preg_match('/bot|crawler|spider|googlebot|bingbot|yandex|baidu|facebookexternalhit|slack|discord|preview|monitor/i', $ua)) return;
+
+    try {
+        $last = setting_get('seo_bot_last_run_at', '');
+        if ($last && (time() - strtotime($last)) < 24 * 3600) return; // not due
+    } catch (Throwable $e) { return; }
+
+    // Single-flight lock so two simultaneous visitors don't both fire.
+    $lockFile = sys_get_temp_dir() . '/maventech_seo_bot.lock';
+    if (is_file($lockFile) && (time() - filemtime($lockFile)) < 600) return; // 10 min TTL
+    if (@file_put_contents($lockFile, (string)time()) === false) return;
+
+    // Defer the actual run until AFTER PHP has finished sending the response
+    // to the browser, so the visitor isn't blocked by the LLM call.
+    register_shutdown_function(static function () use ($lockFile) {
+        // Close the connection to the browser ASAP.
+        ignore_user_abort(true);
+        @set_time_limit(120);
+        if (function_exists('fastcgi_finish_request')) {
+            @fastcgi_finish_request();
+        } else {
+            // For PHP built-in server / non-FPM environments — best-effort flush.
+            while (ob_get_level() > 0) @ob_end_flush();
+            @flush();
+        }
+        try {
+            seo_bot_run_if_due(false);
+        } catch (Throwable $e) {
+            @error_log('[seo-bot autotick] ' . $e->getMessage());
+        } finally {
+            @unlink($lockFile);
+        }
+    });
+}

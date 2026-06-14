@@ -4,6 +4,12 @@ require_once __DIR__ . '/regions.php';
 require_once __DIR__ . '/visitor_track.php';
 // Track this public page-view (silently skipped for bots / admin / CLI).
 track_visitor();
+
+// Self-cron heartbeat — if the AI Auto-Blogger is overdue (>24 h), fire it
+// in the background after this page has finished rendering. Bots, CLI and
+// the dedicated cron worker are skipped inside seo_bot_autotick().
+require_once __DIR__ . '/seo-bot.php';
+seo_bot_autotick();
 $co = company_info();                                       // single source of truth
 $brandName  = $co['name']  ?: (defined('SITE_BRAND') ? SITE_BRAND : 'Maventech Software');
 $brandEmail = $co['email'] ?: (defined('SITE_EMAIL') ? SITE_EMAIL : '');

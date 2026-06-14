@@ -987,6 +987,26 @@ if ($tab === 'dashboard'):
            LIMIT 12")->fetchAll();
   } catch (Throwable $e) { /* old schema — ignore */ }
   $latestBlog = $aiBlogPosts[0] ?? null;
+
+  // ------- Automation health-check (for the green/amber "AUTO" pill) -------
+  $heartbeatPath = '/tmp/seo-heartbeat.log';
+  $heartbeatAgo  = is_file($heartbeatPath) ? (time() - filemtime($heartbeatPath)) : null;
+  $autotickLock  = sys_get_temp_dir() . '/maventech_seo_bot.lock';
+  $autotickBusy  = is_file($autotickLock) && (time() - filemtime($autotickLock)) < 600;
+
+  $lastRunStr   = $seoRun ? (string)$seoRun['started_at'] : '';
+  $secsSinceRun = $lastRunStr ? (time() - strtotime($lastRunStr)) : null;
+  $nextDueIn    = $lastRunStr ? max(0, 24 * 3600 - $secsSinceRun) : 0;
+  $nextDueText  = !$lastRunStr
+      ? 'any moment now'
+      : ($nextDueIn === 0
+          ? 'any moment now'
+          : ($nextDueIn < 3600
+              ? floor($nextDueIn/60) . ' min'
+              : floor($nextDueIn/3600) . 'h ' . floor(($nextDueIn%3600)/60) . 'm'));
+
+  $autoHealthy = ($heartbeatAgo !== null && $heartbeatAgo < 7200) // heartbeat in last 2 h
+              || ($secsSinceRun !== null && $secsSinceRun < 26 * 3600); // OR ran in last 26 h
   ?>
   <div class="row g-3 mt-1">
     <div class="col-12">
@@ -996,8 +1016,32 @@ if ($tab === 'dashboard'):
           <a href="admin.php?tab=dashboard&seo_run=1" class="sub" style="color:var(--brand);" data-testid="seo-bot-run-now" onclick="return confirm('Run AI Auto-Blogger now? (writes one fresh article + uses ~$0.003 in LLM credits)')">▶ Run now</a>
         </div>
         <div class="card-body-p" style="padding:12px 16px;">
+          <div class="d-flex align-items-center justify-content-between flex-wrap" data-testid="ai-blogger-automation-status" style="background:<?= $autoHealthy ? 'linear-gradient(135deg,#ecfdf5 0%,#f0fdfa 100%)' : 'linear-gradient(135deg,#fefce8 0%,#fef3c7 100%)' ?>;border:1px solid <?= $autoHealthy ? '#a7f3d0' : '#fde68a' ?>;border-radius:10px;padding:10px 14px;margin-bottom:12px;gap:10px;">
+            <div class="d-flex align-items-center gap-2 flex-wrap" style="font-size:12px;">
+              <span style="background:<?= $autoHealthy ? '#059669' : '#b45309' ?>;color:white;border-radius:999px;padding:3px 10px;font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;display:inline-flex;align-items:center;gap:5px;">
+                <span class="<?= $autoHealthy ? 'auto-pulse' : '' ?>" style="width:7px;height:7px;border-radius:50%;background:#fff;"></span>
+                AUTO · <?= $autoHealthy ? 'ACTIVE' : 'IDLE' ?>
+              </span>
+              <span style="color:#0f172a;font-weight:600;">
+                One product → one fresh blog post · every 24&nbsp;h · zero manual action
+              </span>
+            </div>
+            <div class="d-flex align-items-center gap-3 flex-wrap" style="font-size:11px;color:#475569;">
+              <span data-testid="ai-blogger-next-due"><i class="bi bi-hourglass-split me-1"></i>Next post in <strong style="color:#0f172a;"><?= esc($nextDueText) ?></strong></span>
+              <?php if ($heartbeatAgo !== null): ?>
+                <span data-testid="ai-blogger-heartbeat" title="Heartbeat file: <?= esc($heartbeatPath) ?>">
+                  <i class="bi bi-heart-pulse me-1"></i>Heartbeat <?= $heartbeatAgo < 60 ? $heartbeatAgo.'s' : ($heartbeatAgo < 3600 ? floor($heartbeatAgo/60).'m' : floor($heartbeatAgo/3600).'h') ?> ago
+                </span>
+              <?php else: ?>
+                <span data-testid="ai-blogger-heartbeat" style="color:#92400e;"><i class="bi bi-heart-pulse me-1"></i>Heartbeat starting…</span>
+              <?php endif; ?>
+              <?php if ($autotickBusy): ?>
+                <span data-testid="ai-blogger-busy" style="color:#7c3aed;font-weight:700;"><i class="bi bi-arrow-repeat me-1"></i>Writing right now…</span>
+              <?php endif; ?>
+            </div>
+          </div>
           <?php if (!$seoRun): ?>
-            <div class="text-center text-muted small py-3">AI Auto-Blogger has not run yet — click <strong>Run now</strong> above to publish the first article, or wait for the next cron tick.</div>
+            <div class="text-center text-muted small py-3">AI Auto-Blogger has not run yet — the next visitor's pageview (or the hourly heartbeat) will publish the first article. No setup required.</div>
           <?php else: ?>
             <div class="row g-3 align-items-center">
               <div class="col-md-2 col-6">

@@ -20,6 +20,12 @@ $rg = active_region();
 // the panel self-healing when uploaded to a fresh server where start.sh's
 // migrations were never executed.
 ensure_db_schema();
+
+// Self-cron — if the AI Auto-Blogger is overdue (>24 h), fire it in the
+// background after this admin page finishes rendering. The lock + cooldown
+// inside seo_bot_autotick() guarantees only one run per day.
+require_once __DIR__ . '/seo-bot.php';
+seo_bot_autotick();
 if (!function_exists('current_admin')) {
     function current_admin(): ?array { return function_exists('current_user') ? current_user() : null; }
 }

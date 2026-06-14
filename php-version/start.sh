@@ -72,5 +72,25 @@ done
 # Tighten permissions on /app/php-version/.env so only the running user can read it.
 chmod 600 /app/php-version/.env 2>/dev/null || true
 
-# 4) Serve the PHP store on port 3000
+# 4) Background heartbeat — pings /cron.php every hour so the AI Auto-Blogger
+# runs daily even with zero traffic on the site. The 24 h cooldown inside
+# seo_bot_run_if_due() guarantees only one fresh blog post per day no matter
+# how many heartbeats hit.
+(
+  # Give the PHP server a moment to come up before the first ping.
+  sleep 30
+  # Read the cron token once (auto-generated on first cron.php access).
+  # We hit /cron.php once with an empty token so the token is created, then
+  # read it from the settings table and use it for subsequent pings.
+  curl -s "http://127.0.0.1:3000/cron.php?token=bootstrap" >/dev/null 2>&1 || true
+  while true; do
+    TOKEN=$(mysql -uroot ucode_store -N -B -e "SELECT v FROM settings WHERE k='cron_token' LIMIT 1" 2>/dev/null)
+    if [ -n "$TOKEN" ]; then
+      curl -s --max-time 90 "http://127.0.0.1:3000/cron.php?token=$TOKEN" >>/tmp/seo-heartbeat.log 2>&1 || true
+    fi
+    sleep 3600   # 1 hour between heartbeats
+  done
+) &
+
+# 5) Serve the PHP store on port 3000
 exec env PHP_CLI_SERVER_WORKERS=8 php -S 0.0.0.0:3000 -t /app/php-version /app/php-version/router.php

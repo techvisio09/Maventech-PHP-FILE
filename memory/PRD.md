@@ -514,3 +514,34 @@ See `/app/memory/test_credentials.md`.
   - `/admin.php?tab=dashboard` HTML contains the new card heading "AI Auto-Blogger", the feed wrapper testid, 4 feed rows (one per AI-published post), and a count badge showing 4.
   - The public `/blog.php` index now lists 54 articles — the 4 fresh AI posts appear at the top (Jun 14, 2026) intermixed cleanly with the seeded posts: *Office 2021 Pro Plus: Is It Right for You?*, *Office 2024 Pro Plus: Worth the Investment?*, *Project 2021: Is It Right for Your Team?*, *Windows 11 Pro: Is It Right for Your Business?* — confirming the round-robin picked four different products from the US catalogue without repeating any.
 
+
+
+## [Jun 2026] AI Auto-Blogger — fully autonomous (3 layers, zero manual setup)
+The user asked for *true* daily auto-publishing with no manual button-clicking. Three layers were added so the bot runs by itself on any hosting (preview pod, cPanel, VPS, Docker):
+
+- **Layer 1 — Self-cron heartbeat on every page hit** (`seo_bot_autotick()` in `includes/seo-bot.php`):
+  - Wired into both `includes/header.php` (public pages) and `includes/admin-shell.php` (admin pages) so EVERY HTTP request from a real human becomes a heartbeat.
+  - Skips CLI, the dedicated `/cron.php` route, and any User-Agent matching `bot|crawler|spider|googlebot|bingbot|yandex|baidu|facebookexternalhit|slack|discord|preview|monitor` — never wastes an LLM call on a crawler.
+  - Cheap early-exit: one settings lookup → `if (now - last_run < 24h) return;` (~0.1 ms).
+  - Single-flight lock at `sys_get_temp_dir() . '/maventech_seo_bot.lock'` (10 min TTL) prevents two simultaneous visitors from both firing the bot.
+  - Uses `register_shutdown_function` + `fastcgi_finish_request` (FPM) / output-buffer flush (built-in server) to **detach from the browser before the LLM call** — visitor's page renders instantly; the bot writes the blog post in the background.
+- **Layer 2 — Background heartbeat in `start.sh`** (preview pod / always-on VPS):
+  - Spawns a `while true; sleep 3600; curl /cron.php?token=… ; done &` daemon after the PHP server starts.
+  - Reads the auto-generated `cron_token` from the `settings` table so no `.env` setup needed.
+  - Logs to `/tmp/seo-heartbeat.log` (used by the dashboard to display the heartbeat freshness badge).
+- **Layer 3 — Existing `/cron.php?token=…`** still works for traditional cPanel-style external cron, so the user can also wire up a `* * * * *` cron line if they prefer.
+
+### Automation Status banner (admin.php dashboard)
+A new always-visible banner at the top of the AI Auto-Blogger card surfaces the automation state:
+- Green pill `AUTO · ACTIVE` (or amber `AUTO · IDLE` if neither a heartbeat nor a run has happened in the last few hours).  Uses the `.auto-pulse` CSS keyframe added to `assets/css/style.css`.
+- Caption: *"One product → one fresh blog post · every 24 h · zero manual action"*.
+- Right side: `Next post in 23h 51m` countdown · `Heartbeat 37s ago` (from `/tmp/seo-heartbeat.log` mtime) · optional `Writing right now…` indicator when the autotick lock is held.
+- Test ids: `ai-blogger-automation-status`, `ai-blogger-next-due`, `ai-blogger-heartbeat`, `ai-blogger-busy`.
+
+### Verified end-to-end
+- Restarted `supervisorctl restart frontend` → `/tmp/seo-heartbeat.log` was written within 30 s and contained `cron.php: processed=0` + `seo-bot: skipped — last run 0.1h ago` (cooldown respected).
+- Backdated `seo_bot_last_run_at` to 25 h ago → a single `curl /index.php` with a real-browser UA → 25 s later a **brand-new 5th AI post was live**: *"Microsoft Visio 2021 Professional: Is It Right for Your Team?"* (id `ai-20260614-microsoft-visio-2021-professional-windows-pc`), proving the visitor-driven self-cron works.
+- Second hit immediately after → no duplicate (cooldown enforced).
+- Hit with `User-Agent: Googlebot/2.1` → autotick early-exits, no LLM call, no new row.
+- Public `/blog.php` index now shows 55 articles with all 5 AI posts at the top (screenshot captured).
+

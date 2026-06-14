@@ -1684,3 +1684,11 @@ nav .bi,
 /* Toasts / alerts: lead-icon breathing room */
 .alert .bi,
 .toast .bi { margin-right: .55rem; }
+
+/* AI Auto-Blogger automation pill — green pulse dot */
+.auto-pulse { animation: auto-pulse-anim 1.6s ease-out infinite; box-shadow: 0 0 0 0 rgba(255,255,255,0.85); }
+@keyframes auto-pulse-anim {
+  0%   { box-shadow: 0 0 0 0   rgba(255,255,255,0.85); }
+  70%  { box-shadow: 0 0 0 8px rgba(255,255,255,0);    }
+  100% { box-shadow: 0 0 0 0   rgba(255,255,255,0);    }
+}
