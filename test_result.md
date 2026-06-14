@@ -101,3 +101,77 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: |
+  Fix multiple issues: 1) Customer reviews from email go to testimonials but not reviews page,
+  2) Receipt QR code not auto-looking up orders, 3) AI Auto-Blogger not working (no LLM key),
+  4) Simplify admin AI blogger panel with API key input fields
+
+backend:
+  - task: "QR Code auto-lookup on order-history.php"
+    implemented: true
+    working: true
+    file: "php-version/order-history.php"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Added GET param auto-processing so QR code scans auto-lookup orders without requiring manual input"
+
+  - task: "Customer reviews merged from customer_reviews table into reviews.php"
+    implemented: true
+    working: true
+    file: "php-version/reviews.php"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Added UNION ALL query merging reviews and customer_reviews tables with collation fix"
+
+  - task: "AI Auto-Blogger LLM key configuration"
+    implemented: true
+    working: true
+    file: "php-version/.env, php-version/config.php"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Configured EMERGENT_LLM_KEY in .env file; verified AI generates and publishes blog posts"
+
+  - task: "AI Auto-Blogger admin panel simplified with API key fields"
+    implemented: true
+    working: true
+    file: "php-version/admin.php"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Redesigned entire AI blogger section: user-friendly UI, API key input fields with Save button, one-click quick actions, progress stats, search engine submission"
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "QR Code auto-lookup"
+    - "Customer reviews merge"
+    - "AI Auto-Blogger functionality"
+    - "Simplified admin panel"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: "All 4 major fixes implemented and verified: QR code auto-lookup, reviews merge, LLM key config, simplified admin UI"

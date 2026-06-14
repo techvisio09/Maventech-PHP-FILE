@@ -531,6 +531,44 @@ if ($tab === 'ai-blogger') {
     require_once __DIR__ . '/includes/ai-citation-tracker.php';
     require_once __DIR__ . '/includes/dmca-watchdog.php';
 
+    // ----- Save API keys from the simplified admin panel -----
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['save_ai_keys'])) {
+        $newLlmKey = trim($_POST['llm_api_key'] ?? '');
+        $newGscKey = trim($_POST['google_search_console'] ?? '');
+        $newBingKey = trim($_POST['bing_webmaster'] ?? '');
+        $updated = [];
+        if ($newLlmKey !== '') {
+            // Write to the .env file so it persists across restarts
+            $envPath = __DIR__ . '/.env';
+            $envContent = '';
+            if (is_file($envPath)) {
+                $envContent = file_get_contents($envPath);
+                // Remove old EMERGENT_LLM_KEY line
+                $envContent = preg_replace('/^EMERGENT_LLM_KEY=.*$/m', '', $envContent);
+                $envContent = trim($envContent);
+            }
+            $envContent .= "\nEMERGENT_LLM_KEY=" . $newLlmKey . "\n";
+            file_put_contents($envPath, $envContent);
+            putenv('EMERGENT_LLM_KEY=' . $newLlmKey);
+            // Also save in settings for display
+            setting_set('ai_blogger_llm_key', $newLlmKey);
+            $updated[] = 'AI Key';
+        }
+        if ($newGscKey !== '') {
+            setting_set('google_site_verification_token', $newGscKey);
+            $updated[] = 'Google Search Console';
+        }
+        if ($newBingKey !== '') {
+            setting_set('bing_site_verification_token', $newBingKey);
+            $updated[] = 'Bing Webmaster';
+        }
+        $_SESSION['seo_bot_flash'] = $updated
+            ? 'Updated: ' . implode(', ', $updated) . '. Changes take effect immediately.'
+            : 'No changes made.';
+        header('Location: admin.php?tab=ai-blogger');
+        exit;
+    }
+
     // ----- DMCA finding status updates (mark dismissed / reported / taken-down) -----
     if (!empty($_GET['dmca_set']) && !empty($_GET['id'])) {
         if (dmca_set_status((int)$_GET['id'], (string)$_GET['dmca_set'])) {
@@ -1870,70 +1908,28 @@ elseif ($tab === 'ai-blogger'):
         $recentRuns = $pdo->query("SELECT * FROM seo_runs ORDER BY id DESC LIMIT 8")->fetchAll();
     } catch (Throwable $e) {}
 ?>
-  <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
-    <div>
-      <h1 class="h4 fw-bold mb-1" data-testid="ai-blogger-page-title"><i class="bi bi-robot me-1 text-primary"></i> AI Auto-Blogger</h1>
-      <small class="text-muted">Six products picked every 24&nbsp;h <strong>for each country (US · UK · AU · CA)</strong> = 24 fresh blog posts daily · Claude Haiku writes each one in the local currency &amp; voice · published instantly to <code>/blog.php</code> · auto-pinged to Google, Bing, IndexNow, listed in <code>/llms.txt</code> + <code>/ai.txt</code>. Each post is verified (HTTP 200 + IndexNow + backlink count) the moment it's written.</small>
-    </div>
-    <div class="d-flex gap-2 flex-wrap">
-      <a href="admin.php?tab=ai-blogger&run_underserved_post=1" class="btn btn-outline-success rounded-pill px-3" data-testid="ai-blogger-run-underserved" onclick="return confirm('Pick the next UNDER-SERVED market (fewest posts in last 24h) and publish ONE blog post right now?')" title="Picks the market with the fewest posts in the last 24h (US/UK/AU/CA) and publishes one blog instantly. Use when you don't want to wait for the daily cron."><i class="bi bi-lightning-charge me-1"></i>Force-generate one post now</a>
-      <a href="admin.php?tab=ai-blogger&run_random_post=1" class="btn btn-outline-primary rounded-pill px-3" data-testid="ai-blogger-run-random" onclick="return confirm('Pick a RANDOM product + RANDOM country and publish ONE blog post right now (with instant IndexNow push)?')" title="Picks one random product + random country, writes a blog and indexes it instantly. Does not affect the daily batch."><i class="bi bi-shuffle me-1"></i>Publish a random post</a>
-      <a href="admin.php?tab=ai-blogger&run_trends_article=1" class="btn btn-outline-primary rounded-pill px-3" data-testid="ai-blogger-run-trends" onclick="return confirm('Publish today\'s editorial trends article? Picks one product and writes a 700-1000 word opinion piece about 2026 trends in its category.')" title="Daily featured editorial · 700-1000 words about 2026 industry trends · separate from the 24-post regional batch"><i class="bi bi-newspaper me-1"></i>Publish trends article</a>
-      <a href="admin.php?tab=ai-blogger&seo_run=1" class="btn btn-primary rounded-pill px-4" data-testid="ai-blogger-run-now" onclick="return confirm('Publish today\'s full batch — 6 posts × 4 countries = 24 articles? (~$0.08 in LLM credits, ~3 minutes)')"><i class="bi bi-play-fill me-1"></i>Publish today\'s batch now</a>
-    </div>
-  </div>
-
   <?php
-    // Daily cap & external-cron URL panel — surfaced just under the header
-    // so the operator sees today's progress vs the 24-post cap and can grab
-    // the secret cron URL for shared-hosting external schedulers.
-    $dailyCap   = 24;                       // 6 posts × 4 countries
-    $todayCount = (int)$mon['posts_24h'];   // already computed above
-    $pct        = max(0, min(100, (int)round($todayCount / $dailyCap * 100)));
-    $cronToken  = seo_bot_cron_token();
-    $cronUrl    = rtrim(site_url(), '/') . '/cron/seo-daily.php?token=' . rawurlencode($cronToken);
+    // Determine if LLM key is configured
+    $currentLlmKey = defined('OPENAI_API_KEY') && OPENAI_API_KEY !== '' ? OPENAI_API_KEY : '';
+    $savedLlmKey   = setting_get('ai_blogger_llm_key', '');
+    $hasLlmKey     = ($currentLlmKey !== '' || $savedLlmKey !== '');
+    $maskedKey      = $hasLlmKey ? (substr($currentLlmKey ?: $savedLlmKey, 0, 12) . '••••••••') : '';
+    $gscToken      = setting_get('google_site_verification_token', defined('GOOGLE_SITE_VERIFICATION') ? GOOGLE_SITE_VERIFICATION : '');
+    $bingToken     = setting_get('bing_site_verification_token', defined('BING_SITE_VERIFICATION') ? BING_SITE_VERIFICATION : '');
   ?>
-  <div class="card-e mb-3" data-testid="ai-blogger-manual-controls" style="background:linear-gradient(135deg,#f8fafc 0%,#f1f5f9 100%);border:1px solid #e2e8f0;padding:14px 16px;">
-    <div class="row g-3 align-items-center">
-      <!-- Today's count vs cap -->
-      <div class="col-md-4">
-        <div class="text-uppercase small text-secondary" style="font-weight:700;letter-spacing:1px;font-size:10px;">Today's count</div>
-        <div class="d-flex align-items-baseline gap-2 mt-1">
-          <span class="fw-bold" data-testid="ai-blogger-daily-count" style="font-size:24px;color:<?= $todayCount >= $dailyCap ? '#059669' : '#0f172a' ?>;"><?= $todayCount ?></span>
-          <span class="text-secondary" style="font-size:13px;font-weight:600;">/ <?= $dailyCap ?> daily cap</span>
-        </div>
-        <div class="progress mt-2" style="height:6px;border-radius:999px;background:#e2e8f0;">
-          <div class="progress-bar" role="progressbar" style="width:<?= $pct ?>%;background:linear-gradient(90deg,#10b981 0%,#34d399 100%);" aria-valuenow="<?= $pct ?>" aria-valuemin="0" aria-valuemax="100"></div>
-        </div>
-        <div class="text-secondary small mt-1"><?= $pct ?>% of today's target reached</div>
-      </div>
-
-      <!-- External cron URL -->
-      <div class="col-md-8" data-testid="ai-blogger-cron-url-panel">
-        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-          <div class="text-uppercase small text-secondary" style="font-weight:700;letter-spacing:1px;font-size:10px;"><i class="bi bi-shield-lock me-1"></i>External cron URL <span class="text-warning ms-1" style="font-weight:600;font-size:10px;">keep secret</span></div>
-          <a href="admin.php?tab=ai-blogger&rotate_cron_token=1" class="btn btn-sm btn-outline-secondary rounded-pill" data-testid="ai-blogger-rotate-token" onclick="return confirm('Rotate the external-cron token? Any external schedulers using the current URL will stop working until you update them.')"><i class="bi bi-arrow-repeat me-1"></i>Rotate token</a>
-        </div>
-        <div class="text-secondary small mt-1">For shared-hosting deployments — point any external scheduler at this URL (token-authenticated):</div>
-        <div class="input-group input-group-sm mt-2">
-          <input type="text" class="form-control" data-testid="ai-blogger-cron-url" id="ai-blogger-cron-url-input" value="<?= esc($cronUrl) ?>" readonly style="font-family:monospace;font-size:11.5px;background:#fff;border-color:#cbd5e1;">
-          <button class="btn btn-outline-primary" type="button" data-testid="ai-blogger-copy-cron-url" onclick="(function(){var i=document.getElementById('ai-blogger-cron-url-input');i.select();document.execCommand('copy');this.innerHTML='<i class=\'bi bi-check-lg me-1\'></i>Copied';setTimeout(()=>{this.innerHTML='<i class=\'bi bi-clipboard me-1\'></i>Copy';},1500);}).call(this);"><i class="bi bi-clipboard me-1"></i>Copy</button>
-        </div>
-        <details class="mt-2">
-          <summary class="small text-secondary" style="cursor:pointer;">Or use a server cron line</summary>
-          <pre class="small text-body bg-white p-2 mt-2 rounded border" style="font-size:11px;overflow-x:auto;">0 * * * * curl -fsS "<?= esc($cronUrl) ?>" &gt;/dev/null 2&gt;&amp;1</pre>
-        </details>
-      </div>
-    </div>
+  <!-- ====== SIMPLIFIED AI AUTO-BLOGGER PANEL ====== -->
+  <div class="mb-3">
+    <h1 class="h4 fw-bold mb-1" data-testid="ai-blogger-page-title"><i class="bi bi-robot me-1 text-primary"></i> AI Auto-Blogger</h1>
+    <p class="text-secondary mb-0" style="font-size:14px;">Automatically writes and publishes blog posts about your products for US, UK, Australia & Canada markets. Posts go live on your website instantly.</p>
   </div>
 
   <?php if (!empty($_SESSION['seo_bot_flash'])): ?>
-    <div class="alert alert-info" data-testid="ai-blogger-flash" style="border-radius:12px;"><i class="bi bi-robot me-1"></i><?= esc($_SESSION['seo_bot_flash']) ?></div>
+    <div class="alert alert-info" data-testid="ai-blogger-flash" style="border-radius:12px;"><i class="bi bi-check-circle me-1"></i><?= esc($_SESSION['seo_bot_flash']) ?></div>
     <?php unset($_SESSION['seo_bot_flash']); ?>
   <?php endif; ?>
   <?php if (!empty($_SESSION['seo_bot_blog_flash'])): $bf = $_SESSION['seo_bot_blog_flash']; $bfPosts = $bf['posts'] ?? []; ?>
     <div class="alert" data-testid="ai-blogger-blog-flash" style="margin:0 0 14px;background:linear-gradient(135deg,#eef2ff 0%,#fdf4ff 100%);border:1px solid #c7d2fe;color:#1e293b;border-radius:12px;padding:14px 18px;">
-      <div style="font-weight:700;color:#4338ca;font-size:12px;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;"><i class="bi bi-stars me-1"></i>AI just published <?= count($bfPosts) ?> new blog post<?= count($bfPosts) === 1 ? '' : 's' ?></div>
+      <div style="font-weight:700;color:#4338ca;font-size:13px;margin-bottom:8px;"><i class="bi bi-stars me-1"></i>New blog post<?= count($bfPosts) === 1 ? '' : 's' ?> published!</div>
       <div class="row g-2">
         <?php foreach ($bfPosts as $p):
           $title = $p['blog_post_title'] ?? '';
@@ -1945,8 +1941,8 @@ elseif ($tab === 'ai-blogger'):
             <a href="<?= esc($url) ?>" target="_blank" rel="noopener" class="d-flex align-items-center gap-2 text-decoration-none" style="background:rgba(255,255,255,0.7);border-radius:8px;padding:8px 10px;">
               <?php if ($img): ?><img src="<?= esc($img) ?>" alt="" style="width:36px;height:36px;object-fit:cover;border-radius:6px;flex-shrink:0;"><?php endif; ?>
               <div style="flex:1;min-width:0;">
-                <div class="fw-bold text-body" style="font-size:12.5px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= esc($title) ?></div>
-                <?php if ($prod): ?><div class="text-secondary" style="font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><i class="bi bi-box-seam me-1"></i><?= esc($prod) ?></div><?php endif; ?>
+                <div class="fw-bold text-body" style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= esc($title) ?></div>
+                <?php if ($prod): ?><div class="text-secondary" style="font-size:11px;"><i class="bi bi-box-seam me-1"></i><?= esc($prod) ?></div><?php endif; ?>
               </div>
               <i class="bi bi-box-arrow-up-right text-primary"></i>
             </a>
@@ -1957,652 +1953,324 @@ elseif ($tab === 'ai-blogger'):
     <?php unset($_SESSION['seo_bot_blog_flash']); ?>
   <?php endif; ?>
 
-  <!-- Automation Status Banner -->
-  <div class="card-e" data-testid="ai-blogger-automation-status" style="background:<?= $autoHealthy ? 'linear-gradient(135deg,#ecfdf5 0%,#f0fdfa 100%)' : 'linear-gradient(135deg,#fefce8 0%,#fef3c7 100%)' ?>;border:1px solid <?= $autoHealthy ? '#a7f3d0' : '#fde68a' ?>;padding:16px 18px;margin-bottom:14px;">
-    <div class="d-flex align-items-center justify-content-between flex-wrap" style="gap:14px;">
-      <div class="d-flex align-items-center gap-3 flex-wrap">
-        <span style="background:<?= $autoHealthy ? '#059669' : '#b45309' ?>;color:white;border-radius:999px;padding:5px 14px;font-size:11px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;display:inline-flex;align-items:center;gap:7px;">
-          <span class="<?= $autoHealthy ? 'auto-pulse' : '' ?>" style="width:8px;height:8px;border-radius:50%;background:#fff;"></span>
-          AUTO · <?= $autoHealthy ? 'ACTIVE' : 'IDLE' ?>
-        </span>
-        <div>
-          <div style="color:#0f172a;font-weight:700;font-size:14px;">6 posts × 4 countries (US · UK · AU · CA) = 24 fresh blog posts every 24 h</div>
-          <div style="color:#475569;font-size:12px;margin-top:2px;">Zero manual action. Self-cron fires on visitor pageviews after cooldown · hourly heartbeat as a backup · each post verified for HTTP 200 + IndexNow push + internal-backlink count the moment it's written.</div>
-        </div>
-      </div>
-      <div class="d-flex align-items-center gap-3 flex-wrap" style="font-size:12px;color:#334155;">
-        <div style="text-align:right;">
-          <div class="text-uppercase small text-secondary" style="font-weight:700;letter-spacing:1px;font-size:10px;">Next batch in</div>
-          <div class="fw-bold" data-testid="ai-blogger-next-due" style="color:#0f172a;"><?= esc($nextDueText) ?></div>
-        </div>
-        <div style="text-align:right;">
-          <div class="text-uppercase small text-secondary" style="font-weight:700;letter-spacing:1px;font-size:10px;">Heartbeat</div>
-          <div class="fw-bold" data-testid="ai-blogger-heartbeat" style="color:<?= $heartbeatAgo !== null && $heartbeatAgo < 7200 ? '#059669' : '#92400e' ?>;">
-            <?= $heartbeatAgo !== null ? ($heartbeatAgo < 60 ? $heartbeatAgo.'s ago' : ($heartbeatAgo < 3600 ? floor($heartbeatAgo/60).'m ago' : floor($heartbeatAgo/3600).'h ago')) : 'Starting…' ?>
-          </div>
-        </div>
-        <?php if ($autotickBusy): ?>
-          <div data-testid="ai-blogger-busy" style="background:#ede9fe;color:#7c3aed;padding:6px 12px;border-radius:8px;font-weight:700;font-size:12px;"><i class="bi bi-arrow-repeat me-1"></i>Writing right now…</div>
-        <?php endif; ?>
-      </div>
-    </div>
-  </div>
-
-  <!-- Stat Strip -->
-  <div class="row g-3 mb-3">
-    <div class="col-md-3 col-6">
-      <div class="card-e" style="padding:14px 16px;">
-        <div class="text-uppercase small text-secondary" style="font-weight:700;letter-spacing:1px;font-size:10px;">Total AI posts published</div>
-        <div class="fw-bold mt-1" data-testid="ai-blogger-stat-total" style="font-size:24px;color:#0f172a;"><?= $totalAi ?></div>
-        <div class="text-secondary small">of <?= $totalAllPosts ?> total articles on /blog</div>
-      </div>
-    </div>
-    <div class="col-md-3 col-6">
-      <div class="card-e" style="padding:14px 16px;">
-        <div class="text-uppercase small text-secondary" style="font-weight:700;letter-spacing:1px;font-size:10px;">LLM tokens used</div>
-        <div class="fw-bold mt-1" style="font-size:24px;color:#0f172a;"><?= number_format($seoTokens) ?></div>
-        <div class="text-secondary small">~$<?= number_format($seoTokens / 1000 * 0.001, 3) ?> latest run · Claude Haiku 4.5</div>
-      </div>
-    </div>
-    <div class="col-md-3 col-6">
-      <div class="card-e" style="padding:14px 16px;">
-        <div class="text-uppercase small text-secondary" style="font-weight:700;letter-spacing:1px;font-size:10px;">Markets covered</div>
-        <div class="fw-bold mt-1" style="font-size:18px;color:#0f172a;">🇺🇸 🇬🇧 🇦🇺 🇨🇦</div>
-        <div class="text-secondary small">US · UK · Australia · Canada</div>
-      </div>
-    </div>
-    <div class="col-md-3 col-6">
-      <div class="card-e" style="padding:14px 16px;">
-        <div class="text-uppercase small text-secondary" style="font-weight:700;letter-spacing:1px;font-size:10px;">Next product up</div>
-        <?php if ($nextProduct): ?>
-          <div class="fw-bold mt-1" data-testid="ai-blogger-next-product" style="font-size:13px;color:#0f172a;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= esc($nextProduct['name']) ?></div>
-          <div class="text-secondary small"><?= esc($nextProduct['region']) ?> · round-robin queue</div>
-        <?php else: ?>
-          <div class="fw-bold mt-1" style="font-size:13px;color:#64748b;">No active product available</div>
-        <?php endif; ?>
-      </div>
-    </div>
-  </div>
-
-  <!-- Go-Live Checklist -->
-  <?php
-    // Compute live readiness signals so the user can see at a glance what's
-    // working and what still needs their attention before / after going live.
-    $siteUrl = rtrim(site_url(), '/');
-    $siteHost = parse_url($siteUrl, PHP_URL_HOST);
-    $isOnPreviewDomain = (bool)preg_match('/(preview\.emergentagent|\.emergent\.host|localhost|127\.0\.0\.1)/i', (string)$siteHost);
-
-    $checks = [];
-    // 1) Production domain
-    $checks[] = [
-        'ok'    => !$isOnPreviewDomain,
-        'label' => 'Production domain',
-        'value' => $siteHost ?: '—',
-        'help'  => $isOnPreviewDomain
-            ? 'Currently on the preview host. When you deploy to your real domain, update <code>SITE_URL</code> in <code>config.php</code> (or the <code>SITE_URL</code> env var). All sitemap / robots / canonical URLs auto-resolve from there — no other find-and-replace needed.'
-            : 'Live domain detected — sitemap, robots, ai.txt, llms.txt and canonical tags all resolve correctly.',
-    ];
-    // 2) Sitemap reachable
-    $sitemapOk = false;
-    try {
-        $ch = curl_init($siteUrl . '/sitemap.xml');
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 4, CURLOPT_NOBODY => true]);
-        curl_exec($ch);
-        $sitemapOk = (curl_getinfo($ch, CURLINFO_RESPONSE_CODE) === 200);
-        curl_close($ch);
-    } catch (Throwable $e) {}
-    $checks[] = [
-        'ok'    => $sitemapOk,
-        'label' => 'XML sitemap',
-        'value' => $siteUrl . '/sitemap.xml',
-        'help'  => $sitemapOk
-            ? 'Sitemap responds with HTTP 200 and lists every active product + category + blog post. Submit this URL to Google Search Console and Bing Webmaster Tools.'
-            : 'Sitemap not responding 200 — check that <code>router.php</code> (or .htaccess) maps <code>/sitemap.xml</code> to <code>sitemap-xml.php</code>.',
-    ];
-    // 3) Robots.txt dynamic
-    $robotsOk = false; $robotsBody = '';
-    try {
-        $rb = @file_get_contents($siteUrl . '/robots.txt');
-        if ($rb !== false) { $robotsBody = $rb; $robotsOk = stripos($rb, 'Sitemap:') !== false; }
-    } catch (Throwable $e) {}
-    $checks[] = [
-        'ok'    => $robotsOk && !$isOnPreviewDomain ? true : ($robotsOk && strpos($robotsBody, $siteHost) !== false),
-        'label' => 'robots.txt is dynamic',
-        'value' => $robotsOk ? 'Auto-generated · Sitemap line resolves to ' . $siteHost : 'Missing or static',
-        'help'  => 'Served by <code>robots-txt.php</code>, not a static file — so when you switch domains the Sitemap: URLs update automatically.',
-    ];
-    // 4) ai.txt dynamic
-    $aiTxtOk = false;
-    try {
-        $rb = @file_get_contents($siteUrl . '/ai.txt');
-        if ($rb !== false && stripos($rb, 'Citation-Preference') !== false) $aiTxtOk = true;
-    } catch (Throwable $e) {}
-    $checks[] = [
-        'ok'    => $aiTxtOk,
-        'label' => 'ai.txt manifest',
-        'value' => $siteUrl . '/ai.txt',
-        'help'  => 'Citation + training-use preferences for ChatGPT / Claude / Perplexity / Gemini — respected by every modern AI crawler.',
-    ];
-    // 5) llms.txt
-    $llmsOk = false;
-    try {
-        $rb = @file_get_contents($siteUrl . '/llms.txt');
-        if ($rb !== false && stripos($rb, 'Live product catalogue') !== false) $llmsOk = true;
-    } catch (Throwable $e) {}
-    $checks[] = [
-        'ok'    => $llmsOk,
-        'label' => '/llms.txt live catalogue',
-        'value' => $siteUrl . '/llms.txt',
-        'help'  => 'Live product list + AI summaries rebuilt on every request — what ChatGPT / Perplexity read when summarising your shop.',
-    ];
-    // 6) Merchant feed
-    $feedOk = false;
-    try {
-        $ch = curl_init($siteUrl . '/merchant-feed.xml');
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 4, CURLOPT_NOBODY => true]);
-        curl_exec($ch);
-        $feedOk = (curl_getinfo($ch, CURLINFO_RESPONSE_CODE) === 200);
-        curl_close($ch);
-    } catch (Throwable $e) {}
-    $checks[] = [
-        'ok'    => $feedOk,
-        'label' => 'Google / Bing Shopping feed',
-        'value' => $siteUrl . '/merchant-feed.xml',
-        'help'  => 'Submit this URL once inside Google Merchant Center → "Add product feed" so your catalog appears in Google Shopping carousels.',
-    ];
-    // 7) Verification meta tags
-    $gv  = defined('GOOGLE_SITE_VERIFICATION') ? GOOGLE_SITE_VERIFICATION : '';
-    $bv  = defined('BING_SITE_VERIFICATION')   ? BING_SITE_VERIFICATION   : '';
-    $yv  = defined('YANDEX_SITE_VERIFICATION') ? YANDEX_SITE_VERIFICATION : '';
-    $checks[] = [
-        'ok'    => $gv !== '',
-        'label' => 'Google Search Console verified',
-        'value' => $gv ? '<code>google-site-verification</code> meta tag set' : 'Add token from search.google.com/search-console',
-        'help'  => 'Once verified you can submit sitemap + view Gemini / Discover impressions. Token goes into <code>config.php</code> as <code>GOOGLE_SITE_VERIFICATION</code> or env var.',
-    ];
-    $checks[] = [
-        'ok'    => $bv !== '',
-        'label' => 'Bing Webmaster verified',
-        'value' => $bv ? '<code>msvalidate.01</code> meta tag set' : 'Add token from bing.com/webmasters',
-        'help'  => 'Verifying Bing unlocks indexing for <strong>Microsoft Copilot</strong> and <strong>ChatGPT-via-Bing</strong>. Token goes into <code>config.php</code> as <code>BING_SITE_VERIFICATION</code>.',
-    ];
-    $checks[] = [
-        'ok'    => $yv !== '',
-        'label' => 'Yandex Webmaster verified (optional)',
-        'value' => $yv ? '<code>yandex-verification</code> meta tag set' : 'Optional — useful for non-English markets',
-        'help'  => 'Yandex feeds several open-source AI models. Token goes into <code>config.php</code> as <code>YANDEX_SITE_VERIFICATION</code>.',
-    ];
-    // 8) Automation heartbeat (re-uses earlier check)
-    $checks[] = [
-        'ok'    => $autoHealthy,
-        'label' => 'Daily auto-publish heartbeat',
-        'value' => $heartbeatAgo !== null ? ('Last ping ' . ($heartbeatAgo < 60 ? $heartbeatAgo.'s' : ($heartbeatAgo < 3600 ? floor($heartbeatAgo/60).'m' : floor($heartbeatAgo/3600).'h')) . ' ago') : 'Background poller not started yet',
-        'help'  => 'Three independent triggers (visitor pageviews · hourly poller · /cron.php) keep the bot running 24/7.',
-    ];
-    // 9) At least one AI blog post
-    $checks[] = [
-        'ok'    => $totalAi > 0,
-        'label' => 'AI blog posts published',
-        'value' => $totalAi . ' post' . ($totalAi === 1 ? '' : 's') . ' on /blog',
-        'help'  => 'New posts ship one per 24 h — auto-pinged to Google + Bing + IndexNow so they appear in search within minutes.',
-    ];
-
-    $okCount = count(array_filter($checks, fn($c) => $c['ok']));
-    $totalCheck = count($checks);
-    $pct = (int)round(($okCount / max(1, $totalCheck)) * 100);
-    $hostBadgeColor = $isOnPreviewDomain ? '#b45309' : '#059669';
-    $hostBadgeText  = $isOnPreviewDomain ? 'PREVIEW MODE' : 'LIVE';
-  ?>
-  <div class="card-e mb-3" data-testid="go-live-checklist">
-    <div class="card-head">
-      <div class="ttl"><i class="bi bi-rocket-takeoff"></i> Go-Live Checklist <span class="sub ms-2">make sure everything keeps working when you deploy</span></div>
-      <div class="d-flex align-items-center gap-2">
-        <span style="background:<?= $hostBadgeColor ?>;color:white;border-radius:999px;padding:3px 10px;font-size:10px;font-weight:700;letter-spacing:0.5px;"><?= esc($hostBadgeText) ?></span>
-        <span class="sub" style="color:<?= $okCount === $totalCheck ? '#059669' : '#b45309' ?>;font-weight:700;" data-testid="go-live-score"><?= $okCount ?>/<?= $totalCheck ?> ready (<?= $pct ?>%)</span>
-      </div>
-    </div>
-    <div class="card-body-p" style="padding:0;">
-      <div style="height:6px;background:#f1f5f9;">
-        <div style="height:6px;background:linear-gradient(90deg,#10b981 0%,#059669 100%);width:<?= $pct ?>%;transition:width .4s;"></div>
-      </div>
-      <div class="tbl-elegant" style="border:none;border-radius:0;">
-        <table class="table mb-0">
-          <tbody>
-            <?php foreach ($checks as $i => $c): ?>
-              <tr data-testid="checklist-row-<?= $i ?>">
-                <td style="width:46px;text-align:center;vertical-align:top;padding-top:14px;">
-                  <?php if ($c['ok']): ?>
-                    <i class="bi bi-check-circle-fill" style="font-size:22px;color:#059669;"></i>
-                  <?php else: ?>
-                    <i class="bi bi-exclamation-triangle-fill" style="font-size:22px;color:#d97706;"></i>
-                  <?php endif; ?>
-                </td>
-                <td style="padding:12px 14px;">
-                  <div class="fw-bold" style="font-size:13.5px;color:#0f172a;"><?= esc($c['label']) ?></div>
-                  <div class="text-secondary" style="font-size:12px;margin-top:2px;"><?= $c['value'] /* contains <code> tags */ ?></div>
-                  <div class="text-secondary" style="font-size:11.5px;margin-top:4px;line-height:1.45;"><?= $c['help'] /* trusted HTML — author-controlled */ ?></div>
-                </td>
-              </tr>
-            <?php endforeach; ?>
-          </tbody>
-        </table>
-      </div>
-      <div style="padding:12px 16px;background:#f8fafc;border-top:1px solid #e5e7eb;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-        <a href="admin.php?tab=ai-blogger&submit_sitemaps=1" class="btn btn-sm btn-primary rounded-pill px-3" data-testid="checklist-submit-sitemaps" onclick="return confirm('Ping Google, Bing and IndexNow with the current sitemap right now?')"><i class="bi bi-send-check me-1"></i>Submit sitemap to Google + Bing now</a>
-        <span style="width:1px;height:22px;background:#e5e7eb;"></span>
-        <a href="https://search.google.com/search-console" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary rounded-pill px-3"><i class="bi bi-google me-1"></i>Google Search Console</a>
-        <a href="https://www.bing.com/webmasters" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary rounded-pill px-3"><i class="bi bi-microsoft me-1"></i>Bing Webmaster Tools</a>
-        <a href="https://merchants.google.com" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary rounded-pill px-3"><i class="bi bi-shop me-1"></i>Google Merchant Center</a>
-        <a href="https://yandex.com/support/webmaster/" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary rounded-pill px-3">Yandex</a>
-        <a href="<?= esc($siteUrl) ?>/robots.txt" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary rounded-pill px-3" data-testid="checklist-view-robots">View /robots.txt</a>
-        <a href="<?= esc($siteUrl) ?>/ai.txt" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary rounded-pill px-3" data-testid="checklist-view-aitxt">View /ai.txt</a>
-        <a href="<?= esc($siteUrl) ?>/llms.txt" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary rounded-pill px-3">View /llms.txt</a>
-      </div>
-    </div>
-  </div>
-
-  <!-- AI Discoverability Panel -->
-  <div class="card-e mb-3" data-testid="ai-discoverability-panel">
-    <div class="card-head">
-      <div class="ttl"><i class="bi bi-broadcast"></i> AI Discoverability <span class="sub ms-2">where this site is being indexed for AI search</span></div>
-      <span class="sub" style="color:#059669;font-weight:700;"><i class="bi bi-shield-check"></i> Allow-listed for 22 AI crawlers</span>
-    </div>
-    <div class="card-body-p" style="padding:14px 18px;">
+  <!-- ====== 1. API KEY SETTINGS ====== -->
+  <div class="card-e mb-3" style="border:1px solid #e2e8f0;border-radius:14px;padding:20px;">
+    <h5 class="fw-bold mb-3" style="font-size:15px;"><i class="bi bi-key-fill me-2 text-warning"></i>API Keys & Settings</h5>
+    <p class="text-secondary small mb-3">Enter your API keys below. The AI blogger needs an AI key to write posts. Google & Bing keys help your posts appear in search faster.</p>
+    <form method="post" action="admin.php?tab=ai-blogger">
+      <input type="hidden" name="save_ai_keys" value="1">
       <div class="row g-3">
-        <?php
-          $platforms = [
-            ['ChatGPT (OpenAI)',     'GPTBot, OAI-SearchBot, ChatGPT-User', 'allowed',  'bi-chat-square-dots'],
-            ['Gemini (Google)',      'Googlebot + Google-Extended',         'allowed',  'bi-google'],
-            ['Copilot (Microsoft)',  'Bingbot + IndexNow pinged daily',     'allowed',  'bi-microsoft'],
-            ['Claude (Anthropic)',   'ClaudeBot, anthropic-ai',             'allowed',  'bi-stars'],
-            ['Perplexity',           'PerplexityBot, Perplexity-User',      'allowed',  'bi-search'],
-            ['Apple Intelligence',   'Applebot, Applebot-Extended',         'allowed',  'bi-apple'],
-            ['Meta AI (Llama)',      'FacebookExternalHit, meta-externalagent','allowed','bi-meta'],
-            ['Mistral / You.com',    'MistralAI-User, YouBot, KagiBot',     'allowed',  'bi-broadcast-pin'],
-            ['Common Crawl (open)',  'CCBot, DiffBot, Bytespider',          'allowed',  'bi-database'],
-          ];
-          foreach ($platforms as $pf):
-        ?>
-          <div class="col-md-4 col-sm-6">
-            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:10px;">
-              <div style="width:34px;height:34px;border-radius:8px;background:#ecfdf5;color:#047857;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="<?= $pf[3] ?>" style="font-size:18px;"></i></div>
-              <div style="flex:1;min-width:0;">
-                <div class="fw-bold" style="font-size:13px;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= esc($pf[0]) ?></div>
-                <div class="text-secondary" style="font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= esc($pf[1]) ?></div>
-              </div>
-              <span style="background:#d1fae5;color:#047857;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;">ALLOWED</span>
-            </div>
+        <div class="col-md-4">
+          <label class="form-label small fw-semibold">AI Key (Emergent / OpenAI)</label>
+          <div class="input-group">
+            <input type="password" name="llm_api_key" class="form-control" placeholder="<?= $hasLlmKey ? $maskedKey : 'Paste your AI key here' ?>" style="font-size:13px;" data-testid="ai-key-input">
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="var i=this.previousElementSibling;i.type=i.type==='password'?'text':'password';"><i class="bi bi-eye"></i></button>
           </div>
-        <?php endforeach; ?>
+          <div class="small mt-1 <?= $hasLlmKey ? 'text-success' : 'text-danger' ?>">
+            <i class="bi bi-<?= $hasLlmKey ? 'check-circle-fill' : 'exclamation-circle-fill' ?> me-1"></i>
+            <?= $hasLlmKey ? 'Key configured' : 'No key set — AI features won\'t work without this' ?>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label small fw-semibold">Google Search Console Token</label>
+          <input type="text" name="google_search_console" class="form-control" placeholder="<?= $gscToken ? 'Configured' : 'Paste verification token' ?>" style="font-size:13px;" data-testid="gsc-key-input">
+          <div class="small mt-1 <?= $gscToken ? 'text-success' : 'text-secondary' ?>">
+            <i class="bi bi-<?= $gscToken ? 'check-circle-fill' : 'info-circle' ?> me-1"></i>
+            <?= $gscToken ? 'Token set' : 'Optional — helps Google find your posts faster' ?>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label small fw-semibold">Bing Webmaster Token</label>
+          <input type="text" name="bing_webmaster" class="form-control" placeholder="<?= $bingToken ? 'Configured' : 'Paste verification token' ?>" style="font-size:13px;" data-testid="bing-key-input">
+          <div class="small mt-1 <?= $bingToken ? 'text-success' : 'text-secondary' ?>">
+            <i class="bi bi-<?= $bingToken ? 'check-circle-fill' : 'info-circle' ?> me-1"></i>
+            <?= $bingToken ? 'Token set' : 'Optional — helps Bing & AI search find your posts' ?>
+          </div>
+        </div>
       </div>
-      <hr style="margin:14px 0;border-color:#e5e7eb;">
-      <div class="row g-2 small">
-        <div class="col-md-6">
-          <strong style="color:#0f172a;font-size:12px;">📡 Active indexing channels</strong>
-          <ul class="mb-0 ps-3 mt-1 text-secondary" style="font-size:12px;line-height:1.7;">
-            <li><a href="sitemap.xml" target="_blank" rel="noopener" style="color:#4338ca;">/sitemap.xml</a> — submitted to Google + Bing on every run</li>
-            <li><a href="merchant-feed.xml" target="_blank" rel="noopener" style="color:#4338ca;">/merchant-feed.xml</a> — Google Shopping / Bing Shopping</li>
-            <li><a href="llms.txt" target="_blank" rel="noopener" style="color:#4338ca;">/llms.txt</a> — live catalogue context for ChatGPT / Claude / Gemini / Perplexity</li>
-            <li><a href="ai.txt" target="_blank" rel="noopener" style="color:#4338ca;">/ai.txt</a> — citation + training-use manifest</li>
-            <li>IndexNow API → Bing, Yandex, Naver, Seznam (45 URLs / daily run)</li>
-          </ul>
-        </div>
-        <div class="col-md-6">
-          <strong style="color:#0f172a;font-size:12px;">🎯 Manual one-time submissions (recommended)</strong>
-          <ul class="mb-0 ps-3 mt-1 text-secondary" style="font-size:12px;line-height:1.7;">
-            <li><a href="https://search.google.com/search-console" target="_blank" rel="noopener" style="color:#4338ca;">Google Search Console</a> → add property, submit sitemap</li>
-            <li><a href="https://www.bing.com/webmasters" target="_blank" rel="noopener" style="color:#4338ca;">Bing Webmaster Tools</a> → unlocks Copilot + ChatGPT (via Bing)</li>
-            <li><a href="https://merchants.google.com" target="_blank" rel="noopener" style="color:#4338ca;">Google Merchant Center</a> → submit <code>/merchant-feed.xml</code></li>
-            <li><a href="https://yandex.com/support/webmaster/" target="_blank" rel="noopener" style="color:#4338ca;">Yandex Webmaster</a> · <a href="https://searchadvisor.naver.com/" target="_blank" rel="noopener" style="color:#4338ca;">Naver</a></li>
-            <li>ChatGPT / Claude / Perplexity: no console — they pick up the site automatically via their crawlers (already allow-listed above).</li>
-          </ul>
-        </div>
+      <div class="mt-3">
+        <button type="submit" class="btn btn-primary rounded-pill px-4" data-testid="save-ai-keys-btn"><i class="bi bi-check-lg me-1"></i>Save Settings</button>
+        <span class="text-secondary small ms-2">Changes apply immediately — no restart needed.</span>
+      </div>
+    </form>
+  </div>
+
+  <!-- ====== 2. QUICK ACTIONS (one-click) ====== -->
+  <div class="card-e mb-3" style="border:1px solid #e2e8f0;border-radius:14px;padding:20px;">
+    <h5 class="fw-bold mb-3" style="font-size:15px;"><i class="bi bi-lightning-charge-fill me-2 text-success"></i>Quick Actions</h5>
+    <div class="row g-3">
+      <div class="col-md-6 col-lg-3">
+        <a href="admin.php?tab=ai-blogger&run_underserved_post=1" class="card text-decoration-none h-100" style="border:2px solid #d1fae5;border-radius:12px;padding:16px;transition:all .15s;" data-testid="ai-blogger-run-underserved"
+           onmouseover="this.style.borderColor='#10b981';this.style.transform='translateY(-2px)'"
+           onmouseout="this.style.borderColor='#d1fae5';this.style.transform='none'"
+           onclick="return confirm('Write and publish one new blog post now?')">
+          <div class="text-center">
+            <div style="font-size:28px;color:#10b981;"><i class="bi bi-pencil-square"></i></div>
+            <div class="fw-bold mt-2" style="font-size:14px;color:#0f172a;">Write One Post</div>
+            <div class="text-secondary small mt-1">AI picks a product and writes a blog post for the market that needs it most</div>
+          </div>
+        </a>
+      </div>
+      <div class="col-md-6 col-lg-3">
+        <a href="admin.php?tab=ai-blogger&run_random_post=1" class="card text-decoration-none h-100" style="border:2px solid #dbeafe;border-radius:12px;padding:16px;transition:all .15s;" data-testid="ai-blogger-run-random"
+           onmouseover="this.style.borderColor='#3b82f6';this.style.transform='translateY(-2px)'"
+           onmouseout="this.style.borderColor='#dbeafe';this.style.transform='none'"
+           onclick="return confirm('Write a random blog post now?')">
+          <div class="text-center">
+            <div style="font-size:28px;color:#3b82f6;"><i class="bi bi-shuffle"></i></div>
+            <div class="fw-bold mt-2" style="font-size:14px;color:#0f172a;">Random Post</div>
+            <div class="text-secondary small mt-1">Picks a random product and country, writes and publishes instantly</div>
+          </div>
+        </a>
+      </div>
+      <div class="col-md-6 col-lg-3">
+        <a href="admin.php?tab=ai-blogger&run_trends_article=1" class="card text-decoration-none h-100" style="border:2px solid #ede9fe;border-radius:12px;padding:16px;transition:all .15s;" data-testid="ai-blogger-run-trends"
+           onmouseover="this.style.borderColor='#8b5cf6';this.style.transform='translateY(-2px)'"
+           onmouseout="this.style.borderColor='#ede9fe';this.style.transform='none'"
+           onclick="return confirm('Write a trending topic article now?')">
+          <div class="text-center">
+            <div style="font-size:28px;color:#8b5cf6;"><i class="bi bi-newspaper"></i></div>
+            <div class="fw-bold mt-2" style="font-size:14px;color:#0f172a;">Trends Article</div>
+            <div class="text-secondary small mt-1">A longer opinion piece about current trends in one of your product categories</div>
+          </div>
+        </a>
+      </div>
+      <div class="col-md-6 col-lg-3">
+        <a href="admin.php?tab=ai-blogger&seo_run=1" class="card text-decoration-none h-100" style="border:2px solid #fef3c7;border-radius:12px;padding:16px;transition:all .15s;background:linear-gradient(135deg,#fffbeb,#fef9c3);" data-testid="ai-blogger-run-now"
+           onmouseover="this.style.borderColor='#f59e0b';this.style.transform='translateY(-2px)'"
+           onmouseout="this.style.borderColor='#fef3c7';this.style.transform='none'"
+           onclick="return confirm('Publish the full daily batch? This writes 24 posts (6 per country) — takes about 3 minutes.')">
+          <div class="text-center">
+            <div style="font-size:28px;color:#f59e0b;"><i class="bi bi-play-circle-fill"></i></div>
+            <div class="fw-bold mt-2" style="font-size:14px;color:#0f172a;">Publish Full Batch</div>
+            <div class="text-secondary small mt-1">Write all 24 posts at once (6 per country: US, UK, AU, CA)</div>
+          </div>
+        </a>
       </div>
     </div>
   </div>
 
-  <!-- Monitoring snapshot — last 24 h health -->
-  <div class="row g-3 mb-3" data-testid="ai-blogger-monitoring">
-    <div class="col-md-3 col-6">
-      <div class="card-e" style="padding:14px 16px;">
-        <div class="text-uppercase small text-secondary" style="font-weight:700;letter-spacing:1px;font-size:10px;">Posts last 24 h</div>
-        <div class="fw-bold mt-1" data-testid="mon-posts-24h" style="font-size:24px;color:#0f172a;"><?= (int)$mon['posts_24h'] ?></div>
-        <div class="text-secondary small">target: <?= count($regionsList) * (int)SEOBOT_BLOG_POSTS_PER_REGION_PER_DAY ?> · 6 per country</div>
-      </div>
-    </div>
-    <div class="col-md-3 col-6">
-      <div class="card-e" style="padding:14px 16px;">
-        <div class="text-uppercase small text-secondary" style="font-weight:700;letter-spacing:1px;font-size:10px;">HTTP-200 verified</div>
-        <div class="fw-bold mt-1" data-testid="mon-verified-24h" style="font-size:24px;color:<?= $mon['verified_24h'] === $mon['posts_24h'] && $mon['posts_24h'] > 0 ? '#059669' : '#0f172a' ?>;"><?= (int)$mon['verified_24h'] ?>/<?= (int)$mon['posts_24h'] ?></div>
-        <div class="text-secondary small">live URLs respond 200 OK</div>
-      </div>
-    </div>
-    <div class="col-md-3 col-6">
-      <div class="card-e" style="padding:14px 16px;">
-        <div class="text-uppercase small text-secondary" style="font-weight:700;letter-spacing:1px;font-size:10px;">IndexNow pushed</div>
-        <div class="fw-bold mt-1" data-testid="mon-indexnow-24h" style="font-size:24px;color:<?= $mon['indexnow_ok_24h'] === $mon['posts_24h'] && $mon['posts_24h'] > 0 ? '#059669' : '#0f172a' ?>;"><?= (int)$mon['indexnow_ok_24h'] ?>/<?= (int)$mon['posts_24h'] ?></div>
-        <div class="text-secondary small">submitted to Bing / Yandex / Naver</div>
-      </div>
-    </div>
-    <div class="col-md-3 col-6">
-      <div class="card-e" style="padding:14px 16px;">
-        <div class="text-uppercase small text-secondary" style="font-weight:700;letter-spacing:1px;font-size:10px;">Avg internal links / post</div>
-        <div class="fw-bold mt-1" data-testid="mon-avg-links" style="font-size:24px;color:#0f172a;"><?= number_format($mon['avg_links'], 1) ?></div>
-        <div class="text-secondary small">backlinks within the site (SEO weight)</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- AI Citation Tracker — are the AI engines actually citing our catalogue? -->
+  <!-- ====== 3. TODAY'S PROGRESS ====== -->
   <?php
-    $citByEngine    = ai_citations_latest_by_engine();
-    $lastCitRunAt   = setting_get('ai_citations_last_run_at', '');
-    $citDaysAgo     = $lastCitRunAt ? floor((time() - strtotime($lastCitRunAt)) / 86400) : null;
-    $citNextDueDays = $lastCitRunAt ? max(0, AI_CITATIONS_COOLDOWN_DAYS - $citDaysAgo) : 0;
+    $dailyCap   = 24;
+    $todayCount = (int)$mon['posts_24h'];
+    $pct        = max(0, min(100, (int)round($todayCount / $dailyCap * 100)));
   ?>
-  <div class="card-e mb-3" data-testid="ai-citation-tracker">
-    <div class="card-head">
-      <div class="ttl"><i class="bi bi-quote"></i> AI Citation Tracker <span class="sub ms-2">are ChatGPT / Gemini / Claude actually citing your catalogue?</span></div>
-      <div class="d-flex align-items-center gap-2">
-        <span class="sub" style="color:#64748b;font-size:11px;">
-          <?php if ($lastCitRunAt): ?>Last probe <?= esc($citDaysAgo === 0 ? 'today' : $citDaysAgo.'d ago') ?> · Next in <?= (int)$citNextDueDays ?>d<?php else: ?>No probes yet<?php endif; ?>
-        </span>
-        <a href="admin.php?tab=ai-blogger&run_citations=1" class="btn btn-sm btn-outline-primary rounded-pill px-3" data-testid="ai-citations-run-now" onclick="return confirm('Probe all 3 AI engines now? (~$0.003 in LLM credits)')"><i class="bi bi-arrow-clockwise me-1"></i>Run check now</a>
+  <div class="row g-3 mb-3">
+    <div class="col-md-3">
+      <div class="card-e text-center" style="padding:16px;border-radius:12px;">
+        <div class="text-secondary small fw-bold" style="letter-spacing:0.5px;">Posts Today</div>
+        <div class="fw-bold mt-1" style="font-size:28px;color:<?= $todayCount > 0 ? '#059669' : '#0f172a' ?>;" data-testid="ai-blogger-daily-count"><?= $todayCount ?></div>
+        <div class="text-secondary small">out of <?= $dailyCap ?> target</div>
+        <div class="progress mt-2" style="height:6px;border-radius:999px;background:#e2e8f0;">
+          <div class="progress-bar" style="width:<?= $pct ?>%;background:#10b981;"></div>
+        </div>
       </div>
     </div>
-    <div class="card-body-p" style="padding:14px 16px;">
-      <?php if (!$citByEngine): ?>
-        <div class="text-center text-muted small py-3">No probes yet — click <strong>Run check now</strong> to ask Claude, GPT-4o-mini and Gemini what they know about <?= esc(defined('SITE_BRAND') ? SITE_BRAND : 'your shop') ?>. Then every 7 days the heartbeat will re-probe automatically so you can watch your AI visibility grow.</div>
-      <?php else: ?>
-        <div class="row g-3">
-          <?php foreach ($citByEngine as $engineName => $row):
-            $brandHit = (int)$row['mentions_brand'];
-            $urlHit   = (int)$row['mentions_url'];
-            $cited    = !empty($row['cited_urls_json']) ? (array)json_decode($row['cited_urls_json'], true) : [];
-            $statusColor = $brandHit && $urlHit ? '#059669' : ($brandHit ? '#b45309' : '#dc2626');
-            $statusText  = $brandHit && $urlHit ? 'CITED' : ($brandHit ? 'KNOWN' : 'UNKNOWN');
-          ?>
-            <div class="col-md-4">
-              <div style="border:1px solid #e5e7eb;border-radius:12px;padding:14px;background:#fff;height:100%;display:flex;flex-direction:column;" data-testid="citation-card-<?= esc(strtolower(str_replace([' ','.'], '-', $engineName))) ?>">
-                <div class="d-flex justify-content-between align-items-start mb-2">
-                  <div>
-                    <div class="fw-bold" style="font-size:14px;color:#0f172a;"><?= esc($engineName) ?></div>
-                    <div class="text-secondary" style="font-size:11px;"><?= esc(substr((string)$row['ran_at'], 0, 16)) ?> UTC</div>
-                  </div>
-                  <span style="background:<?= $statusColor ?>;color:white;border-radius:999px;padding:3px 9px;font-size:10px;font-weight:700;letter-spacing:0.4px;"><?= $statusText ?></span>
-                </div>
-                <div class="d-flex gap-3 mb-2 small">
-                  <span title="Mentions brand name"><i class="bi <?= $brandHit ? 'bi-check-circle-fill text-success' : 'bi-x-circle text-secondary' ?> me-1"></i>Brand</span>
-                  <span title="Mentions site URL"><i class="bi <?= $urlHit ? 'bi-check-circle-fill text-success' : 'bi-x-circle text-secondary' ?> me-1"></i>URL</span>
-                  <span title="Number of products cited"><i class="bi bi-list-ol me-1 text-secondary"></i><?= (int)$row['product_count'] ?> products</span>
-                </div>
-                <?php if (!empty($row['error'])): ?>
-                  <div class="alert alert-warning small p-2 mb-0" style="font-size:11px;"><?= esc($row['error']) ?></div>
-                <?php else: ?>
-                  <div style="background:#f8fafc;border-radius:8px;padding:8px 10px;font-size:11.5px;color:#334155;line-height:1.45;max-height:130px;overflow-y:auto;flex:1;" data-testid="citation-response-<?= esc(strtolower(str_replace([' ','.'], '-', $engineName))) ?>">
-                    <?= nl2br(esc(mb_strimwidth((string)$row['response'], 0, 600, '…'))) ?>
-                  </div>
-                <?php endif; ?>
-                <?php if ($cited): ?>
-                  <div class="mt-2" style="font-size:11px;">
-                    <span class="text-secondary">URLs cited:</span>
-                    <?php foreach (array_slice($cited, 0, 3) as $cu): ?>
-                      <a href="<?= esc($cu) ?>" target="_blank" rel="noopener" style="display:inline-block;background:#eef2ff;color:#4338ca;padding:1px 7px;border-radius:6px;font-size:10.5px;margin:2px 2px 0 0;text-decoration:none;overflow:hidden;max-width:220px;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle;"><?= esc(parse_url($cu, PHP_URL_HOST) ?: $cu) ?></a>
-                    <?php endforeach; ?>
-                  </div>
-                <?php endif; ?>
-              </div>
-            </div>
+    <div class="col-md-3">
+      <div class="card-e text-center" style="padding:16px;border-radius:12px;">
+        <div class="text-secondary small fw-bold" style="letter-spacing:0.5px;">Total Posts</div>
+        <div class="fw-bold mt-1" style="font-size:28px;color:#0f172a;" data-testid="ai-blogger-stat-total"><?= $totalAiAll ?></div>
+        <div class="text-secondary small">published on your blog</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card-e text-center" style="padding:16px;border-radius:12px;">
+        <div class="text-secondary small fw-bold" style="letter-spacing:0.5px;">Markets</div>
+        <div class="mt-2">
+          <?php foreach ($regionsList as $rc => $ri): ?>
+            <span style="font-size:20px;" title="<?= esc($ri['name']) ?>"><?= $ri['flag'] ?></span>
           <?php endforeach; ?>
         </div>
-        <div class="small text-secondary mt-3" style="font-size:11.5px;">
-          <i class="bi bi-info-circle me-1"></i>
-          <strong style="color:#0f172a;">How to read this:</strong>
-          <span style="color:#dc2626;font-weight:700;">UNKNOWN</span> = the AI doesn't know your site yet (normal for a brand-new domain — give it 2-6 weeks after going live);
-          <span style="color:#b45309;font-weight:700;">KNOWN</span> = the AI mentions your brand;
-          <span style="color:#059669;font-weight:700;">CITED</span> = the AI mentions your brand AND links to your real URL. CITED is the goal.
-        </div>
-      <?php endif; ?>
-    </div>
-  </div>
-
-  <!-- Full feed of AI-published posts (filtered by country) -->
-  <div class="card-e mb-3" data-testid="ai-blogger-full-feed">
-    <div class="card-head">
-      <div class="ttl"><i class="bi bi-stars"></i> All AI-published blog posts <span class="sub ms-2">filter by country to see only that market</span></div>
-      <a href="blog.php<?= $regionFilter ? '?region=' . esc($regionFilter) : '' ?>" target="_blank" rel="noopener" class="sub" style="color:var(--brand);"><i class="bi bi-box-arrow-up-right"></i> Open public /blog</a>
-    </div>
-    <!-- Country/currency tabs -->
-    <div class="d-flex flex-wrap" data-testid="country-filter-tabs" style="border-bottom:1px solid #e5e7eb;padding:6px 10px 0;gap:6px;background:#fafafa;">
-      <a href="admin.php?tab=ai-blogger" data-testid="country-tab-all" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:8px 8px 0 0;text-decoration:none;font-size:13px;font-weight:600;<?= $regionFilter === '' ? 'background:white;border:1px solid #e5e7eb;border-bottom:1px solid white;margin-bottom:-1px;color:#4338ca;' : 'color:#64748b;' ?>">
-        <i class="bi bi-globe2"></i>All countries <span style="background:#eef2ff;color:#4338ca;border-radius:999px;padding:1px 8px;font-size:11px;font-weight:700;"><?= $totalAiAll ?></span>
-      </a>
-      <?php foreach ($regionsList as $rc => $ri):
-        $isActive = $regionFilter === $rc;
-        $cnt = $perRegionCounts[$rc];
-      ?>
-        <a href="admin.php?tab=ai-blogger&region_filter=<?= esc($rc) ?>" data-testid="country-tab-<?= esc($rc) ?>" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:8px 8px 0 0;text-decoration:none;font-size:13px;font-weight:600;<?= $isActive ? 'background:white;border:1px solid #e5e7eb;border-bottom:1px solid white;margin-bottom:-1px;color:#4338ca;' : 'color:#64748b;' ?>">
-          <span style="font-size:14px;"><?= $ri['flag'] ?></span><?= esc($ri['name']) ?>
-          <span style="background:<?= $isActive ? '#eef2ff' : '#f1f5f9' ?>;color:<?= $isActive ? '#4338ca' : '#64748b' ?>;border-radius:999px;padding:1px 8px;font-size:11px;font-weight:700;"><?= $cnt ?></span>
-          <span class="text-secondary" style="font-size:10px;font-weight:500;"><?= esc($ri['currency']) ?></span>
-        </a>
-      <?php endforeach; ?>
-    </div>
-    <div class="card-body-p" style="padding:0;">
-      <?php if (!$aiAll): ?>
-        <div class="text-center text-muted small py-4">
-          <?php if ($regionFilter): ?>
-            No posts published for <strong><?= esc($regionsList[$regionFilter]['name']) ?></strong> yet — they'll appear here as soon as the next batch runs.
-          <?php else: ?>
-            No AI-published posts yet. Click <strong>"Publish today's batch now"</strong> above to ship the first 24-post batch.
-          <?php endif; ?>
-        </div>
-      <?php else: ?>
-        <div class="tbl-elegant" style="border:none;border-radius:0;">
-          <table class="table mb-0">
-            <thead>
-              <tr>
-                <th style="width:60px;">#</th>
-                <th>Title</th>
-                <th style="width:90px;">Market</th>
-                <th style="width:175px;">Featured product</th>
-                <th style="width:120px;">Published</th>
-                <th style="width:130px;" title="HTTP 200 check · IndexNow ping · internal link count">Verified</th>
-                <th style="width:80px;text-align:right;">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              <?php foreach ($aiAll as $i => $bp): ?>
-                <?php
-                  $rel = '';
-                  if (!empty($bp['created_at'])) {
-                      $d = max(0, time() - strtotime($bp['created_at']));
-                      $rel = $d < 3600 ? floor($d/60).'m ago' : ($d < 86400 ? floor($d/3600).'h ago' : floor($d/86400).'d ago');
-                  }
-                  $tr = (string)$bp['target_region'];
-                  $trMeta = $regionsList[$tr] ?? null;
-                  $http200 = ((int)$bp['verified_http'] === 200);
-                  $inOk    = in_array((string)$bp['indexnow_status'], ['ok','accepted','http_200','http_202'], true);
-                  $links   = (int)$bp['internal_links_count'];
-                ?>
-                <tr data-testid="ai-blogger-row-<?= $i ?>">
-                  <td><?php if (!empty($bp['image'])): ?><img src="<?= esc($bp['image']) ?>" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:6px;"><?php endif; ?></td>
-                  <td>
-                    <div class="fw-bold" style="font-size:13.5px;color:#0f172a;line-height:1.35;"><?= esc($bp['title']) ?></div>
-                    <div class="text-secondary" style="font-size:11px;margin-top:2px;"><?= esc($bp['read_time']) ?></div>
-                  </td>
-                  <td>
-                    <?php if ($trMeta): ?>
-                      <span style="display:inline-flex;align-items:center;gap:4px;background:#e0e7ff;color:#3730a3;border-radius:999px;padding:2px 9px;font-size:11px;font-weight:700;" title="<?= esc($trMeta['name']) ?> · <?= esc($trMeta['currency']) ?>">
-                        <span><?= $trMeta['flag'] ?></span><?= esc($tr) ?>
-                      </span>
-                    <?php else: ?>
-                      <span class="text-secondary small">—</span>
-                    <?php endif; ?>
-                  </td>
-                  <td>
-                    <?php if ($bp['product_name']): ?>
-                      <a href="<?= esc('product.php?slug=' . urlencode($bp['product_slug'] ?? '')) ?>" target="_blank" rel="noopener" style="font-size:12px;color:#4338ca;text-decoration:none;"><?= esc(mb_strimwidth($bp['product_name'], 0, 28, '…')) ?></a>
-                    <?php else: ?>
-                      <span class="text-secondary small">—</span>
-                    <?php endif; ?>
-                  </td>
-                  <td>
-                    <div style="font-size:12px;color:#0f172a;font-weight:600;"><?= esc($bp['date']) ?></div>
-                    <?php if ($rel): ?><div class="text-secondary" style="font-size:11px;"><?= esc($rel) ?></div><?php endif; ?>
-                  </td>
-                  <td>
-                    <div class="d-flex gap-1 align-items-center" style="font-size:10.5px;">
-                      <span title="HTTP check · <?= (int)$bp['verified_http'] ?>" style="background:<?= $http200 ? '#d1fae5' : '#fef3c7' ?>;color:<?= $http200 ? '#065f46' : '#92400e' ?>;border-radius:6px;padding:2px 6px;font-weight:700;">
-                        <i class="bi <?= $http200 ? 'bi-check2-circle' : 'bi-hourglass-split' ?>"></i> <?= $http200 ? '200' : (((int)$bp['verified_http']) ?: '…') ?>
-                      </span>
-                      <span title="IndexNow status: <?= esc((string)$bp['indexnow_status']) ?>" style="background:<?= $inOk ? '#d1fae5' : '#fef3c7' ?>;color:<?= $inOk ? '#065f46' : '#92400e' ?>;border-radius:6px;padding:2px 6px;font-weight:700;">
-                        <i class="bi bi-broadcast"></i> <?= $inOk ? 'IN' : '·' ?>
-                      </span>
-                      <span title="<?= $links ?> internal backlinks" style="background:#eef2ff;color:#4338ca;border-radius:6px;padding:2px 6px;font-weight:700;">
-                        <i class="bi bi-link-45deg"></i> <?= $links ?>
-                      </span>
-                    </div>
-                  </td>
-                  <td style="text-align:right;">
-                    <a href="blog-post.php?id=<?= urlencode($bp['id']) ?>" target="_blank" rel="noopener" class="btn btn-sm btn-primary rounded-pill px-3" data-testid="ai-blogger-row-view-<?= $i ?>"><i class="bi bi-box-arrow-up-right"></i></a>
-                  </td>
-                </tr>
-              <?php endforeach; ?>
-            </tbody>
-          </table>
-        </div>
-      <?php endif; ?>
-    </div>
-  </div>
-
-  <!-- DMCA Scraper Watchdog -->
-  <?php
-    $dmcaPending = dmca_list_findings('pending', 20);
-    $dmcaAll     = dmca_list_findings(null, 100);
-    $dmcaLastRun = setting_get('dmca_last_scan_at', '');
-  ?>
-  <div class="card-e mb-3" data-testid="dmca-watchdog-panel">
-    <div class="card-head">
-      <div class="ttl"><i class="bi bi-shield-shaded"></i> DMCA Scraper Watchdog <span class="sub ms-2">flag third-party sites cloning your AI-written content</span></div>
-      <div class="d-flex align-items-center gap-2">
-        <span class="sub" style="color:#64748b;font-size:11px;">
-          <?php if ($dmcaLastRun): ?>
-            Last scan <?= esc(floor((time() - strtotime($dmcaLastRun)) / 86400)) ?>d ago · <?= count($dmcaAll) ?> findings on file
-          <?php else: ?>
-            No scans yet
-          <?php endif; ?>
-        </span>
-        <a href="admin.php?tab=ai-blogger&run_dmca=1" class="btn btn-sm btn-outline-primary rounded-pill px-3" data-testid="dmca-run-now" onclick="return confirm('Run a scraper-detection scan now? Samples <?= (int)DMCA_POSTS_PER_SCAN ?> recent AI posts and asks Claude to flag known clones (~$0.005 in LLM credits)')"><i class="bi bi-shield-check me-1"></i>Scan now</a>
+        <div class="text-secondary small mt-1">US · UK · AU · CA</div>
       </div>
     </div>
-    <div class="card-body-p" style="padding:14px 16px;">
-      <?php if (!$dmcaAll): ?>
-        <div class="alert alert-info py-2 mb-0" style="border-radius:10px;font-size:12.5px;">
-          <i class="bi bi-info-circle me-1"></i>
-          <strong>No clones detected.</strong> The watchdog samples 5 recent AI posts each week and asks Claude Haiku whether the exact text has been seen on other domains.
-          The big practical value of this panel kicks in <em>after</em> a finding lands — you'll get a one-click <strong>DMCA notice generator</strong> per row, pre-filled with your company details, the original URL, and the suspected URL.
-        </div>
-      <?php else: ?>
-        <div class="tbl-elegant" style="border:none;border-radius:0;">
-          <table class="table mb-0">
-            <thead>
-              <tr>
-                <th style="width:60px;">Status</th>
-                <th>Suspected clone</th>
-                <th>Original post</th>
-                <th style="width:90px;">Confidence</th>
-                <th style="width:120px;">Detected</th>
-                <th style="width:230px;text-align:right;">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              <?php foreach ($dmcaAll as $f): ?>
-                <?php
-                  $statusColor = ['pending' => '#b45309', 'dismissed' => '#94a3b8', 'reported' => '#4338ca', 'taken_down' => '#059669'][$f['status']] ?? '#64748b';
-                  $statusBg    = ['pending' => '#fef3c7', 'dismissed' => '#f1f5f9', 'reported' => '#e0e7ff', 'taken_down' => '#d1fae5'][$f['status']] ?? '#f1f5f9';
-                ?>
-                <tr data-testid="dmca-row-<?= (int)$f['id'] ?>">
-                  <td><span style="background:<?= $statusBg ?>;color:<?= $statusColor ?>;border-radius:999px;padding:2px 9px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;"><?= esc(str_replace('_',' ', $f['status'])) ?></span></td>
-                  <td>
-                    <a href="<?= esc($f['suspected_url']) ?>" target="_blank" rel="noopener" style="font-size:12px;color:#dc2626;text-decoration:none;font-weight:600;"><?= esc(mb_strimwidth((string)$f['suspected_host'], 0, 45, '…')) ?></a>
-                    <div class="text-secondary" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;max-width:280px;white-space:nowrap;"><?= esc($f['suspected_url']) ?></div>
-                  </td>
-                  <td>
-                    <a href="blog-post.php?id=<?= urlencode($f['post_id']) ?>" target="_blank" rel="noopener" style="font-size:12px;color:#4338ca;text-decoration:none;"><?= esc(mb_strimwidth((string)($f['post_title'] ?? $f['post_id']), 0, 35, '…')) ?></a>
-                  </td>
-                  <td>
-                    <?php $cc = strtolower((string)$f['confidence']); ?>
-                    <span style="background:<?= $cc === 'high' ? '#fee2e2' : ($cc === 'medium' ? '#fef3c7' : '#f1f5f9') ?>;color:<?= $cc === 'high' ? '#b91c1c' : ($cc === 'medium' ? '#92400e' : '#64748b') ?>;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;"><?= esc($cc ?: '—') ?></span>
-                  </td>
-                  <td style="font-size:11px;color:#0f172a;"><?= esc(substr((string)$f['ran_at'], 0, 16)) ?></td>
-                  <td style="text-align:right;">
-                    <div class="d-flex justify-content-end gap-1 flex-wrap">
-                      <?php if ($f['status'] !== 'reported' && $f['status'] !== 'taken_down'): ?>
-                        <a href="admin.php?tab=ai-blogger&dmca_notice=<?= (int)$f['id'] ?>" class="btn btn-sm btn-outline-danger" data-testid="dmca-notice-<?= (int)$f['id'] ?>" title="Download a DMCA takedown notice for this clone"><i class="bi bi-file-earmark-arrow-down"></i> DMCA</a>
-                      <?php endif; ?>
-                      <?php if ($f['status'] === 'pending'): ?>
-                        <a href="admin.php?tab=ai-blogger&dmca_set=dismissed&id=<?= (int)$f['id'] ?>" class="btn btn-sm btn-outline-secondary" title="False positive — dismiss">Dismiss</a>
-                        <a href="admin.php?tab=ai-blogger&dmca_set=reported&id=<?= (int)$f['id'] ?>" class="btn btn-sm btn-outline-primary" title="Mark as reported (you've sent the notice)">Mark reported</a>
-                      <?php endif; ?>
-                      <?php if ($f['status'] === 'reported'): ?>
-                        <a href="admin.php?tab=ai-blogger&dmca_set=taken_down&id=<?= (int)$f['id'] ?>" class="btn btn-sm btn-outline-success" title="Confirm the host took the clone down">Mark taken down</a>
-                      <?php endif; ?>
-                    </div>
-                  </td>
-                </tr>
-              <?php endforeach; ?>
-            </tbody>
-          </table>
-        </div>
-      <?php endif; ?>
+    <div class="col-md-3">
+      <div class="card-e text-center" style="padding:16px;border-radius:12px;">
+        <div class="text-secondary small fw-bold" style="letter-spacing:0.5px;">Next Post About</div>
+        <?php if ($nextProduct): ?>
+          <div class="fw-bold mt-1" style="font-size:13px;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" data-testid="ai-blogger-next-product"><?= esc($nextProduct['name']) ?></div>
+          <div class="text-secondary small"><?= esc($nextProduct['region'] ?? 'US') ?> market</div>
+        <?php else: ?>
+          <div class="text-secondary mt-1">Waiting for first run</div>
+        <?php endif; ?>
+      </div>
     </div>
   </div>
 
-  <!-- Recent run log -->
-  <?php if ($recentRuns): ?>
-  <div class="card-e mb-3" data-testid="ai-blogger-runs-log">
-    <div class="card-head">
-      <div class="ttl"><i class="bi bi-clock-history"></i> Recent automation runs <span class="sub ms-2">last 8 cron / autotick triggers</span></div>
+  <!-- ====== 4. AUTOMATION STATUS ====== -->
+  <div class="card-e mb-3" style="border-radius:12px;padding:16px;background:<?= $autoHealthy ? 'linear-gradient(135deg,#ecfdf5 0%,#f0fdfa 100%)' : 'linear-gradient(135deg,#fefce8 0%,#fef3c7 100%)' ?>;border:1px solid <?= $autoHealthy ? '#a7f3d0' : '#fde68a' ?>;">
+    <div class="d-flex align-items-center gap-3 flex-wrap">
+      <div>
+        <span class="badge rounded-pill" style="background:<?= $autoHealthy ? '#059669' : '#d97706' ?>;color:white;font-size:11px;padding:5px 12px;">
+          <i class="bi bi-<?= $autoHealthy ? 'check-circle-fill' : 'clock-history' ?> me-1"></i>
+          <?= $autoHealthy ? 'Automation Running' : 'Waiting to Start' ?>
+        </span>
+      </div>
+      <div class="text-secondary small">
+        Posts are written and published automatically every 24 hours. No manual action needed.
+        <span class="fw-semibold">Next batch in: <?= esc($nextDueText) ?></span>
+      </div>
     </div>
-    <div class="card-body-p" style="padding:0;">
-      <div class="tbl-elegant" style="border:none;border-radius:0;">
-        <table class="table mb-0">
+  </div>
+
+  <!-- ====== 5. SUBMIT TO SEARCH ENGINES ====== -->
+  <div class="card-e mb-3" style="border:1px solid #e2e8f0;border-radius:14px;padding:20px;">
+    <h5 class="fw-bold mb-2" style="font-size:15px;"><i class="bi bi-globe2 me-2 text-primary"></i>Search Engine Visibility</h5>
+    <p class="text-secondary small mb-3">Tell search engines about your website so customers can find your blog posts.</p>
+    <div class="d-flex flex-wrap gap-2">
+      <a href="admin.php?tab=ai-blogger&submit_sitemaps=1" class="btn btn-primary rounded-pill px-3" data-testid="checklist-submit-sitemaps" onclick="return confirm('Submit your sitemap to all search engines now?')"><i class="bi bi-send-check me-1"></i>Submit to Search Engines</a>
+      <a href="https://search.google.com/search-console" target="_blank" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-google me-1"></i>Google Search Console</a>
+      <a href="https://www.bing.com/webmasters" target="_blank" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-microsoft me-1"></i>Bing Webmaster</a>
+      <a href="blog.php" target="_blank" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-journal-text me-1"></i>View Blog</a>
+    </div>
+  </div>
+
+  <!-- ====== 6. PUBLISHED BLOG POSTS ====== -->
+  <div class="card-e mb-3" data-testid="ai-blogger-full-feed" style="border:1px solid #e2e8f0;border-radius:14px;padding:20px;">
+    <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+      <h5 class="fw-bold mb-0" style="font-size:15px;"><i class="bi bi-journal-richtext me-2 text-primary"></i>Published Blog Posts</h5>
+      <div class="d-flex align-items-center gap-1 flex-wrap">
+        <!-- Country filter tabs -->
+        <a href="admin.php?tab=ai-blogger" class="btn btn-sm <?= $regionFilter === '' ? 'btn-primary' : 'btn-outline-secondary' ?> rounded-pill px-3" data-testid="country-tab-all">All <span class="badge text-bg-light text-dark ms-1"><?= $totalAiAll ?></span></a>
+        <?php foreach ($regionsList as $rc => $ri): ?>
+          <a href="admin.php?tab=ai-blogger&region_filter=<?= esc($rc) ?>" class="btn btn-sm <?= $regionFilter === $rc ? 'btn-primary' : 'btn-outline-secondary' ?> rounded-pill px-3" data-testid="country-tab-<?= esc($rc) ?>"><?= $ri['flag'] ?> <?= esc($rc) ?> <span class="badge text-bg-light text-dark ms-1"><?= (int)($perRegionCounts[$rc] ?? 0) ?></span></a>
+        <?php endforeach; ?>
+      </div>
+    </div>
+
+    <?php if ($aiAll): ?>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0" style="font-size:13px;">
           <thead>
-            <tr>
-              <th>Started</th>
-              <th>IndexNow</th>
-              <th>Products refreshed</th>
-              <th>New blog post</th>
-              <th>LLM calls</th>
-              <th>Errors</th>
+            <tr class="text-secondary" style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">
+              <th>Title</th>
+              <th>Product</th>
+              <th>Market</th>
+              <th>Date</th>
+              <th style="width:80px;">Status</th>
+              <th style="width:60px;"></th>
             </tr>
           </thead>
           <tbody>
-            <?php foreach ($recentRuns as $rr):
-              $rrErrors = !empty($rr['errors_json']) ? (array)json_decode((string)$rr['errors_json'], true) : [];
-            ?>
-              <tr>
-                <td style="font-size:12px;color:#0f172a;font-weight:600;"><?= esc(substr((string)$rr['started_at'], 0, 16)) ?> UTC</td>
-                <td><span style="background:<?= $rr['indexnow_status']==='ok' ? '#d1fae5' : '#fef3c7' ?>;color:<?= $rr['indexnow_status']==='ok' ? '#047857' : '#92400e' ?>;border-radius:999px;padding:2px 9px;font-size:10px;font-weight:700;"><?= esc($rr['indexnow_status'] ?: '—') ?></span> <span class="text-secondary small"><?= (int)$rr['indexnow_count'] ?> URLs</span></td>
-                <td><?= (int)$rr['products_updated'] ?></td>
+            <?php $i = 0; foreach (array_slice($aiAll, 0, 20) as $bp): $i++; ?>
+              <?php
+                $httpOk  = (int)($bp['verified_http'] ?? 0) === 200;
+                $inOk    = in_array((string)($bp['indexnow_status'] ?? ''), ['ok','accepted','http_200','http_202'], true);
+              ?>
+              <tr data-testid="ai-blogger-row-<?= $i ?>">
                 <td>
-                  <?php if (!empty($rr['blog_post_id'])): ?>
-                    <a href="blog-post.php?id=<?= urlencode($rr['blog_post_id']) ?>" target="_blank" rel="noopener" style="font-size:12px;color:#4338ca;text-decoration:none;font-weight:600;"><?= esc(mb_strimwidth((string)$rr['blog_post_title'], 0, 50, '…')) ?></a>
+                  <div class="fw-semibold" style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= esc($bp['title']) ?></div>
+                </td>
+                <td class="text-secondary" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                  <?= esc($bp['product_name'] ?? '—') ?>
+                </td>
+                <td>
+                  <?php $rFlag = $regionsList[$bp['target_region'] ?? '']['flag'] ?? ''; ?>
+                  <span><?= $rFlag ?> <?= esc($bp['target_region'] ?? '') ?></span>
+                </td>
+                <td class="text-secondary"><?= date('M j', strtotime($bp['created_at'] ?? $bp['date'])) ?></td>
+                <td>
+                  <?php if ($httpOk): ?>
+                    <span class="badge rounded-pill" style="background:#d1fae5;color:#065f46;font-size:10px;">Live</span>
                   <?php else: ?>
-                    <span class="text-secondary small">—</span>
+                    <span class="badge rounded-pill" style="background:#fef3c7;color:#92400e;font-size:10px;">Pending</span>
                   <?php endif; ?>
                 </td>
-                <td><?= (int)$rr['llm_calls'] ?></td>
-                <td><?php if ($rrErrors): ?><span style="background:#fee2e2;color:#b91c1c;border-radius:999px;padding:2px 9px;font-size:10px;font-weight:700;"><?= count($rrErrors) ?></span><?php else: ?><span class="text-secondary small">0</span><?php endif; ?></td>
+                <td>
+                  <a href="blog-post.php?id=<?= urlencode($bp['id']) ?>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary rounded-pill" data-testid="ai-blogger-row-view-<?= $i ?>"><i class="bi bi-eye"></i></a>
+                </td>
               </tr>
             <?php endforeach; ?>
           </tbody>
         </table>
       </div>
+      <?php if (count($aiAll) > 20): ?>
+        <div class="text-center mt-2">
+          <span class="text-secondary small">Showing first 20 of <?= count($aiAll) ?> posts</span>
+        </div>
+      <?php endif; ?>
+    <?php else: ?>
+      <div class="text-center py-4" style="color:#94a3b8;">
+        <div style="font-size:48px;"><i class="bi bi-journal-x"></i></div>
+        <div class="fw-semibold mt-2">No blog posts yet</div>
+        <div class="small mt-1">Click <strong>"Write One Post"</strong> or <strong>"Publish Full Batch"</strong> above to get started.</div>
+      </div>
+    <?php endif; ?>
+  </div>
+
+  <!-- ====== 7. RECENT ACTIVITY LOG ====== -->
+  <?php if ($recentRuns): ?>
+  <div class="card-e mb-3" data-testid="ai-blogger-runs-log" style="border:1px solid #e2e8f0;border-radius:14px;padding:20px;">
+    <h5 class="fw-bold mb-3" style="font-size:15px;"><i class="bi bi-clock-history me-2 text-secondary"></i>Recent Activity</h5>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0" style="font-size:12px;">
+        <thead>
+          <tr class="text-secondary" style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;">
+            <th>When</th>
+            <th>Search Engines</th>
+            <th>New Posts</th>
+            <th>AI Calls</th>
+            <th>Issues</th>
+          </tr>
+        </thead>
+        <tbody>
+          <?php foreach ($recentRuns as $rr):
+            $rrErrors = !empty($rr['errors_json']) ? (array)json_decode($rr['errors_json'], true) : [];
+          ?>
+            <tr>
+              <td class="text-secondary"><?= date('M j, g:ia', strtotime($rr['started_at'])) ?></td>
+              <td>
+                <?php if ($rr['indexnow_status'] === 'ok'): ?>
+                  <span class="badge rounded-pill" style="background:#d1fae5;color:#047857;font-size:10px;">Submitted <?= (int)$rr['indexnow_count'] ?> pages</span>
+                <?php else: ?>
+                  <span class="text-secondary">—</span>
+                <?php endif; ?>
+              </td>
+              <td>
+                <?php if (!empty($rr['blog_post_id'])): ?>
+                  <a href="blog-post.php?id=<?= urlencode($rr['blog_post_id']) ?>" target="_blank" rel="noopener" style="font-size:12px;color:#4338ca;text-decoration:none;font-weight:600;"><?= esc(mb_strimwidth((string)$rr['blog_post_title'], 0, 40, '...')) ?></a>
+                <?php else: ?>
+                  <span class="text-secondary">—</span>
+                <?php endif; ?>
+              </td>
+              <td><?= (int)$rr['llm_calls'] ?></td>
+              <td>
+                <?php if ($rrErrors): ?>
+                  <span class="badge rounded-pill" style="background:#fee2e2;color:#b91c1c;font-size:10px;"><?= count($rrErrors) ?></span>
+                <?php else: ?>
+                  <span class="text-success"><i class="bi bi-check-circle-fill"></i></span>
+                <?php endif; ?>
+              </td>
+            </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
     </div>
   </div>
   <?php endif; ?>
+
+  <!-- ====== 8. ADVANCED SETTINGS (collapsed) ====== -->
+  <details class="card-e mb-3" style="border:1px solid #e2e8f0;border-radius:14px;padding:16px 20px;">
+    <summary class="fw-bold" style="font-size:14px;cursor:pointer;"><i class="bi bi-gear me-2 text-secondary"></i>Advanced Settings</summary>
+    <div class="mt-3">
+      <div class="row g-3">
+        <!-- External Cron URL -->
+        <div class="col-12">
+          <label class="form-label small fw-semibold">Automation Scheduler URL</label>
+          <p class="text-secondary small mb-2">If your hosting doesn't support automatic scheduling, you can point an external cron service at this URL:</p>
+          <?php $cronToken = seo_bot_cron_token(); $cronUrl = rtrim(site_url(), '/') . '/cron/seo-daily.php?token=' . rawurlencode($cronToken); ?>
+          <div class="input-group input-group-sm">
+            <input type="text" class="form-control" id="ai-blogger-cron-url-input" value="<?= esc($cronUrl) ?>" readonly style="font-family:monospace;font-size:11px;background:#f8fafc;">
+            <button class="btn btn-outline-primary" type="button" data-testid="ai-blogger-copy-cron-url" onclick="(function(){var i=document.getElementById('ai-blogger-cron-url-input');i.select();document.execCommand('copy');this.innerHTML='<i class=\'bi bi-check-lg me-1\'></i>Copied';setTimeout(()=>{this.innerHTML='<i class=\'bi bi-clipboard me-1\'></i>Copy';},1500);}).call(this);"><i class="bi bi-clipboard me-1"></i>Copy</button>
+          </div>
+          <div class="d-flex gap-2 mt-2">
+            <a href="admin.php?tab=ai-blogger&rotate_cron_token=1" class="btn btn-sm btn-outline-secondary rounded-pill" data-testid="ai-blogger-rotate-token" onclick="return confirm('Generate a new security token? Old links will stop working.')"><i class="bi bi-arrow-repeat me-1"></i>Reset Token</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </details>
 
 <?php
 // ============================================================================

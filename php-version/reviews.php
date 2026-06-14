@@ -35,11 +35,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['write_review'])) {
 
 $perPage = 10;
 $page = max(1, (int)($_GET['p'] ?? 1));
-$total = (int)db()->query('SELECT COUNT(*) c FROM reviews')->fetch()['c'];
+// Merge reviews from both `reviews` table AND `customer_reviews` (email-submitted reviews)
+// so all real customer feedback appears on this page.
+$totalStatic = (int)db()->query('SELECT COUNT(*) c FROM reviews')->fetch()['c'];
+$totalCustomer = 0;
+try {
+    $totalCustomer = (int)db()->query("SELECT COUNT(*) c FROM customer_reviews WHERE status='published' AND rating IS NOT NULL")->fetch()['c'];
+} catch (Throwable $e) {}
+$total = $totalStatic + $totalCustomer;
 $pages = max(1, (int)ceil($total / $perPage));
 $page = min($page, $pages);
 $offset = ($page - 1) * $perPage;
-$list = db()->query("SELECT * FROM reviews ORDER BY review_date DESC, id ASC LIMIT $perPage OFFSET $offset")->fetchAll();
+// UNION both tables — explicit COLLATE to handle different collations between tables
+$list = db()->query("
+    (SELECT id, name COLLATE utf8mb4_unicode_ci AS name,
+            initials COLLATE utf8mb4_unicode_ci AS initials,
+            location COLLATE utf8mb4_unicode_ci AS location,
+            review_date, rating,
+            text COLLATE utf8mb4_unicode_ci AS text,
+            product COLLATE utf8mb4_unicode_ci AS product, verified
+     FROM reviews)
+    UNION ALL
+    (SELECT id + 100000 AS id,
+            customer_name COLLATE utf8mb4_unicode_ci AS name,
+            UPPER(LEFT(customer_name, 2)) COLLATE utf8mb4_unicode_ci AS initials,
+            'Verified Buyer' AS location,
+            DATE(submitted_at) AS review_date,
+            rating,
+            comment COLLATE utf8mb4_unicode_ci AS text,
+            COALESCE((SELECT p.name FROM products p WHERE p.slug = cr.product_slug LIMIT 1), 'Software Product') COLLATE utf8mb4_unicode_ci AS product,
+            1 AS verified
+     FROM customer_reviews cr
+     WHERE cr.status = 'published' AND cr.rating IS NOT NULL)
+    ORDER BY review_date DESC, id DESC
+    LIMIT $perPage OFFSET $offset
+")->fetchAll();
 
 $dist = [5 => 77, 4 => 14, 3 => 5, 2 => 1, 1 => 4];
 $cats = [

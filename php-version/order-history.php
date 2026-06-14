@@ -55,13 +55,21 @@ $errors  = [];
 $success = '';
 $order   = null;
 
-/* ---------- POST: form submission ---------- */
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($_GET['action'])) {
+/* ---------- QR-code auto-lookup: when GET params email + order are present
+   (from scanning the receipt QR code), treat it as a lookup automatically
+   so the customer sees their order details without retyping anything. ---------- */
+$_qrEmail = trim($_GET['email'] ?? '');
+$_qrOrder = trim($_GET['order'] ?? '');
+$_isQrLookup = ($_qrEmail !== '' && $_qrOrder !== '' && empty($_GET['action']) && $_SERVER['REQUEST_METHOD'] !== 'POST');
+
+/* ---------- POST: form submission  /  QR auto-lookup ---------- */
+if (($_SERVER['REQUEST_METHOD'] === 'POST' && empty($_GET['action'])) || $_isQrLookup) {
     if (_oh_throttle_remaining() <= 0) {
         $errors[] = 'Too many lookup attempts. Please wait 10 minutes and try again.';
     } else {
-        $email = strtolower(trim($_POST['email'] ?? ''));
-        $orderNum = strtoupper(trim($_POST['order_number'] ?? ''));
+        // QR auto-lookup uses GET params; manual form uses POST params
+        $email    = strtolower(trim($_isQrLookup ? $_qrEmail : ($_POST['email'] ?? '')));
+        $orderNum = strtoupper(trim($_isQrLookup ? $_qrOrder : ($_POST['order_number'] ?? '')));
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $errors[] = 'Please enter the email address used at checkout.';
         }
