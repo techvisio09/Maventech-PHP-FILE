@@ -117,6 +117,21 @@ Allow: /
 User-agent: MistralAI-User
 Allow: /
 
+User-agent: CCBot
+Allow: /
+
+User-agent: PetalBot
+Allow: /
+
+User-agent: Brave-Search
+Allow: /
+
+User-agent: NeevaBot
+Allow: /
+
+User-agent: Andibot
+Allow: /
+
 # ----- Sitemaps -----
 Sitemap: https://sales-control-26.preview.emergentagent.com/sitemap.xml
 Sitemap: https://sales-control-26.preview.emergentagent.com/merchant-feed.xml

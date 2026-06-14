@@ -545,3 +545,39 @@ A new always-visible banner at the top of the AI Auto-Blogger card surfaces the 
 - Hit with `User-Agent: Googlebot/2.1` → autotick early-exits, no LLM call, no new row.
 - Public `/blog.php` index now shows 55 articles with all 5 AI posts at the top (screenshot captured).
 
+
+
+## [Jun 2026] AI Auto-Blogger — dedicated sidebar tab + AI-platform discoverability
+The user asked for (1) a sidebar entry so the auto-blogger isn't buried inside the dashboard, and (2) confirmation the site is discoverable by ChatGPT, Gemini, Copilot, Perplexity, Claude, etc. when it goes live.
+
+### 1. Sidebar item + dedicated full-page tab (`admin.php?tab=ai-blogger`)
+- New nav item in `includes/admin-shell.php` (the actual rendered sidebar — `admin-sidebar.php` is dormant):
+  - **Icon**: `bi-robot`, **Label**: *AI Auto-Blogger*, slotted in the **Overview** section right after Dashboard.
+  - Trailing purple **AUTO** pill so it's instantly recognisable as the automation hub.
+  - Active state highlighting works (`data-testid="adm-nav-ai-blogger"`).
+- New `tab=ai-blogger` page (~330 LoC in `admin.php`) with:
+  - **Header**: "AI Auto-Blogger" + tag-line + big **"Publish next post now"** button (`data-testid="ai-blogger-run-now"`).
+  - **Flash alerts** for completed runs + new-post announcement (gradient card with thumbnail + "View live post" link).
+  - **Automation Status banner** (mirrors dashboard): green/amber AUTO pulse pill · "Next post in 23h 51m" · "Heartbeat 37s ago" · optional "Writing right now…" busy indicator.
+  - **4 stat tiles**: Total AI posts published, LLM tokens used, Markets covered (🇺🇸🇬🇧🇦🇺🇨🇦), Next product up (round-robin queue preview).
+  - **AI Discoverability panel** (`data-testid="ai-discoverability-panel"`): 9 cards showing platform allow-list status (ChatGPT/OpenAI, Gemini/Google, Copilot/Microsoft, Claude/Anthropic, Perplexity, Apple Intelligence, Meta AI, Mistral/You.com, Common Crawl) each marked `ALLOWED`. Plus two columns of live links: *Active indexing channels* (sitemap, merchant-feed, llms.txt, ai.txt, IndexNow) and *Manual one-time submissions* (Google Search Console, Bing Webmaster Tools, Google Merchant Center, Yandex, Naver) with helper copy.
+  - **Full feed table** (`data-testid="ai-blogger-full-feed"`): every AI-published post in a clean table — title · featured product link · region pill · published date + relative time · view button.
+  - **Recent runs log**: last 8 cron / autotick triggers with IndexNow status, products refreshed, the new blog post (if any), LLM calls, error count.
+
+### 2. AI platform discoverability hardening
+- **Robots.txt extended** with CCBot (Common Crawl — feeds Llama / Mistral / many open-source LLMs), PetalBot (Huawei AI), Brave-Search, NeevaBot, Andibot. Total **22 AI / search crawlers** now explicitly Allow-listed.
+- **Article JSON-LD** added to `/blog-post.php` for every AI-authored post (and the seeded ones too) — gives Gemini, ChatGPT, Copilot, Perplexity, Apple Intelligence a clean `@type=Article` block with `headline`, `image`, `datePublished`, `dateModified`, `author: "Maventech Software AI Editorial Team"`, `publisher`, `mainEntityOfPage`, `description`, `inLanguage`, `isAccessibleForFree`. Verified on the live `ai-20260614-microsoft-visio-2021-professional-windows-pc` post.
+- **Fixed long-standing bug** in `blog-post.php`: `(int)$post['id']` was casting AI string IDs (`ai-20260614-…`) to `0`, mangling the canonical URL. Now uses `rawurlencode((string)$post['id'])`.
+- **Existing channels** untouched and continue to do their job:
+  - `/sitemap.xml` + `/merchant-feed.xml` (Google Shopping / Bing Shopping)
+  - `/llms.txt` (live catalogue + AI-summary blurbs)
+  - `/ai.txt` (citation + training-use preferences)
+  - IndexNow API → Bing / Yandex / Naver / Seznam every 24 h (45 URLs)
+  - Google + Bing sitemap-ping endpoints on each SEO bot run
+
+### Verified end-to-end
+- `php -l` clean on every modified file.
+- `curl /admin.php?tab=ai-blogger` returns the new page with all 8 expected testids (`ai-blogger-page-title`, `-run-now`, `-automation-status`, `-stat-total`, `ai-discoverability-panel`, `-full-feed`, `-runs-log`, `-next-product`). Total AI posts = 5, full feed renders 5 rows.
+- Sidebar HTML contains `data-testid="adm-nav-ai-blogger"` with `class="item active"` highlighting + the `AUTO` badge.
+- `Article` JSON-LD blob parsed and confirmed on the live AI blog post: 2 JSON-LD blocks (Article + Organization).
+

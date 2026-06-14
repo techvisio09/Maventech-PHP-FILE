@@ -31,6 +31,7 @@ if (!function_exists('current_admin')) {
 }
 $navItems = [
     'dashboard'   => ['icon' => 'bi-speedometer2',       'label' => 'Dashboard',          'href' => 'admin.php?tab=dashboard'],
+    'ai-blogger'  => ['icon' => 'bi-robot',              'label' => 'AI Auto-Blogger',    'href' => 'admin.php?tab=ai-blogger'],
     'company'     => ['icon' => 'bi-building',           'label' => 'Company Info',       'href' => 'admin.php?tab=company'],
     'inventory'   => ['icon' => 'bi-boxes',              'label' => 'Inventory Mgmt',     'href' => 'inventory.php'],
     'products'    => ['icon' => 'bi-box-seam',           'label' => 'Products / Key Inventory', 'href' => 'admin.php?tab=products'],
@@ -1208,9 +1209,12 @@ hr { border-color: var(--border); opacity:.5; }
 <div class="adm-shell">
   <aside class="adm-sidebar" data-testid="adm-sidebar">
     <div class="side-section">Overview</div>
-    <?php foreach (['dashboard','company','regions','inventory'] as $k): $i = $navItems[$k]; ?>
+    <?php foreach (['dashboard','ai-blogger','company','regions','inventory'] as $k): $i = $navItems[$k]; ?>
       <a class="item <?= $adminActive===$k?'active':'' ?>" href="<?= esc($i['href']) ?>" data-testid="adm-nav-<?= $k ?>">
         <i class="bi <?= esc($i['icon']) ?>"></i><?= esc($i['label']) ?>
+        <?php if ($k === 'ai-blogger'): ?>
+          <span class="adm-nav-badge" style="background:#7c3aed;box-shadow:none;animation:none;letter-spacing:.4px;">AUTO</span>
+        <?php endif; ?>
       </a>
     <?php endforeach; ?>
     <div class="side-section">Catalog</div>

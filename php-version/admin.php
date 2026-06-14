@@ -1694,6 +1694,366 @@ if ($tab === 'dashboard'):
 
 <?php
 // ============================================================================
+// AI AUTO-BLOGGER — dedicated full-page admin tab.
+// One product → one fresh blog post every 24 h, fully automatic.
+// ============================================================================
+elseif ($tab === 'ai-blogger'):
+    require_once __DIR__ . '/includes/seo-bot.php';
+
+    // Manual "Run now" from this page — redirects back to ai-blogger after.
+    if (!empty($_GET['seo_run'])) {
+        try {
+            $r = seo_bot_run_if_due(true);
+            if (!empty($r['skipped'])) {
+                $_SESSION['seo_bot_flash'] = 'AI Auto-Blogger was already up to date — ' . $r['reason'] . '.';
+            } else {
+                $_SESSION['seo_bot_flash'] = 'AI Auto-Blogger run complete — IndexNow ' . $r['indexnow_status']
+                    . ' (' . $r['indexnow_count'] . ' URLs) · LLM refresh: ' . $r['products_updated'] . ' product(s) · '
+                    . count($r['errors']) . ' error(s).';
+                if (!empty($r['blog_post_id'])) {
+                    $_SESSION['seo_bot_blog_flash'] = [
+                        'id'    => $r['blog_post_id'],
+                        'title' => $r['blog_post_title'],
+                        'url'   => 'blog-post.php?id=' . urlencode($r['blog_post_id']),
+                        'image' => $r['blog_post_image'] ?? '',
+                    ];
+                }
+            }
+        } catch (Throwable $e) {
+            $_SESSION['seo_bot_flash'] = 'AI Auto-Blogger error: ' . $e->getMessage();
+        }
+        header('Location: admin.php?tab=ai-blogger');
+        exit;
+    }
+
+    $seoRun    = seo_bot_latest_run();
+    $seoErrors = ($seoRun && !empty($seoRun['errors_json'])) ? (array)json_decode($seoRun['errors_json'], true) : [];
+    $seoTokens = $seoRun ? ((int)$seoRun['llm_tokens_in'] + (int)$seoRun['llm_tokens_out']) : 0;
+
+    // All AI-published blog posts (newest first).
+    $aiAll = [];
+    try {
+        $aiAll = $pdo->query("
+            SELECT bp.id, bp.title, bp.date, bp.image, bp.read_time, bp.product_id, bp.created_at,
+                   p.name AS product_name, p.region AS product_region, p.slug AS product_slug
+              FROM blog_posts bp
+              LEFT JOIN products p ON p.id = bp.product_id
+             WHERE bp.ai_generated = 1
+             ORDER BY COALESCE(bp.created_at, '1970-01-01') DESC, bp.id DESC")->fetchAll();
+    } catch (Throwable $e) {}
+    $totalAi = count($aiAll);
+    $totalAllPosts = (int)$pdo->query("SELECT COUNT(*) FROM blog_posts")->fetchColumn();
+
+    // Automation health check (mirrors dashboard banner).
+    $heartbeatPath = '/tmp/seo-heartbeat.log';
+    $heartbeatAgo  = is_file($heartbeatPath) ? (time() - filemtime($heartbeatPath)) : null;
+    $autotickLock  = sys_get_temp_dir() . '/maventech_seo_bot.lock';
+    $autotickBusy  = is_file($autotickLock) && (time() - filemtime($autotickLock)) < 600;
+    $lastRunStr    = $seoRun ? (string)$seoRun['started_at'] : '';
+    $secsSinceRun  = $lastRunStr ? (time() - strtotime($lastRunStr)) : null;
+    $nextDueIn     = $lastRunStr ? max(0, 24 * 3600 - $secsSinceRun) : 0;
+    $nextDueText   = !$lastRunStr
+        ? 'any moment now'
+        : ($nextDueIn === 0
+            ? 'any moment now'
+            : ($nextDueIn < 3600
+                ? floor($nextDueIn/60) . ' min'
+                : floor($nextDueIn/3600) . 'h ' . floor(($nextDueIn%3600)/60) . 'm'));
+    $autoHealthy = ($heartbeatAgo !== null && $heartbeatAgo < 7200)
+                || ($secsSinceRun !== null && $secsSinceRun < 26 * 3600);
+
+    // Next product the bot will write about (round-robin preview).
+    $nextProduct = null;
+    try {
+        $regions = array_values(array_filter(array_map('trim', explode(',', SEOBOT_BLOG_REGIONS))));
+        $inClause = implode(',', array_fill(0, count($regions), '?'));
+        $stmt = $pdo->prepare("
+            SELECT p.id, p.slug, p.name, p.image, p.region,
+                   (SELECT MAX(bp.created_at) FROM blog_posts bp
+                     WHERE bp.product_id = p.id AND bp.ai_generated = 1) AS last_ai_post_at
+              FROM products p
+             WHERE p.is_active = 1
+               AND p.region IN ($inClause)
+             ORDER BY (last_ai_post_at IS NULL) DESC, last_ai_post_at ASC, RAND()
+             LIMIT 1");
+        $stmt->execute($regions);
+        $nextProduct = $stmt->fetch();
+    } catch (Throwable $e) {}
+
+    // Recent SEO runs for the activity log table.
+    $recentRuns = [];
+    try {
+        $recentRuns = $pdo->query("SELECT * FROM seo_runs ORDER BY id DESC LIMIT 8")->fetchAll();
+    } catch (Throwable $e) {}
+?>
+  <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+    <div>
+      <h1 class="h4 fw-bold mb-1" data-testid="ai-blogger-page-title"><i class="bi bi-robot me-1 text-primary"></i> AI Auto-Blogger</h1>
+      <small class="text-muted">One product picked every 24&nbsp;h · Claude Haiku writes a fresh SEO-optimised blog article · published instantly to <code>/blog.php</code> · also pinged to Google, Bing, IndexNow and listed in <code>/llms.txt</code> + <code>/ai.txt</code> so ChatGPT, Gemini, Copilot, Perplexity and Claude can cite it. Markets: <strong>US · UK · AU · CA</strong>.</small>
+    </div>
+    <a href="admin.php?tab=ai-blogger&seo_run=1" class="btn btn-primary rounded-pill px-4" data-testid="ai-blogger-run-now" onclick="return confirm('Publish one fresh AI blog post right now? (~$0.003 in LLM credits)')"><i class="bi bi-play-fill me-1"></i>Publish next post now</a>
+  </div>
+
+  <?php if (!empty($_SESSION['seo_bot_flash'])): ?>
+    <div class="alert alert-info" data-testid="ai-blogger-flash" style="border-radius:12px;"><i class="bi bi-robot me-1"></i><?= esc($_SESSION['seo_bot_flash']) ?></div>
+    <?php unset($_SESSION['seo_bot_flash']); ?>
+  <?php endif; ?>
+  <?php if (!empty($_SESSION['seo_bot_blog_flash'])): $bf = $_SESSION['seo_bot_blog_flash']; ?>
+    <div class="alert" data-testid="ai-blogger-blog-flash" style="margin:0 0 14px;background:linear-gradient(135deg,#eef2ff 0%,#fdf4ff 100%);border:1px solid #c7d2fe;color:#1e293b;border-radius:12px;padding:14px 18px;display:flex;gap:14px;align-items:center;">
+      <?php if (!empty($bf['image'])): ?><img src="<?= esc($bf['image']) ?>" alt="" style="width:64px;height:64px;object-fit:cover;border-radius:10px;flex-shrink:0;"><?php endif; ?>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:700;color:#4338ca;font-size:12px;letter-spacing:1px;text-transform:uppercase;"><i class="bi bi-stars me-1"></i>AI just published a new blog post</div>
+        <div style="font-size:16px;font-weight:700;margin-top:2px;"><?= esc($bf['title']) ?></div>
+        <a href="<?= esc($bf['url']) ?>" target="_blank" rel="noopener" style="font-size:13px;color:#4338ca;font-weight:600;text-decoration:none;">View live post <i class="bi bi-box-arrow-up-right"></i></a>
+      </div>
+      <button type="button" class="btn-close" aria-label="Close" onclick="this.parentElement.style.display='none'"></button>
+    </div>
+    <?php unset($_SESSION['seo_bot_blog_flash']); ?>
+  <?php endif; ?>
+
+  <!-- Automation Status Banner -->
+  <div class="card-e" data-testid="ai-blogger-automation-status" style="background:<?= $autoHealthy ? 'linear-gradient(135deg,#ecfdf5 0%,#f0fdfa 100%)' : 'linear-gradient(135deg,#fefce8 0%,#fef3c7 100%)' ?>;border:1px solid <?= $autoHealthy ? '#a7f3d0' : '#fde68a' ?>;padding:16px 18px;margin-bottom:14px;">
+    <div class="d-flex align-items-center justify-content-between flex-wrap" style="gap:14px;">
+      <div class="d-flex align-items-center gap-3 flex-wrap">
+        <span style="background:<?= $autoHealthy ? '#059669' : '#b45309' ?>;color:white;border-radius:999px;padding:5px 14px;font-size:11px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;display:inline-flex;align-items:center;gap:7px;">
+          <span class="<?= $autoHealthy ? 'auto-pulse' : '' ?>" style="width:8px;height:8px;border-radius:50%;background:#fff;"></span>
+          AUTO · <?= $autoHealthy ? 'ACTIVE' : 'IDLE' ?>
+        </span>
+        <div>
+          <div style="color:#0f172a;font-weight:700;font-size:14px;">One product → one fresh blog post · every 24&nbsp;h</div>
+          <div style="color:#475569;font-size:12px;margin-top:2px;">Zero manual action required. Self-cron fires on every visitor pageview after the cooldown expires; backed by an hourly background heartbeat.</div>
+        </div>
+      </div>
+      <div class="d-flex align-items-center gap-3 flex-wrap" style="font-size:12px;color:#334155;">
+        <div style="text-align:right;">
+          <div class="text-uppercase small text-secondary" style="font-weight:700;letter-spacing:1px;font-size:10px;">Next post in</div>
+          <div class="fw-bold" data-testid="ai-blogger-next-due" style="color:#0f172a;"><?= esc($nextDueText) ?></div>
+        </div>
+        <div style="text-align:right;">
+          <div class="text-uppercase small text-secondary" style="font-weight:700;letter-spacing:1px;font-size:10px;">Heartbeat</div>
+          <div class="fw-bold" data-testid="ai-blogger-heartbeat" style="color:<?= $heartbeatAgo !== null && $heartbeatAgo < 7200 ? '#059669' : '#92400e' ?>;">
+            <?= $heartbeatAgo !== null ? ($heartbeatAgo < 60 ? $heartbeatAgo.'s ago' : ($heartbeatAgo < 3600 ? floor($heartbeatAgo/60).'m ago' : floor($heartbeatAgo/3600).'h ago')) : 'Starting…' ?>
+          </div>
+        </div>
+        <?php if ($autotickBusy): ?>
+          <div data-testid="ai-blogger-busy" style="background:#ede9fe;color:#7c3aed;padding:6px 12px;border-radius:8px;font-weight:700;font-size:12px;"><i class="bi bi-arrow-repeat me-1"></i>Writing right now…</div>
+        <?php endif; ?>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stat Strip -->
+  <div class="row g-3 mb-3">
+    <div class="col-md-3 col-6">
+      <div class="card-e" style="padding:14px 16px;">
+        <div class="text-uppercase small text-secondary" style="font-weight:700;letter-spacing:1px;font-size:10px;">Total AI posts published</div>
+        <div class="fw-bold mt-1" data-testid="ai-blogger-stat-total" style="font-size:24px;color:#0f172a;"><?= $totalAi ?></div>
+        <div class="text-secondary small">of <?= $totalAllPosts ?> total articles on /blog</div>
+      </div>
+    </div>
+    <div class="col-md-3 col-6">
+      <div class="card-e" style="padding:14px 16px;">
+        <div class="text-uppercase small text-secondary" style="font-weight:700;letter-spacing:1px;font-size:10px;">LLM tokens used</div>
+        <div class="fw-bold mt-1" style="font-size:24px;color:#0f172a;"><?= number_format($seoTokens) ?></div>
+        <div class="text-secondary small">~$<?= number_format($seoTokens / 1000 * 0.001, 3) ?> latest run · Claude Haiku 4.5</div>
+      </div>
+    </div>
+    <div class="col-md-3 col-6">
+      <div class="card-e" style="padding:14px 16px;">
+        <div class="text-uppercase small text-secondary" style="font-weight:700;letter-spacing:1px;font-size:10px;">Markets covered</div>
+        <div class="fw-bold mt-1" style="font-size:18px;color:#0f172a;">🇺🇸 🇬🇧 🇦🇺 🇨🇦</div>
+        <div class="text-secondary small">US · UK · Australia · Canada</div>
+      </div>
+    </div>
+    <div class="col-md-3 col-6">
+      <div class="card-e" style="padding:14px 16px;">
+        <div class="text-uppercase small text-secondary" style="font-weight:700;letter-spacing:1px;font-size:10px;">Next product up</div>
+        <?php if ($nextProduct): ?>
+          <div class="fw-bold mt-1" data-testid="ai-blogger-next-product" style="font-size:13px;color:#0f172a;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= esc($nextProduct['name']) ?></div>
+          <div class="text-secondary small"><?= esc($nextProduct['region']) ?> · round-robin queue</div>
+        <?php else: ?>
+          <div class="fw-bold mt-1" style="font-size:13px;color:#64748b;">No active product available</div>
+        <?php endif; ?>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI Discoverability Panel -->
+  <div class="card-e mb-3" data-testid="ai-discoverability-panel">
+    <div class="card-head">
+      <div class="ttl"><i class="bi bi-broadcast"></i> AI Discoverability <span class="sub ms-2">where this site is being indexed for AI search</span></div>
+      <span class="sub" style="color:#059669;font-weight:700;"><i class="bi bi-shield-check"></i> Allow-listed for 22 AI crawlers</span>
+    </div>
+    <div class="card-body-p" style="padding:14px 18px;">
+      <div class="row g-3">
+        <?php
+          $platforms = [
+            ['ChatGPT (OpenAI)',     'GPTBot, OAI-SearchBot, ChatGPT-User', 'allowed',  'bi-chat-square-dots'],
+            ['Gemini (Google)',      'Googlebot + Google-Extended',         'allowed',  'bi-google'],
+            ['Copilot (Microsoft)',  'Bingbot + IndexNow pinged daily',     'allowed',  'bi-microsoft'],
+            ['Claude (Anthropic)',   'ClaudeBot, anthropic-ai',             'allowed',  'bi-stars'],
+            ['Perplexity',           'PerplexityBot, Perplexity-User',      'allowed',  'bi-search'],
+            ['Apple Intelligence',   'Applebot, Applebot-Extended',         'allowed',  'bi-apple'],
+            ['Meta AI (Llama)',      'FacebookExternalHit, meta-externalagent','allowed','bi-meta'],
+            ['Mistral / You.com',    'MistralAI-User, YouBot, KagiBot',     'allowed',  'bi-broadcast-pin'],
+            ['Common Crawl (open)',  'CCBot, DiffBot, Bytespider',          'allowed',  'bi-database'],
+          ];
+          foreach ($platforms as $pf):
+        ?>
+          <div class="col-md-4 col-sm-6">
+            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:10px;">
+              <div style="width:34px;height:34px;border-radius:8px;background:#ecfdf5;color:#047857;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="<?= $pf[3] ?>" style="font-size:18px;"></i></div>
+              <div style="flex:1;min-width:0;">
+                <div class="fw-bold" style="font-size:13px;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= esc($pf[0]) ?></div>
+                <div class="text-secondary" style="font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= esc($pf[1]) ?></div>
+              </div>
+              <span style="background:#d1fae5;color:#047857;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;">ALLOWED</span>
+            </div>
+          </div>
+        <?php endforeach; ?>
+      </div>
+      <hr style="margin:14px 0;border-color:#e5e7eb;">
+      <div class="row g-2 small">
+        <div class="col-md-6">
+          <strong style="color:#0f172a;font-size:12px;">📡 Active indexing channels</strong>
+          <ul class="mb-0 ps-3 mt-1 text-secondary" style="font-size:12px;line-height:1.7;">
+            <li><a href="sitemap.xml" target="_blank" rel="noopener" style="color:#4338ca;">/sitemap.xml</a> — submitted to Google + Bing on every run</li>
+            <li><a href="merchant-feed.xml" target="_blank" rel="noopener" style="color:#4338ca;">/merchant-feed.xml</a> — Google Shopping / Bing Shopping</li>
+            <li><a href="llms.txt" target="_blank" rel="noopener" style="color:#4338ca;">/llms.txt</a> — live catalogue context for ChatGPT / Claude / Gemini / Perplexity</li>
+            <li><a href="ai.txt" target="_blank" rel="noopener" style="color:#4338ca;">/ai.txt</a> — citation + training-use manifest</li>
+            <li>IndexNow API → Bing, Yandex, Naver, Seznam (45 URLs / daily run)</li>
+          </ul>
+        </div>
+        <div class="col-md-6">
+          <strong style="color:#0f172a;font-size:12px;">🎯 Manual one-time submissions (recommended)</strong>
+          <ul class="mb-0 ps-3 mt-1 text-secondary" style="font-size:12px;line-height:1.7;">
+            <li><a href="https://search.google.com/search-console" target="_blank" rel="noopener" style="color:#4338ca;">Google Search Console</a> → add property, submit sitemap</li>
+            <li><a href="https://www.bing.com/webmasters" target="_blank" rel="noopener" style="color:#4338ca;">Bing Webmaster Tools</a> → unlocks Copilot + ChatGPT (via Bing)</li>
+            <li><a href="https://merchants.google.com" target="_blank" rel="noopener" style="color:#4338ca;">Google Merchant Center</a> → submit <code>/merchant-feed.xml</code></li>
+            <li><a href="https://yandex.com/support/webmaster/" target="_blank" rel="noopener" style="color:#4338ca;">Yandex Webmaster</a> · <a href="https://searchadvisor.naver.com/" target="_blank" rel="noopener" style="color:#4338ca;">Naver</a></li>
+            <li>ChatGPT / Claude / Perplexity: no console — they pick up the site automatically via their crawlers (already allow-listed above).</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Full feed of AI-published posts -->
+  <div class="card-e mb-3" data-testid="ai-blogger-full-feed">
+    <div class="card-head">
+      <div class="ttl"><i class="bi bi-stars"></i> All AI-published blog posts <span class="sub ms-2">newest first · click any to view live</span></div>
+      <a href="blog.php" target="_blank" rel="noopener" class="sub" style="color:var(--brand);"><i class="bi bi-box-arrow-up-right"></i> Open public /blog</a>
+    </div>
+    <div class="card-body-p" style="padding:0;">
+      <?php if (!$aiAll): ?>
+        <div class="text-center text-muted small py-4">No AI-published posts yet. Click <strong>"Publish next post now"</strong> above to ship the first one.</div>
+      <?php else: ?>
+        <div class="tbl-elegant" style="border:none;border-radius:0;">
+          <table class="table mb-0">
+            <thead>
+              <tr>
+                <th style="width:60px;">#</th>
+                <th>Title</th>
+                <th style="width:200px;">Featured product</th>
+                <th style="width:90px;">Region</th>
+                <th style="width:130px;">Published</th>
+                <th style="width:80px;text-align:right;">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php foreach ($aiAll as $i => $bp): ?>
+                <?php
+                  $rel = '';
+                  if (!empty($bp['created_at'])) {
+                      $d = max(0, time() - strtotime($bp['created_at']));
+                      $rel = $d < 3600 ? floor($d/60).'m ago' : ($d < 86400 ? floor($d/3600).'h ago' : floor($d/86400).'d ago');
+                  }
+                ?>
+                <tr data-testid="ai-blogger-row-<?= $i ?>">
+                  <td>
+                    <?php if (!empty($bp['image'])): ?>
+                      <img src="<?= esc($bp['image']) ?>" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:6px;">
+                    <?php endif; ?>
+                  </td>
+                  <td>
+                    <div class="fw-bold" style="font-size:13.5px;color:#0f172a;line-height:1.35;"><?= esc($bp['title']) ?></div>
+                    <div class="text-secondary" style="font-size:11px;margin-top:2px;"><?= esc($bp['read_time']) ?></div>
+                  </td>
+                  <td>
+                    <?php if ($bp['product_name']): ?>
+                      <a href="<?= esc('product.php?slug=' . urlencode($bp['product_slug'] ?? '')) ?>" target="_blank" rel="noopener" style="font-size:12px;color:#4338ca;text-decoration:none;"><?= esc($bp['product_name']) ?></a>
+                    <?php else: ?>
+                      <span class="text-secondary small">—</span>
+                    <?php endif; ?>
+                  </td>
+                  <td>
+                    <?php if ($bp['product_region']): ?>
+                      <span style="background:#e0e7ff;color:#3730a3;border-radius:999px;padding:2px 9px;font-size:10px;font-weight:700;"><?= esc($bp['product_region']) ?></span>
+                    <?php endif; ?>
+                  </td>
+                  <td>
+                    <div style="font-size:12px;color:#0f172a;font-weight:600;"><?= esc($bp['date']) ?></div>
+                    <?php if ($rel): ?><div class="text-secondary" style="font-size:11px;"><?= esc($rel) ?></div><?php endif; ?>
+                  </td>
+                  <td style="text-align:right;">
+                    <a href="blog-post.php?id=<?= urlencode($bp['id']) ?>" target="_blank" rel="noopener" class="btn btn-sm btn-primary rounded-pill px-3" data-testid="ai-blogger-row-view-<?= $i ?>"><i class="bi bi-box-arrow-up-right"></i></a>
+                  </td>
+                </tr>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+      <?php endif; ?>
+    </div>
+  </div>
+
+  <!-- Recent run log -->
+  <?php if ($recentRuns): ?>
+  <div class="card-e mb-3" data-testid="ai-blogger-runs-log">
+    <div class="card-head">
+      <div class="ttl"><i class="bi bi-clock-history"></i> Recent automation runs <span class="sub ms-2">last 8 cron / autotick triggers</span></div>
+    </div>
+    <div class="card-body-p" style="padding:0;">
+      <div class="tbl-elegant" style="border:none;border-radius:0;">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>Started</th>
+              <th>IndexNow</th>
+              <th>Products refreshed</th>
+              <th>New blog post</th>
+              <th>LLM calls</th>
+              <th>Errors</th>
+            </tr>
+          </thead>
+          <tbody>
+            <?php foreach ($recentRuns as $rr):
+              $rrErrors = !empty($rr['errors_json']) ? (array)json_decode((string)$rr['errors_json'], true) : [];
+            ?>
+              <tr>
+                <td style="font-size:12px;color:#0f172a;font-weight:600;"><?= esc(substr((string)$rr['started_at'], 0, 16)) ?> UTC</td>
+                <td><span style="background:<?= $rr['indexnow_status']==='ok' ? '#d1fae5' : '#fef3c7' ?>;color:<?= $rr['indexnow_status']==='ok' ? '#047857' : '#92400e' ?>;border-radius:999px;padding:2px 9px;font-size:10px;font-weight:700;"><?= esc($rr['indexnow_status'] ?: '—') ?></span> <span class="text-secondary small"><?= (int)$rr['indexnow_count'] ?> URLs</span></td>
+                <td><?= (int)$rr['products_updated'] ?></td>
+                <td>
+                  <?php if (!empty($rr['blog_post_id'])): ?>
+                    <a href="blog-post.php?id=<?= urlencode($rr['blog_post_id']) ?>" target="_blank" rel="noopener" style="font-size:12px;color:#4338ca;text-decoration:none;font-weight:600;"><?= esc(mb_strimwidth((string)$rr['blog_post_title'], 0, 50, '…')) ?></a>
+                  <?php else: ?>
+                    <span class="text-secondary small">—</span>
+                  <?php endif; ?>
+                </td>
+                <td><?= (int)$rr['llm_calls'] ?></td>
+                <td><?php if ($rrErrors): ?><span style="background:#fee2e2;color:#b91c1c;border-radius:999px;padding:2px 9px;font-size:10px;font-weight:700;"><?= count($rrErrors) ?></span><?php else: ?><span class="text-secondary small">0</span><?php endif; ?></td>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <?php endif; ?>
+
+<?php
+// ============================================================================
 // COMPANY INFO — single source of truth used by every email template.
 // Sidebar item below Dashboard.
 // ============================================================================

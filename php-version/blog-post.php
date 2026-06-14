@@ -12,8 +12,49 @@ $pageTitle = ($post ? $post['title'] : 'Post Not Found') . ' | ' . SITE_BRAND;
 if ($post) {
     $pageDescription = trim(mb_substr(strip_tags($post['content']), 0, 155)) . '…';
     $ogType = 'article';
-    $canonicalUrl = site_url() . '/blog-post.php?id=' . (int)$post['id'];
+    $canonicalUrl = site_url() . '/blog-post.php?id=' . rawurlencode((string)$post['id']);
     if (!empty($post['image'])) $ogImage = $post['image'];
+
+    // Article JSON-LD — lets Gemini, ChatGPT, Copilot, Perplexity and other
+    // AI engines extract a clean Article schema and cite the post directly.
+    $articleDate = '';
+    if (!empty($post['created_at'])) {
+        $articleDate = date('c', strtotime((string)$post['created_at']));
+    } elseif (!empty($post['date'])) {
+        $ts = strtotime((string)$post['date']);
+        if ($ts) $articleDate = date('c', $ts);
+    }
+    $authorName = !empty($post['ai_generated'])
+        ? (defined('SITE_BRAND') ? SITE_BRAND : 'Maventech Software') . ' AI Editorial Team'
+        : (defined('SITE_BRAND') ? SITE_BRAND : 'Maventech Software');
+    $jsonLdArticle = [
+        '@context'      => 'https://schema.org',
+        '@type'         => 'Article',
+        'headline'      => $post['title'],
+        'image'         => $post['image'] ? [$post['image']] : [],
+        'datePublished' => $articleDate ?: date('c'),
+        'dateModified'  => $articleDate ?: date('c'),
+        'author'        => [
+            '@type' => 'Organization',
+            'name'  => $authorName,
+            'url'   => site_url(),
+        ],
+        'publisher'     => [
+            '@type' => 'Organization',
+            'name'  => defined('SITE_BRAND') ? SITE_BRAND : 'Maventech Software',
+            'logo'  => [
+                '@type' => 'ImageObject',
+                'url'   => site_url() . '/assets/images/badges/microsoft-verified.svg',
+            ],
+        ],
+        'mainEntityOfPage' => [
+            '@type' => 'WebPage',
+            '@id'   => $canonicalUrl,
+        ],
+        'description'   => $pageDescription,
+        'inLanguage'    => 'en',
+        'isAccessibleForFree' => true,
+    ];
 } else {
     http_response_code(404);
     $noIndex = true;
@@ -21,6 +62,9 @@ if ($post) {
 
 include __DIR__ . '/includes/header.php';
 ?>
+<?php if (!empty($jsonLdArticle)): ?>
+<script type="application/ld+json"><?= json_encode($jsonLdArticle, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?></script>
+<?php endif; ?>
 <div class="container py-5" style="max-width: 800px;">
   <?php if ($post): ?>
     <nav aria-label="breadcrumb">
