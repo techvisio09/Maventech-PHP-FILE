@@ -43,7 +43,15 @@ define('SITE_PHONE', '1-888-632-9902');
 // Public site URL — used for canonical links, sitemap and structured data (change when moving to your own domain)
 define('SITE_URL', 'https://sales-control-26.preview.emergentagent.com');
 // Google Search Console verification — paste your GSC meta-tag code here (content="..." value)
-define('GOOGLE_SITE_VERIFICATION', '');
+define('GOOGLE_SITE_VERIFICATION', getenv('GOOGLE_SITE_VERIFICATION') ?: '');
+// Bing Webmaster Tools verification (unlocks Copilot + ChatGPT-via-Bing).
+define('BING_SITE_VERIFICATION',   getenv('BING_SITE_VERIFICATION')   ?: '');
+// Yandex Webmaster verification (used by Yandex search + several AI engines).
+define('YANDEX_SITE_VERIFICATION', getenv('YANDEX_SITE_VERIFICATION') ?: '');
+// Pinterest domain verification (rich pins on product pages).
+define('PINTEREST_SITE_VERIFICATION', getenv('PINTEREST_SITE_VERIFICATION') ?: '');
+// Baidu Webmaster verification (Chinese market — optional).
+define('BAIDU_SITE_VERIFICATION',  getenv('BAIDU_SITE_VERIFICATION')  ?: '');
 define('SITE_EMAIL', 'services@maventechsoftware.com');
 define('SITE_HOURS', 'Mon-Sat, 9 AM - 6 PM EST');
 define('SITE_ADDRESS', '135 Carolina St G2, Vallejo, CA 94590, USA');

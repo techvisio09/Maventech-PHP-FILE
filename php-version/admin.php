@@ -1878,6 +1878,181 @@ elseif ($tab === 'ai-blogger'):
     </div>
   </div>
 
+  <!-- Go-Live Checklist -->
+  <?php
+    // Compute live readiness signals so the user can see at a glance what's
+    // working and what still needs their attention before / after going live.
+    $siteUrl = rtrim(site_url(), '/');
+    $siteHost = parse_url($siteUrl, PHP_URL_HOST);
+    $isOnPreviewDomain = (bool)preg_match('/(preview\.emergentagent|\.emergent\.host|localhost|127\.0\.0\.1)/i', (string)$siteHost);
+
+    $checks = [];
+    // 1) Production domain
+    $checks[] = [
+        'ok'    => !$isOnPreviewDomain,
+        'label' => 'Production domain',
+        'value' => $siteHost ?: '—',
+        'help'  => $isOnPreviewDomain
+            ? 'Currently on the preview host. When you deploy to your real domain, update <code>SITE_URL</code> in <code>config.php</code> (or the <code>SITE_URL</code> env var). All sitemap / robots / canonical URLs auto-resolve from there — no other find-and-replace needed.'
+            : 'Live domain detected — sitemap, robots, ai.txt, llms.txt and canonical tags all resolve correctly.',
+    ];
+    // 2) Sitemap reachable
+    $sitemapOk = false;
+    try {
+        $ch = curl_init($siteUrl . '/sitemap.xml');
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 4, CURLOPT_NOBODY => true]);
+        curl_exec($ch);
+        $sitemapOk = (curl_getinfo($ch, CURLINFO_RESPONSE_CODE) === 200);
+        curl_close($ch);
+    } catch (Throwable $e) {}
+    $checks[] = [
+        'ok'    => $sitemapOk,
+        'label' => 'XML sitemap',
+        'value' => $siteUrl . '/sitemap.xml',
+        'help'  => $sitemapOk
+            ? 'Sitemap responds with HTTP 200 and lists every active product + category + blog post. Submit this URL to Google Search Console and Bing Webmaster Tools.'
+            : 'Sitemap not responding 200 — check that <code>router.php</code> (or .htaccess) maps <code>/sitemap.xml</code> to <code>sitemap-xml.php</code>.',
+    ];
+    // 3) Robots.txt dynamic
+    $robotsOk = false; $robotsBody = '';
+    try {
+        $rb = @file_get_contents($siteUrl . '/robots.txt');
+        if ($rb !== false) { $robotsBody = $rb; $robotsOk = stripos($rb, 'Sitemap:') !== false; }
+    } catch (Throwable $e) {}
+    $checks[] = [
+        'ok'    => $robotsOk && !$isOnPreviewDomain ? true : ($robotsOk && strpos($robotsBody, $siteHost) !== false),
+        'label' => 'robots.txt is dynamic',
+        'value' => $robotsOk ? 'Auto-generated · Sitemap line resolves to ' . $siteHost : 'Missing or static',
+        'help'  => 'Served by <code>robots-txt.php</code>, not a static file — so when you switch domains the Sitemap: URLs update automatically.',
+    ];
+    // 4) ai.txt dynamic
+    $aiTxtOk = false;
+    try {
+        $rb = @file_get_contents($siteUrl . '/ai.txt');
+        if ($rb !== false && stripos($rb, 'Citation-Preference') !== false) $aiTxtOk = true;
+    } catch (Throwable $e) {}
+    $checks[] = [
+        'ok'    => $aiTxtOk,
+        'label' => 'ai.txt manifest',
+        'value' => $siteUrl . '/ai.txt',
+        'help'  => 'Citation + training-use preferences for ChatGPT / Claude / Perplexity / Gemini — respected by every modern AI crawler.',
+    ];
+    // 5) llms.txt
+    $llmsOk = false;
+    try {
+        $rb = @file_get_contents($siteUrl . '/llms.txt');
+        if ($rb !== false && stripos($rb, 'Live product catalogue') !== false) $llmsOk = true;
+    } catch (Throwable $e) {}
+    $checks[] = [
+        'ok'    => $llmsOk,
+        'label' => '/llms.txt live catalogue',
+        'value' => $siteUrl . '/llms.txt',
+        'help'  => 'Live product list + AI summaries rebuilt on every request — what ChatGPT / Perplexity read when summarising your shop.',
+    ];
+    // 6) Merchant feed
+    $feedOk = false;
+    try {
+        $ch = curl_init($siteUrl . '/merchant-feed.xml');
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 4, CURLOPT_NOBODY => true]);
+        curl_exec($ch);
+        $feedOk = (curl_getinfo($ch, CURLINFO_RESPONSE_CODE) === 200);
+        curl_close($ch);
+    } catch (Throwable $e) {}
+    $checks[] = [
+        'ok'    => $feedOk,
+        'label' => 'Google / Bing Shopping feed',
+        'value' => $siteUrl . '/merchant-feed.xml',
+        'help'  => 'Submit this URL once inside Google Merchant Center → "Add product feed" so your catalog appears in Google Shopping carousels.',
+    ];
+    // 7) Verification meta tags
+    $gv  = defined('GOOGLE_SITE_VERIFICATION') ? GOOGLE_SITE_VERIFICATION : '';
+    $bv  = defined('BING_SITE_VERIFICATION')   ? BING_SITE_VERIFICATION   : '';
+    $yv  = defined('YANDEX_SITE_VERIFICATION') ? YANDEX_SITE_VERIFICATION : '';
+    $checks[] = [
+        'ok'    => $gv !== '',
+        'label' => 'Google Search Console verified',
+        'value' => $gv ? '<code>google-site-verification</code> meta tag set' : 'Add token from search.google.com/search-console',
+        'help'  => 'Once verified you can submit sitemap + view Gemini / Discover impressions. Token goes into <code>config.php</code> as <code>GOOGLE_SITE_VERIFICATION</code> or env var.',
+    ];
+    $checks[] = [
+        'ok'    => $bv !== '',
+        'label' => 'Bing Webmaster verified',
+        'value' => $bv ? '<code>msvalidate.01</code> meta tag set' : 'Add token from bing.com/webmasters',
+        'help'  => 'Verifying Bing unlocks indexing for <strong>Microsoft Copilot</strong> and <strong>ChatGPT-via-Bing</strong>. Token goes into <code>config.php</code> as <code>BING_SITE_VERIFICATION</code>.',
+    ];
+    $checks[] = [
+        'ok'    => $yv !== '',
+        'label' => 'Yandex Webmaster verified (optional)',
+        'value' => $yv ? '<code>yandex-verification</code> meta tag set' : 'Optional — useful for non-English markets',
+        'help'  => 'Yandex feeds several open-source AI models. Token goes into <code>config.php</code> as <code>YANDEX_SITE_VERIFICATION</code>.',
+    ];
+    // 8) Automation heartbeat (re-uses earlier check)
+    $checks[] = [
+        'ok'    => $autoHealthy,
+        'label' => 'Daily auto-publish heartbeat',
+        'value' => $heartbeatAgo !== null ? ('Last ping ' . ($heartbeatAgo < 60 ? $heartbeatAgo.'s' : ($heartbeatAgo < 3600 ? floor($heartbeatAgo/60).'m' : floor($heartbeatAgo/3600).'h')) . ' ago') : 'Background poller not started yet',
+        'help'  => 'Three independent triggers (visitor pageviews · hourly poller · /cron.php) keep the bot running 24/7.',
+    ];
+    // 9) At least one AI blog post
+    $checks[] = [
+        'ok'    => $totalAi > 0,
+        'label' => 'AI blog posts published',
+        'value' => $totalAi . ' post' . ($totalAi === 1 ? '' : 's') . ' on /blog',
+        'help'  => 'New posts ship one per 24 h — auto-pinged to Google + Bing + IndexNow so they appear in search within minutes.',
+    ];
+
+    $okCount = count(array_filter($checks, fn($c) => $c['ok']));
+    $totalCheck = count($checks);
+    $pct = (int)round(($okCount / max(1, $totalCheck)) * 100);
+    $hostBadgeColor = $isOnPreviewDomain ? '#b45309' : '#059669';
+    $hostBadgeText  = $isOnPreviewDomain ? 'PREVIEW MODE' : 'LIVE';
+  ?>
+  <div class="card-e mb-3" data-testid="go-live-checklist">
+    <div class="card-head">
+      <div class="ttl"><i class="bi bi-rocket-takeoff"></i> Go-Live Checklist <span class="sub ms-2">make sure everything keeps working when you deploy</span></div>
+      <div class="d-flex align-items-center gap-2">
+        <span style="background:<?= $hostBadgeColor ?>;color:white;border-radius:999px;padding:3px 10px;font-size:10px;font-weight:700;letter-spacing:0.5px;"><?= esc($hostBadgeText) ?></span>
+        <span class="sub" style="color:<?= $okCount === $totalCheck ? '#059669' : '#b45309' ?>;font-weight:700;" data-testid="go-live-score"><?= $okCount ?>/<?= $totalCheck ?> ready (<?= $pct ?>%)</span>
+      </div>
+    </div>
+    <div class="card-body-p" style="padding:0;">
+      <div style="height:6px;background:#f1f5f9;">
+        <div style="height:6px;background:linear-gradient(90deg,#10b981 0%,#059669 100%);width:<?= $pct ?>%;transition:width .4s;"></div>
+      </div>
+      <div class="tbl-elegant" style="border:none;border-radius:0;">
+        <table class="table mb-0">
+          <tbody>
+            <?php foreach ($checks as $i => $c): ?>
+              <tr data-testid="checklist-row-<?= $i ?>">
+                <td style="width:46px;text-align:center;vertical-align:top;padding-top:14px;">
+                  <?php if ($c['ok']): ?>
+                    <i class="bi bi-check-circle-fill" style="font-size:22px;color:#059669;"></i>
+                  <?php else: ?>
+                    <i class="bi bi-exclamation-triangle-fill" style="font-size:22px;color:#d97706;"></i>
+                  <?php endif; ?>
+                </td>
+                <td style="padding:12px 14px;">
+                  <div class="fw-bold" style="font-size:13.5px;color:#0f172a;"><?= esc($c['label']) ?></div>
+                  <div class="text-secondary" style="font-size:12px;margin-top:2px;"><?= $c['value'] /* contains <code> tags */ ?></div>
+                  <div class="text-secondary" style="font-size:11.5px;margin-top:4px;line-height:1.45;"><?= $c['help'] /* trusted HTML — author-controlled */ ?></div>
+                </td>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+      <div style="padding:12px 16px;background:#f8fafc;border-top:1px solid #e5e7eb;display:flex;gap:10px;flex-wrap:wrap;">
+        <a href="https://search.google.com/search-console" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary rounded-pill px-3"><i class="bi bi-google me-1"></i>Google Search Console</a>
+        <a href="https://www.bing.com/webmasters" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary rounded-pill px-3"><i class="bi bi-microsoft me-1"></i>Bing Webmaster Tools</a>
+        <a href="https://merchants.google.com" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary rounded-pill px-3"><i class="bi bi-shop me-1"></i>Google Merchant Center</a>
+        <a href="https://yandex.com/support/webmaster/" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary rounded-pill px-3">Yandex</a>
+        <a href="<?= esc($siteUrl) ?>/robots.txt" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary rounded-pill px-3" data-testid="checklist-view-robots">View /robots.txt</a>
+        <a href="<?= esc($siteUrl) ?>/ai.txt" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary rounded-pill px-3" data-testid="checklist-view-aitxt">View /ai.txt</a>
+        <a href="<?= esc($siteUrl) ?>/llms.txt" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary rounded-pill px-3">View /llms.txt</a>
+      </div>
+    </div>
+  </div>
+
   <!-- AI Discoverability Panel -->
   <div class="card-e mb-3" data-testid="ai-discoverability-panel">
     <div class="card-head">

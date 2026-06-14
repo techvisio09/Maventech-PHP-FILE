@@ -581,3 +581,46 @@ The user asked for (1) a sidebar entry so the auto-blogger isn't buried inside t
 - Sidebar HTML contains `data-testid="adm-nav-ai-blogger"` with `class="item active"` highlighting + the `AUTO` badge.
 - `Article` JSON-LD blob parsed and confirmed on the live AI blog post: 2 JSON-LD blocks (Article + Organization).
 
+
+
+## [Jun 2026] Go-Live hardening — dynamic SEO files, internal-linking SEO boost, readiness checklist
+The user asked: *"make sure everything works fine when the website goes live · proper indexing · blog posting must be there · create backend links also that help in ranking"*. Four layers were added:
+
+### 1. Dynamic robots.txt + ai.txt (auto-resolve to live host)
+- The original `robots.txt` and `ai.txt` were **static files with the preview URL hard-coded** — they would have broken on domain switch.
+- Replaced with `robots-txt.php` + `ai-txt.php` (PHP generators that build the file on every request using `site_url()`). Wired into `router.php` (built-in server) and `.htaccess` (Apache) so `/robots.txt` and `/ai.txt` now serve the dynamic versions. Static files renamed to `.static-backup`.
+- Result: when you switch from the preview host to `maventechsoftware.com`, the Sitemap: / ProductFeed: / Contact: lines update automatically — no manual find-and-replace.
+
+### 2. Webmaster verification meta-tag slots (config.php)
+- Added constants `BING_SITE_VERIFICATION`, `YANDEX_SITE_VERIFICATION`, `PINTEREST_SITE_VERIFICATION`, `BAIDU_SITE_VERIFICATION` alongside the existing `GOOGLE_SITE_VERIFICATION`. Each can be set via `config.php` or env var.
+- `header.php` now emits the matching meta tags (`msvalidate.01`, `yandex-verification`, `p:domain_verify`, `baidu-site-verification`) so once you paste the tokens, every search/AI console verifies in one click.
+- Bing verification specifically unlocks **Microsoft Copilot + ChatGPT-via-Bing**.
+
+### 3. Internal-linking SEO boost (the "backend links" the user asked for)
+Internal links are one of Google's strongest topical-authority signals.
+- **`/blog-post.php` enhancements**: AI byline pill, **Featured Product card** (full-width with image + brand + price + "View product" CTA when `product_id` is set), **"You might also like"** 3-product grid drawn from the same category, **"More from the blog"** 3-post grid (newest first, excluding current post). Internal anchor count per post went from ~5 → **35**.
+- **`/product.php` enhancement**: new **"Read more about X"** widget showing up to 3 blog articles whose `product_id` matches this product (reverse-link from articles back to product pages). Surfaces with an `AI` badge when the article was bot-authored.
+- Net effect: every AI blog post now interlinks to 3 sibling products + 3 sibling articles + 1 featured product, and every product page that has been featured pulls in its articles — exactly the link-graph density Google's PageRank-style internal score rewards.
+
+### 4. Go-Live Checklist panel (admin.php?tab=ai-blogger)
+Single-glance dashboard panel (`data-testid="go-live-checklist"`) with **11 automated readiness checks**, a progress bar, and a `LIVE` vs `PREVIEW MODE` badge. Each row shows a green check or amber warning + actionable copy:
+1. Production domain (detects preview vs live host)
+2. XML sitemap reachable (HTTP 200 check)
+3. robots.txt is dynamic (looks for live-host Sitemap line)
+4. ai.txt manifest reachable + contains Citation-Preference
+5. /llms.txt live catalogue reachable
+6. Google/Bing Shopping merchant-feed reachable
+7. Google Search Console verified (token in `GOOGLE_SITE_VERIFICATION`)
+8. Bing Webmaster verified (`BING_SITE_VERIFICATION`)
+9. Yandex Webmaster verified (optional)
+10. Daily auto-publish heartbeat (from `/tmp/seo-heartbeat.log`)
+11. AI blog posts published (count)
+Footer of the panel has direct buttons to **Google Search Console, Bing Webmaster Tools, Google Merchant Center, Yandex** + quick-view links to `/robots.txt`, `/ai.txt`, `/llms.txt` so the operator can verify each file is serving the right content.
+
+### Verified end-to-end
+- All seven modified PHP files lint-clean.
+- `curl /robots.txt` → "Sitemap: https://sales-control-26.preview.emergentagent.com/sitemap.xml" (auto-resolves; will swap on live).
+- `curl /ai.txt` → "Auto-generated from <site_url> at <timestamp>" + dynamic Sitemap + ProductFeed + Contact lines.
+- Go-Live Checklist renders 11 rows, scoring 7/11 (64%) in PREVIEW MODE — the 4 amber items are exactly the 4 user-action items (live domain + 3 webmaster tokens).
+- Latest AI blog post has 35 internal anchor links (up from 5), AI Editorial Team byline visible, Featured Product card + Related Products + More Articles all render. The product page for the featured product shows the reverse-linking widget.
+

@@ -417,6 +417,41 @@ include __DIR__ . '/includes/header.php';
       <?php endforeach; ?>
     </div>
   <?php endif; ?>
+
+  <?php
+    /* ---- Internal-linking widget: blog articles that feature this product.
+       Boosts on-page topical authority (Google's PageRank-style internal
+       link graph) and gives buyers extra trust-building context. ----------- */
+    $articlesAboutThis = [];
+    try {
+        $aap = db()->prepare("SELECT id, title, date, read_time, image, ai_generated
+                                FROM blog_posts
+                               WHERE product_id = ?
+                               ORDER BY COALESCE(created_at, '1970-01-01') DESC, id DESC
+                               LIMIT 3");
+        $aap->execute([(int)$product['id']]);
+        $articlesAboutThis = $aap->fetchAll();
+    } catch (Throwable $e) { /* old schema — silent */ }
+  ?>
+  <?php if ($articlesAboutThis): ?>
+    <h2 class="fw-bold h4 mt-5 mb-4" data-testid="articles-about-this-product"><i class="bi bi-journal-text me-1 text-primary"></i>Read more about <?= esc($product['name']) ?></h2>
+    <div class="row g-3">
+      <?php foreach ($articlesAboutThis as $bp): ?>
+        <div class="col-md-4">
+          <a href="blog-post.php?id=<?= urlencode($bp['id']) ?>" class="card h-100 text-decoration-none p-0" style="border:1px solid #e5e7eb;overflow:hidden;">
+            <img src="<?= esc($bp['image']) ?>" alt="<?= esc($bp['title']) ?>" style="width:100%;height:140px;object-fit:cover;">
+            <div class="p-3">
+              <div class="small text-secondary"><i class="bi bi-calendar3 me-1"></i><?= esc($bp['date']) ?> · <?= esc($bp['read_time']) ?>
+                <?php if (!empty($bp['ai_generated'])): ?> · <span style="color:#5b21b6;font-weight:600;"><i class="bi bi-stars"></i> AI</span><?php endif; ?>
+              </div>
+              <div class="fw-bold mt-1 text-body" style="font-size:14px;line-height:1.35;"><?= esc($bp['title']) ?></div>
+              <div class="text-primary small fw-semibold mt-2">Read article <i class="bi bi-arrow-right"></i></div>
+            </div>
+          </a>
+        </div>
+      <?php endforeach; ?>
+    </div>
+  <?php endif; ?>
 </div>
 
 <style>
