@@ -1978,168 +1978,149 @@ elseif ($tab === 'ai-blogger'):
     <?php unset($_SESSION['seo_bot_blog_flash']); ?>
   <?php endif; ?>
 
-  <!-- ====== 1. API KEY SETTINGS ====== -->
-  <div class="card-e mb-3" style="border:1px solid #e2e8f0;border-radius:14px;padding:20px;">
-    <h5 class="fw-bold mb-3" style="font-size:15px;"><i class="bi bi-key-fill me-2 text-warning"></i>API Keys & Settings</h5>
-    <p class="text-secondary small mb-3">Enter your API keys below. The AI blogger needs an AI key to write posts. Google & Bing keys help your posts appear in search faster.</p>
-    <form method="post" action="admin.php?tab=ai-blogger">
-      <input type="hidden" name="save_ai_keys" value="1">
-      <div class="row g-3">
-        <div class="col-md-4">
-          <label class="form-label small fw-semibold">AI Key (Emergent / OpenAI)</label>
-          <div class="input-group">
-            <input type="password" name="llm_api_key" class="form-control" placeholder="<?= $hasLlmKey ? $maskedKey : 'Paste your AI key here' ?>" style="font-size:13px;" data-testid="ai-key-input">
-            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="var i=this.previousElementSibling;i.type=i.type==='password'?'text':'password';"><i class="bi bi-eye"></i></button>
-          </div>
-          <div class="small mt-1 <?= $hasLlmKey ? 'text-success' : 'text-danger' ?>">
-            <i class="bi bi-<?= $hasLlmKey ? 'check-circle-fill' : 'exclamation-circle-fill' ?> me-1"></i>
-            <?= $hasLlmKey ? 'Key configured' : 'No key set — AI features won\'t work without this' ?>
-          </div>
-        </div>
-        <div class="col-md-4">
-          <label class="form-label small fw-semibold">Google Search Console Token</label>
-          <input type="text" name="google_search_console" class="form-control" placeholder="<?= $gscToken ? 'Configured' : 'Paste verification token' ?>" style="font-size:13px;" data-testid="gsc-key-input">
-          <div class="small mt-1 <?= $gscToken ? 'text-success' : 'text-secondary' ?>">
-            <i class="bi bi-<?= $gscToken ? 'check-circle-fill' : 'info-circle' ?> me-1"></i>
-            <?= $gscToken ? 'Token set' : 'Optional — helps Google find your posts faster' ?>
-          </div>
-        </div>
-        <div class="col-md-4">
-          <label class="form-label small fw-semibold">Bing Webmaster Token</label>
-          <input type="text" name="bing_webmaster" class="form-control" placeholder="<?= $bingToken ? 'Configured' : 'Paste verification token' ?>" style="font-size:13px;" data-testid="bing-key-input">
-          <div class="small mt-1 <?= $bingToken ? 'text-success' : 'text-secondary' ?>">
-            <i class="bi bi-<?= $bingToken ? 'check-circle-fill' : 'info-circle' ?> me-1"></i>
-            <?= $bingToken ? 'Token set' : 'Optional — helps Bing & AI search find your posts' ?>
-          </div>
-        </div>
-      </div>
-      <div class="mt-3">
-        <button type="submit" class="btn btn-primary rounded-pill px-4" data-testid="save-ai-keys-btn"><i class="bi bi-check-lg me-1"></i>Save Settings</button>
-        <span class="text-secondary small ms-2">Changes apply immediately — no restart needed.</span>
-      </div>
-    </form>
-  </div>
+  <!-- Accordion styling -->
+  <style>
+    .ai-section { border:1px solid #e2e8f0; border-radius:14px; margin-bottom:12px; background:#fff; overflow:hidden; }
+    .ai-section > summary { padding:14px 20px; font-size:14px; font-weight:700; cursor:pointer; list-style:none; display:flex; align-items:center; gap:8px; user-select:none; }
+    .ai-section > summary::-webkit-details-marker { display:none; }
+    .ai-section > summary::before { content:'\F285'; font-family:'bootstrap-icons'; font-size:12px; color:#94a3b8; transition:transform .2s; flex-shrink:0; }
+    .ai-section[open] > summary::before { transform:rotate(90deg); color:#3b82f6; }
+    .ai-section > summary:hover { background:#f8fafc; }
+    .ai-section > .ai-body { padding:0 20px 20px; }
+    .ai-section > summary .ai-badge { margin-left:auto; font-size:11px; font-weight:600; padding:3px 10px; border-radius:999px; }
+  </style>
 
-  <!-- ====== 2. QUICK ACTIONS (one-click) ====== -->
-  <div class="card-e mb-3" style="border:1px solid #e2e8f0;border-radius:14px;padding:20px;">
-    <h5 class="fw-bold mb-3" style="font-size:15px;"><i class="bi bi-lightning-charge-fill me-2 text-success"></i>Quick Actions</h5>
+  <!-- ====== 1. QUICK ACTIONS — always visible ====== -->
+  <div class="card-e mb-3" style="border:1px solid #e2e8f0;border-radius:14px;padding:16px 20px;">
     <div class="row g-3">
       <div class="col-md-6 col-lg-3">
-        <a href="admin.php?tab=ai-blogger&run_underserved_post=1" class="card text-decoration-none h-100" style="border:2px solid #d1fae5;border-radius:12px;padding:16px;transition:all .15s;" data-testid="ai-blogger-run-underserved"
+        <a href="admin.php?tab=ai-blogger&run_underserved_post=1" class="card text-decoration-none h-100" style="border:2px solid #d1fae5;border-radius:12px;padding:14px;transition:all .15s;" data-testid="ai-blogger-run-underserved"
            onmouseover="this.style.borderColor='#10b981';this.style.transform='translateY(-2px)'"
            onmouseout="this.style.borderColor='#d1fae5';this.style.transform='none'"
            onclick="return confirm('Write and publish one new blog post now?')">
           <div class="text-center">
-            <div style="font-size:28px;color:#10b981;"><i class="bi bi-pencil-square"></i></div>
-            <div class="fw-bold mt-2" style="font-size:14px;color:#0f172a;">Write One Post</div>
-            <div class="text-secondary small mt-1">AI picks a product and writes a blog post for the market that needs it most</div>
+            <div style="font-size:24px;color:#10b981;"><i class="bi bi-pencil-square"></i></div>
+            <div class="fw-bold mt-1" style="font-size:13px;color:#0f172a;">Write One Post</div>
+            <div class="text-secondary" style="font-size:11px;">AI picks a product & writes a blog</div>
           </div>
         </a>
       </div>
       <div class="col-md-6 col-lg-3">
-        <a href="admin.php?tab=ai-blogger&run_random_post=1" class="card text-decoration-none h-100" style="border:2px solid #dbeafe;border-radius:12px;padding:16px;transition:all .15s;" data-testid="ai-blogger-run-random"
+        <a href="admin.php?tab=ai-blogger&run_random_post=1" class="card text-decoration-none h-100" style="border:2px solid #dbeafe;border-radius:12px;padding:14px;transition:all .15s;" data-testid="ai-blogger-run-random"
            onmouseover="this.style.borderColor='#3b82f6';this.style.transform='translateY(-2px)'"
            onmouseout="this.style.borderColor='#dbeafe';this.style.transform='none'"
            onclick="return confirm('Write a random blog post now?')">
           <div class="text-center">
-            <div style="font-size:28px;color:#3b82f6;"><i class="bi bi-shuffle"></i></div>
-            <div class="fw-bold mt-2" style="font-size:14px;color:#0f172a;">Random Post</div>
-            <div class="text-secondary small mt-1">Picks a random product and country, writes and publishes instantly</div>
+            <div style="font-size:24px;color:#3b82f6;"><i class="bi bi-shuffle"></i></div>
+            <div class="fw-bold mt-1" style="font-size:13px;color:#0f172a;">Random Post</div>
+            <div class="text-secondary" style="font-size:11px;">Random product & country</div>
           </div>
         </a>
       </div>
       <div class="col-md-6 col-lg-3">
-        <a href="admin.php?tab=ai-blogger&run_trends_article=1" class="card text-decoration-none h-100" style="border:2px solid #ede9fe;border-radius:12px;padding:16px;transition:all .15s;" data-testid="ai-blogger-run-trends"
+        <a href="admin.php?tab=ai-blogger&run_trends_article=1" class="card text-decoration-none h-100" style="border:2px solid #ede9fe;border-radius:12px;padding:14px;transition:all .15s;" data-testid="ai-blogger-run-trends"
            onmouseover="this.style.borderColor='#8b5cf6';this.style.transform='translateY(-2px)'"
            onmouseout="this.style.borderColor='#ede9fe';this.style.transform='none'"
            onclick="return confirm('Write a trending topic article now?')">
           <div class="text-center">
-            <div style="font-size:28px;color:#8b5cf6;"><i class="bi bi-newspaper"></i></div>
-            <div class="fw-bold mt-2" style="font-size:14px;color:#0f172a;">Trends Article</div>
-            <div class="text-secondary small mt-1">A longer opinion piece about current trends in one of your product categories</div>
+            <div style="font-size:24px;color:#8b5cf6;"><i class="bi bi-newspaper"></i></div>
+            <div class="fw-bold mt-1" style="font-size:13px;color:#0f172a;">Trends Article</div>
+            <div class="text-secondary" style="font-size:11px;">Long-form industry trends</div>
           </div>
         </a>
       </div>
       <div class="col-md-6 col-lg-3">
-        <a href="admin.php?tab=ai-blogger&seo_run=1" class="card text-decoration-none h-100" style="border:2px solid #fef3c7;border-radius:12px;padding:16px;transition:all .15s;background:linear-gradient(135deg,#fffbeb,#fef9c3);" data-testid="ai-blogger-run-now"
+        <a href="admin.php?tab=ai-blogger&seo_run=1" class="card text-decoration-none h-100" style="border:2px solid #fef3c7;border-radius:12px;padding:14px;transition:all .15s;background:linear-gradient(135deg,#fffbeb,#fef9c3);" data-testid="ai-blogger-run-now"
            onmouseover="this.style.borderColor='#f59e0b';this.style.transform='translateY(-2px)'"
            onmouseout="this.style.borderColor='#fef3c7';this.style.transform='none'"
-           onclick="return confirm('Publish the full daily batch? This writes 24 posts (6 per country) — takes about 3 minutes.')">
+           onclick="return confirm('Publish the full daily batch? This writes 24 posts — takes about 3 minutes.')">
           <div class="text-center">
-            <div style="font-size:28px;color:#f59e0b;"><i class="bi bi-play-circle-fill"></i></div>
-            <div class="fw-bold mt-2" style="font-size:14px;color:#0f172a;">Publish Full Batch</div>
-            <div class="text-secondary small mt-1">Write all 24 posts at once (6 per country: US, UK, AU, CA)</div>
+            <div style="font-size:24px;color:#f59e0b;"><i class="bi bi-play-circle-fill"></i></div>
+            <div class="fw-bold mt-1" style="font-size:13px;color:#0f172a;">Publish Full Batch</div>
+            <div class="text-secondary" style="font-size:11px;">24 posts (6 × 4 countries)</div>
           </div>
         </a>
       </div>
     </div>
   </div>
 
-  <!-- ====== 3. TODAY'S PROGRESS ====== -->
+  <!-- ====== 2. TODAY'S STATS — always visible (compact) ====== -->
   <?php
     $dailyCap   = 24;
     $todayCount = (int)$mon['posts_24h'];
     $pct        = max(0, min(100, (int)round($todayCount / $dailyCap * 100)));
   ?>
-  <div class="row g-3 mb-3">
-    <div class="col-md-3">
-      <div class="card-e text-center" style="padding:16px;border-radius:12px;">
-        <div class="text-secondary small fw-bold" style="letter-spacing:0.5px;">Posts Today</div>
-        <div class="fw-bold mt-1" style="font-size:28px;color:<?= $todayCount > 0 ? '#059669' : '#0f172a' ?>;" data-testid="ai-blogger-daily-count"><?= $todayCount ?></div>
-        <div class="text-secondary small">out of <?= $dailyCap ?> target</div>
-        <div class="progress mt-2" style="height:6px;border-radius:999px;background:#e2e8f0;">
-          <div class="progress-bar" style="width:<?= $pct ?>%;background:#10b981;"></div>
-        </div>
+  <div class="row g-2 mb-3">
+    <div class="col-6 col-md-3">
+      <div class="card-e text-center" style="padding:12px;border-radius:10px;">
+        <div class="text-secondary" style="font-size:10px;font-weight:700;letter-spacing:0.5px;">TODAY</div>
+        <div class="fw-bold" style="font-size:22px;color:<?= $todayCount > 0 ? '#059669' : '#0f172a' ?>;" data-testid="ai-blogger-daily-count"><?= $todayCount ?><span class="text-secondary" style="font-size:12px;font-weight:400;"> / <?= $dailyCap ?></span></div>
       </div>
     </div>
-    <div class="col-md-3">
-      <div class="card-e text-center" style="padding:16px;border-radius:12px;">
-        <div class="text-secondary small fw-bold" style="letter-spacing:0.5px;">Total Posts</div>
-        <div class="fw-bold mt-1" style="font-size:28px;color:#0f172a;" data-testid="ai-blogger-stat-total"><?= $totalAiAll ?></div>
-        <div class="text-secondary small">published on your blog</div>
+    <div class="col-6 col-md-3">
+      <div class="card-e text-center" style="padding:12px;border-radius:10px;">
+        <div class="text-secondary" style="font-size:10px;font-weight:700;letter-spacing:0.5px;">TOTAL POSTS</div>
+        <div class="fw-bold" style="font-size:22px;color:#0f172a;" data-testid="ai-blogger-stat-total"><?= $totalAiAll ?></div>
       </div>
     </div>
-    <div class="col-md-3">
-      <div class="card-e text-center" style="padding:16px;border-radius:12px;">
-        <div class="text-secondary small fw-bold" style="letter-spacing:0.5px;">Markets</div>
-        <div class="mt-2">
-          <?php foreach ($regionsList as $rc => $ri): ?>
-            <span style="font-size:20px;" title="<?= esc($ri['name']) ?>"><?= $ri['flag'] ?></span>
-          <?php endforeach; ?>
-        </div>
-        <div class="text-secondary small mt-1">US · UK · AU · CA</div>
+    <div class="col-6 col-md-3">
+      <div class="card-e text-center" style="padding:12px;border-radius:10px;">
+        <div class="text-secondary" style="font-size:10px;font-weight:700;letter-spacing:0.5px;">MARKETS</div>
+        <div style="font-size:18px;margin-top:2px;">🇺🇸 🇬🇧 🇦🇺 🇨🇦</div>
       </div>
     </div>
-    <div class="col-md-3">
-      <div class="card-e text-center" style="padding:16px;border-radius:12px;">
-        <div class="text-secondary small fw-bold" style="letter-spacing:0.5px;">Next Post About</div>
-        <?php if ($nextProduct): ?>
-          <div class="fw-bold mt-1" style="font-size:13px;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" data-testid="ai-blogger-next-product"><?= esc($nextProduct['name']) ?></div>
-          <div class="text-secondary small"><?= esc($nextProduct['region'] ?? 'US') ?> market</div>
-        <?php else: ?>
-          <div class="text-secondary mt-1">Waiting for first run</div>
-        <?php endif; ?>
+    <div class="col-6 col-md-3">
+      <div class="card-e text-center" style="padding:12px;border-radius:10px;">
+        <div class="text-secondary" style="font-size:10px;font-weight:700;letter-spacing:0.5px;">STATUS</div>
+        <span class="badge rounded-pill mt-1" style="background:<?= $autoHealthy ? '#059669' : '#d97706' ?>;color:white;font-size:10px;"><?= $autoHealthy ? 'Running' : 'Waiting' ?></span>
       </div>
     </div>
   </div>
 
-  <!-- ====== 4. AUTOMATION STATUS ====== -->
-  <div class="card-e mb-3" style="border-radius:12px;padding:16px;background:<?= $autoHealthy ? 'linear-gradient(135deg,#ecfdf5 0%,#f0fdfa 100%)' : 'linear-gradient(135deg,#fefce8 0%,#fef3c7 100%)' ?>;border:1px solid <?= $autoHealthy ? '#a7f3d0' : '#fde68a' ?>;">
-    <div class="d-flex align-items-center gap-3 flex-wrap">
-      <div>
-        <span class="badge rounded-pill" style="background:<?= $autoHealthy ? '#059669' : '#d97706' ?>;color:white;font-size:11px;padding:5px 12px;">
-          <i class="bi bi-<?= $autoHealthy ? 'check-circle-fill' : 'clock-history' ?> me-1"></i>
-          <?= $autoHealthy ? 'Automation Running' : 'Waiting to Start' ?>
-        </span>
-      </div>
-      <div class="text-secondary small">
-        Posts are written and published automatically every 24 hours. No manual action needed.
-        <span class="fw-semibold">Next batch in: <?= esc($nextDueText) ?></span>
-      </div>
-    </div>
-  </div>
+  <!-- ====== COLLAPSIBLE SECTIONS ====== -->
 
-  <!-- ====== 5. SEARCH ENGINE VISIBILITY — full setup panel ====== -->
+  <!-- API Keys & Settings -->
+  <details class="ai-section" open>
+    <summary>
+      <i class="bi bi-key-fill text-warning"></i> API Keys & Settings
+      <span class="ai-badge" style="background:<?= $hasLlmKey ? '#d1fae5' : '#fee2e2' ?>;color:<?= $hasLlmKey ? '#065f46' : '#991b1b' ?>;"><?= $hasLlmKey ? 'Key Set' : 'Key Missing' ?></span>
+    </summary>
+    <div class="ai-body">
+      <p class="text-secondary small mb-3">Enter your API keys below. The AI blogger needs an AI key to write posts.</p>
+      <form method="post" action="admin.php?tab=ai-blogger">
+        <input type="hidden" name="save_ai_keys" value="1">
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label small fw-semibold">AI Key (Emergent / OpenAI)</label>
+            <div class="input-group">
+              <input type="password" name="llm_api_key" class="form-control" placeholder="<?= $hasLlmKey ? $maskedKey : 'Paste your AI key here' ?>" style="font-size:13px;" data-testid="ai-key-input">
+              <button type="button" class="btn btn-outline-secondary btn-sm" onclick="var i=this.previousElementSibling;i.type=i.type==='password'?'text':'password';"><i class="bi bi-eye"></i></button>
+            </div>
+            <div class="small mt-1 <?= $hasLlmKey ? 'text-success' : 'text-danger' ?>"><i class="bi bi-<?= $hasLlmKey ? 'check-circle-fill' : 'exclamation-circle-fill' ?> me-1"></i><?= $hasLlmKey ? 'Key configured' : 'No key — AI won\'t work' ?></div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small fw-semibold">Google Search Console Token</label>
+            <input type="text" name="google_search_console" class="form-control" placeholder="<?= ($seoGsc ?? '') ? 'Configured' : 'Paste token' ?>" style="font-size:13px;">
+            <div class="small mt-1 <?= ($seoGsc ?? '') ? 'text-success' : 'text-secondary' ?>"><i class="bi bi-<?= ($seoGsc ?? '') ? 'check-circle-fill' : 'info-circle' ?> me-1"></i><?= ($seoGsc ?? '') ? 'Token set' : 'Optional' ?></div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small fw-semibold">Bing Webmaster Token</label>
+            <input type="text" name="bing_webmaster" class="form-control" placeholder="<?= ($seoBing ?? '') ? 'Configured' : 'Paste token' ?>" style="font-size:13px;">
+            <div class="small mt-1 <?= ($seoBing ?? '') ? 'text-success' : 'text-secondary' ?>"><i class="bi bi-<?= ($seoBing ?? '') ? 'check-circle-fill' : 'info-circle' ?> me-1"></i><?= ($seoBing ?? '') ? 'Token set' : 'Optional' ?></div>
+          </div>
+        </div>
+        <div class="mt-3"><button type="submit" class="btn btn-primary rounded-pill px-4"><i class="bi bi-check-lg me-1"></i>Save Settings</button></div>
+      </form>
+    </div>
+  </details>
+
+  <!-- Search Engine Visibility -->
+  <details class="ai-section">
+    <summary>
+      <i class="bi bi-globe2 text-primary"></i> Search Engine Visibility
+      <span class="ai-badge" style="background:<?= ($seoConfigured ?? 0) >= 3 ? '#d1fae5' : '#fef3c7' ?>;color:<?= ($seoConfigured ?? 0) >= 3 ? '#065f46' : '#92400e' ?>;"><?= $seoConfigured ?? 0 ?>/5 connected</span>
+    </summary>
+    <div class="ai-body">
   <?php
     // Read saved tokens for display
     $seoGsc     = setting_get('google_site_verification_token', defined('GOOGLE_SITE_VERIFICATION') ? GOOGLE_SITE_VERIFICATION : '');
@@ -2305,17 +2286,22 @@ elseif ($tab === 'ai-blogger'):
       </div>
     </form>
   </div>
+    </div>
+  </details>
 
-  <!-- ====== 6. PUBLISHED BLOG POSTS ====== -->
-  <div class="card-e mb-3" data-testid="ai-blogger-full-feed" style="border:1px solid #e2e8f0;border-radius:14px;padding:20px;">
-    <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
-      <h5 class="fw-bold mb-0" style="font-size:15px;"><i class="bi bi-journal-richtext me-2 text-primary"></i>Published Blog Posts</h5>
-      <div class="d-flex align-items-center gap-1 flex-wrap">
-        <!-- Country filter tabs -->
+  <!-- Published Blog Posts -->
+  <details class="ai-section">
+    <summary>
+      <i class="bi bi-journal-richtext text-primary"></i> Published Blog Posts
+      <span class="ai-badge" style="background:#dbeafe;color:#1e40af;"><?= $totalAiAll ?> posts</span>
+    </summary>
+    <div class="ai-body">
+    <div class="d-flex align-items-center gap-1 flex-wrap mb-3">
         <a href="admin.php?tab=ai-blogger" class="btn btn-sm <?= $regionFilter === '' ? 'btn-primary' : 'btn-outline-secondary' ?> rounded-pill px-3" data-testid="country-tab-all">All <span class="badge text-bg-light text-dark ms-1"><?= $totalAiAll ?></span></a>
         <?php foreach ($regionsList as $rc => $ri): ?>
           <a href="admin.php?tab=ai-blogger&region_filter=<?= esc($rc) ?>" class="btn btn-sm <?= $regionFilter === $rc ? 'btn-primary' : 'btn-outline-secondary' ?> rounded-pill px-3" data-testid="country-tab-<?= esc($rc) ?>"><?= $ri['flag'] ?> <?= esc($rc) ?> <span class="badge text-bg-light text-dark ms-1"><?= (int)($perRegionCounts[$rc] ?? 0) ?></span></a>
         <?php endforeach; ?>
+      </div>
       </div>
     </div>
 
@@ -2377,12 +2363,17 @@ elseif ($tab === 'ai-blogger'):
         <div class="small mt-1">Click <strong>"Write One Post"</strong> or <strong>"Publish Full Batch"</strong> above to get started.</div>
       </div>
     <?php endif; ?>
-  </div>
+    </div>
+  </details>
 
-  <!-- ====== 7. RECENT ACTIVITY LOG ====== -->
+  <!-- Recent Activity -->
   <?php if ($recentRuns): ?>
-  <div class="card-e mb-3" data-testid="ai-blogger-runs-log" style="border:1px solid #e2e8f0;border-radius:14px;padding:20px;">
-    <h5 class="fw-bold mb-3" style="font-size:15px;"><i class="bi bi-clock-history me-2 text-secondary"></i>Recent Activity</h5>
+  <details class="ai-section">
+    <summary>
+      <i class="bi bi-clock-history text-secondary"></i> Recent Activity
+      <span class="ai-badge" style="background:#f1f5f9;color:#475569;"><?= count($recentRuns) ?> runs</span>
+    </summary>
+    <div class="ai-body">
     <div class="table-responsive">
       <table class="table table-sm align-middle mb-0" style="font-size:12px;">
         <thead>
@@ -2427,10 +2418,11 @@ elseif ($tab === 'ai-blogger'):
         </tbody>
       </table>
     </div>
-  </div>
+    </div>
+  </details>
   <?php endif; ?>
 
-  <!-- ====== GO-LIVE SEO/AEO/GEO HEALTH CHECK ====== -->
+  <!-- Go-Live SEO/AEO/GEO Health Check -->
   <?php
     $siteBase = rtrim(site_url(), '/');
     // Check all SEO components
@@ -2497,18 +2489,13 @@ elseif ($tab === 'ai-blogger'):
     $healthPct = (int)round($passCount / $totalChecks * 100);
     $healthColor = $healthPct >= 80 ? '#059669' : ($healthPct >= 50 ? '#d97706' : '#dc2626');
   ?>
-  <div class="card-e mb-3" style="border:1px solid #e2e8f0;border-radius:14px;padding:20px;">
-    <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
-      <h5 class="fw-bold mb-0" style="font-size:15px;"><i class="bi bi-shield-check me-2" style="color:<?= $healthColor ?>;"></i>Go-Live SEO Health Check</h5>
-      <div class="d-flex align-items-center gap-2">
-        <div style="width:120px;height:8px;background:#e2e8f0;border-radius:999px;overflow:hidden;">
-          <div style="width:<?= $healthPct ?>%;height:100%;background:<?= $healthColor ?>;border-radius:999px;"></div>
-        </div>
-        <span class="fw-bold" style="font-size:14px;color:<?= $healthColor ?>;"><?= $healthPct ?>%</span>
-        <span class="text-secondary small">(<?= $passCount ?>/<?= $totalChecks ?> ready)</span>
-      </div>
-    </div>
-    <p class="text-secondary small mb-3">This checklist covers <strong>SEO</strong> (Google/Bing search), <strong>AEO</strong> (answer engines like ChatGPT & Perplexity), and <strong>GEO</strong> (generative AI search). All green = your website is fully optimised for maximum reach.</p>
+  <details class="ai-section">
+    <summary>
+      <i class="bi bi-shield-check" style="color:<?= $healthColor ?>;"></i> Go-Live SEO Health Check
+      <span class="ai-badge" style="background:<?= $healthPct >= 80 ? '#d1fae5' : '#fef3c7' ?>;color:<?= $healthPct >= 80 ? '#065f46' : '#92400e' ?>;"><?= $healthPct ?>% — <?= $passCount ?>/<?= $totalChecks ?> ready</span>
+    </summary>
+    <div class="ai-body">
+    <p class="text-secondary small mb-3">Covers <strong>SEO</strong> (Google/Bing), <strong>AEO</strong> (ChatGPT, Perplexity, Claude), and <strong>GEO</strong> (AI-powered search). All green = maximum reach.</p>
 
     <div class="row g-2">
       <?php foreach ($checks as $ch): ?>
@@ -2539,24 +2526,26 @@ elseif ($tab === 'ai-blogger'):
         <strong>GEO</strong> = Generative Engine Optimization (AI-powered search results)
       </div>
     </div>
-  </div>
+    </div>
+  </details>
 
-  <!-- ====== 8. ADVANCED SETTINGS (collapsed) ====== -->
-  <details class="card-e mb-3" style="border:1px solid #e2e8f0;border-radius:14px;padding:16px 20px;">
-    <summary class="fw-bold" style="font-size:14px;cursor:pointer;"><i class="bi bi-gear me-2 text-secondary"></i>Advanced Settings</summary>
-    <div class="mt-3">
+  <!-- Advanced Settings -->
+  <details class="ai-section">
+    <summary>
+      <i class="bi bi-gear text-secondary"></i> Advanced Settings
+    </summary>
+    <div class="ai-body">
       <div class="row g-3">
-        <!-- External Cron URL -->
         <div class="col-12">
           <label class="form-label small fw-semibold">Automation Scheduler URL</label>
-          <p class="text-secondary small mb-2">If your hosting doesn't support automatic scheduling, you can point an external cron service at this URL:</p>
+          <p class="text-secondary small mb-2">If your hosting doesn't support automatic scheduling, point an external cron service at this URL:</p>
           <?php $cronToken = seo_bot_cron_token(); $cronUrl = rtrim(site_url(), '/') . '/cron/seo-daily.php?token=' . rawurlencode($cronToken); ?>
           <div class="input-group input-group-sm">
             <input type="text" class="form-control" id="ai-blogger-cron-url-input" value="<?= esc($cronUrl) ?>" readonly style="font-family:monospace;font-size:11px;background:#f8fafc;">
             <button class="btn btn-outline-primary" type="button" data-testid="ai-blogger-copy-cron-url" onclick="(function(){var i=document.getElementById('ai-blogger-cron-url-input');i.select();document.execCommand('copy');this.innerHTML='<i class=\'bi bi-check-lg me-1\'></i>Copied';setTimeout(()=>{this.innerHTML='<i class=\'bi bi-clipboard me-1\'></i>Copy';},1500);}).call(this);"><i class="bi bi-clipboard me-1"></i>Copy</button>
           </div>
           <div class="d-flex gap-2 mt-2">
-            <a href="admin.php?tab=ai-blogger&rotate_cron_token=1" class="btn btn-sm btn-outline-secondary rounded-pill" data-testid="ai-blogger-rotate-token" onclick="return confirm('Generate a new security token? Old links will stop working.')"><i class="bi bi-arrow-repeat me-1"></i>Reset Token</a>
+            <a href="admin.php?tab=ai-blogger&rotate_cron_token=1" class="btn btn-sm btn-outline-secondary rounded-pill" onclick="return confirm('Generate a new token? Old links stop working.')"><i class="bi bi-arrow-repeat me-1"></i>Reset Token</a>
           </div>
         </div>
       </div>
