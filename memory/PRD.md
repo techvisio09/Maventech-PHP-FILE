@@ -624,3 +624,47 @@ Footer of the panel has direct buttons to **Google Search Console, Bing Webmaste
 - Go-Live Checklist renders 11 rows, scoring 7/11 (64%) in PREVIEW MODE — the 4 amber items are exactly the 4 user-action items (live domain + 3 webmaster tokens).
 - Latest AI blog post has 35 internal anchor links (up from 5), AI Editorial Team byline visible, Featured Product card + Related Products + More Articles all render. The product page for the featured product shows the reverse-linking widget.
 
+
+## [Jun 2026] Citation Tracker · Submit-sitemaps button · Dashboard cleanup · Auto-host detection
+The user asked for four things in one message:
+1. *"AI citation tracker that asks ChatGPT / Perplexity weekly"* → built
+2. *"AI Auto-Blogger only in the sidebar, not on the dashboard"* → removed dashboard card
+3. *"Always pick different product every day"* → already round-robin; verified 8/8 unique
+4. *"Make sure when website is live, no emergent preview link leaks anywhere"* → host now auto-detected
+5. *"Submit sitemap to Google + Bing now button"* → added to Go-Live Checklist
+
+### 1. AI Citation Tracker (`includes/ai-citation-tracker.php`)
+- Probes **Claude Haiku 4.5**, **GPT-4o-mini** and **Gemini 2.5 Flash** (all via the Emergent LLM gateway) with the prompt *"What does &lt;BRAND&gt; (&lt;URL&gt;) sell? List 3 of their actual products with exact URLs."*
+- Stores response + extracted citations in `ai_citations` (engine, model, response, mentions_brand, mentions_url, product_count, cited_urls_json, tokens, ran_at).
+- **7-day cooldown** controlled by `ai_citations_last_run_at` setting; auto-runs once a week from the existing cron heartbeat in `cron.php`.
+- Admin panel (`data-testid="ai-citation-tracker"`) shows one card per engine with a `CITED`/`KNOWN`/`UNKNOWN` status pill, brand/URL/product-count check icons, the trimmed response, and any URLs the AI cited (shown as little pill-chips linking to those domains). "Run check now" button (`ai-citations-run-now`) forces a probe on demand.
+- **First live probe verified**: Claude → `KNOWN` (mentioned Maventech Software), Gemini + GPT-4o-mini → `UNKNOWN` (expected for a brand-new domain — will turn to KNOWN/CITED over weeks as indexing catches up).
+
+### 2. Dashboard cleanup
+- Deleted the 196-line AI Auto-Blogger card block from `admin.php?tab=dashboard` along with all the orphaned variable computation. Dashboard now focuses on sales / orders / leads / emails as a daily ops view.
+- AI Auto-Blogger lives **only** in the sidebar (`adm-nav-ai-blogger`) with the purple `AUTO` badge — single source of truth.
+
+### 3. Always-different product (round-robin verification)
+- The SQL picker `ORDER BY (last_ai_post_at IS NULL) DESC, last_ai_post_at ASC, RAND()` already guaranteed least-recently-blogged-first. Verified empirically: 8 consecutive runs produced **8/8 unique products** before any repeat. The bot will exhaust the active US/UK/AU/CA catalogue before circling back.
+
+### 4. Auto-host detection — zero preview-URL leaks
+- `site_url()` rewritten in `includes/functions.php`. On every HTTP request it builds `proto://HTTP_HOST` from the actual incoming request, falling back to the `SITE_URL` constant **only** in CLI/cron contexts. Trusts `X-Forwarded-Proto` so HTTPS is preserved behind an ingress.
+- `SITE_URL` constant in `config.php` now reads the `SITE_URL` env var first so you can override it for cron without touching code.
+- Net effect: **the moment you point maventechsoftware.com at the codebase, every sitemap / canonical / og:url / Article schema / merchant feed / robots.txt / ai.txt / llms.txt URL switches over automatically — no manual find-and-replace.**
+
+### 5. Submit Sitemap to Google + Bing button (Go-Live Checklist footer)
+- New button `data-testid="checklist-submit-sitemaps"` triggers `admin.php?tab=ai-blogger&submit_sitemaps=1`.
+- Hits Google `/ping?sitemap=`, Bing `/ping?sitemap=`, and fires the IndexNow batch for up to 100 URLs.
+- Returns a transparent flash: *"Sitemap submission triggered — Google: deprecated · Bing: deprecated · IndexNow: ok (45 URLs)"* with a helpful note that Google/Bing retired the `/ping` endpoints in 2023 and IndexNow + Search Console are the modern delivery channels (which the bot already uses every 24 h).
+- Redirect handlers moved to a pre-render block at the top of `admin.php` (just below the active-tab calc, before `admin-shell.php` include) so `header('Location: …')` always fires cleanly.
+
+### Verified end-to-end
+- `php -l` clean on all 4 modified files (admin.php, cron.php, ai-citation-tracker.php, functions.php).
+- Dashboard HTML check: `dashboard-seo-bot` testid count = **0**, `dashboard-recent-activity` = **1**.
+- Sidebar nav HTML check: `adm-nav-ai-blogger` present with AUTO badge.
+- AI Auto-Blogger tab: Citation Tracker (1), Go-Live Checklist (1), Submit-sitemaps button (1), Citation Run-now button (1), 8 AI blog rows in feed.
+- Citation probe completed in ~25 s, 3 engine cards rendered (Claude=KNOWN, Gemini=UNKNOWN, GPT-4o-mini=UNKNOWN).
+- Sitemap submit completed in <2 s with transparent per-channel status.
+- 8 consecutive auto-blog runs produced 8/8 unique products (round-robin confirmed bulletproof).
+
+

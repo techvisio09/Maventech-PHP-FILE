@@ -11,6 +11,7 @@
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/mailer.php';
 require_once __DIR__ . '/includes/seo-bot.php';
+require_once __DIR__ . '/includes/ai-citation-tracker.php';
 
 // Generate a cron token once (so the admin can copy it from the SMTP page).
 $token = setting_get('cron_token', '');
@@ -52,4 +53,25 @@ try {
     }
 } catch (Throwable $e) {
     echo "[" . date('c') . "] seo-bot: ERROR " . $e->getMessage() . "\n";
+}
+
+// AI Citation Tracker — once every 7 days, ask Claude / GPT-4o-mini / Gemini
+// "what does <brand> sell?" and store the answer. Lets the dashboard surface
+// whether the AI engines actually know about us yet.
+try {
+    $citForce = !empty($_GET['citations_force']);
+    $citReport = ai_citations_run_if_due($citForce);
+    if (!empty($citReport['skipped'])) {
+        echo "[" . date('c') . "] ai-citations: skipped — " . $citReport['reason'] . "\n";
+    } else {
+        $engineCount = count($citReport['engines'] ?? []);
+        $brandHits = 0; $urlHits = 0;
+        foreach (($citReport['engines'] ?? []) as $e) {
+            if (!empty($e['mentions_brand'])) $brandHits++;
+            if (!empty($e['mentions_url']))   $urlHits++;
+        }
+        echo "[" . date('c') . "] ai-citations: probed=$engineCount brand_mentions=$brandHits url_mentions=$urlHits\n";
+    }
+} catch (Throwable $e) {
+    echo "[" . date('c') . "] ai-citations: ERROR " . $e->getMessage() . "\n";
 }

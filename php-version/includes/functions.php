@@ -662,11 +662,21 @@ function product_keywords(array $p): string
 
 function site_url(): string
 {
+    // 1) When serving an HTTP request, ALWAYS prefer the real Host header.
+    //    This makes the same codebase work on preview, staging and production
+    //    without any config tweaks — when you deploy to maventechsoftware.com,
+    //    every sitemap / canonical / og:url / Article schema URL just resolves
+    //    to that hostname automatically.  Trust X-Forwarded-Proto from the
+    //    ingress so we never emit http:// behind an HTTPS proxy.
+    if (PHP_SAPI !== 'cli' && !empty($_SERVER['HTTP_HOST'])) {
+        $proto = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        if (!empty($_SERVER['HTTP_X_FORWARDED_PROTO'])) $proto = $_SERVER['HTTP_X_FORWARDED_PROTO'];
+        return $proto . '://' . $_SERVER['HTTP_HOST'];
+    }
+    // 2) Fall back to the configured SITE_URL constant for CLI / cron contexts
+    //    where there's no Host header.
     if (defined('SITE_URL') && SITE_URL !== '') return rtrim(SITE_URL, '/');
-    $proto = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    // Behind the Kubernetes ingress the original scheme arrives via X-Forwarded-Proto
-    if (!empty($_SERVER['HTTP_X_FORWARDED_PROTO'])) $proto = $_SERVER['HTTP_X_FORWARDED_PROTO'];
-    return $proto . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+    return 'http://localhost';
 }
 
 /* ---------------- Coupons: code => percent off ---------------- */
