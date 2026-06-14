@@ -1142,9 +1142,14 @@ hr { border-color: var(--border); opacity:.5; }
       </div>
     </div>
     <?php
-    // Compute failed email count for the notification bell (cheap query, cached per-request)
+    // Compute failed email count for the notification bell — scoped to
+    // POST-PURCHASE emails only (license delivery, order confirmation,
+    // payment pending, refund) so the bell never alerts on review-request
+    // or marketing failures. Matches the Email Activity Center scope.
     try {
-        $failedCount = (int)db()->query("SELECT COUNT(*) FROM email_outbox WHERE status IN ('failed','bounced')")->fetchColumn();
+        $failedCount = (int)db()->query("SELECT COUNT(*) FROM email_outbox
+            WHERE status IN ('failed','bounced')
+              AND template_code IN ('order_delivery','order_confirmation','order_pending','refund_confirm')")->fetchColumn();
     } catch (Throwable $e) { $failedCount = 0; }
     // Compute unread customer chat messages (drives the Lead Management sidebar badge + bell)
     try {

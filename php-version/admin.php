@@ -3817,16 +3817,27 @@ elseif ($tab === 'keys'):
 elseif ($tab === 'emails'):
   require_once __DIR__ . '/includes/mailer.php';
   $emailsSmtp = smtp_config();
+
+  // Email Activity Center scope: ONLY purchase emails the customer receives
+  // after buying a product (license delivery, order confirmation, payment
+  // pending, refund).  Review requests / lead follow-ups / waitlist / stock
+  // notifications / customer-service replies are intentionally excluded so
+  // the admin can focus on whether each post-purchase email actually
+  // reached the customer.
+  $purchaseTemplates = ['order_delivery', 'order_confirmation', 'order_pending', 'refund_confirm'];
+  $purchaseInSql     = "('" . implode("','", $purchaseTemplates) . "')";
+  $purchaseScope     = "template_code IN $purchaseInSql";
+
   $c = $pdo->query("SELECT
         SUM(status IN ('queued','retrying'))            q,
         SUM(status = 'sent')                            s,
         SUM(opened_at IS NOT NULL)                      o,
         SUM(status IN ('failed','bounced'))             f,
         COUNT(*)                                        t
-        FROM email_outbox")->fetch();
+        FROM email_outbox WHERE $purchaseScope")->fetch();
 ?>
   <h5 class="fw-bold mb-1">Email Activity Center</h5>
-  <p class="text-muted small mb-3">Every transactional email — with delivery, open and click tracking. Click <i class="bi bi-eye"></i> to view the exact email the customer received.</p>
+  <p class="text-muted small mb-3">Every <strong>post-purchase</strong> email (license delivery · order confirmation · payment pending · refund) — with delivery, open and click tracking. Review requests and marketing emails are tracked separately. Click <i class="bi bi-eye"></i> to view the exact email the customer received.</p>
 
   <?php if (!$emailsSmtp['enabled'] || $emailsSmtp['host'] === ''): ?>
   <!-- ==== Critical "SMTP not configured" banner — explains why "sent" emails aren't arriving ==== -->
@@ -3861,10 +3872,10 @@ elseif ($tab === 'emails'):
 
   <div data-testid="email-activity-list">
     <?php
-    $whereSql = '';
-    if      ($emailFilter === 'failed') $whereSql = "WHERE em.status IN ('failed','bounced')";
-    elseif  ($emailFilter === 'sent')   $whereSql = "WHERE em.status = 'sent'";
-    elseif  ($emailFilter === 'queued') $whereSql = "WHERE em.status IN ('queued','retrying')";
+    $whereSql = "WHERE em.$purchaseScope";
+    if      ($emailFilter === 'failed') $whereSql .= " AND em.status IN ('failed','bounced')";
+    elseif  ($emailFilter === 'sent')   $whereSql .= " AND em.status = 'sent'";
+    elseif  ($emailFilter === 'queued') $whereSql .= " AND em.status IN ('queued','retrying')";
     $emQuery = $pdo->query("SELECT em.*, o.order_number, o.first_name, o.last_name, o.phone,
                               (SELECT GROUP_CONCAT(lk.license_key SEPARATOR '|')
                                  FROM license_keys lk WHERE lk.order_id=em.order_id) AS keys_list

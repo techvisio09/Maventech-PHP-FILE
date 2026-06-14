@@ -125,7 +125,11 @@ if ($delivered && ($em['status'] === 'failed' || $em['status'] === 'bounced')) {
 }
 
 /* ---- 4. Fresh failed/bounced counter for the topbar bell ---- */
-$failedCount = (int)$pdo->query("SELECT COUNT(*) FROM email_outbox WHERE status IN ('failed','bounced')")->fetchColumn();
+/* Scoped to POST-PURCHASE emails only — matches the Email Activity Center
+   so the bell never alerts on a failed review-request or marketing email. */
+$failedCount = (int)$pdo->query("SELECT COUNT(*) FROM email_outbox
+    WHERE status IN ('failed','bounced')
+      AND template_code IN ('order_delivery','order_confirmation','order_pending','refund_confirm')")->fetchColumn();
 
 echo json_encode([
     'ok'           => true,
