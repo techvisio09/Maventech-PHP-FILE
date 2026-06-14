@@ -119,6 +119,17 @@ function _pdf_shell(array $ctx, string $bodyHtml): string
     $watermarkTag  = is_file($watermarkPath)
         ? '<img src="' . $watermarkPath . '" alt="">'
         : '';
+    // Diagonal "PAID" / "INVOICE" / "DUE" stamp under the brand logo —
+    // accounting-software vibe.  Caller passes `stamp_text` + `stamp_color`
+    // (defaults to dark grey; green for PAID, amber for DUE).
+    $stampText  = trim((string)($ctx['stamp_text']  ?? ''));
+    $stampColor = (string)($ctx['stamp_color'] ?? '#1f2937');
+    $stampHtml  = '';
+    if ($stampText !== '') {
+        $stampHtml = '<div class="stamp" style="color:' . htmlspecialchars($stampColor, ENT_QUOTES, 'UTF-8') . ';border-color:' . htmlspecialchars($stampColor, ENT_QUOTES, 'UTF-8') . ';">'
+                   . htmlspecialchars($stampText, ENT_QUOTES, 'UTF-8')
+                   . '</div>';
+    }
     $secondRow= '';
     if (!empty($ctx['receipt_number'])) {
         $secondRow .= '<tr><td>Receipt number</td><td class="r">' . htmlspecialchars($ctx['receipt_number'], ENT_QUOTES, 'UTF-8') . '</td></tr>';
@@ -204,10 +215,32 @@ function _pdf_shell(array $ctx, string $bodyHtml): string
     text-align: center;
   }
   .watermark img { width: 360px; height: 360px; }
+
+  /* Diagonal "PAID" / "INVOICE" / "DUE" stamp sitting underneath the
+     brand watermark — accounting-software vibe.  Subtle (12% opacity)
+     and rotated -22° so it reads naturally without screaming.  Border +
+     padding form the classic rubber-stamp look. */
+  .stamp {
+    position: absolute;
+    top: 480px; left: 50%;
+    margin-left: -130px;
+    width: 260px;
+    text-align: center;
+    font-family: 'DejaVu Sans', Helvetica, Arial, sans-serif;
+    font-weight: 900;
+    font-size: 44pt;
+    letter-spacing: 6px;
+    padding: 10px 16px;
+    border: 6px solid #1f2937;
+    border-radius: 12px;
+    opacity: 0.12;
+    transform: rotate(-22deg);
+  }
 </style>
 </head>
 <body>
   <div class="watermark">{$watermarkTag}</div>
+  {$stampHtml}
   <h1>{$docTitle}</h1>
   <table class="head-grid"><tr>
     <td class="head-meta">
@@ -322,6 +355,8 @@ function generate_receipt_pdf(array $order, array $items, ?array $payment = null
         'date_paid'       => $datePaid,
         'bill_to'         => $billTo,
         'brand_key'       => _pdf_brand_for_items($items),
+        'stamp_text'      => 'PAID',
+        'stamp_color'     => '#047857', // emerald — universal "all good"
     ], $bodyHtml);
 
     $dompdf = _pdf_dompdf();
@@ -399,6 +434,9 @@ function generate_invoice_pdf(array $order, array $items): string
         'date_due'        => $dateDue,
         'bill_to'         => $billTo,
         'brand_key'       => _pdf_brand_for_items($items),
+        // Stamp reads "PAID" if the invoice is already settled, otherwise "DUE".
+        'stamp_text'      => $isPaid ? 'PAID' : 'DUE',
+        'stamp_color'     => $isPaid ? '#047857' : '#b91c1c', // emerald vs red
     ], $bodyHtml);
 
     $dompdf = _pdf_dompdf();
