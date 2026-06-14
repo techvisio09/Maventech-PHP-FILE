@@ -619,7 +619,7 @@ Footer of the panel has direct buttons to **Google Search Console, Bing Webmaste
 
 ### Verified end-to-end
 - All seven modified PHP files lint-clean.
-- `curl /robots.txt` → "Sitemap: https://sales-control-26.preview.emergentagent.com/sitemap.xml" (auto-resolves; will swap on live).
+- `curl /robots.txt` → "Sitemap: https://review-qr-fix.preview.emergentagent.com/sitemap.xml" (auto-resolves; will swap on live).
 - `curl /ai.txt` → "Auto-generated from <site_url> at <timestamp>" + dynamic Sitemap + ProductFeed + Contact lines.
 - Go-Live Checklist renders 11 rows, scoring 7/11 (64%) in PREVIEW MODE — the 4 amber items are exactly the 4 user-action items (live domain + 3 webmaster tokens).
 - Latest AI blog post has 35 internal anchor links (up from 5), AI Editorial Team byline visible, Featured Product card + Related Products + More Articles all render. The product page for the featured product shows the reverse-linking widget.

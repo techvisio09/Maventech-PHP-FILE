@@ -133,5 +133,5 @@ User-agent: Andibot
 Allow: /
 
 # ----- Sitemaps -----
-Sitemap: https://sales-control-26.preview.emergentagent.com/sitemap.xml
-Sitemap: https://sales-control-26.preview.emergentagent.com/merchant-feed.xml
+Sitemap: https://review-qr-fix.preview.emergentagent.com/sitemap.xml
+Sitemap: https://review-qr-fix.preview.emergentagent.com/merchant-feed.xml

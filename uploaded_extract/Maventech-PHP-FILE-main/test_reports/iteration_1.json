@@ -30,6 +30,6 @@
   "seed_data_creation": "None.",
   "retest_needed": false,
   "main_agent_can_self_test": true,
-  "context_for_next_testing_agent": "Frontend regression after major refactor PASSED end-to-end at https://software-staging.preview.emergentagent.com. Verified mega-menu, currency, dark mode, category filtering, shop grid, product detail + variants + Add-to-Cart, cart updates, ProAssist upsell modal, Checkout form (mock), JivoChat AI streaming response from gpt-5, and mobile 390px responsiveness (no horizontal overflow). Only cosmetic items remain: document.title is CRA default and Radix DialogContent a11y warning.",
+  "context_for_next_testing_agent": "Frontend regression after major refactor PASSED end-to-end at https://review-qr-fix.preview.emergentagent.com. Verified mega-menu, currency, dark mode, category filtering, shop grid, product detail + variants + Add-to-Cart, cart updates, ProAssist upsell modal, Checkout form (mock), JivoChat AI streaming response from gpt-5, and mobile 390px responsiveness (no horizontal overflow). Only cosmetic items remain: document.title is CRA default and Radix DialogContent a11y warning.",
   "rca of the issue": "No bugs found requiring RCA."
 }
