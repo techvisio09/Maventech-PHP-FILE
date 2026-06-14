@@ -934,7 +934,28 @@ function fulfill_order(int $orderId, bool $forceAdminOverride = false): void {
         '{{amount}}'       => number_format((float)($order['total'] ?? 0), 2),
         '{{company_name}}' => company_info()['name'] ?? (defined('SITE_BRAND') ? SITE_BRAND : ''),
     ]);
-    send_email($order['email'], $subject, $html, $orderId, 'order_delivery');
+
+    // Generate Receipt + Invoice PDFs and attach them to the order
+    // delivery email.  Each customer gets a professionally-formatted
+    // record they can keep for their books / claim back from finance.
+    $pdfPaths = [];
+    try {
+        require_once __DIR__ . '/pdf.php';
+        // Enrich items with sold license keys so PDFs can show them too.
+        $pdfItems = [];
+        foreach ($items as $idx => $it) {
+            $pdfItems[] = array_merge($it, [
+                'unit_price' => $it['price'] ?? 0,
+                'quantity'   => $it['qty']   ?? 1,
+            ]);
+        }
+        $pdfPaths = generate_order_pdfs($order, $pdfItems);
+    } catch (Throwable $e) {
+        @error_log('[fulfill_order pdf] ' . $e->getMessage());
+        $pdfPaths = [];
+    }
+
+    send_email($order['email'], $subject, $html, $orderId, 'order_delivery', 0, $pdfPaths);
     $tl['email_sent'] = date('Y-m-d H:i:s');
     $pdo->prepare('UPDATE orders SET timeline=? WHERE id=?')->execute([json_encode($tl), $orderId]);
 

@@ -429,3 +429,21 @@ See `/app/memory/test_credentials.md`.
 - Add CSV export for sold keys per product
 - Email template A/B test variants
 - Live Chat: typing indicator + push notifications via WebSockets (currently polling)
+
+## [Feb 2026] PDF attachments on order-delivery + strict checkout validation
+- **Receipt + Invoice PDFs** attached automatically to every paid order's delivery email.
+  - `includes/pdf.php` (DomPDF) generates a professionally laid-out **Receipt** ("$X paid on …" banner, line items, totals, statement-name note, payment-history table) and **Invoice** ("$X — paid" / "due …" banner, same items, totals, statement-name note). Logo + company name + address + email come from the `company_info()` single source of truth, so updating the Dashboard Company Info card propagates to every generated PDF.
+  - `generate_order_pdfs($order, $items)` writes both files to `/uploads/order-pdfs/{order_id}/Receipt-{order_number}.pdf` & `Invoice-{order_number}.pdf` and returns the paths.
+  - `fulfill_order()` now calls `generate_order_pdfs(...)` after assigning license keys and passes the paths to `send_email(..., 'order_delivery', 0, $pdfPaths)`.
+  - `send_email()` stores the paths in `email_outbox.attachments_json`; both PHPMailer's `addAttachment()` (production SMTP path) and Resend's base64 attachment payload (legacy fallback) attach the files to the outbound message.
+  - **Verified end-to-end via CLI** (`/tmp/test_fulfill.php`) — re-running fulfill_order on order MVT-DEMO-002 produced outbox row #33 with `attachments_json` listing both PDFs, files on disk are 31 KB / 30 KB valid `%PDF-1.7` documents. Review-request rows (id #34) correctly carry no attachments.
+  - Only `order_delivery` carries PDFs (per user choice "ONLY the order_delivery email").
+- **Strict checkout validation** that BLOCKS payment when fields are invalid:
+  - Email — RFC-valid + not currently flagged undeliverable (typo dictionary + DNS MX). Customers can still override with "Use my address anyway" button (existing UX kept).
+  - Billing address — street number / length / not-just-letters sanity (unless overridden).
+  - Card details — **Luhn-valid** card number (13-19 digits), **MM/YY expiry in the future**, **CVV 3-4 digits**. Runs ALWAYS (not just demo mode) per user choice, because Maventech plans to support additional gateways beyond Stripe.
+  - Required-field cross-check on first/last name, phone, city, state, zip, country, plus US-specific ZIP shape (5 digits or ZIP+4) and minimum phone length.
+  - On invalid submit: red `is-invalid` border + inline `.field-err` message under each bad field, toast banner "Please fix the highlighted fields before continuing.", scrolls + focuses the first bad field, no POST sent.
+  - On valid submit: buttons get spinner + disabled to prevent double-charge, then form posts normally to Stripe / chosen gateway.
+  - **Verified end-to-end via Playwright** on `/checkout.php` — bad card `4111 1111 1111 1112` + expiry `01/20` + CVV `12` shows all three red inline errors + summary toast; correcting to `4242 4242 4242 4242` + `12/30` + `123` allows form to submit (window._submitted=true).
+

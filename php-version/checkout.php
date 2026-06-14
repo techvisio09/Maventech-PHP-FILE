@@ -481,6 +481,164 @@ include __DIR__ . '/includes/header.php';
     $addr.addEventListener('blur', checkAddress);
     $addr.addEventListener('input', () => { _addrOverride = false; clearAddrHint(); });
   }
+
+  // ===== Strict form-level submit guard (blocks payment on invalid data) =====
+  // - Email: RFC valid + not currently flagged undeliverable (unless overridden).
+  // - Billing address: street number / length sanity (unless overridden).
+  // - Card (only when Card payment method is selected): Luhn pass on number,
+  //   MM/YY in the future, 3-4 digit CVV.  Card details are NEVER posted to
+  //   our server (no `name` attr); this is purely a UX guard to stop bad
+  //   data from being forwarded to the payment processor.
+  const form = document.querySelector('form[method="post"]');
+  const submitBtns = form ? form.querySelectorAll('button[type="submit"]') : [];
+
+  function setFieldError($input, msg) {
+    if (!$input) return;
+    $input.classList.add('is-invalid');
+    let $hint = $input.parentElement.querySelector('.field-err');
+    if (!$hint) {
+      $hint = document.createElement('div');
+      $hint.className = 'field-err invalid-feedback d-block';
+      $input.parentElement.appendChild($hint);
+    }
+    $hint.textContent = msg;
+  }
+  function clearFieldError($input) {
+    if (!$input) return;
+    $input.classList.remove('is-invalid');
+    const $hint = $input.parentElement.querySelector('.field-err');
+    if ($hint) $hint.remove();
+  }
+  // Live-clear errors when the user starts editing again.
+  document.querySelectorAll('input, select').forEach(el => {
+    el.addEventListener('input', () => clearFieldError(el));
+    el.addEventListener('change', () => clearFieldError(el));
+  });
+
+  function luhnValid(digits) {
+    if (!/^\d{13,19}$/.test(digits)) return false;
+    let sum = 0, alt = false;
+    for (let i = digits.length - 1; i >= 0; i--) {
+      let n = parseInt(digits.charAt(i), 10);
+      if (alt) { n *= 2; if (n > 9) n -= 9; }
+      sum += n; alt = !alt;
+    }
+    return sum % 10 === 0;
+  }
+  function expiryValid(val) {
+    const m = /^(\d{2})\/(\d{2})$/.exec((val || '').trim());
+    if (!m) return false;
+    const mm = parseInt(m[1], 10), yy = parseInt(m[2], 10);
+    if (mm < 1 || mm > 12) return false;
+    const now = new Date();
+    const curYY = now.getFullYear() % 100;
+    const curMM = now.getMonth() + 1;
+    if (yy < curYY) return false;
+    if (yy === curYY && mm < curMM) return false;
+    return true;
+  }
+
+  async function validateBeforeSubmit() {
+    let firstBadEl = null;
+    const mark = (el, msg) => { setFieldError(el, msg); if (!firstBadEl) firstBadEl = el; };
+
+    // --- Email ---
+    const emailVal = ($email && $email.value || '').trim();
+    if (!emailVal || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(emailVal)) {
+      mark($email, 'Please enter a valid email address.');
+    } else if ($emailHint && $emailHint.style.display === 'block' && !$emailHint.classList.contains('is-ok')) {
+      mark($email, 'This email looks undeliverable. Correct it or click "Use my address anyway".');
+    }
+
+    // --- Billing address: street number / length / not just letters ---
+    const addrVal = ($addr && $addr.value || '').trim();
+    if (!addrVal) {
+      mark($addr, 'Billing address is required.');
+    } else if (!_addrOverride) {
+      const noNum = !/\d/.test(addrVal) && !/p\.?\s*o\.?\s*box/i.test(addrVal);
+      const tooShort = addrVal.length < 6;
+      const justLetters = /^[a-z\s]+$/i.test(addrVal);
+      if (noNum || tooShort || justLetters) {
+        mark($addr, 'Address looks incomplete — include a street number, or override the warning.');
+      }
+    }
+
+    // --- City / State / ZIP / Country / First / Last / Phone ---
+    const requiredMap = [
+      ['input[name="first_name"]', 'First name is required.'],
+      ['input[name="last_name"]',  'Last name is required.'],
+      ['input[name="phone"]',      'Phone number is required.'],
+      ['input[name="city"]',       'City is required.'],
+      ['select[name="state"]',     'Please select a state.'],
+      ['input[name="zip"]',        'ZIP / Postal code is required.'],
+      ['select[name="country"]',   'Country is required.'],
+    ];
+    requiredMap.forEach(([sel, msg]) => {
+      const el = document.querySelector(sel);
+      if (el && !el.value.trim()) mark(el, msg);
+    });
+
+    // Basic ZIP sanity by country (US = 5 digit, other = at least 3 chars)
+    const zip = document.querySelector('input[name="zip"]');
+    const country = document.querySelector('select[name="country"]');
+    if (zip && zip.value.trim()) {
+      const z = zip.value.trim();
+      if (country && country.value === 'US' && !/^\d{5}(-\d{4})?$/.test(z)) {
+        mark(zip, 'US ZIP must be 5 digits (e.g. 90210).');
+      } else if (z.length < 3) {
+        mark(zip, 'ZIP / Postal code is too short.');
+      }
+    }
+    // Phone — at least 7 digits in the local part.
+    const phone = document.querySelector('input[name="phone"]');
+    if (phone && phone.value.trim()) {
+      const digits = phone.value.replace(/\D/g, '');
+      if (digits.length < 7) mark(phone, 'Phone number is too short.');
+    }
+
+    // --- Card details (only when Card is the selected method) ---
+    const pmInput = document.getElementById('payment-method-input');
+    const usingCard = pmInput && pmInput.value === 'card';
+    if (usingCard) {
+      const $cardNum = document.getElementById('card-number');
+      const $cardExp = document.getElementById('card-exp');
+      const $cardCvv = document.getElementById('card-cvv');
+      if ($cardNum) {
+        const digits = ($cardNum.value || '').replace(/\D/g, '');
+        if (!digits) mark($cardNum, 'Enter your card number.');
+        else if (!luhnValid(digits)) mark($cardNum, 'Card number is invalid — please double-check.');
+      }
+      if ($cardExp && !expiryValid($cardExp.value)) {
+        mark($cardExp, 'Expiry must be MM/YY and in the future.');
+      }
+      if ($cardCvv) {
+        const cvv = ($cardCvv.value || '').trim();
+        if (!/^\d{3,4}$/.test(cvv)) mark($cardCvv, 'CVV must be 3 or 4 digits.');
+      }
+    }
+
+    return firstBadEl;
+  }
+
+  if (form) {
+    form.addEventListener('submit', async (e) => {
+      // Allow Submit to proceed if no errors; else block and focus the first bad field.
+      e.preventDefault();
+      const bad = await validateBeforeSubmit();
+      if (bad) {
+        bad.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        try { bad.focus({ preventScroll: true }); } catch(_) { bad.focus(); }
+        // Show a friendly summary toast (uses existing showToast() helper from main.js).
+        if (typeof showToast === 'function') {
+          showToast('<i class="bi bi-exclamation-triangle me-1"></i> Please fix the highlighted fields before continuing.');
+        }
+        return false;
+      }
+      // No errors — disable the buttons (prevent double-submit) and let the form go.
+      submitBtns.forEach(b => { b.disabled = true; b.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Processing…'; });
+      form.submit();
+    });
+  }
 })();
 </script>
 <?php include __DIR__ . '/includes/footer.php'; ?>
