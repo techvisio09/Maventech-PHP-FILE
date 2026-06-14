@@ -166,6 +166,10 @@
     Need help with activation, deals or your receipt? I'm here 24/7.
   </p>
   <div class="ai-intro-actions">
+    <span class="ai-intro-live" aria-label="AI online" data-testid="ai-intro-live-dot">
+      <span class="ai-intro-live-dot"></span>
+      <span class="ai-intro-live-label">Online</span>
+    </span>
     <button type="button" class="ai-intro-btn ai-intro-btn-primary" onclick="aiIntroOpen()" data-testid="ai-intro-chat-btn">
       <i class="bi bi-chat-dots-fill me-1"></i>Chat now
     </button>
@@ -290,7 +294,36 @@
 
 .ai-intro-actions {
   display: flex; gap: 10px; align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
+}
+/* "AI is online" indicator — emerald dot with a soft expanding ring
+   pulse so the visitor can tell at a glance the assistant is live
+   (not a contact form).  Pure CSS, no JS heartbeat needed. */
+.ai-intro-live {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11.5px; font-weight: 700; letter-spacing: .3px;
+  color: #047857;
+}
+.ai-intro-live-dot {
+  position: relative;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 6px rgba(16, 185, 129, .55);
+}
+.ai-intro-live-dot::before {
+  content: ''; position: absolute; inset: -2px;
+  border-radius: 50%;
+  background: rgba(16, 185, 129, .55);
+  animation: ai-live-ring 1.6s ease-out infinite;
+  z-index: -1;
+}
+@keyframes ai-live-ring {
+  0%   { transform: scale(.85); opacity: .8; }
+  100% { transform: scale(2.6); opacity: 0;  }
+}
+[data-bs-theme="dark"] .ai-intro-live { color: #6ee7b7; }
+@media (prefers-reduced-motion: reduce) {
+  .ai-intro-live-dot::before { animation: none; }
 }
 .ai-intro-btn {
   border: none; cursor: pointer;
