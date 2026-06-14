@@ -788,3 +788,23 @@ The Emergent Universal LLM Key gateway returned HTTP 400 with `"Budget has been 
 ## Files changed (this session)
 - `/app/php-version/brand.php` — schema guard + articles query
 - `/app/php-version/includes/functions.php` — central `ensure_db_schema()` now covers `blog_posts` columns
+
+## [Feb 14, 2026] Manual controls & cron wiring (AI Auto-Blogger tab)
+Three new pieces added to the Admin → AI Auto-Blogger tab so the operator no longer has to wait for the daily self-cron:
+- **Force-generate one post now** button (data-testid `ai-blogger-run-underserved`). Picks the next under-served market (US/UK/AU/CA — the one with the fewest posts in the last 24h) and publishes ONE article immediately. 60-sec mini-cooldown to prevent button-mashing.
+- **Today's count: X / 24 daily cap** indicator with a progress bar (data-testid `ai-blogger-daily-count`). Cap is the 6×4 strategy (6 posts × 4 countries).
+- **External cron URL** with copy-button + rotate-token action (data-testid `ai-blogger-cron-url-panel`). Endpoint lives at `/cron/seo-daily.php?token=…`. Token is generated lazily, stored in `settings.seo_bot_cron_token`, rotatable from the admin panel. The endpoint uses `hash_equals()` for constant-time token comparison and falls back to a one-under-served-region publish if the full daily batch already ran inside the 20h cooldown.
+
+Also surfaced a **"{brand} profile →"** chip on each admin Product card (data-testid `brand-profile-link-{slug}`) that opens the public `brand.php?slug=…&view=articles` page in a new tab — so admins can jump straight from a product to its public Articles view in one click.
+
+### Files touched
+- `/app/php-version/includes/seo-bot.php` — added `_seo_pick_under_served_region()`, `seo_publish_one_post_now()`, `seo_bot_cron_token()`, `seo_bot_cron_rotate_token()`.
+- `/app/php-version/admin.php` — new `run_underserved_post=1` + `rotate_cron_token=1` handlers, new button + manual-controls panel, brand-profile chip on Product cards.
+- `/app/php-version/cron/seo-daily.php` — NEW token-authenticated public endpoint; returns JSON.
+
+### Verified end-to-end (curl)
+- `GET /cron/seo-daily.php` → HTTP 401 `{"ok":false,"error":"invalid_token"}`
+- `GET /cron/seo-daily.php?token=wrong` → HTTP 401
+- `GET /cron/seo-daily.php?token={correct}` → HTTP 200 JSON with `mode:"daily_batch"`, publishes via `seo_bot_run_if_due(true)` (the inner LLM-400s reflect the user-managed budget cap).
+- Rotate token via admin → old token now 401, new token now 200, tokens differ.
+- Screenshot confirms all 3 admin-panel pieces render (Force-generate button, 14/24 count + progress bar, External cron URL + Copy + Rotate). 37 brand-profile chips render on the Products tab.

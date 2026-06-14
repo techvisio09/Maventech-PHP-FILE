@@ -398,6 +398,102 @@ SYS;
 }
 
 /* ===================================================================
+ *  Pick the next *under-served* region — the one with the fewest AI
+ *  blog posts published in the last 24h.  Ties broken by the official
+ *  region order (US, UK, AU, CA) so the operator gets predictable
+ *  rotation.  Used by the admin "Force-generate one post now" button.
+ * =================================================================== */
+function _seo_pick_under_served_region(): string
+{
+    $regions = array_values(array_filter(array_map('trim', explode(',', SEOBOT_BLOG_REGIONS))));
+    if (!$regions) $regions = ['US'];
+    try {
+        $pdo = db();
+        $counts = array_fill_keys($regions, 0);
+        $stmt = $pdo->query("SELECT target_region, COUNT(*) c
+                               FROM blog_posts
+                              WHERE ai_generated = 1
+                                AND created_at >= NOW() - INTERVAL 24 HOUR
+                              GROUP BY target_region");
+        foreach ($stmt as $row) {
+            $r = (string)$row['target_region'];
+            if (isset($counts[$r])) $counts[$r] = (int)$row['c'];
+        }
+        // Lowest count first; preserve $regions order on ties.
+        $best = $regions[0]; $bestN = $counts[$best];
+        foreach ($regions as $r) {
+            if ($counts[$r] < $bestN) { $best = $r; $bestN = $counts[$r]; }
+        }
+        return $best;
+    } catch (Throwable $e) {
+        return $regions[0];
+    }
+}
+
+/**
+ * Publish ONE AI blog post immediately, targeting the next under-served
+ * region.  Wrapper around _seo_generate_one_blog_post() that handles
+ * LLM-key bootstrapping and returns a normalised result for the admin
+ * flash / cron endpoint.
+ *
+ *   $regionOverride  Force a specific region (US/UK/AU/CA) instead of
+ *                    auto-picking the under-served one.  Optional.
+ */
+function seo_publish_one_post_now(?string $regionOverride = null): array
+{
+    $pdo = db();
+    seo_bot_ensure_schema($pdo);
+
+    $apiKey  = defined('OPENAI_API_KEY')  ? OPENAI_API_KEY  : (getenv('EMERGENT_LLM_KEY') ?: '');
+    $baseUrl = defined('OPENAI_BASE_URL') ? OPENAI_BASE_URL : '';
+    if (!$apiKey || !$baseUrl) {
+        return ['ok' => false, 'error' => 'LLM key not configured'];
+    }
+
+    $region = $regionOverride
+        ? strtoupper(preg_replace('/[^A-Z]/i', '', $regionOverride))
+        : _seo_pick_under_served_region();
+    $allowed = array_values(array_filter(array_map('trim', explode(',', SEOBOT_BLOG_REGIONS))));
+    if (!in_array($region, $allowed, true)) $region = _seo_pick_under_served_region();
+
+    $report = ['errors' => []];
+    $one = _seo_generate_one_blog_post($pdo, $apiKey, $baseUrl, $region, [], $report);
+    if (empty($one['blog_post_id'])) {
+        return ['ok' => false, 'error' => $report['errors'][0] ?? 'unknown error', 'region' => $region];
+    }
+    return [
+        'ok'              => true,
+        'region'          => $region,
+        'blog_post_id'    => $one['blog_post_id'],
+        'blog_post_title' => $one['blog_post_title'],
+        'blog_post_image' => $one['blog_post_image'] ?? '',
+        'product_name'    => $one['product_name'] ?? '',
+        'blog_product_id' => $one['blog_product_id'] ?? null,
+    ];
+}
+
+/* ===================================================================
+ *  Secret token for the external-cron URL.  Stored in `settings`.
+ *  Generated lazily on first read; rotatable from the admin panel.
+ * =================================================================== */
+function seo_bot_cron_token(): string
+{
+    $tok = setting_get('seo_bot_cron_token', '');
+    if (!$tok || strlen($tok) < 16) {
+        $tok = bin2hex(random_bytes(8));
+        setting_set('seo_bot_cron_token', $tok);
+    }
+    return $tok;
+}
+
+function seo_bot_cron_rotate_token(): string
+{
+    $tok = bin2hex(random_bytes(8));
+    setting_set('seo_bot_cron_token', $tok);
+    return $tok;
+}
+
+/* ===================================================================
  *  AI-AUTHORED DAILY BLOG POST
  *  --------------------------------------------------------------------
  *  Once every ~24 h we pick ONE active product (round-robin so we never

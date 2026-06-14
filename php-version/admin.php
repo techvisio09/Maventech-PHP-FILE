@@ -673,6 +673,48 @@ if ($tab === 'ai-blogger') {
         exit;
     }
 
+    // ----- "Force-generate one post now" — picks the next UNDER-SERVED
+    // market (US/UK/AU/CA with the fewest posts in the last 24h) and
+    // publishes ONE article immediately.  60-sec mini-cooldown to stop
+    // button-mashing.  Separate from the daily 24-post batch.
+    if (!empty($_GET['run_underserved_post'])) {
+        $lastForce = setting_get('seo_bot_force_one_last_at', '');
+        if ($lastForce && (time() - strtotime($lastForce)) < 60) {
+            $_SESSION['seo_bot_flash'] = 'Just force-generated a post a moment ago — give it ~60 seconds before the next.';
+        } else {
+            try {
+                $res = seo_publish_one_post_now();
+                if (!empty($res['ok'])) {
+                    setting_set('seo_bot_force_one_last_at', date('Y-m-d H:i:s'));
+                    $_SESSION['seo_bot_flash'] = 'Force-published one post for the next under-served market (' . esc($res['region']) . ') — ' . esc($res['product_name'] ?: 'a product') . '.';
+                    $_SESSION['seo_bot_blog_flash'] = [
+                        'posts' => [[
+                            'blog_post_id'    => $res['blog_post_id'],
+                            'blog_post_title' => $res['blog_post_title'],
+                            'blog_post_image' => $res['blog_post_image'] ?? '',
+                            'product_name'    => $res['product_name'] ?? '',
+                            'target_region'   => $res['region'],
+                        ]],
+                    ];
+                } else {
+                    $_SESSION['seo_bot_flash'] = 'Force-generate failed (' . esc($res['region'] ?? '—') . ') — ' . esc($res['error'] ?? 'unknown error');
+                }
+            } catch (Throwable $e) {
+                $_SESSION['seo_bot_flash'] = 'Force-generate error: ' . esc($e->getMessage());
+            }
+        }
+        header('Location: admin.php?tab=ai-blogger');
+        exit;
+    }
+
+    // ----- Rotate the external-cron secret token -----
+    if (!empty($_GET['rotate_cron_token'])) {
+        $newTok = seo_bot_cron_rotate_token();
+        $_SESSION['seo_bot_flash'] = 'External-cron token rotated. Update any external schedulers with the new URL.';
+        header('Location: admin.php?tab=ai-blogger');
+        exit;
+    }
+
     // ----- "Publish daily featured trends article" — separate from the
     // 24-post batch. One editorial-style article per day focusing on
     // industry trends around a different product each day. 24 h cooldown.
@@ -1834,9 +1876,54 @@ elseif ($tab === 'ai-blogger'):
       <small class="text-muted">Six products picked every 24&nbsp;h <strong>for each country (US · UK · AU · CA)</strong> = 24 fresh blog posts daily · Claude Haiku writes each one in the local currency &amp; voice · published instantly to <code>/blog.php</code> · auto-pinged to Google, Bing, IndexNow, listed in <code>/llms.txt</code> + <code>/ai.txt</code>. Each post is verified (HTTP 200 + IndexNow + backlink count) the moment it's written.</small>
     </div>
     <div class="d-flex gap-2 flex-wrap">
+      <a href="admin.php?tab=ai-blogger&run_underserved_post=1" class="btn btn-outline-success rounded-pill px-3" data-testid="ai-blogger-run-underserved" onclick="return confirm('Pick the next UNDER-SERVED market (fewest posts in last 24h) and publish ONE blog post right now?')" title="Picks the market with the fewest posts in the last 24h (US/UK/AU/CA) and publishes one blog instantly. Use when you don't want to wait for the daily cron."><i class="bi bi-lightning-charge me-1"></i>Force-generate one post now</a>
       <a href="admin.php?tab=ai-blogger&run_random_post=1" class="btn btn-outline-primary rounded-pill px-3" data-testid="ai-blogger-run-random" onclick="return confirm('Pick a RANDOM product + RANDOM country and publish ONE blog post right now (with instant IndexNow push)?')" title="Picks one random product + random country, writes a blog and indexes it instantly. Does not affect the daily batch."><i class="bi bi-shuffle me-1"></i>Publish a random post</a>
       <a href="admin.php?tab=ai-blogger&run_trends_article=1" class="btn btn-outline-primary rounded-pill px-3" data-testid="ai-blogger-run-trends" onclick="return confirm('Publish today\'s editorial trends article? Picks one product and writes a 700-1000 word opinion piece about 2026 trends in its category.')" title="Daily featured editorial · 700-1000 words about 2026 industry trends · separate from the 24-post regional batch"><i class="bi bi-newspaper me-1"></i>Publish trends article</a>
       <a href="admin.php?tab=ai-blogger&seo_run=1" class="btn btn-primary rounded-pill px-4" data-testid="ai-blogger-run-now" onclick="return confirm('Publish today\'s full batch — 6 posts × 4 countries = 24 articles? (~$0.08 in LLM credits, ~3 minutes)')"><i class="bi bi-play-fill me-1"></i>Publish today\'s batch now</a>
+    </div>
+  </div>
+
+  <?php
+    // Daily cap & external-cron URL panel — surfaced just under the header
+    // so the operator sees today's progress vs the 24-post cap and can grab
+    // the secret cron URL for shared-hosting external schedulers.
+    $dailyCap   = 24;                       // 6 posts × 4 countries
+    $todayCount = (int)$mon['posts_24h'];   // already computed above
+    $pct        = max(0, min(100, (int)round($todayCount / $dailyCap * 100)));
+    $cronToken  = seo_bot_cron_token();
+    $cronUrl    = rtrim(site_url(), '/') . '/cron/seo-daily.php?token=' . rawurlencode($cronToken);
+  ?>
+  <div class="card-e mb-3" data-testid="ai-blogger-manual-controls" style="background:linear-gradient(135deg,#f8fafc 0%,#f1f5f9 100%);border:1px solid #e2e8f0;padding:14px 16px;">
+    <div class="row g-3 align-items-center">
+      <!-- Today's count vs cap -->
+      <div class="col-md-4">
+        <div class="text-uppercase small text-secondary" style="font-weight:700;letter-spacing:1px;font-size:10px;">Today's count</div>
+        <div class="d-flex align-items-baseline gap-2 mt-1">
+          <span class="fw-bold" data-testid="ai-blogger-daily-count" style="font-size:24px;color:<?= $todayCount >= $dailyCap ? '#059669' : '#0f172a' ?>;"><?= $todayCount ?></span>
+          <span class="text-secondary" style="font-size:13px;font-weight:600;">/ <?= $dailyCap ?> daily cap</span>
+        </div>
+        <div class="progress mt-2" style="height:6px;border-radius:999px;background:#e2e8f0;">
+          <div class="progress-bar" role="progressbar" style="width:<?= $pct ?>%;background:linear-gradient(90deg,#10b981 0%,#34d399 100%);" aria-valuenow="<?= $pct ?>" aria-valuemin="0" aria-valuemax="100"></div>
+        </div>
+        <div class="text-secondary small mt-1"><?= $pct ?>% of today's target reached</div>
+      </div>
+
+      <!-- External cron URL -->
+      <div class="col-md-8" data-testid="ai-blogger-cron-url-panel">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+          <div class="text-uppercase small text-secondary" style="font-weight:700;letter-spacing:1px;font-size:10px;"><i class="bi bi-shield-lock me-1"></i>External cron URL <span class="text-warning ms-1" style="font-weight:600;font-size:10px;">keep secret</span></div>
+          <a href="admin.php?tab=ai-blogger&rotate_cron_token=1" class="btn btn-sm btn-outline-secondary rounded-pill" data-testid="ai-blogger-rotate-token" onclick="return confirm('Rotate the external-cron token? Any external schedulers using the current URL will stop working until you update them.')"><i class="bi bi-arrow-repeat me-1"></i>Rotate token</a>
+        </div>
+        <div class="text-secondary small mt-1">For shared-hosting deployments — point any external scheduler at this URL (token-authenticated):</div>
+        <div class="input-group input-group-sm mt-2">
+          <input type="text" class="form-control" data-testid="ai-blogger-cron-url" id="ai-blogger-cron-url-input" value="<?= esc($cronUrl) ?>" readonly style="font-family:monospace;font-size:11.5px;background:#fff;border-color:#cbd5e1;">
+          <button class="btn btn-outline-primary" type="button" data-testid="ai-blogger-copy-cron-url" onclick="(function(){var i=document.getElementById('ai-blogger-cron-url-input');i.select();document.execCommand('copy');this.innerHTML='<i class=\'bi bi-check-lg me-1\'></i>Copied';setTimeout(()=>{this.innerHTML='<i class=\'bi bi-clipboard me-1\'></i>Copy';},1500);}).call(this);"><i class="bi bi-clipboard me-1"></i>Copy</button>
+        </div>
+        <details class="mt-2">
+          <summary class="small text-secondary" style="cursor:pointer;">Or use a server cron line</summary>
+          <pre class="small text-body bg-white p-2 mt-2 rounded border" style="font-size:11px;overflow-x:auto;">0 * * * * curl -fsS "<?= esc($cronUrl) ?>" &gt;/dev/null 2&gt;&amp;1</pre>
+        </details>
+      </div>
     </div>
   </div>
 
@@ -3408,6 +3495,11 @@ elseif ($tab === 'products'):
             <div class="fw-bold" title="<?= esc($p['name']) ?>" style="font-size:13px;line-height:1.3;min-height:34px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;"><?= esc($p['name']) ?></div>
             <div class="text-muted mt-1" style="font-size:11px;"><code style="font-size:10px;"><?= esc($p['sku']) ?></code> · <?= esc($p['platform']) ?></div>
           </a>
+          <?php if (!empty($p['brand'])): $brandSlug = strtolower(preg_replace('/[^a-z0-9]+/i', '-', (string)$p['brand'])); ?>
+            <a href="brand.php?slug=<?= rawurlencode($brandSlug) ?>&view=articles" target="_blank" rel="noopener" class="d-inline-flex align-items-center text-decoration-none mt-1" data-testid="brand-profile-link-<?= esc($p['slug']) ?>" title="Open the public company profile for <?= esc($p['brand']) ?> — see every product + every AI-published article" style="background:#eef2ff;color:#3730a3;border-radius:999px;padding:2px 9px;font-size:10.5px;font-weight:600;">
+              <i class="bi bi-building me-1"></i><?= esc($p['brand']) ?> profile <i class="bi bi-box-arrow-up-right ms-1" style="font-size:9px;"></i>
+            </a>
+          <?php endif; ?>
           <div class="d-flex align-items-baseline gap-2 mt-2">
             <strong style="color:#10b981;font-size:15px;"><?= esc($rg['currency_symbol']) ?><?= number_format(region_price((float)$p['price']),2) ?></strong>
             <?php if ($p['original_price'] && $p['original_price'] > $p['price']): ?>
