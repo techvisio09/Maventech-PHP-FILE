@@ -40,9 +40,12 @@ foreach ($catSlugs as $cs) {
 }
 
 // Topic Cluster Hubs — strong topical-authority signals.  High priority
-// because they aggregate every product + post + FAQ on a topic.
-foreach (['microsoft-office', 'windows', 'antivirus'] as $hubSlug) {
-    $urls[] = ['loc' => $base . '/hub/' . $hubSlug, 'lastmod' => $today, 'freq' => 'weekly', 'pri' => '0.9', 'images' => []];
+// because they aggregate every product + post + FAQ on a topic.  Pulled
+// from the `topic_hubs` table so admin-added hubs ship to Google + Bing
+// automatically without any code change.
+require_once __DIR__ . '/includes/seo-content.php';
+foreach (topic_hubs_all(true) as $__hub) {
+    $urls[] = ['loc' => $base . '/hub/' . $__hub['slug'], 'lastmod' => $today, 'freq' => 'weekly', 'pri' => '0.9', 'images' => []];
 }
 
 // Products — use real updated_at when present and emit the image URL so

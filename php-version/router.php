@@ -77,6 +77,29 @@ if (preg_match('#^/hub/([a-z0-9\-]+)/?$#', $path, $m)) {
     require __DIR__ . '/hub.php';
     return true;
 }
+// Serve site assets even when accessed under /hub/... (the browser
+// resolves relative URLs like `assets/css/x.css` against /hub/<slug>
+// — without a trailing slash, the last segment is dropped, so requests
+// land at /hub/assets/...).  Map them back to the real /assets/... file.
+if (preg_match('#^/hub/(assets/.+|ajax/.+|uploads/.+)$#', $path, $m)) {
+    $file = __DIR__ . '/' . $m[1];
+    if (file_exists($file) && !is_dir($file)) {
+        $ext  = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+        if ($ext === 'php') {
+            $_SERVER['SCRIPT_NAME'] = '/' . $m[1];
+            $_SERVER['SCRIPT_FILENAME'] = $file;
+            require $file;
+            return true;
+        }
+        $mime = ['css'=>'text/css','js'=>'application/javascript','png'=>'image/png','jpg'=>'image/jpeg','jpeg'=>'image/jpeg','gif'=>'image/gif','svg'=>'image/svg+xml','webp'=>'image/webp','ico'=>'image/x-icon','woff'=>'font/woff','woff2'=>'font/woff2','ttf'=>'font/ttf','json'=>'application/json'][$ext] ?? 'application/octet-stream';
+        header('Content-Type: ' . $mime . '; charset=UTF-8');
+        header('Cache-Control: public, max-age=3600');
+        readfile($file);
+        return true;
+    }
+    http_response_code(404);
+    return true;
+}
 $file = __DIR__ . $path;
 if ($path !== '/' && file_exists($file) && !is_dir($file)) {
     return false; // let the built-in server handle real files (php, css, js, images)

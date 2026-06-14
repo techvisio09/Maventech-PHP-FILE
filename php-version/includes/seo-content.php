@@ -773,3 +773,374 @@ function render_breadcrumb_nav(array $crumbs, string $testid = 'breadcrumb'): st
     return $h;
 }
 
+/* =====================================================================
+ *  TOPIC CLUSTER HUB HELPERS
+ *  --------------------------------------------------------------------
+ *  Every hub lives in the `topic_hubs` table (auto-seeded on first run
+ *  with the three legacy default topics).  These helpers are the single
+ *  read-point used by hub.php, sitemap-xml.php, the admin panel and
+ *  product.php / category.php "Topic Hub" backlink renders.
+ * ===================================================================== */
+
+/** Default hubs that get seeded if `topic_hubs` is empty.  Mirrors the
+ *  legacy in-file $TOPICS array so a fresh install ships with content. */
+function _topic_hub_default_seeds(): array
+{
+    $brand = function_exists('site_brand_safe') ? site_brand_safe() : (defined('SITE_BRAND') ? SITE_BRAND : 'our store');
+    return [
+        [
+            'slug'       => 'microsoft-office',
+            'title'      => 'Microsoft Office — the complete buying guide',
+            'headline'   => 'Microsoft Office is a one-time-purchase office suite (Word, Excel, PowerPoint, Outlook, Publisher, Access) sold by ' . $brand . ' at up to 81% below retail. Every licence is genuine, lifetime, activates inside the official Microsoft installer, delivered by email in 15-30 minutes, and protected by a 30-day money-back guarantee.',
+            'audience'   => 'home users, students, freelancers and small-business owners choosing between Office 2024, 2021 and 2019 on Windows or Mac',
+            'categories' => ['office-pc','office-mac','office-2024-pc','office-2021-pc','office-2019-pc','office-2024-mac','office-2021-mac','office-2019-mac','apps','microsoft-project','microsoft-visio'],
+            'blogTags'   => ['%office%','%word%','%excel%','%powerpoint%','%outlook%','%microsoft 365%','%publisher%'],
+            'keywords'   => 'Microsoft Office, Office 2024, Office 2021, Office 2019, Office for Mac, Office for PC, Office lifetime license, Office one time purchase, buy Microsoft Office key, Microsoft Office product key, Office Home and Student, Office Home and Business, Office Professional Plus, Microsoft Project, Microsoft Visio',
+            'aboutLink'  => 'category.php?slug=apps',
+            'color'      => '#dc2626',
+            'videos'     => [],
+        ],
+        [
+            'slug'       => 'windows',
+            'title'      => 'Microsoft Windows — Windows 11, 10 and Pro buying guide',
+            'headline'   => 'Microsoft Windows is the world\'s most-used desktop operating system. ' . $brand . ' sells genuine Windows 11 and Windows 10 product keys (Home, Pro and Education) at up to 81% off retail. Pay once, activate inside the official Windows setup, and keep the licence for life — instant email delivery and 30-day guarantee.',
+            'audience'   => 'self-builders, IT teams and home upgraders looking for a genuine Windows 11 Pro or Windows 10 product key',
+            'categories' => ['windows-11','windows-10','windows','os'],
+            'blogTags'   => ['%windows 11%','%windows 10%','%windows%'],
+            'keywords'   => 'Microsoft Windows, Windows 11 Pro, Windows 11 Home, Windows 10 Pro, Windows 10 Home, Windows product key, buy Windows 11 key, Windows lifetime activation, Windows OEM key, Windows 11 vs 10, upgrade to Windows 11',
+            'aboutLink'  => 'category.php?slug=windows-11',
+            'color'      => '#0078d4',
+            'videos'     => [],
+        ],
+        [
+            'slug'       => 'antivirus',
+            'title'      => 'Antivirus software — Bitdefender, McAfee & internet-security buying guide',
+            'headline'   => 'Modern antivirus software protects every device in your household from malware, ransomware and identity theft. ' . $brand . ' carries genuine Bitdefender and McAfee licences for 1, 3, 5 and 10 devices at up to 81% off retail. Activates inside the official vendor installer, delivered by email, with our 30-day money-back guarantee.',
+            'audience'   => 'home users, families and small businesses choosing between Bitdefender Total Security, McAfee Total Protection and other paid antivirus suites',
+            'categories' => ['antivirus','bitdefender','mcafee','internet-security'],
+            'blogTags'   => ['%bitdefender%','%mcafee%','%antivirus%','%malware%','%ransomware%','%internet security%'],
+            'keywords'   => 'antivirus, Bitdefender Total Security, McAfee Total Protection, internet security, anti-malware, ransomware protection, family antivirus plans, best antivirus 2026, antivirus for Mac, multi-device antivirus',
+            'aboutLink'  => 'category.php?slug=antivirus',
+            'color'      => '#16a34a',
+            'videos'     => [],
+        ],
+    ];
+}
+
+/** Seed default hubs into the DB if the table is empty (idempotent). */
+function topic_hubs_seed_defaults(): void
+{
+    static $seeded = false;
+    if ($seeded) return;
+    $seeded = true;
+    try {
+        ensure_db_schema();
+        $pdo = db();
+        $count = (int)$pdo->query("SELECT COUNT(*) FROM topic_hubs")->fetchColumn();
+        if ($count > 0) return;
+        $stmt = $pdo->prepare("INSERT IGNORE INTO topic_hubs
+            (slug, title, headline, audience, categories_json, blog_tags_json, keywords, about_link, color, videos_json, active, source)
+            VALUES (?,?,?,?,?,?,?,?,?,?,1,'seed')");
+        foreach (_topic_hub_default_seeds() as $h) {
+            $stmt->execute([
+                $h['slug'], $h['title'], $h['headline'], $h['audience'],
+                json_encode($h['categories']), json_encode($h['blogTags']),
+                $h['keywords'], $h['aboutLink'], $h['color'],
+                json_encode($h['videos']),
+            ]);
+        }
+    } catch (Throwable $e) {
+        @error_log('[topic_hubs_seed_defaults] ' . $e->getMessage());
+    }
+}
+
+/** Hydrate a `topic_hubs` row into a hub array (legacy $TOPICS shape). */
+function _topic_hub_hydrate(array $row): array
+{
+    $cats   = json_decode((string)($row['categories_json'] ?? '[]'), true);
+    $tags   = json_decode((string)($row['blog_tags_json']  ?? '[]'), true);
+    $videos = json_decode((string)($row['videos_json']     ?? '[]'), true);
+    return [
+        'id'         => (int)($row['id'] ?? 0),
+        'slug'       => (string)($row['slug'] ?? ''),
+        'title'      => (string)($row['title'] ?? ''),
+        'headline'   => (string)($row['headline'] ?? ''),
+        'audience'   => (string)($row['audience'] ?? ''),
+        'categories' => is_array($cats) ? $cats : [],
+        'blogTags'   => is_array($tags) ? $tags : [],
+        'keywords'   => (string)($row['keywords'] ?? ''),
+        'aboutLink'  => (string)($row['about_link'] ?? ''),
+        'color'      => (string)($row['color'] ?? '#0078d4'),
+        'videos'     => is_array($videos) ? $videos : [],
+        'active'     => (int)($row['active'] ?? 1),
+        'source'     => (string)($row['source'] ?? 'manual'),
+        'updated_at' => (string)($row['updated_at'] ?? ''),
+    ];
+}
+
+/** Returns every hub (default: active only) keyed by slug. */
+function topic_hubs_all(bool $activeOnly = true): array
+{
+    topic_hubs_seed_defaults();
+    try {
+        $sql = "SELECT * FROM topic_hubs" . ($activeOnly ? " WHERE active=1" : "") . " ORDER BY id ASC";
+        $rows = db()->query($sql)->fetchAll();
+    } catch (Throwable $e) {
+        return [];
+    }
+    $out = [];
+    foreach ($rows as $r) { $h = _topic_hub_hydrate($r); $out[$h['slug']] = $h; }
+    return $out;
+}
+
+/** Fetch one hub by slug, or null if missing / inactive. */
+function topic_hub_by_slug(string $slug, bool $activeOnly = true): ?array
+{
+    topic_hubs_seed_defaults();
+    try {
+        $sql = "SELECT * FROM topic_hubs WHERE slug = ?" . ($activeOnly ? " AND active=1" : "") . " LIMIT 1";
+        $st  = db()->prepare($sql);
+        $st->execute([$slug]);
+        $r = $st->fetch();
+    } catch (Throwable $e) { return null; }
+    return $r ? _topic_hub_hydrate($r) : null;
+}
+
+/** Find every hub that contains a given category slug — used by category.php
+ *  and product.php to render a "Part of topic hub" backlink. */
+function topic_hubs_for_category(string $categorySlug): array
+{
+    $hubs = topic_hubs_all(true);
+    $cat  = strtolower(trim($categorySlug));
+    if ($cat === '') return [];
+    $out = [];
+    foreach ($hubs as $h) {
+        foreach ($h['categories'] as $c) {
+            if (strtolower((string)$c) === $cat) { $out[] = $h; break; }
+        }
+    }
+    return $out;
+}
+
+/** Convenience wrapper for products. */
+function topic_hubs_for_product(array $p): array
+{
+    return topic_hubs_for_category((string)($p['category'] ?? ''));
+}
+
+/** Auto-generate hubs from top product categories.  Picks every category
+ *  that has >= $minProducts active products and isn't already covered by
+ *  an existing hub, then inserts a new auto-source hub for each.
+ *  Returns the list of new slugs created. */
+function topic_hubs_auto_generate(int $minProducts = 4): array
+{
+    topic_hubs_seed_defaults();
+    $pdo  = db();
+    $hubs = topic_hubs_all(false);
+    $covered = [];
+    foreach ($hubs as $h) {
+        foreach ($h['categories'] as $c) $covered[strtolower((string)$c)] = 1;
+    }
+    $rows = $pdo->query(
+        "SELECT LOWER(category) AS cat, COUNT(*) AS n
+           FROM products
+          WHERE is_active=1 AND category IS NOT NULL AND category <> ''
+          GROUP BY LOWER(category)
+         HAVING n >= " . (int)$minProducts . "
+          ORDER BY n DESC"
+    )->fetchAll();
+
+    $created = [];
+    $insert = $pdo->prepare("INSERT IGNORE INTO topic_hubs
+        (slug, title, headline, audience, categories_json, blog_tags_json, keywords, about_link, color, videos_json, active, source)
+        VALUES (?,?,?,?,?,?,?,?,?,?,1,'auto')");
+    $palette = ['#0078d4','#16a34a','#dc2626','#9333ea','#0ea5e9','#f59e0b','#ec4899','#22c55e','#6366f1','#14b8a6'];
+    $brand   = function_exists('site_brand_safe') ? site_brand_safe() : (defined('SITE_BRAND') ? SITE_BRAND : 'our store');
+
+    foreach ($rows as $r) {
+        $slugCat = (string)$r['cat'];
+        if ($slugCat === '' || isset($covered[$slugCat])) continue;
+        $title    = function_exists('category_title') ? category_title($slugCat) : ucwords(str_replace('-', ' ', $slugCat));
+        if ($title === '' || strtolower($title) === strtolower($slugCat)) {
+            $title = ucwords(str_replace('-', ' ', $slugCat));
+        }
+        $hubTitle = $title . ' — buying guide & best picks';
+        $headline = $title . ' products are available at ' . $brand . ' with genuine licences, lifetime activation and instant email delivery. Compare the most popular ' . $title . ' titles, read editorial guides, and get answers to common buyer questions on one page.';
+        $audience = 'shoppers comparing ' . $title . ' options before they buy';
+        $keywords = $title . ', buy ' . $title . ', ' . $title . ' license key, best ' . $title . ' deals, ' . $title . ' product key, ' . $title . ' lifetime activation';
+        $tags     = ['%' . strtolower($title) . '%'];
+        $color    = $palette[count($created) % count($palette)];
+        try {
+            $insert->execute([
+                $slugCat, $hubTitle, $headline, $audience,
+                json_encode([$slugCat]), json_encode($tags),
+                $keywords, 'category.php?slug=' . $slugCat, $color, json_encode([]),
+            ]);
+            if ($pdo->lastInsertId()) {
+                $created[] = $slugCat;
+                $covered[$slugCat] = 1;
+            }
+        } catch (Throwable $e) {
+            @error_log('[topic_hubs_auto_generate] ' . $e->getMessage());
+        }
+    }
+    return $created;
+}
+
+/** VideoObject JSON-LD array for a single YouTube URL (best-effort). */
+function topic_hub_video_jsonld(array $video, array $hub): ?array
+{
+    $url = trim((string)($video['url'] ?? ''));
+    if ($url === '') return null;
+    $vid = '';
+    if (preg_match('#(?:youtu\.be/|v=|embed/|shorts/)([A-Za-z0-9_\-]{11})#', $url, $m)) $vid = $m[1];
+    $thumb = $vid !== '' ? 'https://i.ytimg.com/vi/' . $vid . '/hqdefault.jpg' : '';
+    return [
+        '@context'     => 'https://schema.org',
+        '@type'        => 'VideoObject',
+        'name'         => (string)($video['title'] ?? ('Video — ' . strip_tags((string)$hub['title']))),
+        'description'  => (string)($video['title'] ?? strip_tags((string)$hub['headline'])),
+        'thumbnailUrl' => $thumb,
+        'uploadDate'   => $hub['updated_at'] ?? date('c'),
+        'contentUrl'   => $url,
+        'embedUrl'     => $vid !== '' ? 'https://www.youtube.com/embed/' . $vid : $url,
+    ];
+}
+
+/** Helper safe-brand reader (works pre-bootstrap). */
+function site_brand_safe(): string
+{
+    return defined('SITE_BRAND') ? SITE_BRAND : 'our store';
+}
+
+/* =====================================================================
+ *  GSC QUERY CLUSTERING (SEO Discovery Lab)
+ *  --------------------------------------------------------------------
+ *  Admins upload the "Performance Report" CSV from Search Console.  We
+ *  tokenise every query, fold equivalent terms (singular/plural, stop
+ *  words) and group queries that share their two top tokens — the
+ *  resulting clusters become "create new hub" suggestions ranked by
+ *  total impressions.
+ * ===================================================================== */
+
+/** Tokenise a query into significant lowercase words. */
+function gsc_tokenise(string $q): array
+{
+    $stop = ['the','a','an','for','to','of','and','or','with','is','are','vs','in','my','on','at','by','from','this','best','top'];
+    $q = strtolower(trim($q));
+    $q = preg_replace('/[^a-z0-9\s\-]+/u', ' ', $q) ?? '';
+    $parts = preg_split('/\s+/', $q, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    $out = [];
+    foreach ($parts as $p) {
+        if (strlen($p) < 3 || in_array($p, $stop, true)) continue;
+        // crude singularisation: strip trailing 's' for length-5+ words
+        if (strlen($p) >= 5 && substr($p, -1) === 's' && substr($p, -2) !== 'ss') $p = substr($p, 0, -1);
+        $out[] = $p;
+    }
+    return $out;
+}
+
+/** Compute a cluster key (two most-relevant tokens) for a query. */
+function gsc_cluster_key(string $q): string
+{
+    $t = gsc_tokenise($q);
+    if (count($t) === 0) return 'other';
+    sort($t);                  // stable order
+    return implode('-', array_slice(array_values(array_unique($t)), 0, 2));
+}
+
+/** Parse a Search Console Performance CSV and persist queries.  Returns
+ *  ['inserted' => N, 'skipped' => N, 'errors' => []]. */
+function gsc_import_csv(string $csvText): array
+{
+    $report = ['inserted' => 0, 'skipped' => 0, 'errors' => []];
+    $csvText = preg_replace('/^\xEF\xBB\xBF/', '', $csvText) ?? $csvText; // strip BOM
+    $lines = preg_split('/\r\n|\n|\r/', trim($csvText));
+    if (!$lines || count($lines) < 2) {
+        $report['errors'][] = 'CSV is empty or missing rows.';
+        return $report;
+    }
+    $headerRaw = array_shift($lines);
+    $header    = array_map(static fn($s) => strtolower(trim($s)), str_getcsv((string)$headerRaw));
+    $find = static fn(array $opts) => (function() use ($header, $opts) {
+        foreach ($opts as $opt) { $i = array_search($opt, $header, true); if ($i !== false) return $i; }
+        return -1;
+    })();
+    $idxQ = $find(['query','top queries','search query']);
+    $idxI = $find(['impressions','total impressions','impr.']);
+    $idxC = $find(['clicks','total clicks']);
+    $idxP = $find(['position','avg. position','average position']);
+    $idxR = $find(['ctr','avg. ctr']);
+    if ($idxQ < 0) { $report['errors'][] = 'No "Query" column found.'; return $report; }
+
+    $pdo = db();
+    $upsert = $pdo->prepare(
+        "INSERT INTO gsc_queries (query, impressions, clicks, ctr, position, cluster_key, uploaded_at)
+         VALUES (?,?,?,?,?,?, NOW())
+         ON DUPLICATE KEY UPDATE
+           impressions = VALUES(impressions),
+           clicks      = VALUES(clicks),
+           ctr         = VALUES(ctr),
+           position    = VALUES(position),
+           cluster_key = VALUES(cluster_key),
+           uploaded_at = NOW()"
+    );
+    foreach ($lines as $line) {
+        if (trim($line) === '') continue;
+        $row = str_getcsv($line);
+        $q   = trim((string)($row[$idxQ] ?? ''));
+        if ($q === '' || mb_strlen($q) > 250) { $report['skipped']++; continue; }
+        $impr = $idxI >= 0 ? (int)str_replace([',', ' '], '', (string)($row[$idxI] ?? 0)) : 0;
+        $clk  = $idxC >= 0 ? (int)str_replace([',', ' '], '', (string)($row[$idxC] ?? 0)) : 0;
+        $pos  = $idxP >= 0 ? (float)str_replace(',', '.', (string)($row[$idxP] ?? 0)) : 0.0;
+        $ctrRaw = $idxR >= 0 ? (string)($row[$idxR] ?? '0') : '0';
+        $ctr  = (float)str_replace(['%', ',', ' '], ['', '.', ''], $ctrRaw);
+        try {
+            $upsert->execute([$q, $impr, $clk, $ctr, $pos, gsc_cluster_key($q)]);
+            $report['inserted']++;
+        } catch (Throwable $e) {
+            $report['skipped']++;
+            if (count($report['errors']) < 5) $report['errors'][] = $e->getMessage();
+        }
+    }
+    return $report;
+}
+
+/** Return up to $limit query clusters ranked by total impressions.  Each
+ *  cluster carries sample queries + a suggested hub slug/title. */
+function gsc_top_clusters(int $limit = 15): array
+{
+    try {
+        $rows = db()->query(
+            "SELECT cluster_key,
+                    COUNT(*)              AS query_count,
+                    SUM(impressions)      AS impressions,
+                    SUM(clicks)           AS clicks,
+                    GROUP_CONCAT(query ORDER BY impressions DESC SEPARATOR '|') AS sample
+               FROM gsc_queries
+              WHERE cluster_key <> ''
+              GROUP BY cluster_key
+              ORDER BY impressions DESC
+              LIMIT " . (int)$limit
+        )->fetchAll();
+    } catch (Throwable $e) { return []; }
+    $hubs = topic_hubs_all(false);
+    $existingSlugs = array_keys($hubs);
+    $out = [];
+    foreach ($rows as $r) {
+        $samples = array_slice(array_filter(explode('|', (string)$r['sample'])), 0, 6);
+        $hubSlug = preg_replace('/[^a-z0-9\-]/', '', (string)$r['cluster_key']) ?: 'topic';
+        $exists  = in_array($hubSlug, $existingSlugs, true);
+        $out[] = [
+            'cluster_key'   => (string)$r['cluster_key'],
+            'query_count'   => (int)$r['query_count'],
+            'impressions'   => (int)$r['impressions'],
+            'clicks'        => (int)$r['clicks'],
+            'samples'       => array_values($samples),
+            'suggested_slug'  => $hubSlug,
+            'suggested_title' => ucwords(str_replace('-', ' ', (string)$r['cluster_key'])) . ' — buying guide & top picks',
+            'already_exists'  => $exists,
+        ];
+    }
+    return $out;
+}

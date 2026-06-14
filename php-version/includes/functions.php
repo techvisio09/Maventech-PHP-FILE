@@ -222,6 +222,48 @@ function ensure_db_schema(): void
             KEY idx_started (started_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+        // Topic Cluster Hubs — admin-managed dynamic /hub/<slug> pages.
+        // Each row drives a hub URL and aggregates products + posts + FAQs
+        // by category slug.  source: 'seed' (default 3 hubs), 'manual'
+        // (admin created), 'auto' (auto-generated from top categories),
+        // 'gsc' (created from a Google Search Console cluster suggestion).
+        $pdo->exec("CREATE TABLE IF NOT EXISTS topic_hubs (
+            id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            slug VARCHAR(120) NOT NULL,
+            title VARCHAR(255) NOT NULL,
+            headline TEXT NOT NULL,
+            audience VARCHAR(255) NOT NULL DEFAULT '',
+            categories_json TEXT NOT NULL,
+            blog_tags_json TEXT NOT NULL,
+            keywords TEXT NOT NULL,
+            about_link VARCHAR(255) NOT NULL DEFAULT '',
+            color VARCHAR(20) NOT NULL DEFAULT '#0078d4',
+            videos_json TEXT NOT NULL,
+            active TINYINT(1) NOT NULL DEFAULT 1,
+            source VARCHAR(16) NOT NULL DEFAULT 'manual',
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uniq_slug (slug),
+            KEY idx_active (active)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        // Google Search Console — query-level data uploaded by admin via
+        // the Performance Report CSV.  Powers the "SEO Discovery Lab" that
+        // clusters queries into topic suggestions for new hubs / posts.
+        $pdo->exec("CREATE TABLE IF NOT EXISTS gsc_queries (
+            id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            query VARCHAR(255) NOT NULL,
+            impressions INT NOT NULL DEFAULT 0,
+            clicks INT NOT NULL DEFAULT 0,
+            ctr DECIMAL(8,4) NOT NULL DEFAULT 0,
+            position DECIMAL(8,2) NOT NULL DEFAULT 0,
+            cluster_key VARCHAR(120) NOT NULL DEFAULT '',
+            uploaded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY uniq_query (query),
+            KEY idx_cluster (cluster_key),
+            KEY idx_impr (impressions)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
         // ProAssist install-call schedules — customer picks a 30-min slot
         // from the chat widget, admin sees it on the new "Install Schedule"
         // tab.  scheduled_at is stored in America/New_York time (label),

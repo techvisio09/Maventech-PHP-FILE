@@ -275,6 +275,10 @@ $ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.sv
   <?php if (isset($jsonLdItemList)): ?>
   <script type="application/ld+json"><?= json_encode($jsonLdItemList, JSON_UNESCAPED_SLASHES) ?></script>
   <?php endif; ?>
+  <?php if (!empty($jsonLdVideos) && is_array($jsonLdVideos)):
+      foreach ($jsonLdVideos as $__v): ?>
+  <script type="application/ld+json"><?= json_encode($__v, JSON_UNESCAPED_SLASHES) ?></script>
+  <?php endforeach; endif; ?>
   <?php if (!empty($preloadImage)): ?>
   <!-- Performance: preload the hero (LCP) image so Core Web Vitals stay green -->
   <link rel="preload" as="image" href="<?= esc($preloadImage) ?>" fetchpriority="high">
@@ -288,8 +292,8 @@ $ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.sv
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-  <link href="assets/css/style.css" rel="stylesheet">
-  <link href="assets/css/dark-mode-polish.css" rel="stylesheet">
+  <link href="assets/css/style.css?v=<?= esc(@filemtime(__DIR__ . '/../assets/css/style.css')) ?>" rel="stylesheet">
+  <link href="assets/css/dark-mode-polish.css?v=<?= esc(@filemtime(__DIR__ . '/../assets/css/dark-mode-polish.css')) ?>" rel="stylesheet">
   <script>window.SITE_PHONE = '<?= esc($brandPhone) ?>'; window.CART_SLUGS = <?= json_encode(array_keys(cart())) ?>;</script>
 </head>
 <body data-brand-motion="<?= esc(setting_get('company_logo_motion', 'bounce')) ?>" data-brand-vibe="<?= esc(setting_get('company_brand_vibe', 'classic')) ?>">

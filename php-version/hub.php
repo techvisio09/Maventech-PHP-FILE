@@ -22,50 +22,14 @@ require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/seo-content.php';
 require_once __DIR__ . '/includes/email.php';
 
-/* ---------- TOPIC CONFIG ----------
- *  Each topic declares:
- *    title       Human title used in the H1 + breadcrumb.
- *    headline    Quick-Answer 40-60 word AEO direct answer.
- *    audience    Who this is for (E-E-A-T signal).
- *    categories  category slugs whose products belong here.
- *    blogTags    LIKE patterns matched against blog_posts.title to pull
- *                relevant editorial pieces.
- *    keywords    long-tail keyword string (meta + on-page).
- *    aboutLink   shop/category URL for the primary CTA.
- *    color       brand accent for the hero block.
+/* ---------- TOPIC SOURCE ----------
+ *  Hubs are read from the DB (`topic_hubs` table).  topic_hubs_all()
+ *  auto-seeds the three default hubs (microsoft-office, windows,
+ *  antivirus) on first run so no migration step is required.  Admins
+ *  add / edit / auto-generate more hubs from the AI Auto-Blogger panel
+ *  -> "Topic Cluster Hubs" section.
  * ---------------------------------- */
-$TOPICS = [
-    'microsoft-office' => [
-        'title'      => 'Microsoft Office — the complete buying guide',
-        'headline'   => 'Microsoft Office is a one-time-purchase office suite (Word, Excel, PowerPoint, Outlook, Publisher, Access) sold by ' . SITE_BRAND . ' at up to 81% below retail. Every licence is genuine, lifetime, activates inside the official Microsoft installer, delivered by email in 15-30 minutes, and protected by a 30-day money-back guarantee.',
-        'audience'   => 'home users, students, freelancers and small-business owners choosing between Office 2024, 2021 and 2019 on Windows or Mac',
-        'categories' => ['office-pc','office-mac','office-2024-pc','office-2021-pc','office-2019-pc','office-2024-mac','office-2021-mac','office-2019-mac','apps','microsoft-project','microsoft-visio'],
-        'blogTags'   => ['%office%','%word%','%excel%','%powerpoint%','%outlook%','%microsoft 365%','%publisher%'],
-        'keywords'   => 'Microsoft Office, Office 2024, Office 2021, Office 2019, Office for Mac, Office for PC, Office lifetime license, Office one time purchase, buy Microsoft Office key, Microsoft Office product key, Office Home and Student, Office Home and Business, Office Professional Plus, Microsoft Project, Microsoft Visio',
-        'aboutLink'  => 'category.php?slug=apps',
-        'color'      => '#dc2626',
-    ],
-    'windows' => [
-        'title'      => 'Microsoft Windows — Windows 11, 10 and Pro buying guide',
-        'headline'   => 'Microsoft Windows is the world\'s most-used desktop operating system. ' . SITE_BRAND . ' sells genuine Windows 11 and Windows 10 product keys (Home, Pro and Education) at up to 81% off retail. Pay once, activate inside the official Windows setup, and keep the licence for life — instant email delivery and 30-day guarantee.',
-        'audience'   => 'self-builders, IT teams and home upgraders looking for a genuine Windows 11 Pro or Windows 10 product key',
-        'categories' => ['windows-11','windows-10','windows','os'],
-        'blogTags'   => ['%windows 11%','%windows 10%','%windows%'],
-        'keywords'   => 'Microsoft Windows, Windows 11 Pro, Windows 11 Home, Windows 10 Pro, Windows 10 Home, Windows product key, buy Windows 11 key, Windows lifetime activation, Windows OEM key, Windows 11 vs 10, upgrade to Windows 11',
-        'aboutLink'  => 'category.php?slug=windows-11',
-        'color'      => '#0078d4',
-    ],
-    'antivirus' => [
-        'title'      => 'Antivirus software — Bitdefender, McAfee &amp; internet-security buying guide',
-        'headline'   => 'Modern antivirus software protects every device in your household from malware, ransomware and identity theft. ' . SITE_BRAND . ' carries genuine Bitdefender and McAfee licences for 1, 3, 5 and 10 devices at up to 81% off retail. Activates inside the official vendor installer, delivered by email, with our 30-day money-back guarantee.',
-        'audience'   => 'home users, families and small businesses choosing between Bitdefender Total Security, McAfee Total Protection and other paid antivirus suites',
-        'categories' => ['antivirus','bitdefender','mcafee','internet-security'],
-        'blogTags'   => ['%bitdefender%','%mcafee%','%antivirus%','%malware%','%ransomware%','%internet security%'],
-        'keywords'   => 'antivirus, Bitdefender Total Security, McAfee Total Protection, internet security, anti-malware, ransomware protection, family antivirus plans, best antivirus 2026, antivirus for Mac, multi-device antivirus',
-        'aboutLink'  => 'category.php?slug=antivirus',
-        'color'      => '#16a34a',
-    ],
-];
+$TOPICS = topic_hubs_all(true);
 
 $topicSlug = strtolower(trim((string)($_GET['topic'] ?? '')));
 $topic = $TOPICS[$topicSlug] ?? null;
@@ -174,6 +138,15 @@ $jsonLdItemList = category_itemlist_jsonld($hubProducts, strip_tags($topic['titl
 // Hub-wide FAQPage with Speakable selectors so AI assistants quote us verbatim.
 $jsonLdFaq = $hubFaqs ? faq_to_jsonld($hubFaqs) : null;
 
+// Per-video VideoObject schema for each related YouTube link the admin
+// added.  Emitted alongside the other JSON-LD blocks in header.php so
+// Google + AI engines can pick up structured video data.
+$jsonLdVideos = [];
+foreach (($topic['videos'] ?? []) as $v) {
+    $vj = topic_hub_video_jsonld((array)$v, $topic);
+    if ($vj) $jsonLdVideos[] = $vj;
+}
+
 // Mentions list (Google graph edge) — link every aggregated blog post + product to the hub.
 $mentionsArr = [];
 foreach (array_slice($hubProducts, 0, 12) as $p) {
@@ -225,6 +198,7 @@ include __DIR__ . '/includes/header.php';
     $tocChips = [
         ['#hub-products', '<i class="bi bi-grid-3x3-gap-fill"></i> Products', $hubProducts ? null : 'd-none'],
         ['#hub-guides',   '<i class="bi bi-journal-text"></i> Guides',         $hubPosts    ? null : 'd-none'],
+        ['#hub-videos',   '<i class="bi bi-play-btn-fill"></i> Videos',        (!empty($topic['videos']) && is_array($topic['videos']) && count($topic['videos']) > 0) ? null : 'd-none'],
         ['#hub-faqs',     '<i class="bi bi-patch-question-fill"></i> FAQs',    $hubFaqs     ? null : 'd-none'],
         ['#hub-related',  '<i class="bi bi-collection"></i> Related topics',   null],
     ];
@@ -300,6 +274,37 @@ include __DIR__ . '/includes/header.php';
             </div>
           </div>
         </a>
+      </div>
+    <?php endforeach; ?>
+  </div>
+</section>
+<?php endif; ?>
+
+<?php if (!empty($topic['videos']) && is_array($topic['videos'])): ?>
+<!-- Related Videos — YouTube embeds with VideoObject schema for SEO/AI. -->
+<section id="hub-videos" class="mb-5" aria-labelledby="hub-videos-h2" data-testid="hub-videos">
+  <h2 id="hub-videos-h2" class="fw-bold h3 mb-3">Watch &amp; learn</h2>
+  <p class="text-secondary mb-3" style="max-width:780px;">Curated tutorials and product walkthroughs to help you compare and choose with confidence.</p>
+  <div class="row g-3">
+    <?php foreach (array_slice($topic['videos'], 0, 6) as $v):
+      $vu = trim((string)($v['url'] ?? ''));
+      if ($vu === '') continue;
+      $vid = '';
+      if (preg_match('#(?:youtu\.be/|v=|embed/|shorts/)([A-Za-z0-9_\-]{11})#', $vu, $m)) $vid = $m[1];
+      if ($vid === '') continue;
+      $vt = trim((string)($v['title'] ?? '')) ?: 'Video — ' . strip_tags($topic['title']);
+    ?>
+      <div class="col-md-6 col-lg-4">
+        <div class="card h-100" data-testid="hub-video-card" style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
+          <div style="position:relative;width:100%;padding-bottom:56.25%;background:#000;">
+            <iframe loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen
+                    src="https://www.youtube.com/embed/<?= esc($vid) ?>"
+                    style="position:absolute;inset:0;width:100%;height:100%;border:0;" title="<?= esc($vt) ?>"></iframe>
+          </div>
+          <div style="padding:12px 14px;">
+            <div class="fw-semibold" style="color:#0f172a;font-size:13.5px;line-height:1.35;"><?= esc($vt) ?></div>
+          </div>
+        </div>
       </div>
     <?php endforeach; ?>
   </div>

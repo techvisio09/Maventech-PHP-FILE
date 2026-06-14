@@ -528,6 +528,7 @@ $adminActive = ($tab === 'api')
 // ----------------------------------------------------------------------------
 if ($tab === 'ai-blogger') {
     require_once __DIR__ . '/includes/seo-bot.php';
+    require_once __DIR__ . '/includes/seo-content.php';
     require_once __DIR__ . '/includes/ai-citation-tracker.php';
     require_once __DIR__ . '/includes/dmca-watchdog.php';
 
@@ -648,6 +649,162 @@ if ($tab === 'ai-blogger') {
         $_SESSION['seo_bot_flash_kind'] = $updated ? 'success' : 'info';
         header('Location: admin.php?tab=ai-blogger');
         exit;
+    }
+
+    // ----- Topic Cluster Hubs: create / update / delete / auto-generate -----
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['save_topic_hub'])) {
+        ensure_db_schema();
+        topic_hubs_seed_defaults();
+        $id        = (int)($_POST['hub_id'] ?? 0);
+        $slug      = preg_replace('/[^a-z0-9\-]/i', '-', strtolower(trim((string)($_POST['hub_slug'] ?? ''))));
+        $slug      = trim(preg_replace('/-+/', '-', (string)$slug), '-');
+        $title     = trim((string)($_POST['hub_title'] ?? ''));
+        $headline  = trim((string)($_POST['hub_headline'] ?? ''));
+        $audience  = trim((string)($_POST['hub_audience'] ?? ''));
+        $color     = preg_match('/^#[0-9a-fA-F]{6}$/', (string)($_POST['hub_color'] ?? '')) ? (string)$_POST['hub_color'] : '#0078d4';
+        $keywords  = trim((string)($_POST['hub_keywords'] ?? ''));
+        $aboutLink = trim((string)($_POST['hub_about_link'] ?? ''));
+        $active    = empty($_POST['hub_active']) ? 0 : 1;
+        $catsRaw   = (string)($_POST['hub_categories'] ?? '');
+        $tagsRaw   = (string)($_POST['hub_blog_tags'] ?? '');
+        $vidsRaw   = (string)($_POST['hub_videos'] ?? '');
+        $cats      = array_values(array_filter(array_map('trim', preg_split('/[\r\n,]+/', $catsRaw) ?: [])));
+        $tags      = array_values(array_filter(array_map('trim', preg_split('/[\r\n,]+/', $tagsRaw) ?: [])));
+        $videos    = [];
+        foreach (preg_split('/[\r\n]+/', $vidsRaw) ?: [] as $line) {
+            $line = trim((string)$line);
+            if ($line === '') continue;
+            // Accept "URL | Title" or just URL
+            if (strpos($line, '|') !== false) {
+                [$u, $t] = array_map('trim', explode('|', $line, 2));
+                if (filter_var($u, FILTER_VALIDATE_URL)) $videos[] = ['url' => $u, 'title' => $t];
+            } elseif (filter_var($line, FILTER_VALIDATE_URL)) {
+                $videos[] = ['url' => $line, 'title' => ''];
+            }
+        }
+        if ($slug === '' || $title === '' || $headline === '' || !$cats) {
+            $_SESSION['seo_bot_flash'] = 'Topic Hub needs a slug, title, headline AND at least one category.';
+            $_SESSION['seo_bot_flash_kind'] = 'warning';
+            header('Location: admin.php?tab=ai-blogger#topic-hubs-section'); exit;
+        }
+        try {
+            $pdo = db();
+            if ($id > 0) {
+                $st = $pdo->prepare("UPDATE topic_hubs SET slug=?, title=?, headline=?, audience=?, categories_json=?, blog_tags_json=?, keywords=?, about_link=?, color=?, videos_json=?, active=? WHERE id=?");
+                $st->execute([$slug, $title, $headline, $audience, json_encode($cats), json_encode($tags), $keywords, $aboutLink, $color, json_encode($videos), $active, $id]);
+                $_SESSION['seo_bot_flash'] = '✓ Topic Hub updated — /hub/' . $slug;
+            } else {
+                $st = $pdo->prepare("INSERT INTO topic_hubs (slug, title, headline, audience, categories_json, blog_tags_json, keywords, about_link, color, videos_json, active, source) VALUES (?,?,?,?,?,?,?,?,?,?,?,'manual')");
+                $st->execute([$slug, $title, $headline, $audience, json_encode($cats), json_encode($tags), $keywords, $aboutLink, $color, json_encode($videos), $active]);
+                $_SESSION['seo_bot_flash'] = '✓ New Topic Hub created — live at /hub/' . $slug;
+            }
+            $_SESSION['seo_bot_flash_kind'] = 'success';
+        } catch (Throwable $e) {
+            $msg = $e->getMessage();
+            if (stripos($msg, 'Duplicate') !== false) $msg = 'A hub with this slug already exists. Pick a different slug.';
+            $_SESSION['seo_bot_flash'] = 'Topic Hub save failed — ' . $msg;
+            $_SESSION['seo_bot_flash_kind'] = 'danger';
+        }
+        header('Location: admin.php?tab=ai-blogger#topic-hubs-section'); exit;
+    }
+
+    if (!empty($_GET['delete_topic_hub'])) {
+        ensure_db_schema();
+        try {
+            $st = db()->prepare("DELETE FROM topic_hubs WHERE id=?");
+            $st->execute([(int)$_GET['delete_topic_hub']]);
+            $_SESSION['seo_bot_flash'] = '✓ Topic Hub deleted.';
+            $_SESSION['seo_bot_flash_kind'] = 'success';
+        } catch (Throwable $e) {
+            $_SESSION['seo_bot_flash'] = 'Delete failed — ' . $e->getMessage();
+            $_SESSION['seo_bot_flash_kind'] = 'danger';
+        }
+        header('Location: admin.php?tab=ai-blogger#topic-hubs-section'); exit;
+    }
+
+    if (!empty($_GET['toggle_topic_hub'])) {
+        ensure_db_schema();
+        try {
+            $st = db()->prepare("UPDATE topic_hubs SET active = 1 - active WHERE id=?");
+            $st->execute([(int)$_GET['toggle_topic_hub']]);
+            $_SESSION['seo_bot_flash'] = '✓ Topic Hub status toggled.';
+            $_SESSION['seo_bot_flash_kind'] = 'success';
+        } catch (Throwable $e) {}
+        header('Location: admin.php?tab=ai-blogger#topic-hubs-section'); exit;
+    }
+
+    if (!empty($_GET['autogen_topic_hubs'])) {
+        try {
+            $created = topic_hubs_auto_generate(4);
+            if ($created) {
+                $_SESSION['seo_bot_flash'] = '✓ Auto-generated ' . count($created) . ' new topic hub(s) from top categories: ' . esc(implode(', ', $created));
+                $_SESSION['seo_bot_flash_kind'] = 'success';
+            } else {
+                $_SESSION['seo_bot_flash'] = 'No new hubs needed — every busy category already has a topic hub.';
+                $_SESSION['seo_bot_flash_kind'] = 'info';
+            }
+        } catch (Throwable $e) {
+            $_SESSION['seo_bot_flash'] = 'Auto-generate error: ' . $e->getMessage();
+            $_SESSION['seo_bot_flash_kind'] = 'danger';
+        }
+        header('Location: admin.php?tab=ai-blogger#topic-hubs-section'); exit;
+    }
+
+    // ----- SEO Discovery Lab: Google Search Console CSV upload + clusters -----
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['upload_gsc_csv'])) {
+        ensure_db_schema();
+        $csvText = '';
+        if (!empty($_FILES['gsc_csv']['tmp_name']) && is_uploaded_file($_FILES['gsc_csv']['tmp_name'])) {
+            $csvText = (string)file_get_contents($_FILES['gsc_csv']['tmp_name']);
+        } elseif (!empty($_POST['gsc_csv_text'])) {
+            $csvText = (string)$_POST['gsc_csv_text'];
+        }
+        if (trim($csvText) === '') {
+            $_SESSION['seo_bot_flash'] = 'Upload a Google Search Console CSV or paste the contents to discover topics.';
+            $_SESSION['seo_bot_flash_kind'] = 'warning';
+        } else {
+            $r = gsc_import_csv($csvText);
+            $_SESSION['seo_bot_flash'] = '✓ Imported ' . $r['inserted'] . ' GSC quer(y/ies)' . ($r['skipped'] ? ' (' . $r['skipped'] . ' skipped)' : '') . '. Review clusters below to spin up new topic hubs.';
+            $_SESSION['seo_bot_flash_kind'] = $r['inserted'] > 0 ? 'success' : 'warning';
+        }
+        header('Location: admin.php?tab=ai-blogger#discovery-section'); exit;
+    }
+
+    if (!empty($_GET['clear_gsc'])) {
+        try { db()->exec("TRUNCATE TABLE gsc_queries"); $_SESSION['seo_bot_flash'] = '✓ Search Console queries cleared.'; $_SESSION['seo_bot_flash_kind'] = 'success'; }
+        catch (Throwable $e) { $_SESSION['seo_bot_flash'] = $e->getMessage(); }
+        header('Location: admin.php?tab=ai-blogger#discovery-section'); exit;
+    }
+
+    if (!empty($_GET['hub_from_cluster'])) {
+        $ck = preg_replace('/[^a-z0-9\-]/i', '', (string)$_GET['hub_from_cluster']);
+        try {
+            $st = db()->prepare("SELECT GROUP_CONCAT(query ORDER BY impressions DESC SEPARATOR '|') AS sample, SUM(impressions) impr FROM gsc_queries WHERE cluster_key=?");
+            $st->execute([$ck]);
+            $cluster = $st->fetch();
+            if ($cluster && !empty($cluster['sample'])) {
+                $samples = array_slice(array_filter(explode('|', (string)$cluster['sample'])), 0, 6);
+                $first   = (string)reset($samples);
+                $slug    = $ck ?: preg_replace('/[^a-z0-9\-]/', '-', strtolower($first));
+                $slug    = trim(preg_replace('/-+/', '-', (string)$slug), '-') ?: 'topic';
+                $title   = ucwords(str_replace('-', ' ', $slug)) . ' — guide & best picks';
+                $headline= 'Top searches around ' . $title . ': ' . implode(', ', $samples) . '. ' . SITE_BRAND . ' aggregates relevant products, guides and FAQs onto one page so buyers (and AI engines) get a complete answer.';
+                $kw      = implode(', ', $samples);
+                $insert  = db()->prepare("INSERT IGNORE INTO topic_hubs (slug, title, headline, audience, categories_json, blog_tags_json, keywords, about_link, color, videos_json, active, source) VALUES (?,?,?,?,?,?,?,?,?,?,1,'gsc')");
+                $insert->execute([$slug, $title, $headline, 'shoppers searching for ' . $samples[0] . ' and similar terms', json_encode([$slug]), json_encode(['%' . strtolower(str_replace('-', ' ', $slug)) . '%']), $kw, 'category.php?slug=' . $slug, '#0ea5e9', json_encode([])]);
+                if (db()->lastInsertId()) {
+                    $_SESSION['seo_bot_flash'] = '✓ Topic Hub created from search cluster — /hub/' . $slug . '. Tweak the categories list under Topic Hubs to wire it to real products.';
+                    $_SESSION['seo_bot_flash_kind'] = 'success';
+                } else {
+                    $_SESSION['seo_bot_flash'] = 'A hub with slug "' . esc($slug) . '" already exists.';
+                    $_SESSION['seo_bot_flash_kind'] = 'info';
+                }
+            }
+        } catch (Throwable $e) {
+            $_SESSION['seo_bot_flash'] = 'Cluster→Hub failed: ' . $e->getMessage();
+            $_SESSION['seo_bot_flash_kind'] = 'danger';
+        }
+        header('Location: admin.php?tab=ai-blogger#discovery-section'); exit;
     }
 
     // ----- DMCA finding status updates (mark dismissed / reported / taken-down) -----
@@ -2360,7 +2517,7 @@ elseif ($tab === 'ai-blogger'):
   <!-- ====== COLLAPSIBLE SECTIONS ====== -->
 
   <!-- API Keys & Settings -->
-  <details class="ai-section" open>
+  <details class="ai-section" id="api-keys-section" open>
     <summary>
       <i class="bi bi-key-fill text-warning"></i> API Keys & Settings
       <span class="ai-badge" style="background:<?= $hasLlmKey ? '#d1fae5' : '#fee2e2' ?>;color:<?= $hasLlmKey ? '#065f46' : '#991b1b' ?>;"><?= $hasLlmKey ? 'Uploaded' : 'Key Missing' ?></span>
@@ -2476,7 +2633,7 @@ elseif ($tab === 'ai-blogger'):
   </details>
 
   <!-- Search Engine Visibility -->
-  <details class="ai-section">
+  <details class="ai-section" id="seo-visibility-section">
     <summary>
       <i class="bi bi-globe2 text-primary"></i> Search Engine Visibility
       <span class="ai-badge" style="background:<?= ($seoConfigured ?? 0) >= 3 ? '#d1fae5' : '#fef3c7' ?>;color:<?= ($seoConfigured ?? 0) >= 3 ? '#065f46' : '#92400e' ?>;"><?= $seoConfigured ?? 0 ?>/5 connected</span>
@@ -2544,7 +2701,7 @@ elseif ($tab === 'ai-blogger'):
       <div class="form-check form-switch mb-0">
         <input class="form-check-input" type="checkbox" role="switch" id="autoWeeklyToggle"
                name="auto_sitemap_weekly" value="1" <?= $autoWeeklyEnabled ? 'checked' : '' ?>
-               onchange="this.form.submit()" data-testid="auto-weekly-toggle">
+               onchange="window.admPreserveState && window.admPreserveState(); this.form.submit();" data-testid="auto-weekly-toggle">
         <label class="form-check-label small fw-semibold" for="autoWeeklyToggle">
           <i class="bi bi-arrow-clockwise me-1 text-primary"></i>Auto-resubmit sitemap weekly
         </label>
@@ -3005,9 +3162,255 @@ elseif ($tab === 'ai-blogger'):
   })();
   </script>
 
+  <!-- ============== Topic Cluster Hubs ============== -->
+  <?php
+    require_once __DIR__ . '/includes/seo-content.php';
+    $hubsAll  = topic_hubs_all(false);
+    $hubCount = count($hubsAll);
+    $hubLive  = 0; foreach ($hubsAll as $__h) if ($__h['active']) $hubLive++;
+    $editingHubSlug = isset($_GET['edit_hub']) ? (string)$_GET['edit_hub'] : '';
+    $editingHub = $editingHubSlug ? ($hubsAll[$editingHubSlug] ?? null) : null;
+  ?>
+  <details class="ai-section" id="topic-hubs-section" <?= $editingHub ? 'open' : '' ?>>
+    <summary>
+      <i class="bi bi-collection-fill text-primary"></i> Topic Cluster Hubs
+      <span class="ai-badge" style="background:#dbeafe;color:#1e40af;" data-testid="hubs-count-badge"><?= $hubLive ?>/<?= $hubCount ?> live</span>
+    </summary>
+    <div class="ai-body">
+      <p class="text-secondary small mb-3">Each hub publishes a deep <code>/hub/&lt;slug&gt;</code> landing page that aggregates every related product, blog post and FAQ on one URL — exactly what Google's topical-authority model + ChatGPT / Perplexity reward.  Add hubs manually, auto-generate from your busiest categories, or spin one up from a Google Search Console cluster (below).</p>
+
+      <div class="d-flex flex-wrap gap-2 mb-3" data-testid="hubs-toolbar">
+        <a href="admin.php?tab=ai-blogger&autogen_topic_hubs=1#topic-hubs-section" class="btn btn-sm btn-primary rounded-pill px-3" data-testid="hubs-autogen-btn"
+           onclick="return confirm('Auto-generate topic hubs for every busy category (4+ products) that doesn\u0027t already have one?')"><i class="bi bi-magic me-1"></i>Auto-generate from top categories</a>
+        <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3" data-testid="hubs-new-btn"
+           onclick="document.getElementById('hub-form-card').scrollIntoView({behavior:'smooth'});document.getElementById('hub-form-card').classList.add('hub-form-glow');document.querySelector('#hub-form-card input[name=hub_slug]').focus();">
+           <i class="bi bi-plus-lg me-1"></i>New hub</button>
+        <a href="<?= esc(rtrim(site_url(), '/')) ?>/sitemap.xml" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary rounded-pill px-3"><i class="bi bi-filetype-xml me-1"></i>View sitemap</a>
+      </div>
+
+      <?php if ($hubsAll): ?>
+      <div class="table-responsive mb-3" data-testid="hubs-table-wrap">
+        <table class="table table-sm align-middle mb-0" style="font-size:12.5px;">
+          <thead>
+            <tr class="text-secondary" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;">
+              <th>Hub</th><th>Slug</th><th>Categories</th><th>Source</th><th>Status</th><th class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+          <?php foreach ($hubsAll as $h):
+            $bg = $h['color'] ?: '#0078d4';
+            $srcLabel = ['seed'=>'Built-in','manual'=>'Manual','auto'=>'Auto','gsc'=>'GSC import'][$h['source']] ?? $h['source'];
+            $srcBg    = ['seed'=>'#f1f5f9','manual'=>'#e0e7ff','auto'=>'#dcfce7','gsc'=>'#fef9c3'][$h['source']] ?? '#f1f5f9';
+            $srcFg    = ['seed'=>'#475569','manual'=>'#3730a3','auto'=>'#166534','gsc'=>'#854d0e'][$h['source']] ?? '#475569';
+          ?>
+            <tr data-testid="hub-row-<?= esc($h['slug']) ?>">
+              <td>
+                <div class="d-flex align-items-center gap-2">
+                  <span style="width:10px;height:10px;border-radius:50%;background:<?= esc($bg) ?>;display:inline-block;flex-shrink:0;"></span>
+                  <div style="min-width:0;">
+                    <a href="<?= esc(rtrim(site_url(), '/')) ?>/hub/<?= esc($h['slug']) ?>" target="_blank" rel="noopener" class="fw-semibold text-decoration-none" style="color:#0f172a;"><?= esc(strip_tags($h['title'])) ?></a>
+                    <div class="text-secondary small" style="font-size:11px;max-width:380px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= esc(mb_substr(strip_tags($h['headline']), 0, 100)) ?>&hellip;</div>
+                  </div>
+                </div>
+              </td>
+              <td><code style="font-size:11px;">/hub/<?= esc($h['slug']) ?></code></td>
+              <td><span class="badge text-bg-light" style="font-size:10.5px;"><?= count($h['categories']) ?></span></td>
+              <td><span class="badge rounded-pill" style="background:<?= $srcBg ?>;color:<?= $srcFg ?>;font-size:10.5px;"><?= esc($srcLabel) ?></span></td>
+              <td>
+                <?php if ($h['active']): ?>
+                  <span class="badge rounded-pill" style="background:#d1fae5;color:#065f46;font-size:10.5px;"><i class="bi bi-broadcast me-1"></i>Live</span>
+                <?php else: ?>
+                  <span class="badge rounded-pill" style="background:#fee2e2;color:#991b1b;font-size:10.5px;">Paused</span>
+                <?php endif; ?>
+              </td>
+              <td class="text-end">
+                <div class="btn-group btn-group-sm">
+                  <a href="admin.php?tab=ai-blogger&edit_hub=<?= urlencode($h['slug']) ?>#hub-form-card" class="btn btn-outline-primary" data-testid="hub-edit-<?= esc($h['slug']) ?>"><i class="bi bi-pencil"></i></a>
+                  <a href="admin.php?tab=ai-blogger&toggle_topic_hub=<?= (int)$h['id'] ?>#topic-hubs-section" class="btn btn-outline-secondary" data-testid="hub-toggle-<?= esc($h['slug']) ?>" title="<?= $h['active'] ? 'Pause' : 'Activate' ?>"><i class="bi <?= $h['active'] ? 'bi-pause-fill' : 'bi-play-fill' ?>"></i></a>
+                  <a href="admin.php?tab=ai-blogger&delete_topic_hub=<?= (int)$h['id'] ?>#topic-hubs-section" class="btn btn-outline-danger" data-testid="hub-delete-<?= esc($h['slug']) ?>" onclick="return confirm('Delete this hub permanently?')"><i class="bi bi-trash"></i></a>
+                </div>
+              </td>
+            </tr>
+          <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+      <?php else: ?>
+        <div class="alert alert-info mb-3" style="font-size:13px;"><i class="bi bi-info-circle me-1"></i>No hubs yet — create one below or auto-generate from your top categories.</div>
+      <?php endif; ?>
+
+      <!-- Hub edit / create form -->
+      <div class="card mb-2" id="hub-form-card" data-testid="hub-form-card" style="border:1px solid #e2e8f0;border-radius:12px;padding:16px;">
+        <h3 class="h6 fw-bold mb-3"><i class="bi <?= $editingHub ? 'bi-pencil-square' : 'bi-plus-circle' ?> me-1"></i><?= $editingHub ? 'Edit hub' : 'Create new hub' ?></h3>
+        <form method="post" action="admin.php?tab=ai-blogger" data-testid="hub-form">
+          <input type="hidden" name="save_topic_hub" value="1">
+          <input type="hidden" name="hub_id" value="<?= $editingHub ? (int)$editingHub['id'] : 0 ?>">
+          <div class="row g-2">
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold">Slug <span class="text-secondary">/hub/&lt;slug&gt;</span></label>
+              <input type="text" name="hub_slug" class="form-control form-control-sm" required pattern="[a-z0-9\-]+" placeholder="e.g. office-2024" value="<?= esc($editingHub['slug'] ?? '') ?>" data-testid="hub-slug-input">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Title (H1 + meta)</label>
+              <input type="text" name="hub_title" class="form-control form-control-sm" required placeholder="Microsoft Office 2024 — buying guide" value="<?= esc($editingHub['title'] ?? '') ?>" data-testid="hub-title-input">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label small fw-semibold">Accent color</label>
+              <input type="color" name="hub_color" class="form-control form-control-sm form-control-color" value="<?= esc($editingHub['color'] ?? '#0078d4') ?>" style="height:32px;">
+            </div>
+            <div class="col-12">
+              <label class="form-label small fw-semibold">Quick-Answer headline <span class="text-secondary">(40–60 words shown at the top + used by AI engines)</span></label>
+              <textarea name="hub_headline" class="form-control form-control-sm" rows="3" required data-testid="hub-headline-input"><?= esc($editingHub['headline'] ?? '') ?></textarea>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Categories <span class="text-secondary">(comma or newline)</span></label>
+              <textarea name="hub_categories" class="form-control form-control-sm" rows="2" required placeholder="office-pc, office-mac" data-testid="hub-categories-input"><?= esc(implode(', ', $editingHub['categories'] ?? [])) ?></textarea>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Blog-title LIKE patterns <span class="text-secondary">(optional — match guides)</span></label>
+              <textarea name="hub_blog_tags" class="form-control form-control-sm" rows="2" placeholder="%office%, %word%, %excel%"><?= esc(implode(', ', $editingHub['blogTags'] ?? [])) ?></textarea>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Audience <span class="text-secondary">(E-E-A-T)</span></label>
+              <input type="text" name="hub_audience" class="form-control form-control-sm" placeholder="home users, IT teams choosing Office 2024" value="<?= esc($editingHub['audience'] ?? '') ?>">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Primary CTA link</label>
+              <input type="text" name="hub_about_link" class="form-control form-control-sm" placeholder="category.php?slug=office-pc" value="<?= esc($editingHub['aboutLink'] ?? '') ?>">
+            </div>
+            <div class="col-12">
+              <label class="form-label small fw-semibold">SEO keywords <span class="text-secondary">(comma list)</span></label>
+              <textarea name="hub_keywords" class="form-control form-control-sm" rows="2"><?= esc($editingHub['keywords'] ?? '') ?></textarea>
+            </div>
+            <div class="col-12">
+              <label class="form-label small fw-semibold">Related videos <span class="text-secondary">(one per line — <code>YouTube URL | optional title</code>)</span></label>
+              <textarea name="hub_videos" class="form-control form-control-sm" rows="3" placeholder="https://www.youtube.com/watch?v=XXXXX | How to activate Office 2024
+https://youtu.be/YYYYY"><?php
+                if (!empty($editingHub['videos'])) {
+                  $lines = [];
+                  foreach ($editingHub['videos'] as $v) {
+                    $u = (string)($v['url'] ?? ''); if ($u === '') continue;
+                    $t = (string)($v['title'] ?? '');
+                    $lines[] = $t === '' ? $u : ($u . ' | ' . $t);
+                  }
+                  echo esc(implode("\n", $lines));
+                }
+              ?></textarea>
+            </div>
+            <div class="col-12">
+              <div class="form-check">
+                <input type="checkbox" name="hub_active" id="hub-active-cb" class="form-check-input" value="1" <?= (!$editingHub || $editingHub['active']) ? 'checked' : '' ?>>
+                <label for="hub-active-cb" class="form-check-label small">Live on the public site (visible at <code>/hub/&lt;slug&gt;</code> + included in sitemap)</label>
+              </div>
+            </div>
+            <div class="col-12 d-flex gap-2 align-items-center pt-2" style="border-top:1px solid #f1f5f9;">
+              <button type="submit" class="btn btn-primary rounded-pill px-4" data-testid="hub-save-btn"><i class="bi bi-save me-1"></i><?= $editingHub ? 'Update hub' : 'Create hub' ?></button>
+              <?php if ($editingHub): ?>
+                <a href="admin.php?tab=ai-blogger#topic-hubs-section" class="btn btn-link text-secondary">Cancel</a>
+                <a href="<?= esc(rtrim(site_url(), '/')) ?>/hub/<?= esc($editingHub['slug']) ?>" target="_blank" rel="noopener" class="btn btn-link ms-auto"><i class="bi bi-box-arrow-up-right me-1"></i>Preview hub</a>
+              <?php endif; ?>
+            </div>
+          </div>
+        </form>
+      </div>
+      <style>
+        .hub-form-glow { animation: hub-form-pulse 1.4s ease-in-out 1; }
+        @keyframes hub-form-pulse { 0% { box-shadow: 0 0 0 0 rgba(59,130,246,.45); } 70% { box-shadow: 0 0 0 14px rgba(59,130,246,0); } 100% { box-shadow: 0 0 0 0 rgba(59,130,246,0); } }
+        /* Dark-mode polish for the Topic Hubs table + GSC cluster cards. */
+        [data-bs-theme="dark"] #topic-hubs-section table { color: #e2e8f0; }
+        [data-bs-theme="dark"] #topic-hubs-section table thead tr { color: #94a3b8 !important; }
+        [data-bs-theme="dark"] #topic-hubs-section table a { color: #e2e8f0 !important; }
+        [data-bs-theme="dark"] #topic-hubs-section table .text-secondary { color: #94a3b8 !important; }
+        [data-bs-theme="dark"] #topic-hubs-section #hub-form-card { background:#1e293b; border-color:#334155 !important; }
+        [data-bs-theme="dark"] #discovery-section [data-testid="gsc-cluster-card"] { background:#1e293b !important; border-color:#334155 !important; }
+        [data-bs-theme="dark"] #discovery-section [data-testid="gsc-cluster-card"] ul { color:#cbd5e1 !important; }
+        [data-bs-theme="dark"] #discovery-section [data-testid="gsc-cluster-card"] .fw-bold { color:#f1f5f9 !important; }
+        [data-bs-theme="dark"] #discovery-section [data-testid="gsc-cluster-card"] .text-secondary { color:#94a3b8 !important; }
+      </style>
+    </div>
+  </details>
+
+  <!-- ============== SEO Discovery Lab (GSC clusters) ============== -->
+  <?php
+    $gscRowCount = 0;
+    try { $gscRowCount = (int)db()->query("SELECT COUNT(*) FROM gsc_queries")->fetchColumn(); } catch (Throwable $e) {}
+    $gscClusters = $gscRowCount > 0 ? gsc_top_clusters(15) : [];
+  ?>
+  <details class="ai-section" id="discovery-section" <?= ($gscRowCount > 0) ? 'open' : '' ?>>
+    <summary>
+      <i class="bi bi-search-heart text-primary"></i> SEO Discovery Lab — GSC clusters
+      <span class="ai-badge" style="background:#fef3c7;color:#854d0e;" data-testid="gsc-rowcount-badge"><?= number_format($gscRowCount) ?> queries</span>
+    </summary>
+    <div class="ai-body">
+      <p class="text-secondary small mb-3">Export your <strong>Performance &rarr; Queries</strong> report from <a href="https://search.google.com/search-console" target="_blank" rel="noopener">Google Search Console</a> as a CSV and upload it here.  We cluster queries by shared keywords, rank them by impressions, and let you spin up a new topic hub for any cluster in one click — closing the loop between what Google says people search for, and what you publish.</p>
+
+      <div class="row g-3 mb-3" data-testid="gsc-upload-row">
+        <div class="col-md-6">
+          <form method="post" enctype="multipart/form-data" action="admin.php?tab=ai-blogger" data-testid="gsc-upload-form">
+            <input type="hidden" name="upload_gsc_csv" value="1">
+            <label class="form-label small fw-semibold mb-1">Upload Search Console CSV</label>
+            <div class="input-group input-group-sm">
+              <input type="file" name="gsc_csv" accept=".csv,text/csv" class="form-control" data-testid="gsc-csv-file" required>
+              <button type="submit" class="btn btn-primary" data-testid="gsc-upload-btn"><i class="bi bi-upload me-1"></i>Import</button>
+            </div>
+            <div class="form-text" style="font-size:11px;">Headers we recognise: <code>Top queries</code> / <code>Query</code>, <code>Clicks</code>, <code>Impressions</code>, <code>CTR</code>, <code>Position</code>.</div>
+          </form>
+        </div>
+        <div class="col-md-6">
+          <form method="post" action="admin.php?tab=ai-blogger" data-testid="gsc-paste-form">
+            <input type="hidden" name="upload_gsc_csv" value="1">
+            <label class="form-label small fw-semibold mb-1">…or paste CSV text</label>
+            <textarea name="gsc_csv_text" rows="3" class="form-control form-control-sm" placeholder="Query,Clicks,Impressions,CTR,Position&#10;buy microsoft office,12,540,2.22%,4.7"></textarea>
+            <button type="submit" class="btn btn-sm btn-outline-primary rounded-pill mt-2"><i class="bi bi-clipboard-check me-1"></i>Parse</button>
+          </form>
+        </div>
+      </div>
+
+      <?php if ($gscClusters): ?>
+        <div class="d-flex align-items-center mb-2">
+          <strong style="font-size:13px;">Top clusters by impressions</strong>
+          <span class="text-secondary small ms-2">(showing <?= count($gscClusters) ?>)</span>
+          <a href="admin.php?tab=ai-blogger&clear_gsc=1#discovery-section" class="ms-auto small text-danger text-decoration-none" onclick="return confirm('Delete all stored Search Console queries?')"><i class="bi bi-trash me-1"></i>Clear data</a>
+        </div>
+        <div class="row g-2" data-testid="gsc-clusters">
+          <?php foreach ($gscClusters as $c): ?>
+            <div class="col-md-6 col-lg-4">
+              <div class="card h-100" data-testid="gsc-cluster-card" style="border:1px solid <?= $c['already_exists'] ? '#bbf7d0' : '#e2e8f0' ?>;border-radius:10px;padding:12px;">
+                <div class="d-flex align-items-center gap-2 mb-1">
+                  <span class="fw-bold text-truncate" title="<?= esc($c['cluster_key']) ?>" style="font-size:13px;color:#0f172a;"><?= esc($c['cluster_key']) ?></span>
+                  <?php if ($c['already_exists']): ?>
+                    <span class="badge rounded-pill ms-auto" style="background:#d1fae5;color:#065f46;font-size:10px;">Hub exists</span>
+                  <?php endif; ?>
+                </div>
+                <div class="text-secondary small mb-2" style="font-size:11px;">
+                  <i class="bi bi-eye me-1"></i><?= number_format($c['impressions']) ?> impressions ·
+                  <i class="bi bi-cursor me-1"></i><?= number_format($c['clicks']) ?> clicks ·
+                  <?= (int)$c['query_count'] ?> queries
+                </div>
+                <ul class="mb-2 ps-3" style="font-size:11.5px;line-height:1.5;color:#334155;">
+                  <?php foreach (array_slice($c['samples'], 0, 4) as $q): ?>
+                    <li><?= esc($q) ?></li>
+                  <?php endforeach; ?>
+                </ul>
+                <?php if (!$c['already_exists']): ?>
+                  <a href="admin.php?tab=ai-blogger&hub_from_cluster=<?= urlencode($c['cluster_key']) ?>#topic-hubs-section" class="btn btn-sm btn-outline-primary rounded-pill mt-auto" data-testid="gsc-create-hub-<?= esc($c['cluster_key']) ?>"
+                     onclick="return confirm('Create a new topic hub for &quot;<?= esc(addslashes($c['suggested_title'])) ?>&quot;?')"><i class="bi bi-plus-lg me-1"></i>Create hub</a>
+                <?php else: ?>
+                  <a href="<?= esc(rtrim(site_url(), '/')) ?>/hub/<?= esc($c['suggested_slug']) ?>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary rounded-pill mt-auto"><i class="bi bi-box-arrow-up-right me-1"></i>Open existing hub</a>
+                <?php endif; ?>
+              </div>
+            </div>
+          <?php endforeach; ?>
+        </div>
+      <?php elseif ($gscRowCount === 0): ?>
+        <div class="alert alert-light border" style="font-size:12.5px;background:#f8fafc;"><i class="bi bi-lightbulb text-warning me-1"></i><strong>Tip:</strong> In Search Console choose your property &rarr; <em>Performance</em> &rarr; expand the table &rarr; <em>Export &rarr; CSV</em>.  Upload the <code>Queries.csv</code> file (or the whole zip — we read the queries sheet).</div>
+      <?php endif; ?>
+    </div>
+  </details>
+
   <!-- Recent Activity -->
   <?php if ($recentRuns): ?>
-  <details class="ai-section">
+  <details class="ai-section" id="recent-activity-section">
     <summary>
       <i class="bi bi-clock-history text-secondary"></i> Recent Activity
       <span class="ai-badge" style="background:#f1f5f9;color:#475569;"><?= count($recentRuns) ?> runs</span>
@@ -3128,7 +3531,7 @@ elseif ($tab === 'ai-blogger'):
     $healthPct = (int)round($passCount / $totalChecks * 100);
     $healthColor = $healthPct >= 80 ? '#059669' : ($healthPct >= 50 ? '#d97706' : '#dc2626');
   ?>
-  <details class="ai-section">
+  <details class="ai-section" id="health-check-section">
     <summary>
       <i class="bi bi-shield-check" style="color:<?= $healthColor ?>;"></i> Go-Live SEO Health Check
       <span class="ai-badge" style="background:<?= $healthPct >= 80 ? '#d1fae5' : '#fef3c7' ?>;color:<?= $healthPct >= 80 ? '#065f46' : '#92400e' ?>;"><?= $healthPct ?>% — <?= $passCount ?>/<?= $totalChecks ?> ready</span>
@@ -3169,7 +3572,7 @@ elseif ($tab === 'ai-blogger'):
   </details>
 
   <!-- Advanced Settings -->
-  <details class="ai-section">
+  <details class="ai-section" id="advanced-settings-section">
     <summary>
       <i class="bi bi-gear text-secondary"></i> Advanced Settings
     </summary>

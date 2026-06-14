@@ -1329,3 +1329,130 @@ document.addEventListener('click', function(e){
   setInterval(tick, 8000);
 })();
 </script>
+
+<!-- ===== Admin scroll + open-section preserver =====
+     Saves the viewport scrollY + the IDs of every open <details> block
+     to sessionStorage right before the operator submits a form or
+     clicks any admin link.  On the next page load (within 30 s), we
+     restore both.  Result: clicking "Write One Post", "Submit Sitemap",
+     "Save Settings", flipping a toggle, etc. lands the operator back
+     EXACTLY where they were — no more snap-to-top after every action. -->
+<script>
+(function(){
+  var K_Y     = 'adm_state_y';
+  var K_OPEN  = 'adm_state_open';
+  var K_TS    = 'adm_state_ts';
+  var K_TAB   = 'adm_state_tab';
+
+  function currentTab() {
+    var m = location.search.match(/[?&]tab=([^&]+)/);
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+  function saveState() {
+    try {
+      var openIds = [];
+      document.querySelectorAll('details[open]').forEach(function(d){
+        if (d.id) openIds.push(d.id);
+      });
+      sessionStorage.setItem(K_Y,    String(window.scrollY || window.pageYOffset || 0));
+      sessionStorage.setItem(K_OPEN, JSON.stringify(openIds));
+      sessionStorage.setItem(K_TS,   String(Date.now()));
+      sessionStorage.setItem(K_TAB,  currentTab());
+    } catch(e){}
+  }
+  function restoreState() {
+    try {
+      var ts = parseInt(sessionStorage.getItem(K_TS) || '0', 10);
+      if (!ts || (Date.now() - ts) > 30000) {
+        // Stale state — wipe + bail so we don't restore on cold loads.
+        ['adm_state_y','adm_state_open','adm_state_ts','adm_state_tab'].forEach(function(k){
+          sessionStorage.removeItem(k);
+        });
+        return;
+      }
+      // Same tab only — switching tabs SHOULD jump to the top.
+      var savedTab = sessionStorage.getItem(K_TAB) || '';
+      if (savedTab !== currentTab()) {
+        ['adm_state_y','adm_state_open','adm_state_ts','adm_state_tab'].forEach(function(k){
+          sessionStorage.removeItem(k);
+        });
+        return;
+      }
+      // Re-open the same <details> blocks first so the scroll target exists.
+      var openIds = [];
+      try { openIds = JSON.parse(sessionStorage.getItem(K_OPEN) || '[]'); } catch(e){ openIds = []; }
+      openIds.forEach(function(id){
+        var d = document.getElementById(id);
+        if (d && d.tagName === 'DETAILS') d.open = true;
+      });
+      // Restore scroll a few times to survive lazy-loaded images and
+      // accordions snapping into shape.
+      var y = parseInt(sessionStorage.getItem(K_Y) || '0', 10);
+      if (y > 0) {
+        var restore = function(){ window.scrollTo({ top: y, left: 0, behavior: 'instant' }); };
+        restore();
+        setTimeout(restore, 50);
+        setTimeout(restore, 200);
+        setTimeout(restore, 600);
+      }
+      // One-shot — clear after restore so the very next cold load is fresh.
+      setTimeout(function(){
+        sessionStorage.removeItem(K_Y);
+        sessionStorage.removeItem(K_OPEN);
+        sessionStorage.removeItem(K_TS);
+        sessionStorage.removeItem(K_TAB);
+      }, 700);
+    } catch(e){}
+  }
+
+  // Save state right before every form submit (capture phase so it runs
+  // even if a child handler calls e.preventDefault later in the chain).
+  document.addEventListener('submit', function(e){
+    if (e.target && e.target.tagName === 'FORM') saveState();
+  }, true);
+
+  // Expose a manual hook so onchange="this.form.submit()" handlers can
+  // call admPreserveState() right before triggering a programmatic
+  // submit (programmatic .submit() does NOT fire the submit event).
+  window.admPreserveState = saveState;
+
+  // Save state right before ANY change to an input/select with
+  // onchange that auto-submits its form.  This catches the
+  // auto-weekly toggle, the country pickers, the sort dropdowns and
+  // anything else that posts on change.
+  document.addEventListener('change', function(e){
+    var t = e.target;
+    if (!t || !t.form) return;
+    var onchange = t.getAttribute('onchange') || '';
+    if (onchange.indexOf('form.submit()') >= 0 || onchange.indexOf('this.form.submit') >= 0) {
+      saveState();
+    }
+  }, true);
+
+  // Save state on link clicks that navigate within the admin.  Ignores
+  // pure in-page anchors (#section) since those don't reload.
+  document.addEventListener('click', function(e){
+    var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+    if (!a) return;
+    var href = a.getAttribute('href') || '';
+    if (!href || href.charAt(0) === '#') return;
+    if (a.target === '_blank' || a.hasAttribute('download')) return;
+    // Cover admin.php?tab=…, hub/…, page.php?…, etc. — basically any
+    // admin-shell-internal navigation that would otherwise snap to top.
+    if (/^(admin\.php|\?tab=|\.\.?\/admin)/.test(href) || href.indexOf('admin.php') >= 0) {
+      saveState();
+    }
+  }, true);
+
+  // beforeunload catches the soft-reload too (e.g. when JS submits a
+  // hidden form via this.form.submit()).
+  window.addEventListener('beforeunload', saveState);
+
+  // Run the restore on initial DOMContentLoaded.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', restoreState);
+  } else {
+    restoreState();
+  }
+})();
+</script>

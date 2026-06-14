@@ -199,3 +199,33 @@
 
 /* Skeleton subtle improvement — improves perceived elegance on first paint */
 [data-bs-theme="dark"] body { transition: background-color .25s ease; }
+
+
+/* ---------------- Topic Cluster Hubs (public /hub/<slug>) ---------------- */
+[data-bs-theme="dark"] .hub-hero { background: linear-gradient(135deg, rgba(59,130,246,.12), rgba(15,23,42,.50)) !important; border-color: rgba(148,163,184,.18) !important; }
+[data-bs-theme="dark"] .hub-hero h1, [data-bs-theme="dark"] .hub-hero .text-secondary { color: #f1f5f9 !important; }
+[data-bs-theme="dark"] .hub-hero .lead { color: #cbd5e1 !important; }
+[data-bs-theme="dark"] .hub-hero .badge.text-bg-light { background: rgba(30,41,59,.85) !important; color: #e2e8f0 !important; border-color: rgba(148,163,184,.25) !important; }
+[data-bs-theme="dark"] nav[aria-label="On this page"] .badge { background: #1e293b !important; color: #e2e8f0 !important; border-color: #334155 !important; }
+/* Aggregated card grids */
+[data-bs-theme="dark"] [data-testid="hub-product-card"],
+[data-bs-theme="dark"] [data-testid="hub-guide-card"],
+[data-bs-theme="dark"] [data-testid="hub-video-card"],
+[data-bs-theme="dark"] [data-testid="hub-related-link"] { background:#1e293b !important; border-color:#334155 !important; color:#e2e8f0 !important; }
+[data-bs-theme="dark"] [data-testid="hub-product-card"] .fw-bold,
+[data-bs-theme="dark"] [data-testid="hub-guide-card"] .fw-bold,
+[data-bs-theme="dark"] [data-testid="hub-related-link"] .fw-bold { color:#f1f5f9 !important; }
+[data-bs-theme="dark"] [data-testid="hub-product-card"] .text-secondary,
+[data-bs-theme="dark"] [data-testid="hub-guide-card"] .text-secondary,
+[data-bs-theme="dark"] [data-testid="hub-related-link"] .text-secondary { color:#94a3b8 !important; }
+[data-bs-theme="dark"] [data-testid="hub-video-card"] .fw-semibold { color:#f1f5f9 !important; }
+/* FAQ accordion buttons keep the same hover treatment as product page */
+[data-bs-theme="dark"] #hub-faq-accordion .accordion-button { background:#1e293b; color:#f1f5f9; }
+[data-bs-theme="dark"] #hub-faq-accordion .accordion-body { background:#1e293b; color:#cbd5e1; border-top:1px solid #334155; }
+/* Section headings stay readable */
+[data-bs-theme="dark"] #hub-products h2, [data-bs-theme="dark"] #hub-guides h2, [data-bs-theme="dark"] #hub-faqs h2, [data-bs-theme="dark"] #hub-related h2, [data-bs-theme="dark"] #hub-videos h2 { color:#f1f5f9 !important; }
+/* AEO Quick-Answer card body — inline color #1e293b is invisible in dark mode */
+[data-bs-theme="dark"] .aeo-quick-answer { background: linear-gradient(180deg, rgba(59,130,246,.12), rgba(15,23,42,.50)) !important; border-left-color: #3b82f6 !important; }
+[data-bs-theme="dark"] .aeo-quick-answer .aeo-answer-body,
+[data-bs-theme="dark"] .aeo-quick-answer .fw-bold { color: #e2e8f0 !important; }
+[data-bs-theme="dark"] .aeo-quick-answer strong { color: #93c5fd !important; }

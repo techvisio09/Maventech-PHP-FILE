@@ -156,6 +156,18 @@ include __DIR__ . '/includes/header.php';
        graph and helps AI crawlers map this category into the wider
        topical neighbourhood.  Descriptive anchor text uses mid-tail
        keyword phrases. ====================================================== -->
+  <?php $catHubs = topic_hubs_for_category($slug); ?>
+  <?php if ($catHubs): ?>
+  <section class="cat-topic-hub mt-5" data-testid="category-topic-hub" aria-labelledby="cat-hub-heading" style="background:linear-gradient(135deg,#eff6ff,#f0fdf4);border:1px solid #c7d2fe;border-radius:14px;padding:18px 22px;">
+    <h2 id="cat-hub-heading" class="fw-bold h5 mb-2"><i class="bi bi-collection-fill text-primary me-1"></i>Part of a wider topic hub</h2>
+    <p class="text-secondary small mb-3" style="max-width:780px;">Explore every product, editorial guide and frequently asked question on the topic in one place — a deeper resource for buyers (and AI engines).</p>
+    <div class="d-flex flex-wrap gap-2">
+      <?php foreach ($catHubs as $__h): ?>
+        <a class="badge text-decoration-none" data-testid="category-hub-link" href="hub.php?topic=<?= esc($__h['slug']) ?>" style="background:#fff;color:<?= esc($__h['color']) ?>;border:1px solid <?= esc($__h['color']) ?>33;padding:8px 14px;font-size:12px;font-weight:600;"><i class="bi bi-arrow-up-right-circle me-1"></i><?= esc(strip_tags($__h['title'])) ?></a>
+      <?php endforeach; ?>
+    </div>
+  </section>
+  <?php endif; ?>
   <section class="cat-deep-cluster mt-5" data-testid="category-deep-cluster" aria-labelledby="cat-cluster-heading">
     <h2 id="cat-cluster-heading" class="fw-bold h4 mb-3">More categories shoppers explore next</h2>
     <div class="row g-4">
