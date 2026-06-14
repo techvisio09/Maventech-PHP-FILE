@@ -149,6 +149,10 @@ $ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.sv
   <?php if (isset($jsonLdFaq)): ?>
   <script type="application/ld+json"><?= json_encode($jsonLdFaq, JSON_UNESCAPED_SLASHES) ?></script>
   <?php endif; ?>
+  <!-- Performance: pre-resolve DNS + warm TLS to the third-party CDNs we hit
+       on every page so Core Web Vitals (LCP / FCP) stay green. -->
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
   <link rel="preconnect" href="https://fonts.googleapis.com">

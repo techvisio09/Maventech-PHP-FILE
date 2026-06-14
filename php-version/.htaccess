@@ -26,6 +26,13 @@ RedirectMatch 404 ^/vendor/
 RewriteEngine On
 RewriteRule ^uploads/order-pdfs/.* - [F,L]
 
+# ---- Pretty SEO endpoints — proxy /sitemap.xml, /merchant-feed.xml and
+#      /llms.txt through their PHP generators so they always reflect the
+#      live catalogue + company info. ----
+RewriteRule ^sitemap\.xml$        sitemap-xml.php   [L]
+RewriteRule ^merchant-feed\.xml$  merchant-feed.php [L]
+RewriteRule ^llms\.txt$           llms-txt.php      [L]
+
 # ---- Disable PHP / shell execution inside uploads/ ----
 <Directory "uploads">
     <FilesMatch "\.(php|phtml|phar|sh|cgi|pl)$">
