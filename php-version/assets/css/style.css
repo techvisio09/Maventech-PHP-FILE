@@ -894,7 +894,7 @@ body.has-deal-bar #chat-panel { bottom: 155px; }
 @keyframes typing-bounce { 0%,60%,100% { transform: translateY(0); opacity: .45; } 30% { transform: translateY(-4px); opacity: 1; } }
 /* Soft fade-in for the welcome message + chips after the typing-dots
    intro plays.  Triggered by JS adding `.is-fade-in` once the dots fade. */
-.chat-msg.is-fade-in, .chat-chips.is-fade-in {
+.chat-msg.is-fade-in, .chat-chips.is-fade-in, .chat-input-row.is-fade-in {
   animation: chat-intro-fade .35s ease-out both;
 }
 @keyframes chat-intro-fade {

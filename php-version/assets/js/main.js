@@ -326,6 +326,9 @@ function toggleChat() {
     if (!localStorage.getItem('uc_lead_done')) {
       const form = document.getElementById('chat-lead-form');
       if (form) form.style.display = 'block';
+    } else {
+      // Returning visitor — lead already done; surface the composer.
+      revealChatInputRow();
     }
   }
 }
@@ -463,6 +466,8 @@ async function submitLead(callback) {
   } catch (e) { /* best-effort */ }
   localStorage.setItem('uc_lead_done', '1');
   document.getElementById('chat-lead-form').style.display = 'none';
+  // Reveal the message input now that the lead form is complete.
+  revealChatInputRow();
   const firstName = (v.name.split(' ')[0] || '').trim();
   // Clean handoff message after the lead form is submitted.  Per product
   // requirement we no longer show the long "AI offline / phone / hours"
@@ -482,7 +487,21 @@ async function submitLead(callback) {
 function skipLead() {
   localStorage.setItem('uc_lead_done', '1');
   document.getElementById('chat-lead-form').style.display = 'none';
+  revealChatInputRow();
   chatAppend('bot', 'No problem — ask me anything about products, pricing, installation or activation. I\'m happy to help.');
+}
+
+// Show the "Type a message…" composer.  Hidden by default so customers
+// must first share their contact info via the lead form (or skip it).
+// On reveal, smooth slide-in + auto-focus the input.
+function revealChatInputRow() {
+  const row = document.getElementById('chat-input-row');
+  if (!row) return;
+  if (row.style.display === '' || row.style.display === 'flex') return;
+  row.style.display = 'flex';
+  row.classList.add('is-fade-in');
+  const inp = document.getElementById('chat-input');
+  if (inp) setTimeout(() => inp.focus(), 60);
 }
 
 function chatAppend(role, text) {
