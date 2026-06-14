@@ -1,5 +1,38 @@
 # Changelog
 
+## 2026-02-14 (iteration 7) — Admin post quick-actions + Topic Cluster Hubs
+
+### Published Blog Posts — Write One Post + Random Post buttons
+- New in-section quick-action cluster (data-testid=posts-quick-actions): a country picker `<select>` (data-testid=posts-quick-region) + green **Write One Post** button (data-testid=posts-write-one-btn) + blue **Random Post** button (data-testid=posts-random-btn).
+- JS rewrites both buttons' href to append `&region=XX` when the operator picks a country.
+- Clicking any country pill in the filter bar ALSO syncs the quick-action picker — pill click → posts-quick-region.value updates → both button hrefs update. Clicking "All" clears the picker.
+- Matches the visual style of the existing "Generate Trends Article Now" button in the Trending Articles section.
+
+### Topic Cluster Hub — /hub/<topic>
+- NEW `/app/php-version/hub.php` — single dynamic template; topics declared in `$TOPICS` config (microsoft-office, windows, antivirus shipped).
+- NEW router rewrite in `/app/php-version/router.php` — `^/hub/([a-z0-9\-]+)/?$` → hub.php?topic=<slug>. SEO-friendly URLs without `.php` extension.
+- 404 fallback for invalid slugs links to the three real hubs.
+- Each hub renders:
+  - Hero with topic accent colour (red/blue/green) + "TOPIC CLUSTER HUB" badge + H1.
+  - Stat pills: products / guides / answers / last-updated.
+  - AEO Quick Answer card (40-60 word direct answer).
+  - Table-of-contents chip nav.
+  - **Products** section — aggregates every product in the topic's category list (ORDER BY rating*reviews DESC).
+  - **Guides** section — pulls blog posts whose title matches the topic's LIKE patterns.
+  - **FAQs** section — dedup'd Q&A pulled from the top 4 products' `product_faqs()`.
+  - **Related topic hubs** cards — cross-links the OTHER two hubs.
+- Five JSON-LD blocks per hub: Organization graph + CollectionPage (with @id `#cluster`, mentions array, audience.audienceType, keywords, dateModified) + BreadcrumbList + FAQPage + ItemList.
+
+### Hub discoverability
+- Added to `sitemap-xml.php` at priority 0.9 (highest non-homepage weight).
+- Added to the homepage navbar dropdowns: Microsoft-Products → "Microsoft Office guide" + "Windows guide" badges; Antivirus → "Antivirus topic hub" badge.
+
+### Testing
+- 286/286 pytest passing (184 baseline + 102 iter6 tests across 8 classes in `/app/backend/tests/test_iteration6_features.py`).
+- Live Playwright verification on the preview URL — all hub testids + admin quick-action region rewrite verified working.
+
+---
+
 ## 2026-02-14 (iteration 6) — Full SEO / AEO / GEO upgrade across the site
 
 ### Foundations
