@@ -10,6 +10,7 @@
  */
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/mailer.php';
+require_once __DIR__ . '/includes/seo-bot.php';
 
 // Generate a cron token once (so the admin can copy it from the SMTP page).
 $token = setting_get('cron_token', '');
@@ -32,3 +33,23 @@ $start = microtime(true);
 $count = smtp_process_queue($batch);
 $ms    = (int)((microtime(true) - $start) * 1000);
 echo "[" . date('c') . "] cron.php: processed=$count batch=$batch elapsed_ms=$ms\n";
+
+// SEO / GEO / AEO automation — runs once every 24h.
+// IndexNow ping + Google/Bing sitemap ping + Claude Haiku content refresh
+// (meta description + AI summary for stale products).
+try {
+    $seoForce = !empty($_GET['seo_force']);
+    $seoReport = seo_bot_run_if_due($seoForce);
+    if (!empty($seoReport['skipped'])) {
+        echo "[" . date('c') . "] seo-bot: skipped — " . $seoReport['reason'] . "\n";
+    } else {
+        echo "[" . date('c') . "] seo-bot: indexnow={$seoReport['indexnow_status']} ({$seoReport['indexnow_count']} urls) "
+           . "google={$seoReport['google_ping']} bing={$seoReport['bing_ping']} "
+           . "llm_calls={$seoReport['llm_calls']} updated={$seoReport['products_updated']}"
+           . (!empty($seoReport['blog_post_id']) ? ' blog_post="' . $seoReport['blog_post_title'] . '"' : '')
+           . (empty($seoReport['errors']) ? '' : ' errors=' . count($seoReport['errors']))
+           . "\n";
+    }
+} catch (Throwable $e) {
+    echo "[" . date('c') . "] seo-bot: ERROR " . $e->getMessage() . "\n";
+}

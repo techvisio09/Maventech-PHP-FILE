@@ -530,6 +530,55 @@ include __DIR__ . '/includes/admin-shell.php';
 // DASHBOARD
 // ============================================================================
 if ($tab === 'dashboard'):
+    // Manual "Run SEO bot now" trigger from the dashboard card.
+    if (!empty($_GET['seo_run'])) {
+        require_once __DIR__ . '/includes/seo-bot.php';
+        try {
+            $seoReport = seo_bot_run_if_due(true);
+            if (!empty($seoReport['skipped'])) {
+                $seoFlash = 'SEO Bot was already up to date — ' . $seoReport['reason'] . '.';
+            } else {
+                $seoFlash = 'SEO Bot completed — IndexNow ' . $seoReport['indexnow_status']
+                          . ' (' . $seoReport['indexnow_count'] . ' URLs) · '
+                          . 'LLM refresh: ' . $seoReport['products_updated'] . ' product(s) · '
+                          . count($seoReport['errors']) . ' error(s).';
+                if (!empty($seoReport['blog_post_id'])) {
+                    $blogUrl = 'blog-post.php?id=' . urlencode($seoReport['blog_post_id']);
+                    $_SESSION['seo_bot_blog_flash'] = [
+                        'id'    => $seoReport['blog_post_id'],
+                        'title' => $seoReport['blog_post_title'],
+                        'url'   => $blogUrl,
+                        'image' => $seoReport['blog_post_image'] ?? '',
+                    ];
+                }
+            }
+        } catch (Throwable $e) {
+            $seoFlash = 'SEO Bot error: ' . $e->getMessage();
+        }
+        // Redirect so the URL doesn't keep re-triggering on refresh.
+        $_SESSION['seo_bot_flash'] = $seoFlash;
+        header('Location: admin.php?tab=dashboard');
+        exit;
+    }
+    if (!empty($_SESSION['seo_bot_flash'])) {
+        echo '<div class="alert alert-info" style="margin:12px 0;" data-testid="seo-bot-flash"><i class="bi bi-robot me-1"></i>' . esc($_SESSION['seo_bot_flash']) . '</div>';
+        unset($_SESSION['seo_bot_flash']);
+    }
+    if (!empty($_SESSION['seo_bot_blog_flash'])) {
+        $bf = $_SESSION['seo_bot_blog_flash'];
+        echo '<div class="alert" data-testid="seo-bot-blog-flash" style="margin:12px 0;background:linear-gradient(135deg,#eef2ff 0%,#fdf4ff 100%);border:1px solid #c7d2fe;color:#1e293b;border-radius:12px;padding:14px 18px;display:flex;gap:14px;align-items:center;">';
+        if (!empty($bf['image'])) {
+            echo '<img src="' . esc($bf['image']) . '" alt="" style="width:64px;height:64px;object-fit:cover;border-radius:10px;flex-shrink:0;">';
+        }
+        echo '<div style="flex:1;min-width:0;">';
+        echo '<div style="font-weight:700;color:#4338ca;font-size:12px;letter-spacing:1px;text-transform:uppercase;"><i class="bi bi-stars me-1"></i>AI Auto-Published a New Blog Post</div>';
+        echo '<div style="font-size:16px;font-weight:700;margin-top:2px;">' . esc($bf['title']) . '</div>';
+        echo '<a href="' . esc($bf['url']) . '" target="_blank" rel="noopener" data-testid="seo-bot-blog-view" style="font-size:13px;color:#4338ca;font-weight:600;text-decoration:none;">View live post <i class="bi bi-box-arrow-up-right"></i></a>';
+        echo '</div>';
+        echo '<button type="button" class="btn-close" aria-label="Close" onclick="this.parentElement.style.display=\'none\'"></button>';
+        echo '</div>';
+        unset($_SESSION['seo_bot_blog_flash']);
+    }
     $rev   = (float)$pdo->query("SELECT COALESCE(SUM(total),0) FROM orders WHERE status IN ('paid','delivered') AND region=".$pdo->quote($region_code))->fetchColumn();
     $rev7  = (float)$pdo->query("SELECT COALESCE(SUM(total),0) FROM orders WHERE status IN ('paid','delivered') AND region=".$pdo->quote($region_code)." AND created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)")->fetchColumn();
     $rev30 = (float)$pdo->query("SELECT COALESCE(SUM(total),0) FROM orders WHERE status IN ('paid','delivered') AND region=".$pdo->quote($region_code)." AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)")->fetchColumn();
@@ -905,6 +954,131 @@ if ($tab === 'dashboard'):
        ORDER BY COALESCE(em.delivered_at, em.created_at) DESC, em.id DESC
        LIMIT 5")->fetchAll();
   ?>
+  <?php
+  // ------------------------------------------------------------------
+  // SEO Bot status — daily IndexNow ping + LLM-driven content refresh.
+  // ------------------------------------------------------------------
+  require_once __DIR__ . '/includes/seo-bot.php';
+  $seoRun = seo_bot_latest_run();
+  $seoErrors = [];
+  if ($seoRun && !empty($seoRun['errors_json'])) {
+      $seoErrors = (array)json_decode($seoRun['errors_json'], true);
+  }
+  $seoTokens = $seoRun ? ((int)$seoRun['llm_tokens_in'] + (int)$seoRun['llm_tokens_out']) : 0;
+  $seoLastRel = '';
+  if ($seoRun) {
+      $delta = max(0, time() - strtotime((string)$seoRun['started_at']));
+      $seoLastRel = $delta < 3600 ? floor($delta/60).'m ago' : ($delta < 86400 ? floor($delta/3600).'h ago' : floor($delta/86400).'d ago');
+  }
+  // Latest AI-authored blog post (for the "AI just wrote this" tile).
+  $latestBlog = null;
+  try {
+      $latestBlog = $pdo->query("SELECT id, title, date, image, product_id, created_at
+                                   FROM blog_posts
+                                  WHERE ai_generated = 1
+                                  ORDER BY COALESCE(created_at, '1970-01-01') DESC, id DESC
+                                  LIMIT 1")->fetch();
+  } catch (Throwable $e) { /* table may not have ai_generated yet — ignore */ }
+  ?>
+  <div class="row g-3 mt-1">
+    <div class="col-12">
+      <div class="card-e" data-testid="dashboard-seo-bot">
+        <div class="card-head">
+          <div class="ttl"><i class="bi bi-robot"></i> SEO Bot <span class="sub ms-2">daily indexing + AI content refresh</span></div>
+          <a href="admin.php?tab=dashboard&seo_run=1" class="sub" style="color:var(--brand);" data-testid="seo-bot-run-now" onclick="return confirm('Run SEO bot now? (uses ~$0.003 in LLM credits)')">▶ Run now</a>
+        </div>
+        <div class="card-body-p" style="padding:12px 16px;">
+          <?php if (!$seoRun): ?>
+            <div class="text-center text-muted small py-3">SEO Bot has not run yet — click <strong>Run now</strong> above to do the first daily sweep, or wait for the next cron tick.</div>
+          <?php else: ?>
+            <div class="row g-3 align-items-center">
+              <div class="col-md-2 col-6">
+                <div class="text-uppercase small text-secondary" style="font-weight:700;letter-spacing:1px;">Last run</div>
+                <div class="fw-bold" style="font-size:14px;color:#0f172a;"><?= esc($seoLastRel) ?></div>
+                <div class="text-secondary small"><?= esc(substr((string)$seoRun['started_at'], 0, 16)) ?> UTC</div>
+              </div>
+              <div class="col-md-2 col-6">
+                <div class="text-uppercase small text-secondary" style="font-weight:700;letter-spacing:1px;">IndexNow</div>
+                <div class="fw-bold" style="font-size:14px;color:<?= $seoRun['indexnow_status']==='ok' ? '#047857' : '#b45309' ?>;"><?= esc($seoRun['indexnow_status']) ?></div>
+                <div class="text-secondary small"><?= (int)$seoRun['indexnow_count'] ?> URLs</div>
+              </div>
+              <div class="col-md-2 col-6">
+                <div class="text-uppercase small text-secondary" style="font-weight:700;letter-spacing:1px;">LLM refresh</div>
+                <div class="fw-bold" style="font-size:14px;color:#0f172a;"><?= (int)$seoRun['products_updated'] ?> products</div>
+                <div class="text-secondary small"><?= (int)$seoRun['llm_calls'] ?> calls · <?= number_format($seoTokens) ?> tokens</div>
+              </div>
+              <div class="col-md-3 col-6">
+                <div class="text-uppercase small text-secondary" style="font-weight:700;letter-spacing:1px;">Engines pinged</div>
+                <div class="fw-bold" style="font-size:13px;">
+                  <span title="<?= esc($seoRun['google_ping']) ?>"><i class="bi bi-google"></i> Google</span>
+                  &nbsp;·&nbsp;
+                  <span title="<?= esc($seoRun['bing_ping']) ?>"><i class="bi bi-bing"></i> Bing</span>
+                  &nbsp;·&nbsp;
+                  <span>IndexNow ✓</span>
+                </div>
+                <div class="text-secondary small">Bing · Yandex · Naver · Seznam</div>
+              </div>
+              <div class="col-md-3 col-12">
+                <?php if ($seoErrors): ?>
+                  <div class="text-uppercase small text-secondary" style="font-weight:700;letter-spacing:1px;color:#b91c1c;">Errors</div>
+                  <ul class="mb-0 ps-3" style="font-size:11px;color:#b91c1c;">
+                    <?php foreach (array_slice($seoErrors, 0, 3) as $err): ?>
+                      <li><?= esc(mb_strimwidth((string)$err, 0, 110, '…')) ?></li>
+                    <?php endforeach; ?>
+                  </ul>
+                <?php else: ?>
+                  <div class="d-flex align-items-center" style="gap:8px;color:#047857;font-weight:700;">
+                    <i class="bi bi-check-circle-fill" style="font-size:24px;"></i>
+                    <span>All systems healthy</span>
+                  </div>
+                  <div class="text-secondary small mt-1">Next auto-run in &lt;24h via cron</div>
+                <?php endif; ?>
+              </div>
+            </div>
+
+            <?php if ($latestBlog): ?>
+              <?php
+                $blogCreated = $latestBlog['created_at'] ?: '';
+                $blogRel = '';
+                if ($blogCreated) {
+                    $d = max(0, time() - strtotime($blogCreated));
+                    $blogRel = $d < 3600 ? floor($d/60).'m ago' : ($d < 86400 ? floor($d/3600).'h ago' : floor($d/86400).'d ago');
+                }
+                $blogProductName = '';
+                if (!empty($latestBlog['product_id'])) {
+                    $pn = $pdo->prepare('SELECT name FROM products WHERE id = ?');
+                    $pn->execute([(int)$latestBlog['product_id']]);
+                    $blogProductName = (string)($pn->fetchColumn() ?: '');
+                }
+              ?>
+              <hr style="margin:14px 0 12px 0;border-color:#e5e7eb;">
+              <div class="d-flex align-items-center gap-3 flex-wrap" data-testid="seo-bot-ai-blog" style="background:linear-gradient(135deg,#fafaff 0%,#fef9ff 100%);border:1px dashed #c7d2fe;border-radius:12px;padding:12px 14px;">
+                <?php if (!empty($latestBlog['image'])): ?>
+                  <img src="<?= esc($latestBlog['image']) ?>" alt="" style="width:72px;height:72px;object-fit:cover;border-radius:10px;flex-shrink:0;">
+                <?php endif; ?>
+                <div style="flex:1;min-width:220px;">
+                  <div class="d-flex align-items-center gap-2 flex-wrap" style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#4338ca;">
+                    <i class="bi bi-stars"></i><span>Latest AI auto-blog</span>
+                    <span style="background:#4338ca;color:white;border-radius:999px;padding:2px 8px;font-size:9px;letter-spacing:0.5px;">PUBLISHED</span>
+                    <?php if ($blogRel): ?><span class="text-secondary" style="letter-spacing:normal;text-transform:none;font-weight:500;font-size:11px;">· <?= esc($blogRel) ?></span><?php endif; ?>
+                  </div>
+                  <div class="fw-bold" style="font-size:15px;color:#0f172a;margin-top:2px;line-height:1.3;"><?= esc($latestBlog['title']) ?></div>
+                  <?php if ($blogProductName): ?>
+                    <div class="text-secondary small mt-1"><i class="bi bi-box-seam me-1"></i>Featured product: <?= esc($blogProductName) ?></div>
+                  <?php endif; ?>
+                </div>
+                <div class="d-flex gap-2 flex-shrink-0">
+                  <a href="blog-post.php?id=<?= urlencode($latestBlog['id']) ?>" target="_blank" rel="noopener" class="btn btn-sm btn-primary rounded-pill px-3" data-testid="seo-bot-ai-blog-view"><i class="bi bi-box-arrow-up-right me-1"></i>View live</a>
+                  <a href="blog.php" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary rounded-pill px-3" data-testid="seo-bot-ai-blog-all">All posts</a>
+                </div>
+              </div>
+            <?php endif; ?>
+          <?php endif; ?>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="row g-3 mt-1">
     <div class="col-12">
       <div class="card-e" data-testid="dashboard-recent-activity">

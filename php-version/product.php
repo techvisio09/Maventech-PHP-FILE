@@ -13,10 +13,18 @@ if (!$product) {
 }
 
 $pageTitle = $product['name'] . ' | ' . SITE_BRAND;
-/* SEO: description, OG image and Product structured data */
-$pageDescription = 'Buy ' . $product['name'] . ' — genuine lifetime license key for ' . format_price((float)$product['price'])
-    . ($discountFlag = ($product['original_price'] && $product['original_price'] > $product['price']) ? ' (was ' . format_price((float)$product['original_price']) . ')' : '')
-    . '. Instant email delivery, official download and 24/7 support from ' . SITE_BRAND . '.';
+/* SEO: description, OG image and Product structured data
+ * Prefer the LLM-generated meta_description (refreshed daily by the SEO
+ * bot at /cron.php — see includes/seo-bot.php) when present; otherwise
+ * fall back to a deterministic generated line. */
+$discountFlag = ($product['original_price'] && $product['original_price'] > $product['price']);
+if (!empty($product['meta_description'])) {
+    $pageDescription = (string)$product['meta_description'];
+} else {
+    $pageDescription = 'Buy ' . $product['name'] . ' — genuine lifetime license key for ' . format_price((float)$product['price'])
+        . ($discountFlag ? ' (was ' . format_price((float)$product['original_price']) . ')' : '')
+        . '. Instant email delivery, official download and 24/7 support from ' . SITE_BRAND . '.';
+}
 $ogImage = $product['image'];
 $ogType = 'product';
 

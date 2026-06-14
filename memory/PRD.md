@@ -478,3 +478,23 @@ See `/app/memory/test_credentials.md`.
   - `admin.php` → the `resend_outbox` POST handler's INSERT also forwards `attachments_json` to the cloned row.
 - **Verified end-to-end via PHPMailer `preSend()` MIME capture**: assembled message contains a `multipart/mixed` envelope with two `Content-Type: application/pdf` parts. Headers seen on the wire: `Content-Disposition: attachment; filename=Receipt-MV26061430774.pdf` and `…Invoice-MV26061430774.pdf`. Base64 bodies decoded cleanly back to 31706-byte and 30341-byte buffers with `%PDF-1.7` magic — i.e. exactly what the customer's mail client will save when they click the attachment icon.
 
+
+
+## [Jun 2026] AI Auto-Blogger — daily SEO content engine
+- **Goal**: pick one product every day and have the AI write + publish a brand-new blog article — zero manual approval, just a dashboard alert showing what was published.
+- **Where**: `includes/seo-bot.php`, wired into the existing daily run from `cron.php` + dashboard `▶ Run now` button.
+- **How it picks the product**: round-robin SQL — `ORDER BY (last_ai_post_at IS NULL) DESC, last_ai_post_at ASC, RAND() LIMIT 1` against `blog_posts.product_id` so each active product gets covered before any one repeats.
+- **How it writes**: Claude Haiku 4.5 (via the Emergent LLM gateway) is asked for strict JSON `{title, lead, read_time, content_html}`. The HTML is whitelist-sanitised (`<p><h2><h3><ul><ol><li><strong><em><a><br>`), `on*` handlers and `javascript:` hrefs are stripped, and the post is rejected if body < 200 chars.
+- **Publishing**: inserts directly into the same `blog_posts` table that powers `/blog.php` and `/blog-post.php` — the post is **live the moment it's written**.  Cooldown of 20 h between blogs prevents accidental floods on a manual `Run now` mash.
+- **Dashboard surfacing** (`admin.php?tab=dashboard`):
+  - On a successful `Run now`, two alerts appear at the top: the existing teal info flash *plus* a new gradient "AI Auto-Published a New Blog Post" card with the product image, the AI-chosen headline, and a "View live post" link (`data-testid="seo-bot-blog-flash"` / `…-blog-view`).
+  - Inside the SEO Bot card itself a permanent **"Latest AI auto-blog"** tile shows the most recent AI post: thumbnail, PUBLISHED pill, relative time, headline, featured product name, and `View live` + `All posts` buttons (`data-testid="seo-bot-ai-blog"` / `…-blog-view` / `…-blog-all`).
+- **Schema additions** (all idempotent via `seo_bot_ensure_schema`):
+  - `blog_posts.ai_generated` (TINYINT(1) DEFAULT 0)
+  - `blog_posts.product_id` (INT NULL) — fk-ish, used for rotation
+  - `blog_posts.created_at` (DATETIME NULL)
+  - `seo_runs.blog_post_id` / `blog_post_title` / `blog_product_id` / `blog_post_image`
+  - Setting `seo_bot_last_blog_post_at` for the 20 h cooldown.
+- **Cron log** (`cron.php`) now adds `blog_post="<title>"` when a fresh article was published.
+- **Verified end-to-end**: three live AI blog runs produced "Microsoft Office 2024 Professional Plus: Worth the Investment?", "Windows 11 Pro: Is It Right for Your Business?", and "Microsoft Project Professional 2021: Is It Right for Your Team?". All three render through `/blog-post.php?id=ai-…` with proper breadcrumbs, lead, H2 sections, product image and shop CTA. `seo_runs` row also stores the published post id and title so the dashboard tile rehydrates after every refresh.
+

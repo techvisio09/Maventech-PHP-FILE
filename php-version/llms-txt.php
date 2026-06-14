@@ -25,7 +25,7 @@ foreach (db()->query("SELECT product_slug, COUNT(*) c FROM license_keys WHERE st
 }
 
 $products = db()->query("
-    SELECT slug, name, price, original_price, region, category, brand, version, year, badge
+    SELECT slug, name, price, original_price, region, category, brand, version, year, badge, ai_summary
       FROM products
      WHERE is_active = 1
      ORDER BY category, name
@@ -100,8 +100,10 @@ ksort($byCat);
     $savings = ($orig > (float)$p['price']) ? sprintf(' (was $%.2f — save $%.2f)', $orig, $orig - (float)$p['price']) : '';
     $stockNote = ($avail[$p['slug']] ?? 0) > 0 ? 'In stock' : 'Out of stock';
     $badge = !empty($p['badge']) ? ' · ' . $p['badge'] : '';
+    $aiBlurb = !empty($p['ai_summary']) ? "\n  " . trim((string)$p['ai_summary']) : '';
 ?>
-- **<?= $p['name'] ?>** — $<?= $price ?> <?= $p['region'] ?><?= $savings ?><?= $badge ?> · <?= $stockNote ?> · [product](<?= $base . '/product.php?slug=' . $p['slug'] ?>)
+- **<?= $p['name'] ?>** — $<?= $price ?> <?= $p['region'] ?><?= $savings ?><?= $badge ?> · <?= $stockNote ?> · [product](<?= $base . '/product.php?slug=' . $p['slug'] ?>)<?= $aiBlurb ?>
+
 <?php endforeach; ?>
 <?php endforeach; ?>
 
