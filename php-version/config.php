@@ -4,11 +4,13 @@
 // Edit these values to match your hosting environment.
 // ============================================================
 
-// --- Database (MySQL) ---
-define('DB_HOST', 'localhost');
-define('DB_NAME', 'ucode_store');
-define('DB_USER', 'root');
-define('DB_PASS', '');
+// --- Database (MySQL/MariaDB) — env vars override defaults for production. ---
+// IMPORTANT: prefix env vars with MYSQL_ to avoid colliding with /app/backend/.env
+// which defines DB_NAME for the (unrelated) MongoDB stack.
+define('DB_HOST', getenv('MYSQL_HOST') ?: (getenv('DB_HOST') ?: 'localhost'));
+define('DB_NAME', getenv('MYSQL_DATABASE') ?: 'ucode_store');
+define('DB_USER', getenv('MYSQL_USER') ?: (getenv('DB_USER') ?: 'root'));
+define('DB_PASS', getenv('MYSQL_PASSWORD') ?: (getenv('DB_PASS') ?: ''));
 
 // --- Optional: AI chat (OpenAI-compatible API) ---
 // The system checks multiple sources for the AI key:
@@ -60,8 +62,9 @@ define('RESEND_API_KEY', getenv('RESEND_API_KEY') ?: '');
 define('SENDER_EMAIL', getenv('SENDER_EMAIL') ?: 'onboarding@resend.dev');
 
 // --- Admin account (created automatically on first run) ---
-define('ADMIN_EMAIL', 'admin@maventechsoftware.com');
-define('ADMIN_PASSWORD', 'Admin@UC2026!');
+// Override via env vars ADMIN_EMAIL / ADMIN_PASSWORD in production.
+define('ADMIN_EMAIL',    getenv('ADMIN_EMAIL')    ?: 'admin@maventechsoftware.com');
+define('ADMIN_PASSWORD', getenv('ADMIN_PASSWORD') ?: 'Admin@UC2026!');
 
 // --- Company ---
 define('SITE_BRAND', 'Maventech Software');

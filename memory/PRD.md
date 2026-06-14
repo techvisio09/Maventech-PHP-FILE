@@ -808,3 +808,39 @@ Also surfaced a **"{brand} profile →"** chip on each admin Product card (data-
 - `GET /cron/seo-daily.php?token={correct}` → HTTP 200 JSON with `mode:"daily_batch"`, publishes via `seo_bot_run_if_due(true)` (the inner LLM-400s reflect the user-managed budget cap).
 - Rotate token via admin → old token now 401, new token now 200, tokens differ.
 - Screenshot confirms all 3 admin-panel pieces render (Force-generate button, 14/24 count + progress bar, External cron URL + Copy + Rotate). 37 brand-profile chips render on the Products tab.
+
+## [Feb 2026] Iteration 8 — DB-driven Topic Cluster Hubs + Google Search Console Discovery Lab
+
+### What shipped
+- **DB-backed Topic Hubs** — `topic_hubs` table replaces the hard-coded `$TOPICS` array in `hub.php`.  Three seed hubs (microsoft-office, windows, antivirus) are auto-inserted on first run; admin can CRUD more without touching code.
+- **Auto-generate from top categories** — `Auto-generate from top categories` button scans `products.category`, picks every busy category (≥ 4 active products) that isn't already covered by an existing hub's category list and creates an `auto`-source hub in one click.  Idempotent — running twice is a no-op.
+- **Related videos per hub** — admins paste YouTube URLs (`URL | optional title`, one per line).  Hub page renders an embedded carousel with `VideoObject` JSON-LD for every video so Google + AI engines pick up structured video data.
+- **Internal anchor graph** — `category.php` and `product.php` now render a `Topic Cluster Hub` callout linking the page back to every hub that contains its slug (data-testids `category-hub-link` + `product-hub-link`).  Strengthens topical-authority PageRank.
+- **SEO Discovery Lab** — new `gsc_queries` table stores Search Console Performance-Report uploads (CSV file OR pasted text).  `gsc_import_csv()` parses headers `Top queries / Query`, `Clicks`, `Impressions`, `CTR`, `Position`; `gsc_cluster_key()` tokenises queries and groups them by top-2 stemmed tokens; `gsc_top_clusters(15)` returns the heaviest clusters ranked by impressions with one-click `Create hub` actions.
+- **Sitemap follows DB** — `sitemap-xml.php` now `require_once`'s `seo-content.php` and iterates `topic_hubs_all()` so any new hub (manual, auto, GSC-sourced) appears in `sitemap.xml` immediately, no code change required.
+- **Router asset rewrite** — `/hub/<slug>` URLs resolved relative CSS/JS/image paths to `/hub/assets/...`, returning 404 (dark-mode CSS missing, layout broken).  `router.php` now serves `/hub/assets/*`, `/hub/ajax/*` and `/hub/uploads/*` from the project root — fixes the dark-mode regression on hub pages.
+- **Dark-mode polish** — `dark-mode-polish.css` now styles `.hub-hero`, `.aeo-quick-answer` body, hub product/guide/video/related cards and the FAQ accordion in dark mode.  Cache-busted via `?v=<filemtime>` in `header.php`.
+- **Deployment hardening** — `config.php` admin password + DB connection now env-overridable.  DB env vars use `MYSQL_*` prefix to avoid colliding with the unrelated `DB_NAME` env var declared in `/app/backend/.env`.
+
+### Files touched
+- `/app/php-version/includes/functions.php` — added `topic_hubs` + `gsc_queries` schema in `ensure_db_schema()`.
+- `/app/php-version/includes/seo-content.php` — added `topic_hubs_seed_defaults`, `topic_hubs_all`, `topic_hub_by_slug`, `topic_hubs_for_category`, `topic_hubs_for_product`, `topic_hubs_auto_generate`, `topic_hub_video_jsonld`, `gsc_tokenise`, `gsc_cluster_key`, `gsc_import_csv`, `gsc_top_clusters`.
+- `/app/php-version/hub.php` — replaced hard-coded `$TOPICS` array with `topic_hubs_all(true)`; renders related-videos section; emits VideoObject JSON-LD.
+- `/app/php-version/router.php` — new `/hub/assets|ajax|uploads` rewrite block.
+- `/app/php-version/sitemap-xml.php` — DB-driven hub URL list.
+- `/app/php-version/category.php` — `data-testid="category-hub-link"` block above deep-cluster.
+- `/app/php-version/product.php` — `data-testid="product-hub-link"` row above deep-cluster.
+- `/app/php-version/includes/header.php` — cache-busted CSS links; `$jsonLdVideos` block emission.
+- `/app/php-version/admin.php` — new POST handlers (`save_topic_hub`, `delete_topic_hub`, `toggle_topic_hub`, `autogen_topic_hubs`, `upload_gsc_csv`, `clear_gsc`, `hub_from_cluster`); new "Topic Cluster Hubs" + "SEO Discovery Lab" UI sections in the AI Auto-Blogger tab.
+- `/app/php-version/assets/css/dark-mode-polish.css` — hub + admin hub-table + GSC card dark-mode rules.
+- `/app/php-version/config.php` — env-overridable admin password and DB connection (with `MYSQL_*` prefix to avoid Mongo env collision).
+- `/app/backend/tests/test_iteration8_topic_hubs.py` — NEW 14 regression tests.
+
+### Verified end-to-end (curl + Playwright + pytest)
+- 306/306 pytest assertions pass (292 prior + 14 new).
+- `/hub/microsoft-office` returns HTTP 200; CSS/JS/images load via the new `/hub/assets/*` rewrite; dark-mode quick-answer body computes to `rgb(226,232,240)`.
+- `/sitemap.xml` reflects every active hub in the DB (3 seeds + any admin-added or GSC-sourced).
+- Admin POST `save_topic_hub=1` inserts/updates a hub; `toggle_topic_hub=<id>` flips active flag (verified 404 when paused, 200 when live); `delete_topic_hub=<id>` removes; `autogen_topic_hubs=1` is idempotent.
+- Admin CSV upload via `<input type=file name=gsc_csv>` or paste textarea inserts queries into `gsc_queries` with computed `cluster_key`; top clusters render as cards with `Create hub` / `Hub exists` states; `hub_from_cluster=<key>` inserts a `gsc`-source hub and the public `/hub/<slug>` immediately returns 200.
+- `category.php?slug=bitdefender` and `product.php?slug=<bitdefender-product>` render `data-testid="category-hub-link"` / `product-hub-link` pointing to `hub/<slug>` (clean URL — same as sitemap).
+
