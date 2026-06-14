@@ -5042,26 +5042,51 @@ elseif ($tab === 'emails'):
   require_once __DIR__ . '/includes/mailer.php';
   $emailsSmtp = smtp_config();
 
-  // Email Activity Center scope: ONLY purchase emails the customer receives
-  // after buying a product (license delivery, order confirmation, payment
-  // pending, refund).  Review requests / lead follow-ups / waitlist / stock
-  // notifications / customer-service replies are intentionally excluded so
-  // the admin can focus on whether each post-purchase email actually
-  // reached the customer.
+  // Main category: purchase vs review
+  $emailCategory = $_GET['cat'] ?? 'purchase';
+  if (!in_array($emailCategory, ['purchase', 'review'], true)) $emailCategory = 'purchase';
+
+  // Purchase emails scope
   $purchaseTemplates = ['order_delivery', 'order_confirmation', 'order_pending', 'refund_confirm'];
   $purchaseInSql     = "('" . implode("','", $purchaseTemplates) . "')";
   $purchaseScope     = "template_code IN $purchaseInSql";
 
-  $c = $pdo->query("SELECT
+  // Review emails scope
+  $reviewTemplates = ['review_request'];
+  $reviewInSql     = "('" . implode("','", $reviewTemplates) . "')";
+  $reviewScope     = "template_code IN $reviewInSql";
+
+  // Counts for both categories
+  $cPurchase = $pdo->query("SELECT
         SUM(status IN ('queued','retrying'))            q,
         SUM(status = 'sent')                            s,
         SUM(opened_at IS NOT NULL)                      o,
         SUM(status IN ('failed','bounced'))             f,
         COUNT(*)                                        t
         FROM email_outbox WHERE $purchaseScope")->fetch();
+  $cReview = $pdo->query("SELECT
+        SUM(status IN ('queued','retrying'))            q,
+        SUM(status = 'sent')                            s,
+        SUM(opened_at IS NOT NULL)                      o,
+        SUM(status IN ('failed','bounced'))             f,
+        COUNT(*)                                        t
+        FROM email_outbox WHERE $reviewScope")->fetch();
+  $c = $emailCategory === 'review' ? $cReview : $cPurchase;
 ?>
   <h5 class="fw-bold mb-1">Email Activity Center</h5>
-  <p class="text-muted small mb-3">Every <strong>post-purchase</strong> email (license delivery · order confirmation · payment pending · refund) — with delivery, open and click tracking. Review requests and marketing emails are tracked separately. Click <i class="bi bi-eye"></i> to view the exact email the customer received.</p>
+  <p class="text-muted small mb-3">Track all emails sent to your customers — product purchase confirmations and review requests.</p>
+
+  <!-- Main Category Switcher -->
+  <div class="d-flex gap-2 mb-3">
+    <a href="?tab=emails&cat=purchase" class="d-flex align-items-center gap-2 text-decoration-none px-4 py-2" style="border-radius:10px;font-size:13px;font-weight:700;border:2px solid <?= $emailCategory === 'purchase' ? '#3b82f6' : '#e2e8f0' ?>;background:<?= $emailCategory === 'purchase' ? '#eff6ff' : '#fff' ?>;color:<?= $emailCategory === 'purchase' ? '#1d4ed8' : '#64748b' ?>;transition:all .15s;">
+      <i class="bi bi-bag-check-fill"></i> Product Purchases
+      <span class="badge rounded-pill" style="background:<?= $emailCategory === 'purchase' ? '#3b82f6' : '#e2e8f0' ?>;color:<?= $emailCategory === 'purchase' ? '#fff' : '#475569' ?>;font-size:11px;"><?= (int)$cPurchase['t'] ?></span>
+    </a>
+    <a href="?tab=emails&cat=review" class="d-flex align-items-center gap-2 text-decoration-none px-4 py-2" style="border-radius:10px;font-size:13px;font-weight:700;border:2px solid <?= $emailCategory === 'review' ? '#8b5cf6' : '#e2e8f0' ?>;background:<?= $emailCategory === 'review' ? '#f5f3ff' : '#fff' ?>;color:<?= $emailCategory === 'review' ? '#6d28d9' : '#64748b' ?>;transition:all .15s;">
+      <i class="bi bi-star-fill"></i> Customer Reviews
+      <span class="badge rounded-pill" style="background:<?= $emailCategory === 'review' ? '#8b5cf6' : '#e2e8f0' ?>;color:<?= $emailCategory === 'review' ? '#fff' : '#475569' ?>;font-size:11px;"><?= (int)$cReview['t'] ?></span>
+    </a>
+  </div>
 
   <?php if (!$emailsSmtp['enabled'] || $emailsSmtp['host'] === ''): ?>
   <!-- ==== Critical "SMTP not configured" banner — explains why "sent" emails aren't arriving ==== -->
@@ -5096,16 +5121,30 @@ elseif ($tab === 'emails'):
 
   <div data-testid="email-activity-list">
     <?php
-    $whereSql = "WHERE em.$purchaseScope";
+    $activeScope = $emailCategory === 'review' ? $reviewScope : $purchaseScope;
+    $whereSql = "WHERE em.$activeScope";
     if      ($emailFilter === 'failed') $whereSql .= " AND em.status IN ('failed','bounced')";
     elseif  ($emailFilter === 'sent')   $whereSql .= " AND em.status = 'sent'";
     elseif  ($emailFilter === 'queued') $whereSql .= " AND em.status IN ('queued','retrying')";
-    $emQuery = $pdo->query("SELECT em.*, o.order_number, o.first_name, o.last_name, o.phone,
-                              (SELECT GROUP_CONCAT(lk.license_key SEPARATOR '|')
-                                 FROM license_keys lk WHERE lk.order_id=em.order_id) AS keys_list
-                            FROM email_outbox em LEFT JOIN orders o ON o.id=em.order_id
-                            $whereSql
-                            ORDER BY em.created_at DESC LIMIT 200");
+
+    // For review emails, also pull the review data
+    if ($emailCategory === 'review') {
+        $emQuery = $pdo->query("SELECT em.*, o.order_number, o.first_name, o.last_name, o.phone,
+                                  cr.rating AS review_rating, cr.comment AS review_comment, cr.status AS review_status, cr.submitted_at AS review_date,
+                                  (SELECT oi.name FROM order_items oi WHERE oi.order_id=em.order_id LIMIT 1) AS product_name
+                                FROM email_outbox em
+                                LEFT JOIN orders o ON o.id=em.order_id
+                                LEFT JOIN customer_reviews cr ON cr.order_id=em.order_id
+                                $whereSql
+                                ORDER BY em.created_at DESC LIMIT 200");
+    } else {
+        $emQuery = $pdo->query("SELECT em.*, o.order_number, o.first_name, o.last_name, o.phone,
+                                  (SELECT GROUP_CONCAT(lk.license_key SEPARATOR '|')
+                                     FROM license_keys lk WHERE lk.order_id=em.order_id) AS keys_list
+                                FROM email_outbox em LEFT JOIN orders o ON o.id=em.order_id
+                                $whereSql
+                                ORDER BY em.created_at DESC LIMIT 200");
+    }
     $rowCount = 0;
     foreach ($emQuery as $e):
       $rowCount++;
@@ -5143,9 +5182,36 @@ elseif ($tab === 'emails'):
           <div class="ec-field"><span class="ec-k"><i class="bi bi-person-circle"></i> Recipient</span><span class="ec-v"><?php if ($custName && $oid): ?><a href="order-view.php?id=<?= $oid ?>" class="text-decoration-none fw-semibold"><?= esc($custName) ?></a> · <?php elseif ($custName): ?><strong><?= esc($custName) ?></strong> · <?php endif; ?><span class="text-muted"><?= esc($e['recipient']) ?></span></span></div>
           <?php if (!empty($e['phone'])): ?><div class="ec-field"><span class="ec-k"><i class="bi bi-telephone-fill"></i> Phone</span><span class="ec-v"><?= esc($e['phone']) ?></span></div><?php endif; ?>
           <?php if (!empty($e['order_number'])): ?><div class="ec-field"><span class="ec-k"><i class="bi bi-bag-check"></i> Order</span><span class="ec-v"><strong>#<?= esc($e['order_number']) ?></strong></span></div><?php endif; ?>
-          <?php if (!empty($e['keys_list'])): ?>
-            <div class="ec-field ec-field-keys"><span class="ec-k"><i class="bi bi-key-fill"></i> License Key</span><span class="ec-v"><?php foreach (explode('|', $e['keys_list']) as $lk): ?><code class="ec-key"><?= esc($lk) ?></code><?php endforeach; ?></span></div>
+
+          <?php if ($emailCategory === 'purchase'): ?>
+            <?php if (!empty($e['keys_list'])): ?>
+              <div class="ec-field ec-field-keys"><span class="ec-k"><i class="bi bi-key-fill"></i> License Key</span><span class="ec-v"><?php foreach (explode('|', $e['keys_list']) as $lk): ?><code class="ec-key"><?= esc($lk) ?></code><?php endforeach; ?></span></div>
+            <?php endif; ?>
+          <?php else: ?>
+            <?php if (!empty($e['product_name'])): ?>
+              <div class="ec-field"><span class="ec-k"><i class="bi bi-box-seam"></i> Product</span><span class="ec-v"><strong><?= esc($e['product_name']) ?></strong></span></div>
+            <?php endif; ?>
+            <?php if (!empty($e['review_rating'])): ?>
+              <div class="ec-field"><span class="ec-k"><i class="bi bi-star-fill" style="color:#f59e0b;"></i> Rating</span><span class="ec-v"><span style="color:#f59e0b;font-size:15px;"><?= str_repeat('★', (int)$e['review_rating']) ?></span><span class="text-secondary"><?= str_repeat('★', 5 - (int)$e['review_rating']) ?></span> <span class="text-secondary small">(<?= (int)$e['review_rating'] ?>/5)</span></span></div>
+            <?php else: ?>
+              <div class="ec-field"><span class="ec-k"><i class="bi bi-star"></i> Rating</span><span class="ec-v text-secondary">Not yet reviewed</span></div>
+            <?php endif; ?>
+            <?php if (!empty($e['review_comment'])): ?>
+              <div class="ec-field"><span class="ec-k"><i class="bi bi-chat-quote-fill"></i> Review</span><span class="ec-v"><em>"<?= esc(mb_strimwidth($e['review_comment'], 0, 150, '…')) ?>"</em></span></div>
+            <?php endif; ?>
+            <?php if (!empty($e['review_status'])): ?>
+              <div class="ec-field"><span class="ec-k"><i class="bi bi-check2-square"></i> Status</span><span class="ec-v">
+                <?php if ($e['review_status'] === 'published'): ?>
+                  <span class="badge rounded-pill" style="background:#d1fae5;color:#065f46;font-size:10px;">Published</span>
+                <?php elseif ($e['review_status'] === 'hidden'): ?>
+                  <span class="badge rounded-pill" style="background:#fef3c7;color:#92400e;font-size:10px;">Hidden</span>
+                <?php else: ?>
+                  <span class="badge rounded-pill" style="background:#f1f5f9;color:#475569;font-size:10px;"><?= esc(ucfirst($e['review_status'])) ?></span>
+                <?php endif; ?>
+              </span></div>
+            <?php endif; ?>
           <?php endif; ?>
+
           <?php if (!empty($e['delivered_at'])): ?><div class="ec-field"><span class="ec-k"><i class="bi bi-send-check"></i> Delivered</span><span class="ec-v small text-muted"><?= esc(date('M j, Y H:i', strtotime($e['delivered_at']))) ?></span></div><?php endif; ?>
           <?php if (!empty($e['opened_at'])): ?><div class="ec-field"><span class="ec-k"><i class="bi bi-envelope-open"></i> Opened</span><span class="ec-v small text-success"><?= esc(date('M j, Y H:i', strtotime($e['opened_at']))) ?></span></div><?php endif; ?>
           <?php if (!empty($e['last_error'])): ?><div class="ec-field"><span class="ec-k"><i class="bi bi-exclamation-triangle-fill text-danger"></i> Error</span><span class="ec-v small text-danger"><?= esc(mb_strimwidth($e['last_error'], 0, 200, '…')) ?></span></div><?php endif; ?>
