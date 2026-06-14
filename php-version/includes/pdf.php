@@ -42,6 +42,65 @@ function _pdf_money(float $amount, string $cur = 'USD'): string
 }
 
 /**
+ * Detect the dominant brand for an order from its line items.
+ * Used to pick the right watermark on the Receipt / Invoice.
+ *
+ * Order of precedence:
+ *   1) products.brand column (DB-authoritative)
+ *   2) keyword scan of the product name
+ *   3) generic 'maventech' fallback (our own brand mark)
+ */
+function _pdf_brand_for_items(array $items): string
+{
+    if (empty($items)) return 'maventech';
+    // Honour an explicit `brand` field if the caller passes it.
+    foreach ($items as $it) {
+        $b = strtolower(trim((string)($it['brand'] ?? '')));
+        if ($b !== '') {
+            foreach (['microsoft','bitdefender','mcafee','norton','kaspersky','eset','adobe','autodesk','corel','parallels'] as $known) {
+                if (str_contains($b, $known)) return $known;
+            }
+        }
+    }
+    // Fall back to keyword scan on the first item's name.
+    $name = strtolower(trim((string)($items[0]['name'] ?? $items[0]['product_name'] ?? '')));
+    foreach ([
+        'bitdefender' => ['bitdefender'],
+        'mcafee'      => ['mcafee'],
+        'norton'      => ['norton'],
+        'kaspersky'   => ['kaspersky'],
+        'eset'        => ['eset'],
+        'adobe'       => ['adobe', 'acrobat', 'photoshop'],
+        'autodesk'    => ['autocad', 'autodesk'],
+        'corel'       => ['corel'],
+        'parallels'   => ['parallels'],
+        'microsoft'   => ['microsoft', 'office', 'windows', 'visio', 'project', 'excel', 'word', 'powerpoint', 'outlook'],
+    ] as $brandKey => $needles) {
+        foreach ($needles as $n) {
+            if (str_contains($name, $n)) return $brandKey;
+        }
+    }
+    return 'maventech';
+}
+
+/**
+ * Return the absolute filesystem path to the brand-watermark PNG for the
+ * given brand key.  All watermarks are 600×600 dark-grey silhouettes
+ * pre-rendered into /assets/images/brand-watermarks/ so Dompdf can embed
+ * them locally (we keep `isRemoteEnabled` false).  Unknown brand keys
+ * fall back to the Maventech "M" mark.
+ */
+function _pdf_brand_watermark_path(string $brandKey): string
+{
+    $dir = __DIR__ . '/../assets/images/brand-watermarks';
+    $key = strtolower(trim($brandKey));
+    $path = $dir . '/' . $key . '.png';
+    if (is_file($path)) return $path;
+    // Fallback to our own brand mark for any unknown / missing brand.
+    return $dir . '/maventech.png';
+}
+
+/**
  * Shared HTML head + brand header used by both Receipt and Invoice.
  * Variant: 'receipt' or 'invoice' — only the title + sub-line change.
  */
@@ -54,6 +113,12 @@ function _pdf_shell(array $ctx, string $bodyHtml): string
     $logoUrl  = $ctx['logo']  ?? '';   // local file path is fine for Dompdf
     $docTitle = htmlspecialchars($ctx['title'] ?? 'Document',            ENT_QUOTES, 'UTF-8');
     $invNo    = htmlspecialchars($ctx['invoice_number'] ?? '',           ENT_QUOTES, 'UTF-8');
+    // Brand-specific dark watermark PNG (falls back to Maventech 'M').
+    $brandKey  = $ctx['brand_key'] ?? 'maventech';
+    $watermarkPath = _pdf_brand_watermark_path($brandKey);
+    $watermarkTag  = is_file($watermarkPath)
+        ? '<img src="' . $watermarkPath . '" alt="">'
+        : '';
     $secondRow= '';
     if (!empty($ctx['receipt_number'])) {
         $secondRow .= '<tr><td>Receipt number</td><td class="r">' . htmlspecialchars($ctx['receipt_number'], ENT_QUOTES, 'UTF-8') . '</td></tr>';
@@ -124,9 +189,25 @@ function _pdf_shell(array $ctx, string $bodyHtml): string
     margin-top: 30px; padding-top: 14px; border-top: 1px solid #e2e8f0;
     font-size: 8pt; color: #94a3b8; line-height: 1.6;
   }
+
+  /* Dark brand watermark — anchored to the page so it sits behind the
+     content.  Dompdf doesn't always honour `z-index:-1`; instead we put
+     the watermark FIRST in the body source order and rely on subsequent
+     content boxes (which have white-ish backgrounds) overlapping it.
+     7% opacity keeps the page readable. */
+  .watermark {
+    position: absolute;
+    top: 220px; left: 50%;
+    width: 360px; height: 360px;
+    margin-left: -180px;
+    opacity: 0.08;
+    text-align: center;
+  }
+  .watermark img { width: 360px; height: 360px; }
 </style>
 </head>
 <body>
+  <div class="watermark">{$watermarkTag}</div>
   <h1>{$docTitle}</h1>
   <table class="head-grid"><tr>
     <td class="head-meta">
@@ -240,6 +321,7 @@ function generate_receipt_pdf(array $order, array $items, ?array $payment = null
         'receipt_number'  => $receiptNo,
         'date_paid'       => $datePaid,
         'bill_to'         => $billTo,
+        'brand_key'       => _pdf_brand_for_items($items),
     ], $bodyHtml);
 
     $dompdf = _pdf_dompdf();
@@ -316,6 +398,7 @@ function generate_invoice_pdf(array $order, array $items): string
         'date_issued'     => $dateIssued,
         'date_due'        => $dateDue,
         'bill_to'         => $billTo,
+        'brand_key'       => _pdf_brand_for_items($items),
     ], $bodyHtml);
 
     $dompdf = _pdf_dompdf();
