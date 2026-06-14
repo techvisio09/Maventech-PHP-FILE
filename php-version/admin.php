@@ -2016,6 +2016,13 @@ elseif ($tab === 'ai-blogger'):
     [data-bs-theme="dark"] .ai-body > div[style*="overflow-y"] { border-color:#334155 !important; }
     [data-bs-theme="dark"] .ai-body > div[style*="overflow-y"] a { border-color:#1e293b !important; }
     [data-bs-theme="dark"] .ai-body > div[style*="overflow-y"] a:hover { background:rgba(59,130,246,.08) !important; }
+    /* SEO platform cards */
+    .seo-platform-card { background:#f8fafc; border:1px solid #e2e8f0; }
+    [data-bs-theme="dark"] .seo-platform-card { background:rgba(255,255,255,.04); border-color:#334155; }
+    [data-bs-theme="dark"] .seo-platform-card strong { color:#e2e8f0; }
+    [data-bs-theme="dark"] .seo-platform-card .text-secondary { color:#94a3b8 !important; }
+    [data-bs-theme="dark"] .seo-platform-card .form-control { background:#0f172a; border-color:#334155; color:#e2e8f0; }
+    [data-bs-theme="dark"] .seo-platform-card .form-control::placeholder { color:#475569; }
     .ai-section > summary:hover { background:#f8fafc; }
     .ai-section > .ai-body { padding:0 20px 20px; }
     .ai-section > summary .ai-badge { margin-left:auto; font-size:11px; font-weight:600; padding:3px 10px; border-radius:999px; }
@@ -2257,7 +2264,7 @@ elseif ($tab === 'ai-blogger'):
       <div class="row g-3">
         <!-- Google Search Console -->
         <div class="col-md-6">
-          <div class="p-3" style="background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;">
+          <div class="p-3 seo-platform-card" style="border-radius:10px;">
             <div class="d-flex align-items-center gap-2 mb-2">
               <img src="https://www.google.com/favicon.ico" alt="" style="width:18px;height:18px;">
               <strong style="font-size:13px;">Google Search Console</strong>
@@ -2278,7 +2285,7 @@ elseif ($tab === 'ai-blogger'):
 
         <!-- Bing Webmaster -->
         <div class="col-md-6">
-          <div class="p-3" style="background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;">
+          <div class="p-3 seo-platform-card" style="border-radius:10px;">
             <div class="d-flex align-items-center gap-2 mb-2">
               <img src="https://www.bing.com/favicon.ico" alt="" style="width:18px;height:18px;">
               <strong style="font-size:13px;">Bing Webmaster Tools</strong>
@@ -2299,7 +2306,7 @@ elseif ($tab === 'ai-blogger'):
 
         <!-- Yandex Webmaster -->
         <div class="col-md-6">
-          <div class="p-3" style="background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;">
+          <div class="p-3 seo-platform-card" style="border-radius:10px;">
             <div class="d-flex align-items-center gap-2 mb-2">
               <i class="bi bi-search" style="font-size:16px;color:#ff0000;"></i>
               <strong style="font-size:13px;">Yandex Webmaster</strong>
@@ -2320,7 +2327,7 @@ elseif ($tab === 'ai-blogger'):
 
         <!-- Pinterest -->
         <div class="col-md-6">
-          <div class="p-3" style="background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;">
+          <div class="p-3 seo-platform-card" style="border-radius:10px;">
             <div class="d-flex align-items-center gap-2 mb-2">
               <i class="bi bi-pinterest" style="font-size:16px;color:#e60023;"></i>
               <strong style="font-size:13px;">Pinterest</strong>
@@ -2341,7 +2348,7 @@ elseif ($tab === 'ai-blogger'):
 
         <!-- Google Merchant Center -->
         <div class="col-md-6">
-          <div class="p-3" style="background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;">
+          <div class="p-3 seo-platform-card" style="border-radius:10px;">
             <div class="d-flex align-items-center gap-2 mb-2">
               <i class="bi bi-bag-check" style="font-size:16px;color:#4285f4;"></i>
               <strong style="font-size:13px;">Google Merchant Center</strong>
@@ -2372,55 +2379,64 @@ elseif ($tab === 'ai-blogger'):
   </details>
 
   <!-- Published Blog Posts -->
-  <details class="ai-section">
+  <details class="ai-section" id="posts-section">
     <summary>
       <i class="bi bi-journal-richtext text-primary"></i> Published Blog Posts
       <span class="ai-badge" style="background:#dbeafe;color:#1e40af;"><?= $totalAiAll ?> posts</span>
     </summary>
     <div class="ai-body">
-      <!-- Country filter pills -->
-      <div class="d-flex align-items-center gap-1 flex-wrap mb-2">
-        <a href="admin.php?tab=ai-blogger" class="btn btn-sm <?= $regionFilter === '' ? 'btn-primary' : 'btn-outline-secondary' ?> rounded-pill px-3" data-testid="country-tab-all">All <span class="badge text-bg-light text-dark ms-1"><?= $totalAiAll ?></span></a>
+      <!-- Country filter pills — JS-based, no page reload -->
+      <div class="d-flex align-items-center gap-1 flex-wrap mb-2" id="post-filters">
+        <button type="button" class="btn btn-sm btn-primary rounded-pill px-3 post-filter-btn active" data-region="all">All <span class="badge text-bg-light text-dark ms-1"><?= $totalAiAll ?></span></button>
         <?php foreach ($regionsList as $rc => $ri): ?>
-          <a href="admin.php?tab=ai-blogger&region_filter=<?= esc($rc) ?>" class="btn btn-sm <?= $regionFilter === $rc ? 'btn-primary' : 'btn-outline-secondary' ?> rounded-pill px-3" data-testid="country-tab-<?= esc($rc) ?>"><?= $ri['flag'] ?> <?= esc($rc) ?> <span class="badge text-bg-light text-dark ms-1"><?= (int)($perRegionCounts[$rc] ?? 0) ?></span></a>
+          <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3 post-filter-btn" data-region="<?= esc($rc) ?>"><?= $ri['flag'] ?> <?= esc($rc) ?> <span class="badge text-bg-light text-dark ms-1"><?= (int)($perRegionCounts[$rc] ?? 0) ?></span></button>
         <?php endforeach; ?>
       </div>
 
-      <?php if ($aiAll): ?>
-      <!-- Scrollable post list — max 400px before scroll -->
-      <div style="max-height:420px;overflow-y:auto;border:1px solid #eef2f7;border-radius:8px;">
-        <?php $i = 0; foreach (array_slice($aiAll, 0, 30) as $bp): $i++; ?>
+      <?php
+        // Load ALL posts (no region filter) so JS can filter client-side
+        $aiAllUnfiltered = [];
+        try {
+            $stAll = $pdo->query("SELECT bp.id, bp.title, bp.date, bp.image, bp.product_id, bp.created_at,
+                       bp.target_region, bp.verified_http,
+                       p.name AS product_name
+                  FROM blog_posts bp LEFT JOIN products p ON p.id = bp.product_id
+                 WHERE bp.ai_generated = 1
+                 ORDER BY COALESCE(bp.created_at, '1970-01-01') DESC, bp.id DESC LIMIT 50");
+            $aiAllUnfiltered = $stAll->fetchAll();
+        } catch (Throwable $e) {}
+      ?>
+      <?php if ($aiAllUnfiltered): ?>
+      <div id="post-list-box" style="max-height:420px;overflow-y:auto;border-radius:8px;">
+        <?php $i = 0; foreach ($aiAllUnfiltered as $bp): $i++; ?>
           <?php
             $httpOk   = (int)($bp['verified_http'] ?? 0) === 200;
             $postImg  = $bp['image'] ?? '';
-            $rFlag    = $regionsList[$bp['target_region'] ?? '']['flag'] ?? '';
+            $rCode    = $bp['target_region'] ?? '';
+            $rFlag    = $regionsList[$rCode]['flag'] ?? '';
             $postDate = date('M j', strtotime($bp['created_at'] ?? $bp['date']));
-            $prodName = $bp['product_name'] ?? '';
           ?>
-          <a href="blog-post.php?id=<?= urlencode($bp['id']) ?>" target="_blank" rel="noopener" data-testid="ai-blogger-row-<?= $i ?>"
-             class="d-flex align-items-center gap-2 text-decoration-none"
-             style="padding:7px 10px;border-bottom:1px solid #f1f5f9;font-size:12px;color:#334155;transition:background .1s;"
-             onmouseover="this.style.background='#f0f7ff'"
-             onmouseout="this.style.background='transparent'">
-            <span style="width:18px;text-align:center;color:#94a3b8;font-size:10px;flex-shrink:0;"><?= $i ?></span>
+          <a href="blog-post.php?id=<?= urlencode($bp['id']) ?>" target="_blank" rel="noopener"
+             class="post-row d-flex align-items-center gap-2 text-decoration-none" data-region="<?= esc($rCode) ?>">
+            <span class="post-num"><?= $i ?></span>
             <?php if ($postImg): ?>
-              <img src="<?= esc($postImg) ?>" alt="" style="width:28px;height:28px;object-fit:cover;border-radius:5px;flex-shrink:0;">
+              <img src="<?= esc($postImg) ?>" alt="" class="post-thumb">
             <?php else: ?>
-              <span style="width:28px;height:28px;border-radius:5px;background:#e2e8f0;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;color:#94a3b8;"><i class="bi bi-journal-text"></i></span>
+              <span class="post-thumb post-thumb-empty"><i class="bi bi-journal-text"></i></span>
             <?php endif; ?>
-            <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;color:#1e293b;"><?= esc($bp['title']) ?></span>
-            <span style="flex-shrink:0;font-size:14px;"><?= $rFlag ?></span>
-            <span style="flex-shrink:0;color:#94a3b8;min-width:45px;text-align:right;"><?= $postDate ?></span>
-            <span class="badge rounded-pill" style="flex-shrink:0;background:<?= $httpOk ? '#d1fae5' : '#fef3c7' ?>;color:<?= $httpOk ? '#065f46' : '#92400e' ?>;font-size:8px;padding:2px 6px;"><?= $httpOk ? 'Live' : 'Pending' ?></span>
-            <i class="bi bi-chevron-right" style="font-size:10px;color:#cbd5e1;flex-shrink:0;"></i>
+            <span class="post-title"><?= esc($bp['title']) ?></span>
+            <span class="post-flag"><?= $rFlag ?></span>
+            <span class="post-date"><?= $postDate ?></span>
+            <span class="badge rounded-pill post-status" style="background:<?= $httpOk ? '#166534' : '#92400e' ?>;color:<?= $httpOk ? '#bbf7d0' : '#fef3c7' ?>;"><?= $httpOk ? 'Live' : 'Pending' ?></span>
+            <i class="bi bi-chevron-right post-arrow"></i>
           </a>
         <?php endforeach; ?>
       </div>
-      <?php if (count($aiAll) > 30): ?>
-        <div class="text-center mt-2"><span class="text-secondary" style="font-size:11px;">Showing 30 of <?= count($aiAll) ?></span></div>
+      <?php if (count($aiAllUnfiltered) >= 50): ?>
+        <div class="text-center mt-2"><span class="text-secondary" style="font-size:11px;">Showing first 50</span></div>
       <?php endif; ?>
       <?php else: ?>
-      <div class="text-center py-3" style="color:#94a3b8;">
+      <div class="text-center py-3" style="color:#64748b;">
         <i class="bi bi-journal-x" style="font-size:28px;"></i>
         <div class="fw-semibold mt-1" style="font-size:13px;">No blog posts yet</div>
         <div style="font-size:11px;">Click "Write One Post" above to get started.</div>
@@ -2428,6 +2444,60 @@ elseif ($tab === 'ai-blogger'):
       <?php endif; ?>
     </div>
   </details>
+  <style>
+    /* Blog post rows — dark mode native */
+    .post-row { padding:8px 12px; border-bottom:1px solid rgba(255,255,255,.06); font-size:12px; color:#cbd5e1; transition:background .1s; }
+    .post-row:hover { background:rgba(59,130,246,.1); color:#e2e8f0; }
+    .post-num { width:18px; text-align:center; color:#64748b; font-size:10px; flex-shrink:0; }
+    .post-thumb { width:28px; height:28px; object-fit:cover; border-radius:5px; flex-shrink:0; }
+    .post-thumb-empty { display:inline-flex; align-items:center; justify-content:center; background:rgba(255,255,255,.08); color:#64748b; font-size:12px; }
+    .post-title { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; color:#e2e8f0; }
+    .post-flag { flex-shrink:0; font-size:14px; }
+    .post-date { flex-shrink:0; color:#64748b; min-width:45px; text-align:right; }
+    .post-status { flex-shrink:0; font-size:8px; padding:2px 6px; }
+    .post-arrow { font-size:10px; color:#475569; flex-shrink:0; }
+    #post-list-box { border:1px solid rgba(255,255,255,.08); }
+    /* Light mode overrides */
+    [data-bs-theme="light"] .post-row { color:#475569; border-color:#f1f5f9; }
+    [data-bs-theme="light"] .post-row:hover { background:#eff6ff; color:#1e293b; }
+    [data-bs-theme="light"] .post-title { color:#1e293b; }
+    [data-bs-theme="light"] .post-num { color:#94a3b8; }
+    [data-bs-theme="light"] .post-date { color:#94a3b8; }
+    [data-bs-theme="light"] .post-thumb-empty { background:#e2e8f0; color:#94a3b8; }
+    [data-bs-theme="light"] #post-list-box { border-color:#e2e8f0; }
+    [data-bs-theme="light"] .post-arrow { color:#cbd5e1; }
+    /* Filter buttons in dark mode */
+    [data-bs-theme="dark"] .post-filter-btn.btn-outline-secondary { border-color:#475569; color:#94a3b8; }
+    [data-bs-theme="dark"] .post-filter-btn.btn-outline-secondary:hover { background:rgba(59,130,246,.15); border-color:#3b82f6; color:#93c5fd; }
+    [data-bs-theme="dark"] .post-filter-btn.active, [data-bs-theme="dark"] .post-filter-btn.btn-primary { background:#2563eb; border-color:#2563eb; color:#fff; }
+  </style>
+  <script>
+  (function(){
+    var btns = document.querySelectorAll('.post-filter-btn');
+    btns.forEach(function(btn){
+      btn.addEventListener('click', function(e){
+        e.preventDefault();
+        var region = btn.getAttribute('data-region');
+        // Toggle active state
+        btns.forEach(function(b){ b.classList.remove('active','btn-primary'); b.classList.add('btn-outline-secondary'); });
+        btn.classList.add('active','btn-primary');
+        btn.classList.remove('btn-outline-secondary');
+        // Filter rows
+        var rows = document.querySelectorAll('.post-row');
+        var num = 0;
+        rows.forEach(function(r){
+          if (region === 'all' || r.getAttribute('data-region') === region) {
+            r.style.display = '';
+            num++;
+            r.querySelector('.post-num').textContent = num;
+          } else {
+            r.style.display = 'none';
+          }
+        });
+      });
+    });
+  })();
+  </script>
 
   <!-- Recent Activity -->
   <?php if ($recentRuns): ?>
