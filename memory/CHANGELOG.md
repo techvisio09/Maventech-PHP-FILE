@@ -1,5 +1,40 @@
 # Changelog
 
+## 2026-02-14 (iteration 4) — Country filter + trends JSON + auto-weekly
+
+### Public blog country filter
+- `/app/php-version/blog.php` line ~33 — region filter SQL now matches `target_region = ? OR target_region = 'ALL' OR target_region IS NULL`.  Before: picking a country returned 0 rows whenever seed posts weren't tagged.  After: every country pill shows that country's regional posts + all global/seed posts.
+
+### Admin "Published Blog Posts" — country visibility & filter parity
+- Each row now carries `data-region` + `data-is-global` attributes.
+- Region-agnostic posts (target_region=NULL or 'ALL') render a 🌍 emoji with a `Global` label (`.post-flag-label`); region-specific posts render their country code.
+- The country-pill JS filter (admin.php ~line 2716) keeps globals visible across every country selection, matching public-page behaviour.
+
+### Trends "invalid JSON from LLM" fix
+- New helper `_seo_llm_json_decode()` in `seo-bot.php` (lines ~30-100) handles:
+  - Pure JSON
+  - ` ```json … ``` ` fenced JSON
+  - Chatty prefixes ("Here is the JSON:\n{…}")
+  - Smart-quoted JSON (`"…"` curly quotes)
+  - Raw newlines / tabs INSIDE string values (control chars LLMs love to emit)
+- Used in BOTH LLM call sites: regional blog generator + trends generator.
+- Trends prompt strengthened to require `{ … }` only (no preface, no markdown).
+- Error report now includes a 160-char snippet of what the LLM actually returned so the operator can debug fast.
+
+### Auto-resubmit sitemap weekly
+- New toggle in admin SEO panel: data-testid=`auto-weekly-toggle` (Bootstrap switch).  Auto-submits on change.
+- Persists `auto_sitemap_weekly` setting (0/1).  Hint copy mirrors current state.
+- New backend function `seo_bot_weekly_sitemap_tick()` (seo-bot.php) — runs from the shutdown handler at the bottom of every admin/auto-blogger page load:
+  - Gated on toggle == '1' AND `last_sitemap_submit_at` > 7 days old.
+  - Re-pings IndexNow with up to 100 URLs; updates timestamp + sets `last_sitemap_submit_kind = 'auto_weekly'` on success.
+- Submit-button "Sitemap Submitted" pill now shows `· auto` suffix when the most recent submission was triggered by the weekly cron (visual cue that you can leave it running).
+
+### Testing
+- 78/78 pytest passing (24 baseline + 23 iter2 + 30 iter3 + 1 overlap).
+- New `/app/backend/tests/test_iteration3_features.py` with 30 tests across 9 classes.
+
+---
+
 ## 2026-02-14 (iteration 3) — Token UX parity + submitted-state button
 
 ### Token "Uploaded" pattern parity (Google Search Console + Bing Webmaster)
