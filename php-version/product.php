@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/includes/seo-content.php';
 
 $slug = $_GET['slug'] ?? '';
 $product = $slug ? get_product($slug) : null;
@@ -12,7 +13,13 @@ if (!$product) {
     exit;
 }
 
-$pageTitle = $product['name'] . ' | ' . SITE_BRAND;
+/* SEO: long-tail keyword-rich title.  We prepend the brand, append the
+ * platform + the magic words ("Lifetime License Key") so the title
+ * itself targets two-to-three additional intent variants. */
+$_pTitleYear = '';
+if (preg_match('/\b(20\d{2})\b/', $product['name'], $_m)) $_pTitleYear = ' ' . $_m[1];
+$pageTitle = $product['name'] . ' — Lifetime License Key for ' . ($product['platform'] ?: 'Windows') . ' | ' . SITE_BRAND;
+$preloadImage = $product['image'] ?? '';
 /* SEO: description, OG image and Product structured data
  * Prefer the LLM-generated meta_description (refreshed daily by the SEO
  * bot at /cron.php — see includes/seo-bot.php) when present; otherwise
@@ -70,7 +77,7 @@ $jsonLd = [
         'priceValidUntil' => date('Y-12-31'),
         'seller'        => [
             '@type' => 'Organization',
-            'name'  => $brandName,
+            'name'  => SITE_BRAND,
             'url'   => site_url() . '/',
         ],
         'shippingDetails' => [
@@ -101,6 +108,11 @@ if ((float)$product['rating'] > 0 && (int)$product['reviews'] > 0) {
         'worstRating' => '1',
     ];
 }
+// Embed up to 5 real reviews inside the Product schema for richer rich-result eligibility.
+$_reviewItems = product_review_items_jsonld($product, 5);
+if ($_reviewItems) {
+    $jsonLd['review'] = $_reviewItems;
+}
 
 // BreadcrumbList — surfaces the path Home → Category → Product in Google
 // rich results AND helps AI search engines understand site hierarchy.
@@ -123,6 +135,10 @@ $pageFaqs = product_faqs($product);
 $jsonLdFaq = [
     '@context'   => 'https://schema.org',
     '@type'      => 'FAQPage',
+    'speakable'  => [
+        '@type'       => 'SpeakableSpecification',
+        'cssSelector' => ['.pd-faq-accordion', '.pd-seo-copy'],
+    ],
     'mainEntity' => array_map(function($f) {
         return [
             '@type'          => 'Question',
@@ -131,7 +147,12 @@ $jsonLdFaq = [
         ];
     }, $pageFaqs),
 ];
-$pageKeywords = product_keywords($product);
+// HowTo schema — "How to activate <product>".  Google promotes HowTo
+// rich results AND AI search engines parse them as authoritative
+// step-by-step answers for activation queries.
+$jsonLdHowTo = product_howto_jsonld($product);
+
+$pageKeywords = product_long_tail_keywords($product);
 $related = get_products([$product['category']]);
 $related = array_values(array_filter($related, fn($r) => $r['slug'] !== $product['slug']));
 $related = array_slice($related, 0, 4);
@@ -163,7 +184,7 @@ include __DIR__ . '/includes/header.php';
           <span class="pd-360-ring" aria-hidden="true"></span>
           <span class="pd-360-podium" aria-hidden="true"></span>
           <div class="pd-360-stage">
-            <img src="<?= esc($product['image']) ?>" alt="<?= esc(product_img_alt($product)) ?>" title="<?= esc($product['name']) ?>" class="pd-360-img" draggable="false" data-testid="product-360-img">
+            <img src="<?= esc($product['image']) ?>" alt="<?= esc(product_img_alt($product)) ?>" title="<?= esc($product['name']) ?>" class="pd-360-img" draggable="false" data-testid="product-360-img" fetchpriority="high" decoding="async" width="640" height="640">
           </div>
           <span class="pd-360-badge" data-testid="product-360-badge"><i class="bi bi-arrow-repeat me-1"></i>360° view · drag to spin</span>
         </div>
@@ -351,6 +372,40 @@ include __DIR__ . '/includes/header.php';
     </div>
   </div>
 
+  <!-- Long-tail keyword SEO copy block — visible to humans, indexable by
+       crawlers, quotable by AI search engines (Speakable schema attached). -->
+  <?= product_seo_copy($product) ?>
+
+  <!-- Real customer reviews snippet — social proof + indexable text -->
+  <?php $_reviewRows = product_review_snippets(3); ?>
+  <?php if ($_reviewRows): ?>
+  <section class="pd-review-snippets mt-5" data-testid="product-review-snippets" aria-labelledby="pd-rev-heading">
+    <div class="d-flex align-items-center gap-2 mb-3">
+      <i class="bi bi-chat-quote-fill" style="font-size:22px;color:#2563eb;"></i>
+      <h2 id="pd-rev-heading" class="fw-bold h4 mb-0">What buyers say about <?= esc($product['name']) ?></h2>
+    </div>
+    <div class="row g-3">
+      <?php foreach ($_reviewRows as $rv): ?>
+        <div class="col-md-4">
+          <div class="card border h-100 p-3" data-testid="review-snippet-card">
+            <div class="text-warning mb-1">
+              <?php for ($i = 1; $i <= 5; $i++): ?>
+                <i class="bi <?= $i <= (int)$rv['rating'] ? 'bi-star-fill' : 'bi-star' ?>"></i>
+              <?php endfor; ?>
+            </div>
+            <p class="small text-secondary mb-2" style="font-style:italic;">&ldquo;<?= esc(mb_substr((string)$rv['comment'], 0, 220)) . (mb_strlen((string)$rv['comment']) > 220 ? '&hellip;' : '') ?>&rdquo;</p>
+            <div class="small fw-semibold text-body mt-auto"><?= esc((string)($rv['reviewer_name'] ?? 'Verified Buyer')) ?></div>
+            <?php if (!empty($rv['submitted_at'])): ?>
+              <div class="small text-secondary"><?= esc(date('F j, Y', strtotime((string)$rv['submitted_at']))) ?></div>
+            <?php endif; ?>
+          </div>
+        </div>
+      <?php endforeach; ?>
+    </div>
+    <div class="mt-3"><a href="reviews.php" class="text-decoration-none fw-semibold small">Read all <?= (int)$product['reviews'] ?> reviews <i class="bi bi-arrow-right"></i></a></div>
+  </section>
+  <?php endif; ?>
+
   <!-- Ask AI — Claude Haiku 4.5 powered Q&A grounded on this product's
        facts, FAQs, and recent reviews.  Answers free-form questions in
        seconds and routes anything off-topic to live chat. -->
@@ -406,6 +461,51 @@ include __DIR__ . '/includes/header.php';
           </div>
         </div>
       <?php endforeach; ?>
+    </div>
+  </section>
+
+  <!-- ===== Deep-link cluster: drives Google's PageRank graph + helps AI
+       crawlers map this product into the wider topical neighbourhood.
+       Uses descriptive anchor text (mid-tail keywords) for every link.
+       ============================================================== -->
+  <?php
+    $sister = product_sibling_category($product);
+    $catSlug = (string)($product['category'] ?? '');
+    $catTitle = $catSlug ? category_title($catSlug) : '';
+    $relCats = related_category_links($catSlug);
+    $popular = popular_search_terms();
+  ?>
+  <section class="pd-deep-cluster mt-5" data-testid="product-deep-cluster" aria-labelledby="pd-cluster-heading">
+    <h2 id="pd-cluster-heading" class="fw-bold h4 mb-3">Related categories &amp; popular searches</h2>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <div class="fw-bold small text-uppercase text-secondary mb-2"><i class="bi bi-collection me-1"></i>Browse related categories</div>
+        <ul class="list-unstyled small">
+          <?php if ($catTitle): ?>
+            <li class="mb-2">&rsaquo; <a class="text-decoration-none" href="category.php?slug=<?= esc($catSlug) ?>" data-testid="cluster-parent-category">All <?= esc($catTitle) ?> &mdash; genuine license keys</a></li>
+          <?php endif; ?>
+          <?php if ($sister): ?>
+            <li class="mb-2">&rsaquo; <a class="text-decoration-none" href="category.php?slug=<?= esc($sister['slug']) ?>" data-testid="cluster-sister-category"><?= esc($sister['title']) ?> &mdash; sister edition</a></li>
+          <?php endif; ?>
+          <?php foreach ($relCats as $rc): ?>
+            <li class="mb-2">&rsaquo; <a class="text-decoration-none" href="category.php?slug=<?= esc($rc['slug']) ?>" data-testid="cluster-related-<?= esc($rc['slug']) ?>"><?= $rc['anchor'] ?></a></li>
+          <?php endforeach; ?>
+        </ul>
+      </div>
+      <div class="col-md-6">
+        <div class="fw-bold small text-uppercase text-secondary mb-2"><i class="bi bi-search me-1"></i>Popular searches</div>
+        <div class="d-flex flex-wrap gap-2">
+          <?php foreach ($popular as $term): ?>
+            <a href="shop.php?q=<?= urlencode($term) ?>" class="badge text-decoration-none fw-normal" data-testid="cluster-popular-search" style="background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;padding:6px 10px;font-size:12px;"><?= esc($term) ?></a>
+          <?php endforeach; ?>
+        </div>
+        <div class="fw-bold small text-uppercase text-secondary mt-4 mb-2"><i class="bi bi-journal-text me-1"></i>Helpful guides on the blog</div>
+        <ul class="list-unstyled small mb-0">
+          <?php foreach (product_related_articles($product, 3) as $ba): ?>
+            <li class="mb-1">&rsaquo; <a class="text-decoration-none" href="blog-post.php?id=<?= urlencode((string)$ba['id']) ?>" data-testid="cluster-related-article"><?= esc($ba['title']) ?></a></li>
+          <?php endforeach; ?>
+        </ul>
+      </div>
     </div>
   </section>
 

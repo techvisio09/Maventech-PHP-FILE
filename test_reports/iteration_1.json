@@ -1,0 +1,40 @@
+{
+  "summary": "End-to-end testing of Maventech SEO refactor (PHP+MariaDB). 24/24 pytest cases pass. Verified blog filter (form/search/clear/no-results), product page (5 JSON-LD blocks, preload+fetchpriority high, deep-cluster links, reviews, cart buttons), category SEO across 7 slugs (5 JSON-LD blocks, FAQ accordion, intro/buying-guide/deep-cluster, 2026 + 'Lifetime License Keys' in title, long-tail meta), admin sitemap submission + Save Website Domain flows, regression of /, /shop.php, /reviews.php. Also did Playwright validation of blog filter UI, product SEO blocks, category FAQ click, and admin flash element.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "includes/seo-content.php product_review_items_jsonld() & product_review_snippets()", "issue": "Queries used the column 'reviewer_name' which does not exist in customer_reviews (actual column is 'customer_name'). The wrapping try/catch silently swallowed the PDOException so the Product schema 'review' array stayed empty and the on-page 'What buyers say' section never rendered. Also filtered on status='approved' which is not in the enum (only pending/published/hidden). FIXED by switching to 'SELECT customer_name AS reviewer_name ...' and status='published'.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "admin.php save_seo_tokens", "issue": "IndexNow auto-submit branch (line 604) only triggers when site_domain_url actually changes ($domainChanged=true). Re-saving the same domain shows only 'Saved: Website Domain' with no auto-submit hint — operator could think submission silently failed. Consider always running IndexNow on save (idempotent) or surfacing 'no change — skipping resubmission' so the user has feedback."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_seo_php.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Decide on review-data seeding: tests seeded 3 published reviews into customer_reviews (ids 7-9, customer_name starts with Alice/Bob/Carla). Either ship as demo seed or wire the operator UI to publish real reviews so the product schema isn't empty in production.",
+    "Optional polish: surface a friendlier message when re-saving the same Website Domain (currently no IndexNow message is appended unless the value actually changes)."
+  ],
+  "critical_code_review_comments": [
+    "seo-content.php — review queries used a non-existent column 'reviewer_name' and a non-existent status 'approved'; the empty try/catch hid the bug. Fixed.",
+    "Add a logger.warning() inside the catch blocks in seo-content.php (currently '/* best-effort */' silently swallows ALL errors — same trap could hide future bugs).",
+    "Product.php line 405 reads $product['reviews'] (review count) but the on-page review section is only rendered when published reviews exist; consider showing a 'Be the first to review' CTA so the H2 cluster doesn't disappear entirely on low-review products (impacts SEO heading hierarchy)."
+  ],
+  "updated_files": [
+    "/app/php-version/includes/seo-content.php (fixed column name + status filter)",
+    "/app/backend/tests/test_seo_php.py (new pytest suite)"
+  ],
+  "success_rate": {"backend": "100% (24/24 pytest)", "frontend": "100% on UI-rendered selectors verified via Playwright (blog filter, product SEO blocks, category FAQ, admin flash)"},
+  "test_credentials": "admin@maventechsoftware.com / Admin@123 (loaded from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Inserted 3 published rows into customer_reviews (ids 7,8,9 — Alice Johnson, Bob Patel, Carla Smith) so Product JSON-LD 'review' array and the on-page snippet section render. Safe to remove via: DELETE FROM customer_reviews WHERE id IN (7,8,9);",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Pytest suite at /app/backend/tests/test_seo_php.py is the regression baseline. Run via: pytest /app/backend/tests/test_seo_php.py -v. It uses PHP_BASE_URL env var (defaults to the preview URL) and the admin credentials in /app/memory/test_credentials.md. Tests are stateless except TestAdminSitemap.test_admin_save_site_domain_url which writes a timestamped domain into settings.site_domain_url each run — that is intentional to force the IndexNow auto-submit branch. The PHP frontend is served on port 3000 via supervisor 'frontend'. MariaDB is local (root, no password, DB ucode_store).",
+  "rca of the issue": "Issue: Product page 'product-review-snippets' section did not render and Product JSON-LD review[] was empty. RCA: SQL in includes/seo-content.php selected/filtered on columns/values that don't exist in customer_reviews (column 'reviewer_name' → actual is 'customer_name'; status='approved' → enum has only pending/published/hidden). PDOException was silently caught and an empty array returned. Reproduction: open /product.php?slug=bitdefender-antivirus-for-mac-1-mac-1-year → grep page for data-testid='product-review-snippets' (missing) and inspect Product JSON-LD (.review = []). Mitigation: aliased customer_name AS reviewer_name and switched to status='published' (matches the rest of the site, e.g., index.php, reviews.php)."
+}

@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/includes/seo-content.php';
 
 $slug = $_GET['slug'] ?? 'office';
 $sort = $_GET['sort'] ?? '';
@@ -22,19 +23,47 @@ $title = category_title($slug);
 if ($isPlatformCat && $platform !== $implied) {
     $title = category_title($familySlug) . ($platform === 'Windows' ? ' for Windows' : ($platform === 'Mac' ? ' for Mac' : ''));
 }
-$pageTitle = $title . ' | ' . SITE_BRAND;
-$pageDescription = 'Shop genuine ' . $title . ' license keys at up to 81% off retail. Lifetime activation, instant email delivery and free support from ' . SITE_BRAND . '.';
-$pageKeywords = implode(', ', [
-    $title, 'buy ' . $title, $title . ' license key', $title . ' product key', $title . ' lifetime license',
-    'affordable ' . $title, 'genuine ' . $title, $title . ' instant delivery', $title . ' no subscription',
-    'microsoft software license key store',
-]);
+
+$year = date('Y');
+/* SEO: long-tail title that targets two-to-three intent variants in one tag.
+ * Examples: "Microsoft Office 2024 for PC — Lifetime License Keys (2026) | Brand" */
+$pageTitle       = $title . ' — Lifetime License Keys (' . $year . ') | ' . SITE_BRAND;
+$pageDescription = 'Buy genuine ' . $title . ' license keys at up to 81% off retail. Lifetime perpetual licence, no subscription, instant email delivery in 15-30 minutes and 30-day money-back guarantee from ' . SITE_BRAND . '. Updated ' . $year . '.';
+$pageKeywords    = category_long_tail_keywords($title, $platform);
+
 $products = get_products($cats, $platform, $sort);
+
+/* ----- Structured data ----- */
+$jsonLdBreadcrumb = category_breadcrumb_jsonld($slug, $title);
+$jsonLdItemList   = category_itemlist_jsonld($products, $title);
+$catFaqs          = category_faqs($slug, $title);
+$jsonLdFaq        = faq_to_jsonld($catFaqs);
+
+/* CollectionPage schema — primary type for category landing pages.
+ * Tells Google "this is a curated list of related products" so it
+ * indexes the URL as a hub page rather than a thin filter. */
+$jsonLd = [
+    '@context'    => 'https://schema.org',
+    '@type'       => 'CollectionPage',
+    'name'        => $title,
+    'description' => $pageDescription,
+    'url'         => site_url() . '/category.php?slug=' . urlencode($slug),
+    'inLanguage'  => 'en',
+    'isPartOf'    => ['@id' => site_url() . '/#website'],
+    'about'       => ['@type' => 'Thing', 'name' => $title],
+    'mainEntity'  => $jsonLdItemList,
+];
 
 include __DIR__ . '/includes/header.php';
 ?>
 <?= render_page_head($title . ' Products', count($products) . ' products — genuine licenses, delivered in minutes', [$title => null], 'category-title') ?>
 <div class="container py-4 py-lg-5">
+
+  <!-- SEO hero intro: indexable copy that primes the page with mid-tail intent. -->
+  <p class="lead text-secondary mb-4" data-testid="category-intro-copy" style="max-width:880px;">
+    <?= category_intro_seo($slug, $title) ?>
+  </p>
+
   <!-- Structured toolbar: title/count | platform | sort -->
   <div class="shop-toolbar row g-3 align-items-center mb-4 mx-0 p-3" data-testid="category-toolbar">
     <div class="col-lg-4">
@@ -78,5 +107,82 @@ include __DIR__ . '/includes/header.php';
       <?php endforeach; ?>
     </div>
   <?php endif; ?>
+
+  <!-- ============ Long-form SEO copy: buying guide with H2/H3
+       hierarchy that targets mid-tail and long-tail searches. ============ -->
+  <?= category_buying_guide_html($slug, $title, count($products)) ?>
+
+  <!-- ============ Category FAQ (visible accordion + FAQPage JSON-LD).
+       Quotable verbatim by AI search engines / Google AI Overviews. ====== -->
+  <section class="cat-faq mt-5" aria-labelledby="cat-faq-heading" data-testid="category-faq">
+    <div class="d-flex align-items-center gap-2 mb-3">
+      <i class="bi bi-patch-question-fill" style="font-size:22px;color:#2563eb;"></i>
+      <h2 id="cat-faq-heading" class="fw-bold h4 mb-0"><?= esc($title) ?> &mdash; frequently asked questions</h2>
+    </div>
+    <div class="accordion pd-faq-accordion" id="cat-faq-accordion">
+      <?php foreach ($catFaqs as $idx => $f): $itemId = 'cat-faq-item-' . $idx; ?>
+        <div class="accordion-item">
+          <h3 class="accordion-header">
+            <button class="accordion-button <?= $idx > 0 ? 'collapsed' : '' ?>" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#<?= esc($itemId) ?>" aria-expanded="<?= $idx === 0 ? 'true' : 'false' ?>"
+                    aria-controls="<?= esc($itemId) ?>" data-testid="cat-faq-q-<?= $idx ?>">
+              <?= esc($f['question']) ?>
+            </button>
+          </h3>
+          <div id="<?= esc($itemId) ?>" class="accordion-collapse collapse <?= $idx === 0 ? 'show' : '' ?>"
+               data-bs-parent="#cat-faq-accordion">
+            <div class="accordion-body" data-testid="cat-faq-a-<?= $idx ?>">
+              <?= $f['answer'] ?>
+            </div>
+          </div>
+        </div>
+      <?php endforeach; ?>
+    </div>
+  </section>
+
+  <!-- ============ Deep-link cluster: drives Google's internal PageRank
+       graph and helps AI crawlers map this category into the wider
+       topical neighbourhood.  Descriptive anchor text uses mid-tail
+       keyword phrases. ====================================================== -->
+  <section class="cat-deep-cluster mt-5" data-testid="category-deep-cluster" aria-labelledby="cat-cluster-heading">
+    <h2 id="cat-cluster-heading" class="fw-bold h4 mb-3">More categories shoppers explore next</h2>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <div class="fw-bold small text-uppercase text-secondary mb-2"><i class="bi bi-collection me-1"></i>Related categories</div>
+        <ul class="list-unstyled small">
+          <?php foreach (related_category_links($slug) as $rc): ?>
+            <li class="mb-2">&rsaquo; <a class="text-decoration-none" href="category.php?slug=<?= esc($rc['slug']) ?>" data-testid="cluster-cat-<?= esc($rc['slug']) ?>"><?= $rc['anchor'] ?></a></li>
+          <?php endforeach; ?>
+        </ul>
+      </div>
+      <div class="col-md-6">
+        <div class="fw-bold small text-uppercase text-secondary mb-2"><i class="bi bi-search me-1"></i>Popular searches</div>
+        <div class="d-flex flex-wrap gap-2 mb-4">
+          <?php foreach (popular_search_terms($slug) as $term): ?>
+            <a href="shop.php?q=<?= urlencode($term) ?>" class="badge text-decoration-none fw-normal" data-testid="cluster-popular" style="background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;padding:6px 10px;font-size:12px;"><?= esc($term) ?></a>
+          <?php endforeach; ?>
+        </div>
+        <?php
+          /* Latest 3 blog posts — keeps the cluster fresh + connects the
+             commercial page to the editorial side (topical authority). */
+          $clusterPosts = [];
+          try {
+            $stmtCp = db()->prepare("SELECT id, title FROM blog_posts ORDER BY COALESCE(created_at,'1970-01-01') DESC, id DESC LIMIT 3");
+            $stmtCp->execute();
+            $clusterPosts = $stmtCp->fetchAll();
+          } catch (Throwable $e) {}
+        ?>
+        <?php if ($clusterPosts): ?>
+          <div class="fw-bold small text-uppercase text-secondary mb-2"><i class="bi bi-journal-text me-1"></i>Latest guides on the blog</div>
+          <ul class="list-unstyled small mb-0">
+            <?php foreach ($clusterPosts as $bp): ?>
+              <li class="mb-1">&rsaquo; <a class="text-decoration-none" href="blog-post.php?id=<?= urlencode((string)$bp['id']) ?>" data-testid="cluster-blog-link"><?= esc($bp['title']) ?></a></li>
+            <?php endforeach; ?>
+          </ul>
+        <?php endif; ?>
+      </div>
+    </div>
+  </section>
+
 </div>
 <?php include __DIR__ . '/includes/footer.php'; ?>

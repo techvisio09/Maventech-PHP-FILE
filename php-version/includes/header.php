@@ -254,6 +254,16 @@ $ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.sv
   <?php if (isset($jsonLdFaq)): ?>
   <script type="application/ld+json"><?= json_encode($jsonLdFaq, JSON_UNESCAPED_SLASHES) ?></script>
   <?php endif; ?>
+  <?php if (isset($jsonLdHowTo)): ?>
+  <script type="application/ld+json"><?= json_encode($jsonLdHowTo, JSON_UNESCAPED_SLASHES) ?></script>
+  <?php endif; ?>
+  <?php if (isset($jsonLdItemList)): ?>
+  <script type="application/ld+json"><?= json_encode($jsonLdItemList, JSON_UNESCAPED_SLASHES) ?></script>
+  <?php endif; ?>
+  <?php if (!empty($preloadImage)): ?>
+  <!-- Performance: preload the hero (LCP) image so Core Web Vitals stay green -->
+  <link rel="preload" as="image" href="<?= esc($preloadImage) ?>" fetchpriority="high">
+  <?php endif; ?>
   <!-- Performance: pre-resolve DNS + warm TLS to the third-party CDNs we hit
        on every page so Core Web Vitals (LCP / FCP) stay green. -->
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
