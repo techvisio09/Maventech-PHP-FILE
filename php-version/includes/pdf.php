@@ -101,6 +101,42 @@ function _pdf_brand_watermark_path(string $brandKey): string
 }
 
 /**
+ * Generate a QR-code PNG (base64-encoded data URI) that links to the
+ * customer's Order History entry pre-filled with their email + order
+ * number.  Returned as a `data:image/png;base64,...` URI so Dompdf can
+ * embed it directly without a remote fetch (and without writing yet
+ * another tmp file on disk).  Returns '' if encoding fails — caller
+ * gracefully omits the QR in that case.
+ */
+function _pdf_order_history_qr(array $order): string
+{
+    if (empty($order['email']) || empty($order['order_number'])) return '';
+    if (!class_exists(\chillerlan\QRCode\QRCode::class)) return '';
+    $url = rtrim(function_exists('site_url') ? site_url() : '', '/')
+         . '/order-history.php?email=' . rawurlencode((string)$order['email'])
+         . '&order=' . rawurlencode((string)$order['order_number']);
+    try {
+        $opts = new \chillerlan\QRCode\QROptions([
+            // Auto-size QR to fit any URL length — version 1..10 covers up
+            // to a few hundred chars at ECC level M, plenty for our URL.
+            'versionMin'          => 5,
+            'versionMax'          => 10,
+            'eccLevel'            => \chillerlan\QRCode\Common\EccLevel::M,
+            'scale'               => 4,
+            'imageBase64'         => true,
+            'imageTransparent'    => false,
+            // PNG via GD — yields a `data:image/png;base64,...` URI that
+            // Dompdf embeds without needing remote-fetch.
+            'outputInterface'     => \chillerlan\QRCode\Output\QRGdImagePNG::class,
+        ]);
+        return (new \chillerlan\QRCode\QRCode($opts))->render($url);
+    } catch (Throwable $e) {
+        error_log('[pdf-qr] ' . $e->getMessage());
+        return '';
+    }
+}
+
+/**
  * Shared HTML head + brand header used by both Receipt and Invoice.
  * Variant: 'receipt' or 'invoice' — only the title + sub-line change.
  */
@@ -129,6 +165,18 @@ function _pdf_shell(array $ctx, string $bodyHtml): string
         $stampHtml = '<div class="stamp" style="color:' . htmlspecialchars($stampColor, ENT_QUOTES, 'UTF-8') . ';border-color:' . htmlspecialchars($stampColor, ENT_QUOTES, 'UTF-8') . ';">'
                    . htmlspecialchars($stampText, ENT_QUOTES, 'UTF-8')
                    . '</div>';
+    }
+    // Bottom-right QR — links to the customer's Order History entry with
+    // email + order number pre-filled.  Anyone holding the printed copy
+    // (accountant, auditor, finance team) can scan and get a fresh PDF
+    // on the spot — no need to email support.
+    $qrDataUri = (string)($ctx['qr_data_uri'] ?? '');
+    $qrHtml    = '';
+    if ($qrDataUri !== '') {
+        $qrHtml = '<div class="qr-stamp">'
+                . '  <img src="' . $qrDataUri . '" alt="QR code">'
+                . '  <div class="qr-label">Scan to re-download<br>Receipt &amp; Invoice</div>'
+                . '</div>';
     }
     $secondRow= '';
     if (!empty($ctx['receipt_number'])) {
@@ -197,7 +245,7 @@ function _pdf_shell(array $ctx, string $bodyHtml): string
   .statement .lbl { font-weight: 700; color: #78350f; }
 
   .footer {
-    margin-top: 30px; padding-top: 14px; border-top: 1px solid #e2e8f0;
+    margin-top: 14px; padding-top: 10px; border-top: 1px solid #e2e8f0;
     font-size: 8pt; color: #94a3b8; line-height: 1.6;
   }
 
@@ -236,6 +284,36 @@ function _pdf_shell(array $ctx, string $bodyHtml): string
     opacity: 0.12;
     transform: rotate(-22deg);
   }
+  /* QR — sits in its own block at the very bottom of the document so a
+     printed copy can be scanned back to the customer's Order History
+     (email + order# pre-filled).  Right-aligned via a single-cell
+     table so Dompdf (which is finicky with floats) renders it reliably. */
+  /* QR — sits in the empty right cell next to the "Bill to" block so a
+     printed copy can be scanned back to the customer's Order History
+     (email + order# pre-filled).  This keeps it inside the existing
+     2-column header layout and guarantees it fits on page 1. */
+  .from-bill td.qr-cell { text-align: right; vertical-align: top; }
+  .qr-stamp {
+    display: inline-block;
+    width: 90px;
+    text-align: center;
+    font-family: Helvetica, Arial, sans-serif;
+  }
+  .qr-stamp img {
+    width: 78px; height: 78px;
+    display: block; margin: 0 auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 2px;
+    background: #ffffff;
+  }
+  .qr-stamp .qr-label {
+    margin-top: 4px;
+    font-size: 6.5pt;
+    color: #64748b;
+    line-height: 1.25;
+    letter-spacing: .2px;
+  }
 </style>
 </head>
 <body>
@@ -261,7 +339,7 @@ function _pdf_shell(array $ctx, string $bodyHtml): string
 
   <table class="from-bill"><tr>
     <td><div class="label">Bill to</div>{$billLines}</td>
-    <td></td>
+    <td class="qr-cell">{$qrHtml}</td>
   </tr></table>
 
   {$bodyHtml}
@@ -357,6 +435,7 @@ function generate_receipt_pdf(array $order, array $items, ?array $payment = null
         'brand_key'       => _pdf_brand_for_items($items),
         'stamp_text'      => 'PAID',
         'stamp_color'     => '#047857', // emerald — universal "all good"
+        'qr_data_uri'     => _pdf_order_history_qr($order),
     ], $bodyHtml);
 
     $dompdf = _pdf_dompdf();
@@ -437,6 +516,7 @@ function generate_invoice_pdf(array $order, array $items): string
         // Stamp reads "PAID" if the invoice is already settled, otherwise "DUE".
         'stamp_text'      => $isPaid ? 'PAID' : 'DUE',
         'stamp_color'     => $isPaid ? '#047857' : '#b91c1c', // emerald vs red
+        'qr_data_uri'     => _pdf_order_history_qr($order),
     ], $bodyHtml);
 
     $dompdf = _pdf_dompdf();
