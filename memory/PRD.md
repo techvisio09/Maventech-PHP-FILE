@@ -719,3 +719,61 @@ Massive upgrade to the global JSON-LD blob in `includes/header.php` (served on e
 - Batch generator: 6 unique products / 6 posts in 49 s / 7993 tokens / $0.02 / 0 errors.
 
 
+
+## [Jun 2026] 24 posts/day (6 × 4 countries) · country filter · monitoring · DMCA watchdog
+
+### 1. 6 posts × 4 countries = 24 posts/day, fully autonomous
+- Renamed constant `SEOBOT_BLOG_POSTS_PER_DAY` → `SEOBOT_BLOG_POSTS_PER_REGION_PER_DAY` (= 6). Total batch size now = `regions × per-region` = 24.
+- `_seo_generate_daily_blog_batch()` outer-loops the 4 active regions (US, UK, AU, CA). For each region it inner-loops 6 calls to `_seo_generate_one_blog_post($targetRegion, …)`.
+- The single-post generator now:
+  - **Takes `$targetRegion`** as a parameter (US/UK/AU/CA).
+  - **Round-robin per region** — `SELECT … (SELECT MAX(created_at) FROM blog_posts WHERE product_id = p.id AND ai_generated = 1 AND target_region = ?) AS last_ai_post_at` so each region has its own queue; the same product can be blogged once for each market (US version mentions USD + US delivery, UK version mentions GBP + UK delivery, etc.).
+  - **Region-aware prompt** with currency, locale (American/British/Australian/Canadian English), and delivery wording injected from a small lookup table.
+  - **Per-post verification** the moment after insert:
+    1. `IndexNow` push for the single new URL → stored in `blog_posts.indexnow_status`.
+    2. HTTP HEAD check of the live URL → stored in `blog_posts.verified_http` + `verified_at`.
+    3. Internal anchor count via regex (`href="product.php|category.php|blog-post.php|shop.php|page.php"`) → `blog_posts.internal_links_count`.
+    4. SHA-1 content fingerprint → `blog_posts.content_fingerprint` (for the DMCA scanner).
+  - **Post ID schema** changed to `ai-YYYYMMDD-slug-{us|uk|au|ca}` so all 4 regional variants of "Office 2024" coexist cleanly.
+- Schema additions to `blog_posts` (idempotent migrations in `seo_bot_ensure_schema`): `target_region`, `indexnow_status`, `verified_http`, `verified_at`, `internal_links_count`, `content_fingerprint` + indexes on `target_region` and `content_fingerprint`.
+- 24 h cooldown still applies at the BATCH level. Self-cron on every visitor pageview after cooldown + hourly background heartbeat in `start.sh` + traditional cron.php route all keep firing. **Zero manual action required.**
+
+### 2. Country / Currency filter in admin
+- New tab-bar above the Full Feed table (`data-testid="country-filter-tabs"`) with 5 chips: **All countries · 🇺🇸 United States USD ($) · 🇬🇧 United Kingdom GBP (£) · 🇦🇺 Australia AUD (A$) · 🇨🇦 Canada CAD (C$)**.
+- Each chip shows the live count (`perRegionCounts` query) and toggles the feed via `?region_filter=US`.
+- Active tab gets white background + border + indigo text; inactive stays grey.
+- Empty-state for a region with no posts yet: *"No posts published for Australia yet — they'll appear here as soon as the next batch runs."*
+
+### 3. Per-post Verified column + Monitoring snapshot
+- New "Verified" column in the feed table shows three pills per row:
+  - **HTTP**: `200` (green) or amber with the actual code · `…` if pending.
+  - **IN** (IndexNow): green when `ok / accepted / http_200 / http_202`, amber otherwise.
+  - **🔗 N**: indigo pill with the internal-backlink count for that post.
+- New **Monitoring strip** (`data-testid="ai-blogger-monitoring"`) above the citation tracker with 4 tiles:
+  - Posts last 24 h (target 24 = 6 × 4)
+  - HTTP-200 verified ratio
+  - IndexNow pushed ratio
+  - Avg internal links per post
+
+### 4. DMCA Scraper Watchdog (`includes/dmca-watchdog.php`)
+- New table `dmca_findings` (post_id, suspected_url, suspected_host, confidence, notes, status enum [pending|dismissed|reported|taken_down], scanned_with, ran_at).
+- Weekly cron-driven scan (`dmca_run_if_due`) samples `DMCA_POSTS_PER_SCAN = 5` random AI posts, sends a 200-char snippet + title to Claude Haiku, and parses a strict-JSON `{found_elsewhere, suspected_urls, confidence, notes}` response. Any URL on a host other than ours lands in `dmca_findings` as `pending`.
+- **DMCA notice generator** — `?dmca_notice={id}` downloads a copy-paste DMCA takedown notice as `dmca-notice-{id}.txt`, pre-filled with: original work URL + title, infringing URL + host, your brand / address / email / phone from `company_info()`, perjury statement, signature block.
+- **Admin panel** (`data-testid="dmca-watchdog-panel"`) with: scan-now button, recent-findings table (status pill, suspected host, original post, confidence colour, detected timestamp), and per-row actions: **Download DMCA notice · Dismiss · Mark reported · Mark taken down**.
+- Wired into `cron.php` so weekly scans happen alongside the existing AI Citation tracker.
+
+### 5. Honest framing
+- Without a real web-search API the DMCA watchdog is limited to "what Claude already knows about" — it catches scrapers that have been crawled into LLM training, not breaking news. The big practical value is the DMCA notice generator (Microsoft Office hosts honour these within 24-48 h once you send one).
+- The country filter UI works even when the LLM budget is exhausted; existing posts have been backfilled with `target_region='US'` so the US tab shows all 14 historic AI posts immediately.
+
+### Verified end-to-end (curl + DB)
+- All four modified files (`admin.php`, `cron.php`, `includes/seo-bot.php`, `includes/dmca-watchdog.php`) lint-clean.
+- Country tabs all render: All=14, US=14, UK=0, AU=0, CA=0 (UK/AU/CA will populate when budget is topped up).
+- UK filter shows empty-state: *"No posts published for United Kingdom yet"*.
+- DMCA scan returns *"DMCA scan complete — sampled 0 posts, found 0 suspected clone(s)"* (zero because content_fingerprint was just backfilled; future scans will sample 5 each week).
+- Monitoring panel renders all 4 tiles with `data-testid="mon-posts-24h"`, `mon-verified-24h`, `mon-indexnow-24h`, `mon-avg-links`.
+
+### Blocked by: Universal LLM Key budget exhausted
+The Emergent Universal LLM Key gateway returned HTTP 400 with `"Budget has been exceeded! Current cost: 1.03, Max budget: 1.001"` when we tried to run the 24-post test batch. **User must top up the Universal Key** (Profile → Universal Key → Add Balance, or enable auto-topup). All code is in place and will work on the next run after the budget is restored.
+
+

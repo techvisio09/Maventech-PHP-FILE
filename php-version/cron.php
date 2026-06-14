@@ -12,6 +12,7 @@ require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/mailer.php';
 require_once __DIR__ . '/includes/seo-bot.php';
 require_once __DIR__ . '/includes/ai-citation-tracker.php';
+require_once __DIR__ . '/includes/dmca-watchdog.php';
 
 // Generate a cron token once (so the admin can copy it from the SMTP page).
 $token = setting_get('cron_token', '');
@@ -74,4 +75,18 @@ try {
     }
 } catch (Throwable $e) {
     echo "[" . date('c') . "] ai-citations: ERROR " . $e->getMessage() . "\n";
+}
+
+// DMCA Scraper Watchdog — weekly sample of AI posts asked against Claude
+// for content-clone detection. Logs findings to dmca_findings.
+try {
+    $dmcaForce = !empty($_GET['dmca_force']);
+    $dmcaReport = dmca_run_if_due($dmcaForce);
+    if (!empty($dmcaReport['skipped'])) {
+        echo "[" . date('c') . "] dmca-watchdog: skipped — " . $dmcaReport['reason'] . "\n";
+    } else {
+        echo "[" . date('c') . "] dmca-watchdog: checked={$dmcaReport['checked']} findings={$dmcaReport['findings']}\n";
+    }
+} catch (Throwable $e) {
+    echo "[" . date('c') . "] dmca-watchdog: ERROR " . $e->getMessage() . "\n";
 }

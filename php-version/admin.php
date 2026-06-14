@@ -529,6 +529,45 @@ $adminActive = ($tab === 'api')
 if ($tab === 'ai-blogger') {
     require_once __DIR__ . '/includes/seo-bot.php';
     require_once __DIR__ . '/includes/ai-citation-tracker.php';
+    require_once __DIR__ . '/includes/dmca-watchdog.php';
+
+    // ----- DMCA finding status updates (mark dismissed / reported / taken-down) -----
+    if (!empty($_GET['dmca_set']) && !empty($_GET['id'])) {
+        if (dmca_set_status((int)$_GET['id'], (string)$_GET['dmca_set'])) {
+            $_SESSION['seo_bot_flash'] = 'DMCA finding #' . (int)$_GET['id'] . ' marked as "' . esc((string)$_GET['dmca_set']) . '"';
+        }
+        header('Location: admin.php?tab=ai-blogger');
+        exit;
+    }
+
+    // ----- Download DMCA notice for a single finding (.txt) -----
+    if (!empty($_GET['dmca_notice'])) {
+        $row = db()->prepare("SELECT f.*, bp.title AS post_title FROM dmca_findings f LEFT JOIN blog_posts bp ON bp.id = f.post_id WHERE f.id = ?");
+        $row->execute([(int)$_GET['dmca_notice']]);
+        $finding = $row->fetch();
+        if ($finding) {
+            header('Content-Type: text/plain; charset=UTF-8');
+            header('Content-Disposition: attachment; filename="dmca-notice-' . (int)$finding['id'] . '.txt"');
+            echo dmca_build_notice($finding);
+            exit;
+        }
+        header('Location: admin.php?tab=ai-blogger');
+        exit;
+    }
+
+    // ----- "Run DMCA scan now" -----
+    if (!empty($_GET['run_dmca'])) {
+        try {
+            $d = dmca_run_if_due(true);
+            $_SESSION['seo_bot_flash'] = !empty($d['skipped'])
+                ? 'DMCA scan skipped — ' . $d['reason']
+                : "DMCA scan complete — sampled {$d['checked']} posts, found {$d['findings']} suspected clone(s).";
+        } catch (Throwable $e) {
+            $_SESSION['seo_bot_flash'] = 'DMCA scan error: ' . $e->getMessage();
+        }
+        header('Location: admin.php?tab=ai-blogger');
+        exit;
+    }
 
     if (!empty($_GET['submit_sitemaps'])) {
         $siteUrl    = rtrim(site_url(), '/');
@@ -1616,27 +1655,62 @@ if ($tab === 'dashboard'):
 elseif ($tab === 'ai-blogger'):
     require_once __DIR__ . '/includes/seo-bot.php';
     require_once __DIR__ . '/includes/ai-citation-tracker.php';
-    // (Redirect handlers — submit_sitemaps, run_citations, seo_run — live in
-    // the pre-render block at the top of this file so header() can fire
-    // before admin-shell.php emits HTML.)
+    require_once __DIR__ . '/includes/dmca-watchdog.php';
+    // (Redirect handlers — submit_sitemaps, run_citations, run_dmca, dmca_set,
+    // dmca_notice, seo_run — live in the pre-render block at the top of this
+    // file so header() can fire before admin-shell.php emits HTML.)
+
+    // ----- Country/Currency filter for the feed -----
+    $regionFilter = strtoupper(preg_replace('/[^A-Z]/i', '', (string)($_GET['region_filter'] ?? '')));
+    $regionsList  = [
+        'US' => ['flag' => '🇺🇸', 'name' => 'United States', 'currency' => 'USD ($)'],
+        'UK' => ['flag' => '🇬🇧', 'name' => 'United Kingdom', 'currency' => 'GBP (£)'],
+        'AU' => ['flag' => '🇦🇺', 'name' => 'Australia',     'currency' => 'AUD (A$)'],
+        'CA' => ['flag' => '🇨🇦', 'name' => 'Canada',        'currency' => 'CAD (C$)'],
+    ];
+    if (!isset($regionsList[$regionFilter])) $regionFilter = '';
 
     $seoRun    = seo_bot_latest_run();
     $seoErrors = ($seoRun && !empty($seoRun['errors_json'])) ? (array)json_decode($seoRun['errors_json'], true) : [];
     $seoTokens = $seoRun ? ((int)$seoRun['llm_tokens_in'] + (int)$seoRun['llm_tokens_out']) : 0;
 
-    // All AI-published blog posts (newest first).
+    // All AI-published blog posts (newest first), optionally filtered by region.
     $aiAll = [];
     try {
-        $aiAll = $pdo->query("
-            SELECT bp.id, bp.title, bp.date, bp.image, bp.read_time, bp.product_id, bp.created_at,
-                   p.name AS product_name, p.region AS product_region, p.slug AS product_slug
-              FROM blog_posts bp
-              LEFT JOIN products p ON p.id = bp.product_id
-             WHERE bp.ai_generated = 1
-             ORDER BY COALESCE(bp.created_at, '1970-01-01') DESC, bp.id DESC")->fetchAll();
+        $sql = "SELECT bp.id, bp.title, bp.date, bp.image, bp.read_time, bp.product_id, bp.created_at,
+                       bp.target_region, bp.indexnow_status, bp.verified_http, bp.verified_at, bp.internal_links_count,
+                       p.name AS product_name, p.region AS product_region, p.slug AS product_slug
+                  FROM blog_posts bp
+                  LEFT JOIN products p ON p.id = bp.product_id
+                 WHERE bp.ai_generated = 1";
+        $params = [];
+        if ($regionFilter) { $sql .= " AND bp.target_region = ?"; $params[] = $regionFilter; }
+        $sql .= " ORDER BY COALESCE(bp.created_at, '1970-01-01') DESC, bp.id DESC";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        $aiAll = $stmt->fetchAll();
     } catch (Throwable $e) {}
     $totalAi = count($aiAll);
     $totalAllPosts = (int)$pdo->query("SELECT COUNT(*) FROM blog_posts")->fetchColumn();
+
+    // Per-region counters for the country tabs (always show all regions).
+    $perRegionCounts = ['US' => 0, 'UK' => 0, 'AU' => 0, 'CA' => 0];
+    try {
+        foreach ($pdo->query("SELECT target_region, COUNT(*) c FROM blog_posts WHERE ai_generated = 1 GROUP BY target_region") as $rrow) {
+            if (isset($perRegionCounts[$rrow['target_region']])) {
+                $perRegionCounts[$rrow['target_region']] = (int)$rrow['c'];
+            }
+        }
+    } catch (Throwable $e) {}
+    $totalAiAll = array_sum($perRegionCounts) + ((int)$pdo->query("SELECT COUNT(*) FROM blog_posts WHERE ai_generated=1 AND (target_region IS NULL OR target_region='')")->fetchColumn());
+
+    // Monitoring snapshot — last 24 h.
+    $mon = [
+        'posts_24h'        => (int)$pdo->query("SELECT COUNT(*) FROM blog_posts WHERE ai_generated=1 AND created_at >= NOW() - INTERVAL 24 HOUR")->fetchColumn(),
+        'verified_24h'     => (int)$pdo->query("SELECT COUNT(*) FROM blog_posts WHERE ai_generated=1 AND verified_http=200 AND created_at >= NOW() - INTERVAL 24 HOUR")->fetchColumn(),
+        'indexnow_ok_24h'  => (int)$pdo->query("SELECT COUNT(*) FROM blog_posts WHERE ai_generated=1 AND indexnow_status IN ('ok','accepted') AND created_at >= NOW() - INTERVAL 24 HOUR")->fetchColumn(),
+        'avg_links'        => (float)$pdo->query("SELECT AVG(internal_links_count) FROM blog_posts WHERE ai_generated=1 AND internal_links_count IS NOT NULL")->fetchColumn(),
+    ];
 
     // Automation health check (mirrors dashboard banner).
     $heartbeatPath = '/tmp/seo-heartbeat.log';
@@ -1683,9 +1757,9 @@ elseif ($tab === 'ai-blogger'):
   <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
     <div>
       <h1 class="h4 fw-bold mb-1" data-testid="ai-blogger-page-title"><i class="bi bi-robot me-1 text-primary"></i> AI Auto-Blogger</h1>
-      <small class="text-muted">Six products picked every 24&nbsp;h · Claude Haiku writes a fresh SEO-optimised blog article for each · published instantly to <code>/blog.php</code> · also pinged to Google, Bing, IndexNow and listed in <code>/llms.txt</code> + <code>/ai.txt</code> so ChatGPT, Gemini, Copilot, Perplexity and Claude can cite them. Markets: <strong>US · UK · AU · CA</strong>.</small>
+      <small class="text-muted">Six products picked every 24&nbsp;h <strong>for each country (US · UK · AU · CA)</strong> = 24 fresh blog posts daily · Claude Haiku writes each one in the local currency &amp; voice · published instantly to <code>/blog.php</code> · auto-pinged to Google, Bing, IndexNow, listed in <code>/llms.txt</code> + <code>/ai.txt</code>. Each post is verified (HTTP 200 + IndexNow + backlink count) the moment it's written.</small>
     </div>
-    <a href="admin.php?tab=ai-blogger&seo_run=1" class="btn btn-primary rounded-pill px-4" data-testid="ai-blogger-run-now" onclick="return confirm('Publish 6 fresh AI blog posts right now? (~$0.02 in LLM credits)')"><i class="bi bi-play-fill me-1"></i>Publish today\'s batch now</a>
+    <a href="admin.php?tab=ai-blogger&seo_run=1" class="btn btn-primary rounded-pill px-4" data-testid="ai-blogger-run-now" onclick="return confirm('Publish today\'s full batch — 6 posts × 4 countries = 24 articles? (~$0.08 in LLM credits, ~3 minutes)')"><i class="bi bi-play-fill me-1"></i>Publish today\'s batch now</a>
   </div>
 
   <?php if (!empty($_SESSION['seo_bot_flash'])): ?>
@@ -1727,8 +1801,8 @@ elseif ($tab === 'ai-blogger'):
           AUTO · <?= $autoHealthy ? 'ACTIVE' : 'IDLE' ?>
         </span>
         <div>
-          <div style="color:#0f172a;font-weight:700;font-size:14px;">Six products → six fresh blog posts · every 24&nbsp;h</div>
-          <div style="color:#475569;font-size:12px;margin-top:2px;">Zero manual action required. Self-cron fires on every visitor pageview after the cooldown expires; backed by an hourly background heartbeat.</div>
+          <div style="color:#0f172a;font-weight:700;font-size:14px;">6 posts × 4 countries (US · UK · AU · CA) = 24 fresh blog posts every 24 h</div>
+          <div style="color:#475569;font-size:12px;margin-top:2px;">Zero manual action. Self-cron fires on visitor pageviews after cooldown · hourly heartbeat as a backup · each post verified for HTTP 200 + IndexNow push + internal-backlink count the moment it's written.</div>
         </div>
       </div>
       <div class="d-flex align-items-center gap-3 flex-wrap" style="font-size:12px;color:#334155;">
@@ -2022,6 +2096,38 @@ elseif ($tab === 'ai-blogger'):
     </div>
   </div>
 
+  <!-- Monitoring snapshot — last 24 h health -->
+  <div class="row g-3 mb-3" data-testid="ai-blogger-monitoring">
+    <div class="col-md-3 col-6">
+      <div class="card-e" style="padding:14px 16px;">
+        <div class="text-uppercase small text-secondary" style="font-weight:700;letter-spacing:1px;font-size:10px;">Posts last 24 h</div>
+        <div class="fw-bold mt-1" data-testid="mon-posts-24h" style="font-size:24px;color:#0f172a;"><?= (int)$mon['posts_24h'] ?></div>
+        <div class="text-secondary small">target: <?= count($regionsList) * (int)SEOBOT_BLOG_POSTS_PER_REGION_PER_DAY ?> · 6 per country</div>
+      </div>
+    </div>
+    <div class="col-md-3 col-6">
+      <div class="card-e" style="padding:14px 16px;">
+        <div class="text-uppercase small text-secondary" style="font-weight:700;letter-spacing:1px;font-size:10px;">HTTP-200 verified</div>
+        <div class="fw-bold mt-1" data-testid="mon-verified-24h" style="font-size:24px;color:<?= $mon['verified_24h'] === $mon['posts_24h'] && $mon['posts_24h'] > 0 ? '#059669' : '#0f172a' ?>;"><?= (int)$mon['verified_24h'] ?>/<?= (int)$mon['posts_24h'] ?></div>
+        <div class="text-secondary small">live URLs respond 200 OK</div>
+      </div>
+    </div>
+    <div class="col-md-3 col-6">
+      <div class="card-e" style="padding:14px 16px;">
+        <div class="text-uppercase small text-secondary" style="font-weight:700;letter-spacing:1px;font-size:10px;">IndexNow pushed</div>
+        <div class="fw-bold mt-1" data-testid="mon-indexnow-24h" style="font-size:24px;color:<?= $mon['indexnow_ok_24h'] === $mon['posts_24h'] && $mon['posts_24h'] > 0 ? '#059669' : '#0f172a' ?>;"><?= (int)$mon['indexnow_ok_24h'] ?>/<?= (int)$mon['posts_24h'] ?></div>
+        <div class="text-secondary small">submitted to Bing / Yandex / Naver</div>
+      </div>
+    </div>
+    <div class="col-md-3 col-6">
+      <div class="card-e" style="padding:14px 16px;">
+        <div class="text-uppercase small text-secondary" style="font-weight:700;letter-spacing:1px;font-size:10px;">Avg internal links / post</div>
+        <div class="fw-bold mt-1" data-testid="mon-avg-links" style="font-size:24px;color:#0f172a;"><?= number_format($mon['avg_links'], 1) ?></div>
+        <div class="text-secondary small">backlinks within the site (SEO weight)</div>
+      </div>
+    </div>
+  </div>
+
   <!-- AI Citation Tracker — are the AI engines actually citing our catalogue? -->
   <?php
     $citByEngine    = ai_citations_latest_by_engine();
@@ -2095,15 +2201,37 @@ elseif ($tab === 'ai-blogger'):
     </div>
   </div>
 
-  <!-- Full feed of AI-published posts -->
+  <!-- Full feed of AI-published posts (filtered by country) -->
   <div class="card-e mb-3" data-testid="ai-blogger-full-feed">
     <div class="card-head">
-      <div class="ttl"><i class="bi bi-stars"></i> All AI-published blog posts <span class="sub ms-2">newest first · click any to view live</span></div>
-      <a href="blog.php" target="_blank" rel="noopener" class="sub" style="color:var(--brand);"><i class="bi bi-box-arrow-up-right"></i> Open public /blog</a>
+      <div class="ttl"><i class="bi bi-stars"></i> All AI-published blog posts <span class="sub ms-2">filter by country to see only that market</span></div>
+      <a href="blog.php<?= $regionFilter ? '?region=' . esc($regionFilter) : '' ?>" target="_blank" rel="noopener" class="sub" style="color:var(--brand);"><i class="bi bi-box-arrow-up-right"></i> Open public /blog</a>
+    </div>
+    <!-- Country/currency tabs -->
+    <div class="d-flex flex-wrap" data-testid="country-filter-tabs" style="border-bottom:1px solid #e5e7eb;padding:6px 10px 0;gap:6px;background:#fafafa;">
+      <a href="admin.php?tab=ai-blogger" data-testid="country-tab-all" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:8px 8px 0 0;text-decoration:none;font-size:13px;font-weight:600;<?= $regionFilter === '' ? 'background:white;border:1px solid #e5e7eb;border-bottom:1px solid white;margin-bottom:-1px;color:#4338ca;' : 'color:#64748b;' ?>">
+        <i class="bi bi-globe2"></i>All countries <span style="background:#eef2ff;color:#4338ca;border-radius:999px;padding:1px 8px;font-size:11px;font-weight:700;"><?= $totalAiAll ?></span>
+      </a>
+      <?php foreach ($regionsList as $rc => $ri):
+        $isActive = $regionFilter === $rc;
+        $cnt = $perRegionCounts[$rc];
+      ?>
+        <a href="admin.php?tab=ai-blogger&region_filter=<?= esc($rc) ?>" data-testid="country-tab-<?= esc($rc) ?>" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:8px 8px 0 0;text-decoration:none;font-size:13px;font-weight:600;<?= $isActive ? 'background:white;border:1px solid #e5e7eb;border-bottom:1px solid white;margin-bottom:-1px;color:#4338ca;' : 'color:#64748b;' ?>">
+          <span style="font-size:14px;"><?= $ri['flag'] ?></span><?= esc($ri['name']) ?>
+          <span style="background:<?= $isActive ? '#eef2ff' : '#f1f5f9' ?>;color:<?= $isActive ? '#4338ca' : '#64748b' ?>;border-radius:999px;padding:1px 8px;font-size:11px;font-weight:700;"><?= $cnt ?></span>
+          <span class="text-secondary" style="font-size:10px;font-weight:500;"><?= esc($ri['currency']) ?></span>
+        </a>
+      <?php endforeach; ?>
     </div>
     <div class="card-body-p" style="padding:0;">
       <?php if (!$aiAll): ?>
-        <div class="text-center text-muted small py-4">No AI-published posts yet. Click <strong>"Publish next post now"</strong> above to ship the first one.</div>
+        <div class="text-center text-muted small py-4">
+          <?php if ($regionFilter): ?>
+            No posts published for <strong><?= esc($regionsList[$regionFilter]['name']) ?></strong> yet — they'll appear here as soon as the next batch runs.
+          <?php else: ?>
+            No AI-published posts yet. Click <strong>"Publish today's batch now"</strong> above to ship the first 24-post batch.
+          <?php endif; ?>
+        </div>
       <?php else: ?>
         <div class="tbl-elegant" style="border:none;border-radius:0;">
           <table class="table mb-0">
@@ -2111,9 +2239,10 @@ elseif ($tab === 'ai-blogger'):
               <tr>
                 <th style="width:60px;">#</th>
                 <th>Title</th>
-                <th style="width:200px;">Featured product</th>
-                <th style="width:90px;">Region</th>
-                <th style="width:130px;">Published</th>
+                <th style="width:90px;">Market</th>
+                <th style="width:175px;">Featured product</th>
+                <th style="width:120px;">Published</th>
+                <th style="width:130px;" title="HTTP 200 check · IndexNow ping · internal link count">Verified</th>
                 <th style="width:80px;text-align:right;">Action</th>
               </tr>
             </thead>
@@ -2125,35 +2254,136 @@ elseif ($tab === 'ai-blogger'):
                       $d = max(0, time() - strtotime($bp['created_at']));
                       $rel = $d < 3600 ? floor($d/60).'m ago' : ($d < 86400 ? floor($d/3600).'h ago' : floor($d/86400).'d ago');
                   }
+                  $tr = (string)$bp['target_region'];
+                  $trMeta = $regionsList[$tr] ?? null;
+                  $http200 = ((int)$bp['verified_http'] === 200);
+                  $inOk    = in_array((string)$bp['indexnow_status'], ['ok','accepted','http_200','http_202'], true);
+                  $links   = (int)$bp['internal_links_count'];
                 ?>
                 <tr data-testid="ai-blogger-row-<?= $i ?>">
-                  <td>
-                    <?php if (!empty($bp['image'])): ?>
-                      <img src="<?= esc($bp['image']) ?>" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:6px;">
-                    <?php endif; ?>
-                  </td>
+                  <td><?php if (!empty($bp['image'])): ?><img src="<?= esc($bp['image']) ?>" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:6px;"><?php endif; ?></td>
                   <td>
                     <div class="fw-bold" style="font-size:13.5px;color:#0f172a;line-height:1.35;"><?= esc($bp['title']) ?></div>
                     <div class="text-secondary" style="font-size:11px;margin-top:2px;"><?= esc($bp['read_time']) ?></div>
                   </td>
                   <td>
-                    <?php if ($bp['product_name']): ?>
-                      <a href="<?= esc('product.php?slug=' . urlencode($bp['product_slug'] ?? '')) ?>" target="_blank" rel="noopener" style="font-size:12px;color:#4338ca;text-decoration:none;"><?= esc($bp['product_name']) ?></a>
+                    <?php if ($trMeta): ?>
+                      <span style="display:inline-flex;align-items:center;gap:4px;background:#e0e7ff;color:#3730a3;border-radius:999px;padding:2px 9px;font-size:11px;font-weight:700;" title="<?= esc($trMeta['name']) ?> · <?= esc($trMeta['currency']) ?>">
+                        <span><?= $trMeta['flag'] ?></span><?= esc($tr) ?>
+                      </span>
                     <?php else: ?>
                       <span class="text-secondary small">—</span>
                     <?php endif; ?>
                   </td>
                   <td>
-                    <?php if ($bp['product_region']): ?>
-                      <span style="background:#e0e7ff;color:#3730a3;border-radius:999px;padding:2px 9px;font-size:10px;font-weight:700;"><?= esc($bp['product_region']) ?></span>
+                    <?php if ($bp['product_name']): ?>
+                      <a href="<?= esc('product.php?slug=' . urlencode($bp['product_slug'] ?? '')) ?>" target="_blank" rel="noopener" style="font-size:12px;color:#4338ca;text-decoration:none;"><?= esc(mb_strimwidth($bp['product_name'], 0, 28, '…')) ?></a>
+                    <?php else: ?>
+                      <span class="text-secondary small">—</span>
                     <?php endif; ?>
                   </td>
                   <td>
                     <div style="font-size:12px;color:#0f172a;font-weight:600;"><?= esc($bp['date']) ?></div>
                     <?php if ($rel): ?><div class="text-secondary" style="font-size:11px;"><?= esc($rel) ?></div><?php endif; ?>
                   </td>
+                  <td>
+                    <div class="d-flex gap-1 align-items-center" style="font-size:10.5px;">
+                      <span title="HTTP check · <?= (int)$bp['verified_http'] ?>" style="background:<?= $http200 ? '#d1fae5' : '#fef3c7' ?>;color:<?= $http200 ? '#065f46' : '#92400e' ?>;border-radius:6px;padding:2px 6px;font-weight:700;">
+                        <i class="bi <?= $http200 ? 'bi-check2-circle' : 'bi-hourglass-split' ?>"></i> <?= $http200 ? '200' : (((int)$bp['verified_http']) ?: '…') ?>
+                      </span>
+                      <span title="IndexNow status: <?= esc((string)$bp['indexnow_status']) ?>" style="background:<?= $inOk ? '#d1fae5' : '#fef3c7' ?>;color:<?= $inOk ? '#065f46' : '#92400e' ?>;border-radius:6px;padding:2px 6px;font-weight:700;">
+                        <i class="bi bi-broadcast"></i> <?= $inOk ? 'IN' : '·' ?>
+                      </span>
+                      <span title="<?= $links ?> internal backlinks" style="background:#eef2ff;color:#4338ca;border-radius:6px;padding:2px 6px;font-weight:700;">
+                        <i class="bi bi-link-45deg"></i> <?= $links ?>
+                      </span>
+                    </div>
+                  </td>
                   <td style="text-align:right;">
                     <a href="blog-post.php?id=<?= urlencode($bp['id']) ?>" target="_blank" rel="noopener" class="btn btn-sm btn-primary rounded-pill px-3" data-testid="ai-blogger-row-view-<?= $i ?>"><i class="bi bi-box-arrow-up-right"></i></a>
+                  </td>
+                </tr>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+      <?php endif; ?>
+    </div>
+  </div>
+
+  <!-- DMCA Scraper Watchdog -->
+  <?php
+    $dmcaPending = dmca_list_findings('pending', 20);
+    $dmcaAll     = dmca_list_findings(null, 100);
+    $dmcaLastRun = setting_get('dmca_last_scan_at', '');
+  ?>
+  <div class="card-e mb-3" data-testid="dmca-watchdog-panel">
+    <div class="card-head">
+      <div class="ttl"><i class="bi bi-shield-shaded"></i> DMCA Scraper Watchdog <span class="sub ms-2">flag third-party sites cloning your AI-written content</span></div>
+      <div class="d-flex align-items-center gap-2">
+        <span class="sub" style="color:#64748b;font-size:11px;">
+          <?php if ($dmcaLastRun): ?>
+            Last scan <?= esc(floor((time() - strtotime($dmcaLastRun)) / 86400)) ?>d ago · <?= count($dmcaAll) ?> findings on file
+          <?php else: ?>
+            No scans yet
+          <?php endif; ?>
+        </span>
+        <a href="admin.php?tab=ai-blogger&run_dmca=1" class="btn btn-sm btn-outline-primary rounded-pill px-3" data-testid="dmca-run-now" onclick="return confirm('Run a scraper-detection scan now? Samples <?= (int)DMCA_POSTS_PER_SCAN ?> recent AI posts and asks Claude to flag known clones (~$0.005 in LLM credits)')"><i class="bi bi-shield-check me-1"></i>Scan now</a>
+      </div>
+    </div>
+    <div class="card-body-p" style="padding:14px 16px;">
+      <?php if (!$dmcaAll): ?>
+        <div class="alert alert-info py-2 mb-0" style="border-radius:10px;font-size:12.5px;">
+          <i class="bi bi-info-circle me-1"></i>
+          <strong>No clones detected.</strong> The watchdog samples 5 recent AI posts each week and asks Claude Haiku whether the exact text has been seen on other domains.
+          The big practical value of this panel kicks in <em>after</em> a finding lands — you'll get a one-click <strong>DMCA notice generator</strong> per row, pre-filled with your company details, the original URL, and the suspected URL.
+        </div>
+      <?php else: ?>
+        <div class="tbl-elegant" style="border:none;border-radius:0;">
+          <table class="table mb-0">
+            <thead>
+              <tr>
+                <th style="width:60px;">Status</th>
+                <th>Suspected clone</th>
+                <th>Original post</th>
+                <th style="width:90px;">Confidence</th>
+                <th style="width:120px;">Detected</th>
+                <th style="width:230px;text-align:right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php foreach ($dmcaAll as $f): ?>
+                <?php
+                  $statusColor = ['pending' => '#b45309', 'dismissed' => '#94a3b8', 'reported' => '#4338ca', 'taken_down' => '#059669'][$f['status']] ?? '#64748b';
+                  $statusBg    = ['pending' => '#fef3c7', 'dismissed' => '#f1f5f9', 'reported' => '#e0e7ff', 'taken_down' => '#d1fae5'][$f['status']] ?? '#f1f5f9';
+                ?>
+                <tr data-testid="dmca-row-<?= (int)$f['id'] ?>">
+                  <td><span style="background:<?= $statusBg ?>;color:<?= $statusColor ?>;border-radius:999px;padding:2px 9px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;"><?= esc(str_replace('_',' ', $f['status'])) ?></span></td>
+                  <td>
+                    <a href="<?= esc($f['suspected_url']) ?>" target="_blank" rel="noopener" style="font-size:12px;color:#dc2626;text-decoration:none;font-weight:600;"><?= esc(mb_strimwidth((string)$f['suspected_host'], 0, 45, '…')) ?></a>
+                    <div class="text-secondary" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;max-width:280px;white-space:nowrap;"><?= esc($f['suspected_url']) ?></div>
+                  </td>
+                  <td>
+                    <a href="blog-post.php?id=<?= urlencode($f['post_id']) ?>" target="_blank" rel="noopener" style="font-size:12px;color:#4338ca;text-decoration:none;"><?= esc(mb_strimwidth((string)($f['post_title'] ?? $f['post_id']), 0, 35, '…')) ?></a>
+                  </td>
+                  <td>
+                    <?php $cc = strtolower((string)$f['confidence']); ?>
+                    <span style="background:<?= $cc === 'high' ? '#fee2e2' : ($cc === 'medium' ? '#fef3c7' : '#f1f5f9') ?>;color:<?= $cc === 'high' ? '#b91c1c' : ($cc === 'medium' ? '#92400e' : '#64748b') ?>;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;"><?= esc($cc ?: '—') ?></span>
+                  </td>
+                  <td style="font-size:11px;color:#0f172a;"><?= esc(substr((string)$f['ran_at'], 0, 16)) ?></td>
+                  <td style="text-align:right;">
+                    <div class="d-flex justify-content-end gap-1 flex-wrap">
+                      <?php if ($f['status'] !== 'reported' && $f['status'] !== 'taken_down'): ?>
+                        <a href="admin.php?tab=ai-blogger&dmca_notice=<?= (int)$f['id'] ?>" class="btn btn-sm btn-outline-danger" data-testid="dmca-notice-<?= (int)$f['id'] ?>" title="Download a DMCA takedown notice for this clone"><i class="bi bi-file-earmark-arrow-down"></i> DMCA</a>
+                      <?php endif; ?>
+                      <?php if ($f['status'] === 'pending'): ?>
+                        <a href="admin.php?tab=ai-blogger&dmca_set=dismissed&id=<?= (int)$f['id'] ?>" class="btn btn-sm btn-outline-secondary" title="False positive — dismiss">Dismiss</a>
+                        <a href="admin.php?tab=ai-blogger&dmca_set=reported&id=<?= (int)$f['id'] ?>" class="btn btn-sm btn-outline-primary" title="Mark as reported (you've sent the notice)">Mark reported</a>
+                      <?php endif; ?>
+                      <?php if ($f['status'] === 'reported'): ?>
+                        <a href="admin.php?tab=ai-blogger&dmca_set=taken_down&id=<?= (int)$f['id'] ?>" class="btn btn-sm btn-outline-success" title="Confirm the host took the clone down">Mark taken down</a>
+                      <?php endif; ?>
+                    </div>
                   </td>
                 </tr>
               <?php endforeach; ?>
