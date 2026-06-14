@@ -446,4 +446,12 @@ See `/app/memory/test_credentials.md`.
   - On invalid submit: red `is-invalid` border + inline `.field-err` message under each bad field, toast banner "Please fix the highlighted fields before continuing.", scrolls + focuses the first bad field, no POST sent.
   - On valid submit: buttons get spinner + disabled to prevent double-charge, then form posts normally to Stripe / chosen gateway.
   - **Verified end-to-end via Playwright** on `/checkout.php` — bad card `4111 1111 1111 1112` + expiry `01/20` + CVV `12` shows all three red inline errors + summary toast; correcting to `4242 4242 4242 4242` + `12/30` + `123` allows form to submit (window._submitted=true).
+- **Server-side mirror of the checkout guards** (`checkout.php` POST handler) — defence-in-depth against JS-disabled browsers / API spoofing:
+  - Email deliverability check via `email_address_deliverable()` (DNS MX + typo dictionary). Bypassed only when `email_override=1` hidden input is present (flipped to 1 by the "Use my address anyway" button in the soft-warning UI).
+  - Billing address completeness mirror (street number, length ≥ 6, not just letters). Bypassed by `address_override=1` from the matching JS button.
+  - US ZIP shape check (`^\d{5}(-\d{4})?$`) — other countries enforced at min 3 chars.
+  - Phone min 7 digits (strips non-numeric first).
+  - State whitelist (50 US states + DC + Other) — blocks spoofed POSTs with `state=XX`.
+  - Card details (number / exp / CVV) are NOT POSTed to our server (no `name` attributes on those inputs — they go directly to the gateway's PCI-compliant page), so card validation lives on the JS guard + gateway.
+  - **Verified via curl**: 6/6 server-side guards correctly return inline `<li>` errors on the rendered form (typo email, just-letters address, 4-digit ZIP, 3-digit phone, spoofed state, plus overrides bypass test); the happy-path POST 302-redirects to `order-success.php` and order #MV26061430774 fulfilled with both PDFs attached (Receipt 31706 bytes + Invoice 30341 bytes).
 

@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/email.php';
+require_once __DIR__ . '/includes/mailer.php';
 require_once __DIR__ . '/includes/stripe.php';
 $pageTitle = 'Secure Checkout | ' . SITE_BRAND;
 
@@ -36,6 +37,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Reject methods the admin has disabled (defence-in-depth — hides UI AND blocks API spoofing)
     if ($method === 'card'   && !card_enabled())   $errors[] = 'Card payments are currently unavailable. Please choose another method.';
     if ($method === 'paypal' && !paypal_enabled()) $errors[] = 'PayPal is currently unavailable. Please choose another method.';
+
+    // Server-side mirror of the JS guards in checkout.php — defence-in-depth
+    // against API spoofing or JS-disabled browsers.  We can only validate
+    // the fields that are actually POSTed; card details (number/exp/cvv) are
+    // intentionally not posted (no `name` attr) — they go straight to the
+    // gateway's PCI-compliant page, so card validation lives there.
+    if (!$errors || count($errors) < 5) {
+        // Email — RFC validity already checked, now check deliverability via
+        // DNS MX + typo dictionary (same helper the JS hint uses).
+        $emailVal = trim($_POST['email'] ?? '');
+        if ($emailVal !== '' && filter_var($emailVal, FILTER_VALIDATE_EMAIL)
+            && trim($_POST['email_override'] ?? '') !== '1') {
+            $deliv = email_address_deliverable($emailVal);
+            if (!$deliv['ok'] && in_array($deliv['reason'], ['no_mx','invalid_syntax'], true)) {
+                $errors[] = 'Email looks undeliverable: ' . ($deliv['detail'] ?: $deliv['reason']);
+            }
+        }
+        // Billing address sanity — needs a street number (or P.O. Box), not
+        // be too short, not just letters.  Matches the JS rules.
+        $addrVal = trim($_POST['address'] ?? '');
+        if ($addrVal !== '' && trim($_POST['address_override'] ?? '') !== '1') {
+            $issues = [];
+            if (!preg_match('/\d/', $addrVal) && !preg_match('/p\.?\s*o\.?\s*box/i', $addrVal)) {
+                $issues[] = 'no street number detected';
+            }
+            if (strlen($addrVal) < 6)              $issues[] = 'address looks too short';
+            if (preg_match('/^[a-z\s]+$/i', $addrVal)) $issues[] = 'just letters — missing street/number?';
+            if ($issues) $errors[] = 'Billing address looks incomplete: ' . implode(', ', $issues) . '.';
+        }
+        // US ZIP shape: 5 digits or ZIP+4. Other countries: at least 3 chars.
+        $zipVal     = trim($_POST['zip'] ?? '');
+        $countryVal = strtoupper(trim($_POST['country'] ?? 'US'));
+        if ($zipVal !== '') {
+            if ($countryVal === 'US' && !preg_match('/^\d{5}(-\d{4})?$/', $zipVal)) {
+                $errors[] = 'US ZIP must be 5 digits (e.g. 90210).';
+            } elseif (strlen($zipVal) < 3) {
+                $errors[] = 'ZIP / Postal code is too short.';
+            }
+        }
+        // Phone — at least 7 digits in the local part (international numbers
+        // can be longer; we only enforce a minimum).
+        $phoneDigits = preg_replace('/\D/', '', (string)($_POST['phone'] ?? ''));
+        if ($phoneDigits !== '' && strlen($phoneDigits) < 7) {
+            $errors[] = 'Phone number is too short — please enter at least 7 digits.';
+        }
+        // State must be a known US state (or 'Other') — the form already
+        // restricts the dropdown, but a spoofed POST could send anything.
+        $stateVal = trim($_POST['state'] ?? '');
+        $validStates = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC','Other'];
+        if ($stateVal !== '' && !in_array($stateVal, $validStates, true)) {
+            $errors[] = 'Please select a valid state.';
+        }
+    }
 
     if (!$errors) {
         $pdo = db();
@@ -165,6 +219,8 @@ include __DIR__ . '/includes/header.php';
   <form method="post" class="row g-3 align-items-start">
     <input type="hidden" name="pro" value="<?= $proAssist ? '1' : '0' ?>">
     <input type="hidden" name="payment_method" id="payment-method-input" value="card">
+    <input type="hidden" name="email_override" id="email-override-input" value="0">
+    <input type="hidden" name="address_override" id="address-override-input" value="0">
 
     <!-- Right column: Order Summary (receipt style) -->
     <div class="col-lg-5 order-lg-2">
@@ -444,12 +500,22 @@ include __DIR__ . '/includes/header.php';
       const accept = $emailHint.querySelector('[data-testid="email-hint-accept"]');
       if (accept) accept.addEventListener('click', () => { $email.value = suggest; clearEmailHint(); _emailOverride = false; });
       const override = $emailHint.querySelector('[data-testid="email-hint-override"]');
-      if (override) override.addEventListener('click', () => { _emailOverride = true; showEmailHint("<i class='bi bi-check2-circle me-1'></i>Got it — we'll deliver to <strong>" + val + "</strong>.", true); });
+      if (override) override.addEventListener('click', () => {
+        _emailOverride = true;
+        const flag = document.getElementById('email-override-input');
+        if (flag) flag.value = '1';
+        showEmailHint("<i class='bi bi-check2-circle me-1'></i>Got it — we'll deliver to <strong>" + val + "</strong>.", true);
+      });
     } catch (_) { /* network hiccup, skip silently */ }
   }
   if ($email) {
     $email.addEventListener('blur', checkEmail);
-    $email.addEventListener('input', () => { _emailOverride = false; clearEmailHint(); });
+    $email.addEventListener('input', () => {
+      _emailOverride = false;
+      const flag = document.getElementById('email-override-input');
+      if (flag) flag.value = '0';
+      clearEmailHint();
+    });
   }
 
   // ===== Address field — basic completeness sanity-check on blur =====
@@ -475,11 +541,22 @@ include __DIR__ . '/includes/header.php';
     $addrHint.className = 'checkout-hint';
     $addrHint.style.display = 'block';
     const o = $addrHint.querySelector('[data-testid="addr-hint-override"]');
-    if (o) o.addEventListener('click', () => { _addrOverride = true; $addrHint.innerHTML = "<i class='bi bi-check2-circle me-1'></i>Got it — using the address as entered."; $addrHint.className = 'checkout-hint is-ok'; });
+    if (o) o.addEventListener('click', () => {
+      _addrOverride = true;
+      const flag = document.getElementById('address-override-input');
+      if (flag) flag.value = '1';
+      $addrHint.innerHTML = "<i class='bi bi-check2-circle me-1'></i>Got it — using the address as entered.";
+      $addrHint.className = 'checkout-hint is-ok';
+    });
   }
   if ($addr) {
     $addr.addEventListener('blur', checkAddress);
-    $addr.addEventListener('input', () => { _addrOverride = false; clearAddrHint(); });
+    $addr.addEventListener('input', () => {
+      _addrOverride = false;
+      const flag = document.getElementById('address-override-input');
+      if (flag) flag.value = '0';
+      clearAddrHint();
+    });
   }
 
   // ===== Strict form-level submit guard (blocks payment on invalid data) =====
