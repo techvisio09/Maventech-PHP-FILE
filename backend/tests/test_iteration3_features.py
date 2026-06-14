@@ -195,19 +195,21 @@ class TestAdminPublishedBlogList:
             assert "data-is-global=" in tag, f"row missing data-is-global: {tag[:200]}"
 
     def test_global_rows_render_globe_emoji_and_global_label(self, admin_blogger_html):
-        # Find blocks that are data-is-global='1' and verify presence of 🌍 + Global
-        # We slice the surrounding 600 chars after each global row anchor.
+        # ITER-4 BEHAVIOUR CHANGE: trends articles (target_region='ALL') now
+        # live in their own dedicated <details id="trends-section">, so the
+        # Published Blog Posts list intentionally NO LONGER renders ALL-region
+        # rows.  We verify the globe + 'Global' label on the NEW trends list
+        # instead, which serves the same purpose.
         idx = 0
         found_global_block = False
         while True:
             m = re.search(
-                r'<a[^>]*data-is-global=["\']1["\'][^>]*data-testid="published-blog-row"[^>]*>',
+                r'<a[^>]*data-is-global=["\']1["\'][^>]*data-testid="trends-row"[^>]*>',
                 admin_blogger_html[idx:],
             )
             if not m:
-                # Some templates put data-testid first — try other order
                 m = re.search(
-                    r'<a[^>]*data-testid="published-blog-row"[^>]*data-is-global=["\']1["\'][^>]*>',
+                    r'<a[^>]*data-testid="trends-row"[^>]*data-is-global=["\']1["\'][^>]*>',
                     admin_blogger_html[idx:],
                 )
             if not m:
@@ -215,13 +217,13 @@ class TestAdminPublishedBlogList:
             found_global_block = True
             start = idx + m.start()
             block = admin_blogger_html[start: start + 1200]
-            assert "🌍" in block, f"Global row missing globe emoji 🌍 in block: {block[:400]}"
+            assert "🌍" in block, f"Global trends row missing globe emoji: {block[:400]}"
             assert re.search(
                 r'class="post-flag-label"[^>]*>\s*Global\s*<', block, re.IGNORECASE
-            ), f"Global row missing 'Global' label: {block[:400]}"
+            ), f"Global trends row missing 'Global' label: {block[:400]}"
             idx = start + len(m.group(0))
-            break  # Just verify the first global row
-        assert found_global_block, "No data-is-global='1' rows found (need NULL or ALL target_region posts)"
+            break
+        assert found_global_block, "No data-is-global='1' rows found in the trends list (need at least one target_region='ALL' trends post)"
 
     def test_region_specific_row_shows_country_flag_and_code(self, admin_blogger_html):
         # Look for a US row carrying its flag + label

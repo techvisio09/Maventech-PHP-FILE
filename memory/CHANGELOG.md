@@ -1,5 +1,40 @@
 # Changelog
 
+## 2026-02-14 (iteration 5) — Per-country posts + dedicated Trending Articles section
+
+### Quick Actions country picker
+- New `<select id="quick-action-region">` (data-testid=quick-action-region) above the four Quick Action cards.  Options: 🌍 Auto/All (default), 🇺🇸 US, 🇬🇧 UK, 🇦🇺 AU, 🇨🇦 CA.
+- JS rewrites each card's `href` in-place using `data-base-href` + appending `&region=XX` when a country is picked.  Updates the small hint copy under each card too (e.g. "Target: 🇺🇸 United States").
+- Cards affected: Write One Post, Random Post, Generate Trends Now.  Daily Batch card unchanged (always all regions).
+
+### Regional trends articles
+- `seo_publish_featured_trends_article()` signature changed from `(array &$report, bool $force = false)` to `(array &$report, bool $force = false, string $targetRegion = 'ALL')`.
+- Region whitelist `['ALL','US','UK','AU','CA']`; invalid input falls back to `'ALL'`.
+- New `regionAudienceMap` tailors the LLM system prompt per region (US: NIST/SOC 2/USD, UK: GDPR/Cyber Essentials/GBP, etc).
+- INSERT now binds `$targetRegion` instead of hard-coded `'ALL'`.
+- `run_trends_article` handler reads `?region=XX`, normalises it, passes the value as the 3rd argument, and produces a flash message that includes either "Global audience" or "Targeted at US/UK/AU/CA".
+
+### Generate Trends Article Now (bypass cooldown)
+- Quick Actions trend card + the new Trending Articles section both link to `?run_trends_article=1&force=1` so the 20-hour cooldown is skipped.
+- The Trending Articles section also exposes a dedicated `data-testid=trends-generate-now-btn` button at the top of the country pill bar.
+
+### Dedicated "Trending Articles" admin sub-section
+- New `<details id="trends-section">` placed directly after the Published Blog Posts section.
+- Six country filter pills (All / 🌍 Global / 🇺🇸 US / 🇬🇧 UK / 🇦🇺 AU / 🇨🇦 CA), each with a server-computed count badge.
+- JS filter rules: All → everything, Global → only data-is-global='1' rows, country code → that country's rows + globals.
+- Empty state: data-testid=trends-empty-state shows "Click Generate Trends Article Now to write your first one."
+
+### De-duplication: Published Blog Posts vs Trending Articles
+- Published Blog Posts query now excludes `is_featured_trends=1` rows (`AND COALESCE(is_featured_trends,0) = 0`).
+- Per-region counts + total badge also exclude trends articles so the header count matches the rendered rows.
+- The same article never appears in both lists anymore (verified: Playwright found 5 in trends + 6 in published, overlap = 0).
+
+### Testing
+- 111/111 pytest passing (78 baseline + 33 iter4).
+- New `/app/backend/tests/test_iteration4_features.py` with 33 tests across 11 classes covering the Quick Actions picker DOM/JS, trends function signature, regionAudienceMap, trends sub-section DOM, filter JS rules, and flash branches.
+
+---
+
 ## 2026-02-14 (iteration 4) — Country filter + trends JSON + auto-weekly
 
 ### Public blog country filter

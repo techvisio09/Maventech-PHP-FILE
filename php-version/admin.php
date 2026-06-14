@@ -1999,15 +1999,25 @@ elseif ($tab === 'ai-blogger'):
     $totalAllPosts = (int)$pdo->query("SELECT COUNT(*) FROM blog_posts")->fetchColumn();
 
     // Per-region counters for the country tabs (always show all regions).
+    // We exclude trends articles here so the Published Blog Posts header
+    // count + per-region badges match the rows actually rendered (trends
+    // articles live in their own dedicated section).
     $perRegionCounts = ['US' => 0, 'UK' => 0, 'AU' => 0, 'CA' => 0];
     try {
-        foreach ($pdo->query("SELECT target_region, COUNT(*) c FROM blog_posts WHERE ai_generated = 1 GROUP BY target_region") as $rrow) {
+        foreach ($pdo->query("SELECT target_region, COUNT(*) c FROM blog_posts
+                              WHERE ai_generated = 1
+                                AND COALESCE(is_featured_trends, 0) = 0
+                              GROUP BY target_region") as $rrow) {
             if (isset($perRegionCounts[$rrow['target_region']])) {
                 $perRegionCounts[$rrow['target_region']] = (int)$rrow['c'];
             }
         }
     } catch (Throwable $e) {}
-    $totalAiAll = array_sum($perRegionCounts) + ((int)$pdo->query("SELECT COUNT(*) FROM blog_posts WHERE ai_generated=1 AND (target_region IS NULL OR target_region='')")->fetchColumn());
+    $totalAiAll = array_sum($perRegionCounts) + ((int)$pdo->query(
+        "SELECT COUNT(*) FROM blog_posts
+          WHERE ai_generated = 1
+            AND COALESCE(is_featured_trends, 0) = 0
+            AND (target_region IS NULL OR target_region = '')")->fetchColumn());
 
     // Monitoring snapshot — last 24 h.
     $mon = [
@@ -2717,6 +2727,7 @@ elseif ($tab === 'ai-blogger'):
                        p.name AS product_name
                   FROM blog_posts bp LEFT JOIN products p ON p.id = bp.product_id
                  WHERE bp.ai_generated = 1
+                   AND COALESCE(bp.is_featured_trends, 0) = 0
                  ORDER BY COALESCE(bp.created_at, '1970-01-01') DESC, bp.id DESC LIMIT 50");
             $aiAllUnfiltered = $stAll->fetchAll();
         } catch (Throwable $e) {}
