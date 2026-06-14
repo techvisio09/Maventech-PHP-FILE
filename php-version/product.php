@@ -343,6 +343,34 @@ include __DIR__ . '/includes/header.php';
     </div>
   </div>
 
+  <!-- Ask AI — Claude Haiku 4.5 powered Q&A grounded on this product's
+       facts, FAQs, and recent reviews.  Answers free-form questions in
+       seconds and routes anything off-topic to live chat. -->
+  <section class="mt-5 ask-ai-card" data-testid="ask-ai-section" data-slug="<?= esc($product['slug']) ?>">
+    <div class="ask-ai-head">
+      <div class="ask-ai-avatar"><i class="bi bi-stars"></i></div>
+      <div class="ask-ai-meta">
+        <div class="ask-ai-title">Ask AI about this product</div>
+        <div class="ask-ai-sub">Powered by Claude · Instant answers about delivery, compatibility, activation &amp; more</div>
+      </div>
+      <span class="ask-ai-pill"><span class="ask-ai-dot"></span>Online</span>
+    </div>
+    <div class="ask-ai-suggestions" data-testid="ask-ai-suggestions">
+      <button type="button" class="ask-ai-chip" data-q="How long does delivery take?">How long does delivery take?</button>
+      <button type="button" class="ask-ai-chip" data-q="Will this work on my Mac?">Will this work on my Mac?</button>
+      <button type="button" class="ask-ai-chip" data-q="Is this a one-time purchase or subscription?">One-time or subscription?</button>
+      <button type="button" class="ask-ai-chip" data-q="What happens if the key does not activate?">What if it doesn't activate?</button>
+    </div>
+    <div id="ask-ai-thread" class="ask-ai-thread" data-testid="ask-ai-thread"></div>
+    <form id="ask-ai-form" class="ask-ai-form" onsubmit="askAiSubmit(event)">
+      <input type="text" id="ask-ai-input" class="form-control" placeholder="Ask anything about this product…" maxlength="400" autocomplete="off" data-testid="ask-ai-input" required>
+      <button type="submit" class="ask-ai-send" data-testid="ask-ai-send"><i class="bi bi-send-fill"></i></button>
+    </form>
+    <div class="ask-ai-footer">
+      AI answers are based on this product's specs — for personal questions or order help, use the chat bubble.
+    </div>
+  </section>
+
   <!-- Brand-aware FAQ accordion — visible to humans + structured for AI
        crawlers (FAQPage JSON-LD emitted via $jsonLdFaq).  Answers are
        quotable verbatim by ChatGPT / Perplexity / Google AI Overviews. -->
@@ -436,5 +464,187 @@ include __DIR__ . '/includes/header.php';
     padding: 14px 20px 20px;
   }
   [data-bs-theme="dark"] .pd-faq-accordion .accordion-body { color: #cbd5e1; }
+
+  /* Ask AI widget — premium card with Claude-branded "Powered by" feel */
+  .ask-ai-card {
+    background: linear-gradient(135deg, #faf5ff 0%, #f0f9ff 100%);
+    border: 1px solid #e9d5ff;
+    border-radius: 16px;
+    padding: 22px 22px 18px;
+    position: relative;
+    overflow: hidden;
+  }
+  [data-bs-theme="dark"] .ask-ai-card {
+    background: linear-gradient(135deg, #1c1638 0%, #0f1e3a 100%);
+    border-color: #4c1d95;
+  }
+  .ask-ai-head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+  .ask-ai-avatar {
+    width: 42px; height: 42px; border-radius: 12px;
+    background: linear-gradient(135deg, #a855f7, #6366f1);
+    color: #fff; display: inline-flex; align-items: center; justify-content: center;
+    font-size: 20px; box-shadow: 0 6px 18px rgba(168, 85, 247, 0.35);
+  }
+  .ask-ai-meta { flex: 1; min-width: 0; }
+  .ask-ai-title { font-size: 16px; font-weight: 700; color: #1e1b4b; line-height: 1.2; }
+  [data-bs-theme="dark"] .ask-ai-title { color: #ddd6fe; }
+  .ask-ai-sub { font-size: 12px; color: #64748b; margin-top: 2px; }
+  [data-bs-theme="dark"] .ask-ai-sub { color: #94a3b8; }
+  .ask-ai-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: #d1fae5; color: #047857;
+    padding: 4px 10px; border-radius: 999px;
+    font-size: 11px; font-weight: 700;
+  }
+  .ask-ai-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: #10b981;
+    animation: ask-ai-pulse 2s ease-in-out infinite;
+  }
+  @keyframes ask-ai-pulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.4); opacity: 0.5; } }
+  .ask-ai-suggestions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .ask-ai-chip {
+    background: #ffffff; border: 1px solid #e9d5ff;
+    color: #6d28d9; padding: 6px 14px;
+    border-radius: 999px; font-size: 12.5px; font-weight: 600;
+    cursor: pointer; transition: all 0.14s ease;
+  }
+  .ask-ai-chip:hover { background: #6d28d9; color: #fff; border-color: #6d28d9; transform: translateY(-1px); }
+  [data-bs-theme="dark"] .ask-ai-chip { background: #1e1b4b; color: #c4b5fd; border-color: #4c1d95; }
+  [data-bs-theme="dark"] .ask-ai-chip:hover { background: #6d28d9; color: #fff; }
+  .ask-ai-thread { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; max-height: 480px; overflow-y: auto; }
+  .ask-ai-thread:empty { display: none; }
+  .ask-ai-msg {
+    padding: 10px 14px; border-radius: 12px;
+    font-size: 13.5px; line-height: 1.55; max-width: 88%;
+    animation: ask-ai-fade-in 0.22s ease-out;
+  }
+  @keyframes ask-ai-fade-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  .ask-ai-msg.is-q { align-self: flex-end; background: #6d28d9; color: #fff; border-bottom-right-radius: 4px; }
+  .ask-ai-msg.is-a { align-self: flex-start; background: #ffffff; color: #1e1b4b; border: 1px solid #e9d5ff; border-bottom-left-radius: 4px; box-shadow: 0 1px 3px rgba(15,23,42,.05); }
+  [data-bs-theme="dark"] .ask-ai-msg.is-a { background: #1c1638; color: #ddd6fe; border-color: #4c1d95; }
+  .ask-ai-msg.is-err { align-self: flex-start; background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+  .ask-ai-feedback { display: flex; gap: 6px; margin-top: 8px; font-size: 11px; color: #94a3b8; align-items: center; }
+  .ask-ai-fb-btn { background: transparent; border: 0; cursor: pointer; padding: 2px 6px; border-radius: 6px; color: #94a3b8; }
+  .ask-ai-fb-btn:hover { color: #6d28d9; background: rgba(168,85,247,.08); }
+  .ask-ai-fb-btn.is-on { color: #10b981; }
+  .ask-ai-typing { font-size: 12px; color: #94a3b8; padding: 8px 12px; }
+  .ask-ai-typing span { animation: ask-ai-typing 1.2s ease-in-out infinite; }
+  .ask-ai-typing span:nth-child(2) { animation-delay: 0.18s; }
+  .ask-ai-typing span:nth-child(3) { animation-delay: 0.36s; }
+  @keyframes ask-ai-typing { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+  .ask-ai-form { display: flex; gap: 8px; }
+  .ask-ai-form input { flex: 1; border-radius: 999px; padding: 10px 18px; font-size: 14px; border: 1px solid #e9d5ff; }
+  .ask-ai-form input:focus { border-color: #6d28d9; box-shadow: 0 0 0 3px rgba(109,40,217,.15); outline: none; }
+  [data-bs-theme="dark"] .ask-ai-form input { background: #1c1638; color: #ddd6fe; border-color: #4c1d95; }
+  .ask-ai-send {
+    width: 42px; height: 42px; border-radius: 50%; border: 0;
+    background: linear-gradient(135deg, #a855f7, #6366f1); color: #fff;
+    font-size: 16px; cursor: pointer; transition: all 0.14s ease;
+    box-shadow: 0 6px 16px rgba(99,102,241,.32);
+  }
+  .ask-ai-send:hover { transform: translateY(-1px) scale(1.05); box-shadow: 0 10px 22px rgba(99,102,241,.45); }
+  .ask-ai-send:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+  .ask-ai-footer { font-size: 10.5px; color: #94a3b8; margin-top: 10px; text-align: center; }
 </style>
 <?php include __DIR__ . '/includes/footer.php'; ?>
+
+<script>
+/* ============================================================
+ * Ask AI — product page widget (Claude Haiku 4.5)
+ * ============================================================ */
+(function(){
+  const section = document.querySelector('[data-testid="ask-ai-section"]');
+  if (!section) return;
+  const slug   = section.getAttribute('data-slug') || '';
+  const thread = document.getElementById('ask-ai-thread');
+  const input  = document.getElementById('ask-ai-input');
+  const sendBtn = document.querySelector('.ask-ai-send');
+
+  // One-click suggestion chips populate the input.
+  document.querySelectorAll('.ask-ai-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      input.value = chip.getAttribute('data-q') || '';
+      input.focus();
+    });
+  });
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function appendMsg(type, text, chatId) {
+    const div = document.createElement('div');
+    div.className = 'ask-ai-msg is-' + type;
+    div.innerHTML = escapeHtml(text);
+    thread.appendChild(div);
+    if (type === 'a' && chatId) {
+      const fb = document.createElement('div');
+      fb.className = 'ask-ai-feedback';
+      fb.innerHTML = '<span>Was this helpful?</span>'
+        + '<button type="button" class="ask-ai-fb-btn" data-helpful="1" data-id="' + chatId + '" data-testid="ask-ai-fb-up-' + chatId + '"><i class="bi bi-hand-thumbs-up"></i></button>'
+        + '<button type="button" class="ask-ai-fb-btn" data-helpful="0" data-id="' + chatId + '" data-testid="ask-ai-fb-down-' + chatId + '"><i class="bi bi-hand-thumbs-down"></i></button>';
+      thread.appendChild(fb);
+    }
+    thread.scrollTop = thread.scrollHeight;
+  }
+  function appendTyping() {
+    const t = document.createElement('div');
+    t.className = 'ask-ai-typing';
+    t.id = 'ask-ai-typing-indicator';
+    t.innerHTML = 'Thinking<span>.</span><span>.</span><span>.</span>';
+    thread.appendChild(t);
+    thread.scrollTop = thread.scrollHeight;
+  }
+  function removeTyping() {
+    const t = document.getElementById('ask-ai-typing-indicator');
+    if (t) t.remove();
+  }
+
+  window.askAiSubmit = async function(ev) {
+    ev.preventDefault();
+    const q = input.value.trim();
+    if (!q || sendBtn.disabled) return;
+    appendMsg('q', q);
+    input.value = '';
+    sendBtn.disabled = true;
+    appendTyping();
+    try {
+      const r = await fetch('ajax/ask-ai.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug: slug, question: q }),
+      });
+      const j = await r.json();
+      removeTyping();
+      if (j && j.ok) {
+        appendMsg('a', j.answer, j.chat_id);
+      } else {
+        appendMsg('err', (j && j.error) || 'Something went wrong. Please try the chat bubble in the corner.');
+      }
+    } catch (_) {
+      removeTyping();
+      appendMsg('err', 'Network hiccup — please retry, or use the chat bubble for live help.');
+    } finally {
+      sendBtn.disabled = false;
+      input.focus();
+    }
+  };
+
+  // Thumbs up/down feedback delegation.
+  thread.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.ask-ai-fb-btn');
+    if (!btn) return;
+    const chatId  = btn.getAttribute('data-id');
+    const helpful = btn.getAttribute('data-helpful') === '1' ? 1 : 0;
+    btn.classList.add('is-on');
+    btn.parentNode.querySelectorAll('.ask-ai-fb-btn').forEach(b => { if (b !== btn) b.style.opacity = '0.35'; });
+    try {
+      await fetch('ajax/ask-ai-feedback.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId, helpful: helpful }),
+      });
+    } catch (_) {}
+  });
+})();
+</script>

@@ -139,6 +139,26 @@ function ensure_db_schema(): void
             // throttle the "New chat message from {name}" admin alerts to
             // one per lead per 5 minutes during a fast back-and-forth.
             "ALTER TABLE chat_leads ADD COLUMN admin_notified_at DATETIME NULL DEFAULT NULL",
+            // Persistent log of every "Ask AI" turn on the product page.
+            // Lets admins (a) review what customers ask, (b) train the
+            // system prompt over time, (c) capture lead intent (the
+            // question itself is high-quality buyer signal).
+            "CREATE TABLE IF NOT EXISTS product_ai_chats (
+                id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                product_slug VARCHAR(160) NOT NULL,
+                product_name VARCHAR(255) NOT NULL DEFAULT '',
+                session_id   VARCHAR(64)  NOT NULL DEFAULT '',
+                question     TEXT         NOT NULL,
+                answer       MEDIUMTEXT   NULL,
+                tokens_in    INT NULL DEFAULT NULL,
+                tokens_out   INT NULL DEFAULT NULL,
+                ms_latency   INT NULL DEFAULT NULL,
+                helpful      TINYINT(1)   NULL DEFAULT NULL,
+                user_ip      VARCHAR(45)  NOT NULL DEFAULT '',
+                created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                KEY idx_slug_time (product_slug, created_at),
+                KEY idx_session   (session_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
             // customer_reviews — admin_seen_at lets the topbar star-bell badge
             // tell which low-rating submissions are still unacknowledged.
             "ALTER TABLE customer_reviews ADD COLUMN admin_seen_at DATETIME NULL DEFAULT NULL",
