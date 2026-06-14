@@ -2,7 +2,28 @@
 // Public customer review submission page (token-based, no login required).
 require_once __DIR__ . '/includes/functions.php';
 $pdo = db();
-$token = $_GET['t'] ?? '';
+
+// Defensive: some older emails were sent with `{{review_url}}?rating=N` instead
+// of `&rating=N` (single ampersand).  That turns the `?rating=N` into part of
+// the `t` parameter value (e.g. ?t=abc123?rating=3), making the token look
+// invalid and dropping the customer on an error page.  Split it back out so
+// previously-sent emails continue to work.
+$token     = $_GET['t'] ?? '';
+$preRating = (int)($_GET['rating'] ?? 0);
+if (is_string($token) && strpos($token, '?rating=') !== false) {
+    [$realToken, $tail] = explode('?rating=', $token, 2);
+    $token = $realToken;
+    $tailRating = (int)$tail;
+    if ($tailRating >= 1 && $tailRating <= 5) $preRating = $tailRating;
+}
+// Also tolerate '&rating=' embedded in the token if a mail client mangled it.
+if (is_string($token) && strpos($token, '&rating=') !== false) {
+    [$realToken, $tail] = explode('&rating=', $token, 2);
+    $token = $realToken;
+    $tailRating = (int)$tail;
+    if ($tailRating >= 1 && $tailRating <= 5) $preRating = $tailRating;
+}
+
 $review = null;
 if ($token) {
     $r = $pdo->prepare('SELECT cr.*, p.name AS product_name, p.image AS product_image FROM customer_reviews cr LEFT JOIN products p ON p.slug=cr.product_slug WHERE cr.request_token=? LIMIT 1');
@@ -30,8 +51,8 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && $review) {
     }
 }
 
-// Pre-rating from the email-link star click (?rating=N). 0 = none selected.
-$preRating = (int)($_GET['rating'] ?? 0);
+// Pre-rating from the email-link star click (?rating=N).  Already normalised
+// above when the URL was malformed.  Bounds-check defensively here too.
 if ($preRating < 1 || $preRating > 5) $preRating = 0;
 
 $pageTitle = 'Share Your Feedback · ' . esc(SITE_BRAND);
