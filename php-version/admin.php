@@ -530,15 +530,15 @@ include __DIR__ . '/includes/admin-shell.php';
 // DASHBOARD
 // ============================================================================
 if ($tab === 'dashboard'):
-    // Manual "Run SEO bot now" trigger from the dashboard card.
+    // Manual "Run AI Auto-Blogger now" trigger from the dashboard card.
     if (!empty($_GET['seo_run'])) {
         require_once __DIR__ . '/includes/seo-bot.php';
         try {
             $seoReport = seo_bot_run_if_due(true);
             if (!empty($seoReport['skipped'])) {
-                $seoFlash = 'SEO Bot was already up to date — ' . $seoReport['reason'] . '.';
+                $seoFlash = 'AI Auto-Blogger was already up to date — ' . $seoReport['reason'] . '.';
             } else {
-                $seoFlash = 'SEO Bot completed — IndexNow ' . $seoReport['indexnow_status']
+                $seoFlash = 'AI Auto-Blogger completed — IndexNow ' . $seoReport['indexnow_status']
                           . ' (' . $seoReport['indexnow_count'] . ' URLs) · '
                           . 'LLM refresh: ' . $seoReport['products_updated'] . ' product(s) · '
                           . count($seoReport['errors']) . ' error(s).';
@@ -553,7 +553,7 @@ if ($tab === 'dashboard'):
                 }
             }
         } catch (Throwable $e) {
-            $seoFlash = 'SEO Bot error: ' . $e->getMessage();
+            $seoFlash = 'AI Auto-Blogger error: ' . $e->getMessage();
         }
         // Redirect so the URL doesn't keep re-triggering on refresh.
         $_SESSION['seo_bot_flash'] = $seoFlash;
@@ -958,6 +958,10 @@ if ($tab === 'dashboard'):
   // ------------------------------------------------------------------
   // SEO Bot status — daily IndexNow ping + LLM-driven content refresh.
   // ------------------------------------------------------------------
+  // ------------------------------------------------------------------
+  // AI Auto-Blogger — daily IndexNow ping, AI content refresh + the
+  // automatic blog post pipeline (one fresh article every 24 h).
+  // ------------------------------------------------------------------
   require_once __DIR__ . '/includes/seo-bot.php';
   $seoRun = seo_bot_latest_run();
   $seoErrors = [];
@@ -970,26 +974,30 @@ if ($tab === 'dashboard'):
       $delta = max(0, time() - strtotime((string)$seoRun['started_at']));
       $seoLastRel = $delta < 3600 ? floor($delta/60).'m ago' : ($delta < 86400 ? floor($delta/3600).'h ago' : floor($delta/86400).'d ago');
   }
-  // Latest AI-authored blog post (for the "AI just wrote this" tile).
-  $latestBlog = null;
+  // Full feed of AI-authored blog posts (most recent first).
+  $aiBlogPosts = [];
   try {
-      $latestBlog = $pdo->query("SELECT id, title, date, image, product_id, created_at
-                                   FROM blog_posts
-                                  WHERE ai_generated = 1
-                                  ORDER BY COALESCE(created_at, '1970-01-01') DESC, id DESC
-                                  LIMIT 1")->fetch();
-  } catch (Throwable $e) { /* table may not have ai_generated yet — ignore */ }
+      $aiBlogPosts = $pdo->query("
+          SELECT bp.id, bp.title, bp.date, bp.image, bp.product_id, bp.created_at, bp.read_time,
+                 p.name AS product_name, p.region AS product_region
+            FROM blog_posts bp
+            LEFT JOIN products p ON p.id = bp.product_id
+           WHERE bp.ai_generated = 1
+           ORDER BY COALESCE(bp.created_at, '1970-01-01') DESC, bp.id DESC
+           LIMIT 12")->fetchAll();
+  } catch (Throwable $e) { /* old schema — ignore */ }
+  $latestBlog = $aiBlogPosts[0] ?? null;
   ?>
   <div class="row g-3 mt-1">
     <div class="col-12">
       <div class="card-e" data-testid="dashboard-seo-bot">
         <div class="card-head">
-          <div class="ttl"><i class="bi bi-robot"></i> SEO Bot <span class="sub ms-2">daily indexing + AI content refresh</span></div>
-          <a href="admin.php?tab=dashboard&seo_run=1" class="sub" style="color:var(--brand);" data-testid="seo-bot-run-now" onclick="return confirm('Run SEO bot now? (uses ~$0.003 in LLM credits)')">▶ Run now</a>
+          <div class="ttl"><i class="bi bi-robot"></i> AI Auto-Blogger <span class="sub ms-2">daily article + indexing across US · UK · AU · CA</span></div>
+          <a href="admin.php?tab=dashboard&seo_run=1" class="sub" style="color:var(--brand);" data-testid="seo-bot-run-now" onclick="return confirm('Run AI Auto-Blogger now? (writes one fresh article + uses ~$0.003 in LLM credits)')">▶ Run now</a>
         </div>
         <div class="card-body-p" style="padding:12px 16px;">
           <?php if (!$seoRun): ?>
-            <div class="text-center text-muted small py-3">SEO Bot has not run yet — click <strong>Run now</strong> above to do the first daily sweep, or wait for the next cron tick.</div>
+            <div class="text-center text-muted small py-3">AI Auto-Blogger has not run yet — click <strong>Run now</strong> above to publish the first article, or wait for the next cron tick.</div>
           <?php else: ?>
             <div class="row g-3 align-items-center">
               <div class="col-md-2 col-6">
@@ -1036,41 +1044,61 @@ if ($tab === 'dashboard'):
               </div>
             </div>
 
-            <?php if ($latestBlog): ?>
-              <?php
-                $blogCreated = $latestBlog['created_at'] ?: '';
-                $blogRel = '';
-                if ($blogCreated) {
-                    $d = max(0, time() - strtotime($blogCreated));
-                    $blogRel = $d < 3600 ? floor($d/60).'m ago' : ($d < 86400 ? floor($d/3600).'h ago' : floor($d/86400).'d ago');
-                }
-                $blogProductName = '';
-                if (!empty($latestBlog['product_id'])) {
-                    $pn = $pdo->prepare('SELECT name FROM products WHERE id = ?');
-                    $pn->execute([(int)$latestBlog['product_id']]);
-                    $blogProductName = (string)($pn->fetchColumn() ?: '');
-                }
-              ?>
+            <?php if ($aiBlogPosts): ?>
               <hr style="margin:14px 0 12px 0;border-color:#e5e7eb;">
-              <div class="d-flex align-items-center gap-3 flex-wrap" data-testid="seo-bot-ai-blog" style="background:linear-gradient(135deg,#fafaff 0%,#fef9ff 100%);border:1px dashed #c7d2fe;border-radius:12px;padding:12px 14px;">
-                <?php if (!empty($latestBlog['image'])): ?>
-                  <img src="<?= esc($latestBlog['image']) ?>" alt="" style="width:72px;height:72px;object-fit:cover;border-radius:10px;flex-shrink:0;">
-                <?php endif; ?>
-                <div style="flex:1;min-width:220px;">
-                  <div class="d-flex align-items-center gap-2 flex-wrap" style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#4338ca;">
-                    <i class="bi bi-stars"></i><span>Latest AI auto-blog</span>
-                    <span style="background:#4338ca;color:white;border-radius:999px;padding:2px 8px;font-size:9px;letter-spacing:0.5px;">PUBLISHED</span>
-                    <?php if ($blogRel): ?><span class="text-secondary" style="letter-spacing:normal;text-transform:none;font-weight:500;font-size:11px;">· <?= esc($blogRel) ?></span><?php endif; ?>
+              <div class="d-flex align-items-center justify-content-between mb-2" style="gap:8px;flex-wrap:wrap;">
+                <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#4338ca;">
+                  <i class="bi bi-stars me-1"></i>Live feed · all AI-published blog posts
+                </div>
+                <div style="font-size:11px;color:#64748b;font-weight:600;">
+                  <span data-testid="ai-blog-feed-count"><?= count($aiBlogPosts) ?></span> posts auto-published · markets: US · UK · AU · CA
+                </div>
+              </div>
+              <div class="ai-blog-feed" data-testid="seo-bot-ai-blog-feed" style="background:linear-gradient(135deg,#fafaff 0%,#fef9ff 100%);border:1px dashed #c7d2fe;border-radius:12px;padding:6px;">
+                <?php foreach ($aiBlogPosts as $i => $bp): ?>
+                  <?php
+                    $bpDt  = $bp['created_at'] ?: '';
+                    $bpRel = '';
+                    if ($bpDt) {
+                        $d = max(0, time() - strtotime($bpDt));
+                        $bpRel = $d < 3600 ? floor($d/60).'m ago' : ($d < 86400 ? floor($d/3600).'h ago' : floor($d/86400).'d ago');
+                    }
+                  ?>
+                  <div class="d-flex align-items-center gap-3" data-testid="ai-blog-feed-row-<?= $i ?>" style="padding:10px 12px;<?= $i > 0 ? 'border-top:1px solid #ede9fe;' : '' ?>">
+                    <?php if (!empty($bp['image'])): ?>
+                      <img src="<?= esc($bp['image']) ?>" alt="" style="width:52px;height:52px;object-fit:cover;border-radius:8px;flex-shrink:0;">
+                    <?php else: ?>
+                      <div style="width:52px;height:52px;border-radius:8px;background:#ede9fe;display:flex;align-items:center;justify-content:center;color:#7c3aed;flex-shrink:0;"><i class="bi bi-file-earmark-text"></i></div>
+                    <?php endif; ?>
+                    <div style="flex:1;min-width:0;">
+                      <div class="d-flex align-items-center gap-2 flex-wrap" style="font-size:10px;font-weight:700;letter-spacing:0.6px;color:#7c3aed;text-transform:uppercase;">
+                        <span style="background:#4338ca;color:white;border-radius:999px;padding:1px 7px;font-size:9px;">AI · PUBLISHED</span>
+                        <?php if (!empty($bp['product_region'])): ?>
+                          <span style="background:#e0e7ff;color:#3730a3;border-radius:999px;padding:1px 7px;font-size:9px;"><?= esc($bp['product_region']) ?></span>
+                        <?php endif; ?>
+                        <span class="text-secondary" style="letter-spacing:normal;text-transform:none;font-weight:500;font-size:11px;color:#64748b;">
+                          <?= esc($bp['date']) ?><?php if ($bpRel): ?> · <?= esc($bpRel) ?><?php endif; ?> · <?= esc($bp['read_time']) ?>
+                        </span>
+                      </div>
+                      <div class="fw-bold" style="font-size:13.5px;color:#0f172a;margin-top:2px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                        <?= esc($bp['title']) ?>
+                      </div>
+                      <?php if (!empty($bp['product_name'])): ?>
+                        <div class="text-secondary" style="font-size:11px;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                          <i class="bi bi-box-seam me-1"></i><?= esc($bp['product_name']) ?>
+                        </div>
+                      <?php endif; ?>
+                    </div>
+                    <div class="d-flex gap-1 flex-shrink-0">
+                      <a href="blog-post.php?id=<?= urlencode($bp['id']) ?>" target="_blank" rel="noopener" class="btn btn-sm btn-primary rounded-pill px-3" data-testid="ai-blog-feed-view-<?= $i ?>" title="View live post"><i class="bi bi-box-arrow-up-right"></i></a>
+                    </div>
                   </div>
-                  <div class="fw-bold" style="font-size:15px;color:#0f172a;margin-top:2px;line-height:1.3;"><?= esc($latestBlog['title']) ?></div>
-                  <?php if ($blogProductName): ?>
-                    <div class="text-secondary small mt-1"><i class="bi bi-box-seam me-1"></i>Featured product: <?= esc($blogProductName) ?></div>
-                  <?php endif; ?>
-                </div>
-                <div class="d-flex gap-2 flex-shrink-0">
-                  <a href="blog-post.php?id=<?= urlencode($latestBlog['id']) ?>" target="_blank" rel="noopener" class="btn btn-sm btn-primary rounded-pill px-3" data-testid="seo-bot-ai-blog-view"><i class="bi bi-box-arrow-up-right me-1"></i>View live</a>
-                  <a href="blog.php" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary rounded-pill px-3" data-testid="seo-bot-ai-blog-all">All posts</a>
-                </div>
+                <?php endforeach; ?>
+              </div>
+              <div class="text-center mt-2">
+                <a href="blog.php" target="_blank" rel="noopener" class="small" style="color:#4338ca;font-weight:600;text-decoration:none;" data-testid="ai-blog-feed-all-posts">
+                  Open public /blog index <i class="bi bi-box-arrow-up-right"></i>
+                </a>
               </div>
             <?php endif; ?>
           <?php endif; ?>

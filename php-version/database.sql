@@ -491,6 +491,7 @@ CREATE TABLE IF NOT EXISTS `regions` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 INSERT IGNORE INTO `regions` VALUES
+('AU','Australia','AUD','A$',0.1000,1),
 ('CA','Canada','CAD','C$',0.1300,1),
 ('EU','Europe','EUR','€',0.2000,0),
 ('UK','United Kingdom','GBP','£',0.2000,1),

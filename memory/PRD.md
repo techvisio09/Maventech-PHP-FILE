@@ -498,3 +498,19 @@ See `/app/memory/test_credentials.md`.
 - **Cron log** (`cron.php`) now adds `blog_post="<title>"` when a fresh article was published.
 - **Verified end-to-end**: three live AI blog runs produced "Microsoft Office 2024 Professional Plus: Worth the Investment?", "Windows 11 Pro: Is It Right for Your Business?", and "Microsoft Project Professional 2021: Is It Right for Your Team?". All three render through `/blog-post.php?id=ai-…` with proper breadcrumbs, lead, H2 sections, product image and shop CTA. `seo_runs` row also stores the published post id and title so the dashboard tile rehydrates after every refresh.
 
+
+
+## [Jun 2026] AI Auto-Blogger — rename + live feed + region scoping (US / UK / AU / CA)
+- **Dashboard rename**: the dashboard card is now titled **"AI Auto-Blogger"** (header, subtitle, `Run now` confirm, flash messages, no-run empty state — all consistent). Replaces the older "SEO Bot" label.
+- **Live feed of all AI posts** rendered inline inside the AI Auto-Blogger card (`data-testid="seo-bot-ai-blog-feed"`):
+  - Newest first, up to 12 rows, each row shows thumbnail · `AI · PUBLISHED` pill · region pill (US/UK/AU/CA) · date + relative time + read-time · title · featured product · "View live" button.
+  - Counter pill above the list (`data-testid="ai-blog-feed-count"`) + caption *"markets: US · UK · AU · CA"*.
+  - "Open public /blog index" footer link.
+- **Region scoping** (`SEOBOT_BLOG_REGIONS = 'US,UK,AU,CA'`):
+  - The product picker in `_seo_generate_daily_blog_post` now only considers products whose `region` IN ('US','UK','AU','CA').
+  - The LLM prompt receives `TARGET_MARKETS` so the AI writes neutral English copy that resonates across the four English-speaking markets.
+  - `regions` table seeded with Australia (`AU / AUD / A$ / 10% tax`) in `database.sql` so a fresh pod boot includes the new market.
+- **Verified end-to-end via curl + screenshot**:
+  - `/admin.php?tab=dashboard` HTML contains the new card heading "AI Auto-Blogger", the feed wrapper testid, 4 feed rows (one per AI-published post), and a count badge showing 4.
+  - The public `/blog.php` index now lists 54 articles — the 4 fresh AI posts appear at the top (Jun 14, 2026) intermixed cleanly with the seeded posts: *Office 2021 Pro Plus: Is It Right for You?*, *Office 2024 Pro Plus: Worth the Investment?*, *Project 2021: Is It Right for Your Team?*, *Windows 11 Pro: Is It Right for Your Business?* — confirming the round-robin picked four different products from the US catalogue without repeating any.
+

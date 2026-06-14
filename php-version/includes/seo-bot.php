@@ -23,6 +23,8 @@ if (!defined('SEOBOT_INDEXNOW_BATCH'))  define('SEOBOT_INDEXNOW_BATCH', 100);
 if (!defined('SEOBOT_LLM_BATCH'))       define('SEOBOT_LLM_BATCH',      5);
 if (!defined('SEOBOT_REFRESH_DAYS'))    define('SEOBOT_REFRESH_DAYS',   30);
 if (!defined('SEOBOT_BLOG_COOLDOWN_H')) define('SEOBOT_BLOG_COOLDOWN_H',20); // min hours between two auto-blogs
+// Markets the auto-blogger targets — keep in sync with regions table.
+if (!defined('SEOBOT_BLOG_REGIONS'))    define('SEOBOT_BLOG_REGIONS',   'US,UK,AU,CA');
 
 /**
  * Top-level entry point — called from cron.php after the email queue.
@@ -409,19 +411,24 @@ function _seo_generate_daily_blog_post(PDO $pdo, array &$report): array
 
     // Pick the active product that has NEVER been auto-blogged (or whose
     // last AI post is the oldest). This gives us a clean round-robin across
-    // the entire catalogue.
-    $stmt = $pdo->query("
+    // the entire catalogue.  Scoped to the markets we publish blogs for —
+    // US, UK, AU, CA (see SEOBOT_BLOG_REGIONS).
+    $regions = array_values(array_filter(array_map('trim', explode(',', SEOBOT_BLOG_REGIONS))));
+    $inClause = implode(',', array_fill(0, count($regions), '?'));
+    $stmt = $pdo->prepare("
         SELECT p.id, p.slug, p.name, p.brand, p.category, p.version, p.price,
-               p.image, p.description, p.apps,
+               p.image, p.description, p.apps, p.region,
                (SELECT MAX(bp.created_at) FROM blog_posts bp
                  WHERE bp.product_id = p.id AND bp.ai_generated = 1) AS last_ai_post_at
           FROM products p
          WHERE p.is_active = 1
+           AND p.region IN ($inClause)
          ORDER BY (last_ai_post_at IS NULL) DESC, last_ai_post_at ASC, RAND()
          LIMIT 1");
-    $product = $stmt ? $stmt->fetch() : null;
+    $stmt->execute($regions);
+    $product = $stmt->fetch();
     if (!$product) {
-        $report['errors'][] = 'blog: no active product available';
+        $report['errors'][] = 'blog: no active product in target regions (' . SEOBOT_BLOG_REGIONS . ')';
         return $out;
     }
 
@@ -448,6 +455,9 @@ Rules:
  - First-person plural ("we", "our team") tone — confident, no hype.
  - Mention the product brand, edition and year naturally — no keyword
    stuffing.
+ - Write for buyers in the US, UK, Australia and Canada. Use neutral
+   English (avoid heavy US-only slang) and reference international
+   delivery / multi-currency support when natural.
  - Always include one anchor in the closing paragraph:
      <a href="product.php?slug=PRODUCT_SLUG">Shop {brand} {edition} →</a>
  - DO NOT invent prices, do not promise discounts, do not mention competitors
@@ -462,6 +472,7 @@ SYS;
          . "VERSION: " . ($product['version'] ?: 'n/a') . "\n"
          . "APPS: " . ($product['apps'] ?: 'n/a') . "\n"
          . "PRICE_USD: " . $product['price'] . "\n"
+         . "TARGET_MARKETS: " . SEOBOT_BLOG_REGIONS . "\n"
          . "RAW_DESCRIPTION:\n" . trim((string)$product['description']);
 
     $payload = json_encode([
