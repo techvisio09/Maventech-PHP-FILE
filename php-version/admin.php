@@ -287,8 +287,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $tok        = bin2hex(random_bytes(16));
         $maxRetries = (int)(smtp_config()['max_retries'] ?? 3);
         $pdo->prepare("INSERT INTO email_outbox
-            (recipient, subject, html, status, note, order_id, tracking_token, template_code, retry_count, max_retries, next_retry_at, priority)
-            VALUES (?,?,?,'queued',?,?,?,?,0,?,NOW(),?)")
+            (recipient, subject, html, status, note, order_id, tracking_token, template_code, retry_count, max_retries, next_retry_at, priority, attachments_json)
+            VALUES (?,?,?,'queued',?,?,?,?,0,?,NOW(),?,?)")
             ->execute([
                 $to,
                 $subject,
@@ -299,6 +299,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $em['template_code'],
                 $maxRetries,
                 3, // higher priority than batch sends
+                $em['attachments_json'] ?? null,
             ]);
         $newId = (int)$pdo->lastInsertId();
 

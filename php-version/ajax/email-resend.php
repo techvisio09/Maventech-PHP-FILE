@@ -69,14 +69,14 @@ if ($smtpReady) {
     $note = 'Edit & Resend of email #' . $emailId . ($newTo !== '' ? ' (to ' . $newTo . ')' : '');
     try {
         $pdo->prepare("INSERT INTO email_outbox
-            (recipient, subject, html, status, note, order_id, tracking_token, template_code, retry_count, max_retries, next_retry_at, priority)
-            VALUES (?,?,?,'queued',?,?,?,?,0,?,NOW(),?)")
-            ->execute([$to, $em['subject'], $em['html'], $note, $em['order_id'], $tok, $em['template_code'], $maxRetries, 3]);
+            (recipient, subject, html, status, note, order_id, tracking_token, template_code, retry_count, max_retries, next_retry_at, priority, attachments_json)
+            VALUES (?,?,?,'queued',?,?,?,?,0,?,NOW(),?,?)")
+            ->execute([$to, $em['subject'], $em['html'], $note, $em['order_id'], $tok, $em['template_code'], $maxRetries, 3, $em['attachments_json'] ?? null]);
     } catch (Throwable $e) {
         $pdo->prepare("INSERT INTO email_outbox
-            (recipient, subject, html, status, note, order_id, tracking_token, template_code)
-            VALUES (?,?,?,'queued',?,?,?,?)")
-            ->execute([$to, $em['subject'], $em['html'], $note, $em['order_id'], $tok, $em['template_code']]);
+            (recipient, subject, html, status, note, order_id, tracking_token, template_code, attachments_json)
+            VALUES (?,?,?,'queued',?,?,?,?,?)")
+            ->execute([$to, $em['subject'], $em['html'], $note, $em['order_id'], $tok, $em['template_code'], $em['attachments_json'] ?? null]);
     }
     $newId = (int)$pdo->lastInsertId();
 
@@ -98,8 +98,8 @@ if ($smtpReady) {
     // row would sit at 'queued' forever because smtp_process_queue()
     // returns 0 immediately when SMTP isn't configured.
     $pdo->prepare("INSERT INTO email_outbox
-        (recipient, subject, html, status, note, order_id, tracking_token, template_code, delivered_at)
-        VALUES (?,?,?,'sent',?,?,?,?,NOW())")
+        (recipient, subject, html, status, note, order_id, tracking_token, template_code, delivered_at, attachments_json)
+        VALUES (?,?,?,'sent',?,?,?,?,NOW(),?)")
         ->execute([
             $to,
             $em['subject'],
@@ -108,6 +108,7 @@ if ($smtpReady) {
             $em['order_id'],
             $tok,
             $em['template_code'],
+            $em['attachments_json'] ?? null,
         ]);
     $newId = (int)$pdo->lastInsertId();
     $delivered = true; // From the admin UI's perspective, the row is "sent" (captured).

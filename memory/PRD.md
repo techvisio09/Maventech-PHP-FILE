@@ -470,3 +470,11 @@ See `/app/memory/test_credentials.md`.
   - `order-success.php` shows a green Order History CTA banner directly after a successful purchase — friendly nudge so the customer never has to wonder "how do I get my PDFs later?".
 - **Verified end-to-end via curl + Playwright**: lookup form renders, bad email/order combo returns "couldn't find … (7 attempts left)", good combo unlocks the order card, both PDFs download as valid `%PDF-1.7` files (31706 / 30341 bytes), resend creates a new outbox row, a fresh session is correctly locked out (HTTP 403).
 
+## [Feb 2026] **CRITICAL FIX**: Attachments now actually leave the SMTP queue
+- **Root cause**: `smtp_process_queue()` in `includes/mailer.php` was reading queued rows but passing only `(recipient, subject, html)` to `smtp_send()` — the `attachments_json` column was silently dropped. So even though `fulfill_order()` correctly stored the PDF paths in the outbox row, the worker never attached them to the real SMTP message.  Same drop existed in the two admin resend paths.
+- **Fix in three places**:
+  - `includes/mailer.php` → `smtp_process_queue()` now decodes `attachments_json`, filters to files that still exist on disk, and passes them via `smtp_send($to, $subject, $html, ['attachments' => …])`. `_smtp_prepare()` already calls `$m->addAttachment()` for each path so this completes the chain.
+  - `ajax/email-resend.php` → both INSERT branches (SMTP-on / dev-mode) now carry the original row's `attachments_json` into the clone so resent emails keep their PDFs.
+  - `admin.php` → the `resend_outbox` POST handler's INSERT also forwards `attachments_json` to the cloned row.
+- **Verified end-to-end via PHPMailer `preSend()` MIME capture**: assembled message contains a `multipart/mixed` envelope with two `Content-Type: application/pdf` parts. Headers seen on the wire: `Content-Disposition: attachment; filename=Receipt-MV26061430774.pdf` and `…Invoice-MV26061430774.pdf`. Base64 bodies decoded cleanly back to 31706-byte and 30341-byte buffers with `%PDF-1.7` magic — i.e. exactly what the customer's mail client will save when they click the attachment icon.
+

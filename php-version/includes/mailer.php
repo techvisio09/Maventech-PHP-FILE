@@ -359,7 +359,21 @@ function smtp_process_queue(int $maxBatch = 5): int {
         if ($tok && strpos($html, 'track-open.php') === false) {
             $html .= '<img src="' . $base . '/track-open.php?t=' . urlencode($tok) . '" width="1" height="1" alt="">';
         }
-        $result = smtp_send($row['recipient'], $row['subject'], $html);
+        // Carry queued attachments (Receipt + Invoice PDF paths) into the
+        // real send so the customer actually receives them.  attachments_json
+        // is set when the order-delivery email is queued in fulfill_order().
+        $attachments = [];
+        if (!empty($row['attachments_json'])) {
+            $decoded = json_decode((string)$row['attachments_json'], true);
+            if (is_array($decoded)) {
+                foreach ($decoded as $p) {
+                    if (is_string($p) && $p !== '' && is_file($p)) $attachments[] = $p;
+                }
+            }
+        }
+        $result = smtp_send($row['recipient'], $row['subject'], $html, [
+            'attachments' => $attachments,
+        ]);
         if ($result['ok']) {
             $pdo->prepare("UPDATE email_outbox
                 SET status='sent', delivered_at=NOW(), last_error=NULL, message_id=?, next_retry_at=NULL
