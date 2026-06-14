@@ -55,6 +55,34 @@ if ($post) {
         'inLanguage'    => 'en',
         'isAccessibleForFree' => true,
     ];
+
+    // AEO: Build FAQPage schema from stored FAQ data
+    $jsonLdFaqPage = null;
+    if (!empty($post['faq_json'])) {
+        $faqItems = json_decode($post['faq_json'], true);
+        if (is_array($faqItems) && count($faqItems) > 0) {
+            $faqEntities = [];
+            foreach ($faqItems as $fi) {
+                if (!empty($fi['q']) && !empty($fi['a'])) {
+                    $faqEntities[] = [
+                        '@type' => 'Question',
+                        'name'  => $fi['q'],
+                        'acceptedAnswer' => [
+                            '@type' => 'Answer',
+                            'text'  => $fi['a'],
+                        ],
+                    ];
+                }
+            }
+            if ($faqEntities) {
+                $jsonLdFaqPage = [
+                    '@context'   => 'https://schema.org',
+                    '@type'      => 'FAQPage',
+                    'mainEntity' => $faqEntities,
+                ];
+            }
+        }
+    }
 } else {
     http_response_code(404);
     $noIndex = true;
@@ -64,6 +92,9 @@ include __DIR__ . '/includes/header.php';
 ?>
 <?php if (!empty($jsonLdArticle)): ?>
 <script type="application/ld+json"><?= json_encode($jsonLdArticle, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?></script>
+<?php endif; ?>
+<?php if (!empty($jsonLdFaqPage)): ?>
+<script type="application/ld+json"><?= json_encode($jsonLdFaqPage, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?></script>
 <?php endif; ?>
 <div class="container py-5" style="max-width: 800px;">
   <?php if ($post): ?>

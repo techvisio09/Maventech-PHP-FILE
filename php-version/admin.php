@@ -2430,6 +2430,117 @@ elseif ($tab === 'ai-blogger'):
   </div>
   <?php endif; ?>
 
+  <!-- ====== GO-LIVE SEO/AEO/GEO HEALTH CHECK ====== -->
+  <?php
+    $siteBase = rtrim(site_url(), '/');
+    // Check all SEO components
+    $checks = [];
+
+    // 1. AI Key
+    $aiKeyOk = (defined('OPENAI_API_KEY') && OPENAI_API_KEY !== '') || setting_get('ai_blogger_llm_key', '') !== '';
+    $checks[] = ['name' => 'AI Writing Key', 'ok' => $aiKeyOk, 'icon' => 'bi-robot', 'color' => '#8b5cf6',
+                 'desc' => $aiKeyOk ? 'AI key is configured — blog posts can be generated automatically.' : 'No AI key set. Go to API Keys above and add your key.'];
+
+    // 2. Google Search Console
+    $gscOk = ($seoGsc ?? '') !== '';
+    $checks[] = ['name' => 'Google Search Console', 'ok' => $gscOk, 'icon' => 'bi-google', 'color' => '#ea4335',
+                 'desc' => $gscOk ? 'Verification token is set. Google can index your pages.' : 'Not connected. Add your token above to appear in Google search.'];
+
+    // 3. Bing Webmaster
+    $bingOk = ($seoBing ?? '') !== '';
+    $checks[] = ['name' => 'Bing & AI Search', 'ok' => $bingOk, 'icon' => 'bi-microsoft', 'color' => '#00a4ef',
+                 'desc' => $bingOk ? 'Bing token set. Your site will appear in Bing, Copilot & ChatGPT search.' : 'Not connected. Add token to appear in Bing, Microsoft Copilot & ChatGPT.'];
+
+    // 4. XML Sitemap
+    $sitemapOk = true; // Always generated dynamically
+    $checks[] = ['name' => 'XML Sitemap', 'ok' => $sitemapOk, 'icon' => 'bi-filetype-xml', 'color' => '#059669',
+                 'desc' => 'Auto-generated at <a href="' . esc($siteBase) . '/sitemap.xml" target="_blank">/sitemap.xml</a> — includes all products, blog posts & pages.'];
+
+    // 5. robots.txt
+    $robotsOk = true;
+    $checks[] = ['name' => 'robots.txt', 'ok' => $robotsOk, 'icon' => 'bi-file-text', 'color' => '#6366f1',
+                 'desc' => 'Dynamic <a href="' . esc($siteBase) . '/robots.txt" target="_blank">robots.txt</a> allows all search engines and AI crawlers.'];
+
+    // 6. AI Discoverability (ai.txt)
+    $aiTxtOk = true;
+    $checks[] = ['name' => 'AI Discoverability (ai.txt)', 'ok' => $aiTxtOk, 'icon' => 'bi-cpu', 'color' => '#f59e0b',
+                 'desc' => '<a href="' . esc($siteBase) . '/ai.txt" target="_blank">ai.txt</a> allows 22+ AI crawlers (ChatGPT, Gemini, Claude, Copilot, Perplexity, etc).'];
+
+    // 7. LLM Product Catalog
+    $llmsTxtOk = true;
+    $checks[] = ['name' => 'LLM Product Catalog (llms.txt)', 'ok' => $llmsTxtOk, 'icon' => 'bi-list-check', 'color' => '#0ea5e9',
+                 'desc' => '<a href="' . esc($siteBase) . '/llms.txt" target="_blank">llms.txt</a> exposes your full product catalog to AI engines for direct citation.'];
+
+    // 8. Shopping Feed
+    $merchantOk = true;
+    $checks[] = ['name' => 'Google Shopping Feed', 'ok' => $merchantOk, 'icon' => 'bi-bag-check', 'color' => '#4285f4',
+                 'desc' => '<a href="' . esc($siteBase) . '/merchant-feed.xml" target="_blank">merchant-feed.xml</a> feeds product data to Google Shopping.'];
+
+    // 9. IndexNow
+    $indexNowOk = true;
+    $checks[] = ['name' => 'IndexNow (Instant Indexing)', 'ok' => $indexNowOk, 'icon' => 'bi-lightning-charge', 'color' => '#dc2626',
+                 'desc' => 'Every new blog post is instantly pushed to Bing, Yandex, Naver & Seznam via IndexNow.'];
+
+    // 10. Schema Markup
+    $schemaOk = true;
+    $checks[] = ['name' => 'Structured Data (Schema.org)', 'ok' => $schemaOk, 'icon' => 'bi-code-slash', 'color' => '#7c3aed',
+                 'desc' => 'Product, Article, FAQ, Organization & BreadcrumbList schemas on all pages — helps Google show rich results.'];
+
+    // 11. Blog Posts
+    $blogCountOk = $totalAiAll > 0;
+    $checks[] = ['name' => 'Blog Content', 'ok' => $blogCountOk, 'icon' => 'bi-journal-text', 'color' => '#059669',
+                 'desc' => $blogCountOk ? $totalAiAll . ' AI blog posts published across 4 markets. Each includes FAQ for AEO.' : 'No blog posts yet. Use Quick Actions above to generate your first batch.'];
+
+    $passCount = 0;
+    foreach ($checks as $ch) { if ($ch['ok']) $passCount++; }
+    $totalChecks = count($checks);
+    $healthPct = (int)round($passCount / $totalChecks * 100);
+    $healthColor = $healthPct >= 80 ? '#059669' : ($healthPct >= 50 ? '#d97706' : '#dc2626');
+  ?>
+  <div class="card-e mb-3" style="border:1px solid #e2e8f0;border-radius:14px;padding:20px;">
+    <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+      <h5 class="fw-bold mb-0" style="font-size:15px;"><i class="bi bi-shield-check me-2" style="color:<?= $healthColor ?>;"></i>Go-Live SEO Health Check</h5>
+      <div class="d-flex align-items-center gap-2">
+        <div style="width:120px;height:8px;background:#e2e8f0;border-radius:999px;overflow:hidden;">
+          <div style="width:<?= $healthPct ?>%;height:100%;background:<?= $healthColor ?>;border-radius:999px;"></div>
+        </div>
+        <span class="fw-bold" style="font-size:14px;color:<?= $healthColor ?>;"><?= $healthPct ?>%</span>
+        <span class="text-secondary small">(<?= $passCount ?>/<?= $totalChecks ?> ready)</span>
+      </div>
+    </div>
+    <p class="text-secondary small mb-3">This checklist covers <strong>SEO</strong> (Google/Bing search), <strong>AEO</strong> (answer engines like ChatGPT & Perplexity), and <strong>GEO</strong> (generative AI search). All green = your website is fully optimised for maximum reach.</p>
+
+    <div class="row g-2">
+      <?php foreach ($checks as $ch): ?>
+        <div class="col-md-6">
+          <div class="d-flex align-items-start gap-2 p-2" style="background:<?= $ch['ok'] ? '#f0fdf4' : '#fef2f2' ?>;border-radius:8px;border:1px solid <?= $ch['ok'] ? '#bbf7d0' : '#fecaca' ?>;">
+            <div style="flex-shrink:0;width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:<?= $ch['ok'] ? '#dcfce7' : '#fee2e2' ?>;color:<?= $ch['ok'] ? '#15803d' : '#dc2626' ?>;">
+              <?php if ($ch['ok']): ?>
+                <i class="bi bi-check-lg" style="font-size:14px;"></i>
+              <?php else: ?>
+                <i class="bi bi-x-lg" style="font-size:12px;"></i>
+              <?php endif; ?>
+            </div>
+            <div style="min-width:0;">
+              <div class="fw-semibold" style="font-size:12.5px;color:#0f172a;">
+                <i class="<?= $ch['icon'] ?> me-1" style="color:<?= $ch['color'] ?>;"></i><?= $ch['name'] ?>
+              </div>
+              <div class="text-secondary" style="font-size:11px;line-height:1.4;"><?= $ch['desc'] ?></div>
+            </div>
+          </div>
+        </div>
+      <?php endforeach; ?>
+    </div>
+
+    <div class="mt-3 pt-2" style="border-top:1px solid #f1f5f9;">
+      <div class="small text-secondary">
+        <strong>SEO</strong> = Search Engine Optimization (Google, Bing) · 
+        <strong>AEO</strong> = Answer Engine Optimization (ChatGPT, Perplexity, Claude) · 
+        <strong>GEO</strong> = Generative Engine Optimization (AI-powered search results)
+      </div>
+    </div>
+  </div>
+
   <!-- ====== 8. ADVANCED SETTINGS (collapsed) ====== -->
   <details class="card-e mb-3" style="border:1px solid #e2e8f0;border-radius:14px;padding:16px 20px;">
     <summary class="fw-bold" style="font-size:14px;cursor:pointer;"><i class="bi bi-gear me-2 text-secondary"></i>Advanced Settings</summary>

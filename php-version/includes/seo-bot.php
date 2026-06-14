@@ -199,6 +199,9 @@ function seo_bot_ensure_schema(PDO $pdo): void
         if (!in_array('is_featured_trends', $blogCols, true)) {
             $pdo->exec("ALTER TABLE blog_posts ADD is_featured_trends TINYINT(1) NOT NULL DEFAULT 0, ADD KEY idx_featured_trends (is_featured_trends)");
         }
+        if (!in_array('faq_json', $blogCols, true)) {
+            $pdo->exec("ALTER TABLE blog_posts ADD faq_json TEXT NULL");
+        }
     } catch (Throwable $e) { @error_log('[seo-bot schema] blog_posts: ' . $e->getMessage()); }
 }
 
@@ -647,6 +650,12 @@ Return STRICT JSON with EXACTLY these keys (no markdown, no code fences):
                 lead above, then 2-3 <h2> sections, a <ul> with 4-5 key
                 takeaways, and finish with a closing paragraph that links
                 to the product page using the slug provided.
+  faq:         An array of exactly 3 FAQ objects, each with "q" (question)
+               and "a" (answer, 1-2 sentences). Questions should be natural
+               queries a buyer in {$rc['country']} would type into Google or
+               ask an AI assistant (e.g. "Is [product] worth buying in
+               {$rc['country']}?", "What apps are included in [product]?",
+               "How do I activate [product] after purchase?").
 
 Rules:
  - Write specifically for buyers in {$rc['country']}. Use {$rc['locale']}.
@@ -719,6 +728,27 @@ SYS;
     $content  = _seo_blog_sanitize_html((string)$j['content_html']);
     $image    = (string)$product['image'] ?: 'https://images.unsplash.com/photo-1498050108023-c5249f4df085?q=80&w=872&auto=format&fit=crop';
 
+    // AEO: Extract FAQ data if present (for FAQ Schema markup)
+    $faqJson  = null;
+    if (!empty($j['faq']) && is_array($j['faq'])) {
+        $cleanFaq = [];
+        foreach ($j['faq'] as $fItem) {
+            if (!empty($fItem['q']) && !empty($fItem['a'])) {
+                $cleanFaq[] = ['q' => trim($fItem['q']), 'a' => trim($fItem['a'])];
+            }
+        }
+        if ($cleanFaq) {
+            $faqJson = json_encode($cleanFaq, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            // Also append FAQ as HTML to the content for user visibility + AEO
+            $faqHtml = '<h2>Frequently Asked Questions</h2>';
+            foreach ($cleanFaq as $fq) {
+                $faqHtml .= '<p><strong>' . htmlspecialchars($fq['q'], ENT_QUOTES, 'UTF-8') . '</strong></p>'
+                          . '<p>' . htmlspecialchars($fq['a'], ENT_QUOTES, 'UTF-8') . '</p>';
+            }
+            $content .= "\n" . $faqHtml;
+        }
+    }
+
     if (mb_strlen(strip_tags($content)) < 200) {
         $report['errors'][] = "blog[$targetRegion]: LLM body too short (" . mb_strlen(strip_tags($content)) . ' chars)';
         return $out;
@@ -741,8 +771,8 @@ SYS;
     try {
         $ins = $pdo->prepare("INSERT INTO blog_posts
             (id, title, date, read_time, image, content, ai_generated, product_id,
-             target_region, internal_links_count, content_fingerprint, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, NOW())");
+             target_region, internal_links_count, content_fingerprint, faq_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, NOW())");
         $ins->execute([
             $postId,
             $title,
@@ -754,6 +784,7 @@ SYS;
             $targetRegion,
             (int)$internalLinks,
             $fingerprint,
+            $faqJson,
         ]);
     } catch (Throwable $e) {
         $report['errors'][] = "blog[$targetRegion]: insert failed — " . $e->getMessage();
