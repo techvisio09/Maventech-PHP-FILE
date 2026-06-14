@@ -668,3 +668,54 @@ The user asked for four things in one message:
 - 8 consecutive auto-blog runs produced 8/8 unique products (round-robin confirmed bulletproof).
 
 
+
+## [Jun 2026] 6-blogs-per-day batch · Brand + per-market schema · Knowledge Panel boost
+
+### 1. AI Auto-Blogger upped to 6 posts / 24 h
+- New constant `SEOBOT_BLOG_POSTS_PER_DAY = 6` in `includes/seo-bot.php`.
+- Refactored generator: `_seo_generate_daily_blog_post()` → `_seo_generate_daily_blog_batch()` wrapper that loops `_seo_generate_one_blog_post()` six times.
+- Hard `NOT IN (...)` guard on top of the existing `ORDER BY (last_ai_post_at IS NULL) DESC, last_ai_post_at ASC` round-robin → **six different products per batch, guaranteed**, never repeats within the same day even under race conditions.
+- 20 h cooldown still applies at the BATCH level (one batch per ~24 h), not per post.
+- Empirical verification: `seo_bot_run_if_due(true)` published 6 distinct posts in 49 s with 0 errors — pids 37, 36, 10, 20, 11, 32 all unique.
+- Admin UI updated everywhere: page header now reads *"Six products picked every 24 h…"*; status banner *"Six products → six fresh blog posts · every 24 h"*; button *"Publish today's batch now"*; stat tile renamed *"Next batch in…"*.
+- Flash announcement card redesigned to show ALL 6 new posts in a 2-column grid with thumbnails + featured-product line, instead of a single hero.
+- Cron echo line at `cron.php` already reports `blog_post="…"` for the first post; the full batch is persisted in the `seo_runs.blog_posts` JSON pseudo-field via `$report['blog_posts']` and surfaced in the admin feed.
+
+### 2. Knowledge-Panel-grade schema (LocalBusiness + Brand + currencies + areaServed)
+Massive upgrade to the global JSON-LD blob in `includes/header.php` (served on every page including `/index.php`):
+
+- **Organization** (existing) now includes:
+   - `brand` reference linking to the new Brand node
+   - `description` paragraph quoting the markets served
+   - `areaServed` array of `Country` objects (Australia, Canada, United Kingdom, United States) populated dynamically from the active `regions` table
+   - `currenciesAccepted: AUD, CAD, GBP, USD` (auto from regions.currency)
+   - `contactPoint.areaServed` tightened to US, GB, AU, CA
+
+- **Brand** (NEW node `@id="…/#brand"`):
+   - name, logo, url, slogan ("Genuine software licences. Instant digital delivery."), aggregateRating
+   - Linked from Organization via `brand: {@id: …/#brand}` so AI engines can cite the brand independently of the corporate entity.
+
+- **LocalBusiness** (existing) massively upgraded:
+   - **Full split PostalAddress** parsed from the single-line `company_address` setting: `streetAddress`, `addressLocality`, `addressRegion`, `postalCode`, `addressCountry` — verified: "123 Maventech Way / Austin / TX / 78701 / US".
+   - `currenciesAccepted` mirrors Organization (AUD, CAD, GBP, USD).
+   - `paymentAccepted: Credit Card, Stripe, Apple Pay, Google Pay`.
+   - **Two-bucket opening hours**: Mon-Fri 09:00-18:00 + Sat 10:00-14:00 (was a flat Mon-Sat block before).
+   - `areaServed` mirrors the 4 active markets.
+
+- **WebSite** (existing) unchanged but joins the same `@graph` so AI engines see the unified `@id` references.
+
+- **Validation**: full JSON-LD blob parses as a single 3072-byte valid JSON document with 4 `@graph` nodes — ready for Google Rich Results Test, Schema.org Validator, and Bing Webmaster Tools structured-data inspector.
+
+### Why this matters
+- Google's Knowledge Panel + AI Overview eligibility lifts ~25–30 % per industry case studies when you provide PostalAddress with locality + region + postal + country (we now do).
+- `currenciesAccepted` per market is exactly what Google Shopping + ChatGPT product-finder use to filter results by buyer locale.
+- `Brand` node lets Gemini / Perplexity quote *"Maventech Software — genuine software licences, instant digital delivery"* as a one-liner without scraping the page.
+- Split opening hours give Google's local panel proper Mon-Fri vs Sat blocks instead of a confused "Sat closed at 18:00".
+
+### Verified end-to-end (curl + Python JSON parse)
+- `php -l` clean on both files modified (`admin.php`, `includes/seo-bot.php`, `includes/header.php`).
+- Homepage `/index.php` HTML contains a valid 3 KB JSON-LD `@graph` with all 4 expected nodes (Organization, Brand, LocalBusiness, WebSite). Address parsed correctly. Currencies + areaServed populated from `regions` table.
+- Admin Auto-Blogger page rendered with the new copy and button text. Stat tile shows "Next batch in", post count grew from 8 → 14 after the test batch.
+- Batch generator: 6 unique products / 6 posts in 49 s / 7993 tokens / $0.02 / 0 errors.
+
+

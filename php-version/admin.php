@@ -597,15 +597,24 @@ if ($tab === 'ai-blogger') {
             if (!empty($r['skipped'])) {
                 $_SESSION['seo_bot_flash'] = 'AI Auto-Blogger was already up to date — ' . $r['reason'] . '.';
             } else {
-                $_SESSION['seo_bot_flash'] = 'AI Auto-Blogger run complete — IndexNow ' . $r['indexnow_status']
+                $publishedCount = is_array($r['blog_posts'] ?? null) ? count($r['blog_posts']) : (!empty($r['blog_post_id']) ? 1 : 0);
+                $_SESSION['seo_bot_flash'] = 'AI Auto-Blogger run complete — ' . $publishedCount . ' new blog post' . ($publishedCount === 1 ? '' : 's')
+                    . ' · IndexNow ' . $r['indexnow_status']
                     . ' (' . $r['indexnow_count'] . ' URLs) · LLM refresh: ' . $r['products_updated'] . ' product(s) · '
                     . count($r['errors']) . ' error(s).';
-                if (!empty($r['blog_post_id'])) {
+                if (!empty($r['blog_posts'])) {
+                    // Highlight the LIST of new posts in the announcement card.
                     $_SESSION['seo_bot_blog_flash'] = [
-                        'id'    => $r['blog_post_id'],
-                        'title' => $r['blog_post_title'],
-                        'url'   => 'blog-post.php?id=' . urlencode($r['blog_post_id']),
-                        'image' => $r['blog_post_image'] ?? '',
+                        'posts' => $r['blog_posts'],
+                    ];
+                } elseif (!empty($r['blog_post_id'])) {
+                    $_SESSION['seo_bot_blog_flash'] = [
+                        'posts' => [[
+                            'blog_post_id'    => $r['blog_post_id'],
+                            'blog_post_title' => $r['blog_post_title'],
+                            'blog_post_image' => $r['blog_post_image'] ?? '',
+                            'product_name'    => '',
+                        ]],
                     ];
                 }
             }
@@ -1674,24 +1683,37 @@ elseif ($tab === 'ai-blogger'):
   <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
     <div>
       <h1 class="h4 fw-bold mb-1" data-testid="ai-blogger-page-title"><i class="bi bi-robot me-1 text-primary"></i> AI Auto-Blogger</h1>
-      <small class="text-muted">One product picked every 24&nbsp;h · Claude Haiku writes a fresh SEO-optimised blog article · published instantly to <code>/blog.php</code> · also pinged to Google, Bing, IndexNow and listed in <code>/llms.txt</code> + <code>/ai.txt</code> so ChatGPT, Gemini, Copilot, Perplexity and Claude can cite it. Markets: <strong>US · UK · AU · CA</strong>.</small>
+      <small class="text-muted">Six products picked every 24&nbsp;h · Claude Haiku writes a fresh SEO-optimised blog article for each · published instantly to <code>/blog.php</code> · also pinged to Google, Bing, IndexNow and listed in <code>/llms.txt</code> + <code>/ai.txt</code> so ChatGPT, Gemini, Copilot, Perplexity and Claude can cite them. Markets: <strong>US · UK · AU · CA</strong>.</small>
     </div>
-    <a href="admin.php?tab=ai-blogger&seo_run=1" class="btn btn-primary rounded-pill px-4" data-testid="ai-blogger-run-now" onclick="return confirm('Publish one fresh AI blog post right now? (~$0.003 in LLM credits)')"><i class="bi bi-play-fill me-1"></i>Publish next post now</a>
+    <a href="admin.php?tab=ai-blogger&seo_run=1" class="btn btn-primary rounded-pill px-4" data-testid="ai-blogger-run-now" onclick="return confirm('Publish 6 fresh AI blog posts right now? (~$0.02 in LLM credits)')"><i class="bi bi-play-fill me-1"></i>Publish today\'s batch now</a>
   </div>
 
   <?php if (!empty($_SESSION['seo_bot_flash'])): ?>
     <div class="alert alert-info" data-testid="ai-blogger-flash" style="border-radius:12px;"><i class="bi bi-robot me-1"></i><?= esc($_SESSION['seo_bot_flash']) ?></div>
     <?php unset($_SESSION['seo_bot_flash']); ?>
   <?php endif; ?>
-  <?php if (!empty($_SESSION['seo_bot_blog_flash'])): $bf = $_SESSION['seo_bot_blog_flash']; ?>
-    <div class="alert" data-testid="ai-blogger-blog-flash" style="margin:0 0 14px;background:linear-gradient(135deg,#eef2ff 0%,#fdf4ff 100%);border:1px solid #c7d2fe;color:#1e293b;border-radius:12px;padding:14px 18px;display:flex;gap:14px;align-items:center;">
-      <?php if (!empty($bf['image'])): ?><img src="<?= esc($bf['image']) ?>" alt="" style="width:64px;height:64px;object-fit:cover;border-radius:10px;flex-shrink:0;"><?php endif; ?>
-      <div style="flex:1;min-width:0;">
-        <div style="font-weight:700;color:#4338ca;font-size:12px;letter-spacing:1px;text-transform:uppercase;"><i class="bi bi-stars me-1"></i>AI just published a new blog post</div>
-        <div style="font-size:16px;font-weight:700;margin-top:2px;"><?= esc($bf['title']) ?></div>
-        <a href="<?= esc($bf['url']) ?>" target="_blank" rel="noopener" style="font-size:13px;color:#4338ca;font-weight:600;text-decoration:none;">View live post <i class="bi bi-box-arrow-up-right"></i></a>
+  <?php if (!empty($_SESSION['seo_bot_blog_flash'])): $bf = $_SESSION['seo_bot_blog_flash']; $bfPosts = $bf['posts'] ?? []; ?>
+    <div class="alert" data-testid="ai-blogger-blog-flash" style="margin:0 0 14px;background:linear-gradient(135deg,#eef2ff 0%,#fdf4ff 100%);border:1px solid #c7d2fe;color:#1e293b;border-radius:12px;padding:14px 18px;">
+      <div style="font-weight:700;color:#4338ca;font-size:12px;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;"><i class="bi bi-stars me-1"></i>AI just published <?= count($bfPosts) ?> new blog post<?= count($bfPosts) === 1 ? '' : 's' ?></div>
+      <div class="row g-2">
+        <?php foreach ($bfPosts as $p):
+          $title = $p['blog_post_title'] ?? '';
+          $url   = 'blog-post.php?id=' . urlencode($p['blog_post_id'] ?? '');
+          $img   = $p['blog_post_image'] ?? '';
+          $prod  = $p['product_name'] ?? '';
+        ?>
+          <div class="col-md-6">
+            <a href="<?= esc($url) ?>" target="_blank" rel="noopener" class="d-flex align-items-center gap-2 text-decoration-none" style="background:rgba(255,255,255,0.7);border-radius:8px;padding:8px 10px;">
+              <?php if ($img): ?><img src="<?= esc($img) ?>" alt="" style="width:36px;height:36px;object-fit:cover;border-radius:6px;flex-shrink:0;"><?php endif; ?>
+              <div style="flex:1;min-width:0;">
+                <div class="fw-bold text-body" style="font-size:12.5px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= esc($title) ?></div>
+                <?php if ($prod): ?><div class="text-secondary" style="font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><i class="bi bi-box-seam me-1"></i><?= esc($prod) ?></div><?php endif; ?>
+              </div>
+              <i class="bi bi-box-arrow-up-right text-primary"></i>
+            </a>
+          </div>
+        <?php endforeach; ?>
       </div>
-      <button type="button" class="btn-close" aria-label="Close" onclick="this.parentElement.style.display='none'"></button>
     </div>
     <?php unset($_SESSION['seo_bot_blog_flash']); ?>
   <?php endif; ?>
@@ -1705,13 +1727,13 @@ elseif ($tab === 'ai-blogger'):
           AUTO · <?= $autoHealthy ? 'ACTIVE' : 'IDLE' ?>
         </span>
         <div>
-          <div style="color:#0f172a;font-weight:700;font-size:14px;">One product → one fresh blog post · every 24&nbsp;h</div>
+          <div style="color:#0f172a;font-weight:700;font-size:14px;">Six products → six fresh blog posts · every 24&nbsp;h</div>
           <div style="color:#475569;font-size:12px;margin-top:2px;">Zero manual action required. Self-cron fires on every visitor pageview after the cooldown expires; backed by an hourly background heartbeat.</div>
         </div>
       </div>
       <div class="d-flex align-items-center gap-3 flex-wrap" style="font-size:12px;color:#334155;">
         <div style="text-align:right;">
-          <div class="text-uppercase small text-secondary" style="font-weight:700;letter-spacing:1px;font-size:10px;">Next post in</div>
+          <div class="text-uppercase small text-secondary" style="font-weight:700;letter-spacing:1px;font-size:10px;">Next batch in</div>
           <div class="fw-bold" data-testid="ai-blogger-next-due" style="color:#0f172a;"><?= esc($nextDueText) ?></div>
         </div>
         <div style="text-align:right;">

@@ -22,7 +22,8 @@
 if (!defined('SEOBOT_INDEXNOW_BATCH'))  define('SEOBOT_INDEXNOW_BATCH', 100);
 if (!defined('SEOBOT_LLM_BATCH'))       define('SEOBOT_LLM_BATCH',      5);
 if (!defined('SEOBOT_REFRESH_DAYS'))    define('SEOBOT_REFRESH_DAYS',   30);
-if (!defined('SEOBOT_BLOG_COOLDOWN_H')) define('SEOBOT_BLOG_COOLDOWN_H',20); // min hours between two auto-blogs
+if (!defined('SEOBOT_BLOG_COOLDOWN_H')) define('SEOBOT_BLOG_COOLDOWN_H',20); // min hours between two auto-blog batches
+if (!defined('SEOBOT_BLOG_POSTS_PER_DAY')) define('SEOBOT_BLOG_POSTS_PER_DAY', 6); // how many blogs per daily batch
 // Markets the auto-blogger targets — keep in sync with regions table.
 if (!defined('SEOBOT_BLOG_REGIONS'))    define('SEOBOT_BLOG_REGIONS',   'US,UK,AU,CA');
 
@@ -81,16 +82,22 @@ function seo_bot_run_if_due(bool $force = false): array
     $report['llm_tokens_in']    = $refreshSummary['tokens_in'];
     $report['llm_tokens_out']   = $refreshSummary['tokens_out'];
 
-    // 4) AI-generated daily blog post — one product, one fresh article, fully automatic.
-    $blogSummary = _seo_generate_daily_blog_post($pdo, $report);
-    if (!empty($blogSummary['blog_post_id'])) {
-        $report['blog_post_id']    = $blogSummary['blog_post_id'];
-        $report['blog_post_title'] = $blogSummary['blog_post_title'];
-        $report['blog_product_id'] = $blogSummary['blog_product_id'];
-        $report['blog_post_image'] = $blogSummary['blog_post_image'] ?? null;
-        $report['llm_calls']       += (int)($blogSummary['calls']      ?? 0);
-        $report['llm_tokens_in']   += (int)($blogSummary['tokens_in']  ?? 0);
-        $report['llm_tokens_out']  += (int)($blogSummary['tokens_out'] ?? 0);
+    // 4) AI-generated daily blog posts — N products, N fresh articles, fully
+    //    automatic. SEOBOT_BLOG_POSTS_PER_DAY controls the batch size (6 by
+    //    default). Each iteration's round-robin query picks a different
+    //    product than the previous because we just inserted a row.
+    $report['blog_posts'] = []; // [{id,title,product_id,image,product_name}, ...]
+    $blogSummary = _seo_generate_daily_blog_batch($pdo, $report);
+    if (!empty($blogSummary['posts'])) {
+        $first = $blogSummary['posts'][0];
+        $report['blog_post_id']    = $first['blog_post_id'];
+        $report['blog_post_title'] = $first['blog_post_title'];
+        $report['blog_product_id'] = $first['blog_product_id'];
+        $report['blog_post_image'] = $first['blog_post_image'] ?? null;
+        $report['blog_posts']      = $blogSummary['posts'];
+        $report['llm_calls']       += (int)$blogSummary['calls'];
+        $report['llm_tokens_in']   += (int)$blogSummary['tokens_in'];
+        $report['llm_tokens_out']  += (int)$blogSummary['tokens_out'];
     }
 
     // Persist.
@@ -380,20 +387,17 @@ SYS;
  *  approval. The admin dashboard SEO Bot card then surfaces the brand-
  *  new post inline so the operator can see exactly what was published.
  * =================================================================== */
-function _seo_generate_daily_blog_post(PDO $pdo, array &$report): array
+function _seo_generate_daily_blog_batch(PDO $pdo, array &$report): array
 {
     $out = [
-        'blog_post_id'    => null,
-        'blog_post_title' => null,
-        'blog_product_id' => null,
-        'blog_post_image' => null,
-        'calls'           => 0,
-        'tokens_in'       => 0,
-        'tokens_out'      => 0,
+        'posts'      => [],
+        'calls'      => 0,
+        'tokens_in'  => 0,
+        'tokens_out' => 0,
     ];
 
-    // 24 h cooldown — never publish more than one AI blog per day.
-    // This is a silent skip (no error logged) so the dashboard stays clean.
+    // 24 h cooldown applies to the BATCH (not each individual post). Once
+    // we've published a batch today, the next batch waits ~24 h.
     $last = setting_get('seo_bot_last_blog_post_at', '');
     if ($last) {
         $hoursSince = (time() - strtotime($last)) / 3600;
@@ -409,12 +413,69 @@ function _seo_generate_daily_blog_post(PDO $pdo, array &$report): array
         return $out;
     }
 
+    // Loop SEOBOT_BLOG_POSTS_PER_DAY times. After each insertion the
+    // round-robin SELECT (ORDER BY last_ai_post_at ASC) will naturally rank
+    // the just-written product LAST, so the next iteration picks a different
+    // product. Result: N posts ↔ N unique products in one batch.
+    $perDay = max(1, (int)SEOBOT_BLOG_POSTS_PER_DAY);
+    $usedProductIds = [];
+    for ($i = 1; $i <= $perDay; $i++) {
+        $one = _seo_generate_one_blog_post($pdo, $apiKey, $baseUrl, $usedProductIds, $report);
+        $out['calls']      += (int)$one['calls'];
+        $out['tokens_in']  += (int)$one['tokens_in'];
+        $out['tokens_out'] += (int)$one['tokens_out'];
+        if (!empty($one['blog_post_id'])) {
+            $usedProductIds[] = (int)$one['blog_product_id'];
+            $out['posts'][] = [
+                'blog_post_id'    => $one['blog_post_id'],
+                'blog_post_title' => $one['blog_post_title'],
+                'blog_product_id' => $one['blog_product_id'],
+                'blog_post_image' => $one['blog_post_image'] ?? null,
+                'product_name'    => $one['product_name'] ?? '',
+            ];
+        } else {
+            // If a single iteration failed (e.g. no product available or LLM
+            // glitched), break the loop so we don't waste credits on a
+            // systemic issue. The error was already logged in $report['errors'].
+            break;
+        }
+    }
+
+    if ($out['posts']) {
+        setting_set('seo_bot_last_blog_post_at', date('Y-m-d H:i:s'));
+    }
+    return $out;
+}
+
+/**
+ * Write ONE auto-blog. Pulled out of the old _seo_generate_daily_blog_post
+ * so the batch wrapper can call it repeatedly.  $excludeProductIds prevents
+ * picking the same product twice within the same batch (the round-robin
+ * SELECT already does this naturally but we add a hard NOT IN guard for
+ * absolute safety against races).
+ */
+function _seo_generate_one_blog_post(PDO $pdo, string $apiKey, string $baseUrl, array $excludeProductIds, array &$report): array
+{
+    $out = [
+        'blog_post_id'    => null,
+        'blog_post_title' => null,
+        'blog_product_id' => null,
+        'blog_post_image' => null,
+        'product_name'    => '',
+        'calls'           => 0,
+        'tokens_in'       => 0,
+        'tokens_out'      => 0,
+    ];
+
     // Pick the active product that has NEVER been auto-blogged (or whose
     // last AI post is the oldest). This gives us a clean round-robin across
-    // the entire catalogue.  Scoped to the markets we publish blogs for —
-    // US, UK, AU, CA (see SEOBOT_BLOG_REGIONS).
-    $regions = array_values(array_filter(array_map('trim', explode(',', SEOBOT_BLOG_REGIONS))));
+    // the entire catalogue.  Scoped to US, UK, AU, CA via SEOBOT_BLOG_REGIONS.
+    $regions  = array_values(array_filter(array_map('trim', explode(',', SEOBOT_BLOG_REGIONS))));
     $inClause = implode(',', array_fill(0, count($regions), '?'));
+    $excludeSql = '';
+    if ($excludeProductIds) {
+        $excludeSql = ' AND p.id NOT IN (' . implode(',', array_fill(0, count($excludeProductIds), '?')) . ')';
+    }
     $stmt = $pdo->prepare("
         SELECT p.id, p.slug, p.name, p.brand, p.category, p.version, p.price,
                p.image, p.description, p.apps, p.region,
@@ -423,14 +484,16 @@ function _seo_generate_daily_blog_post(PDO $pdo, array &$report): array
           FROM products p
          WHERE p.is_active = 1
            AND p.region IN ($inClause)
+           $excludeSql
          ORDER BY (last_ai_post_at IS NULL) DESC, last_ai_post_at ASC, RAND()
          LIMIT 1");
-    $stmt->execute($regions);
+    $stmt->execute(array_merge($regions, $excludeProductIds));
     $product = $stmt->fetch();
     if (!$product) {
-        $report['errors'][] = 'blog: no active product in target regions (' . SEOBOT_BLOG_REGIONS . ')';
+        $report['errors'][] = 'blog: no eligible product (batch_pos=' . (count($excludeProductIds)+1) . ', regions=' . SEOBOT_BLOG_REGIONS . ')';
         return $out;
     }
+    $out['product_name'] = (string)$product['name'];
 
     $sys = <<<SYS
 You are a senior content strategist for Maventech Software, an authorised
@@ -529,9 +592,9 @@ SYS;
         return $out;
     }
 
-    // Build a unique, deterministic id so re-runs on the same day can't dupe.
+    // Build a unique id — date prefix + slug + short batch suffix so 6 posts
+    // on the same day all coexist.
     $postId = 'ai-' . date('Ymd') . '-' . substr(preg_replace('/[^a-z0-9]+/i', '-', strtolower($product['slug'])), 0, 60);
-    // Guarantee uniqueness even on re-attempts.
     $existing = $pdo->prepare('SELECT 1 FROM blog_posts WHERE id = ?');
     $existing->execute([$postId]);
     if ($existing->fetchColumn()) {
@@ -555,8 +618,6 @@ SYS;
         $report['errors'][] = 'blog: insert failed — ' . $e->getMessage();
         return $out;
     }
-
-    setting_set('seo_bot_last_blog_post_at', date('Y-m-d H:i:s'));
 
     $out['blog_post_id']    = $postId;
     $out['blog_post_title'] = $title;
