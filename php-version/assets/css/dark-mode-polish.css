@@ -256,6 +256,11 @@
 [data-bs-theme="dark"] [data-testid="product-hub-link"] {
   background: rgba(30,41,59,.85) !important;
   border-color: rgba(148,163,184,.30) !important;
+  /* Inline colour is the hub's brand accent — boost it for WCAG-AA contrast
+     against the dark bg by adding a subtle text-shadow + slightly lifted
+     opacity.  Each hub still keeps its identity colour. */
+  filter: brightness(1.35) saturate(1.1);
+  text-shadow: 0 1px 6px rgba(0,0,0,.35);
 }
 
 /* ---- category.php — deep-cluster Popular Searches badges. */

@@ -844,3 +844,37 @@ Also surfaced a **"{brand} profile →"** chip on each admin Product card (data-
 - Admin CSV upload via `<input type=file name=gsc_csv>` or paste textarea inserts queries into `gsc_queries` with computed `cluster_key`; top clusters render as cards with `Create hub` / `Hub exists` states; `hub_from_cluster=<key>` inserts a `gsc`-source hub and the public `/hub/<slug>` immediately returns 200.
 - `category.php?slug=bitdefender` and `product.php?slug=<bitdefender-product>` render `data-testid="category-hub-link"` / `product-hub-link` pointing to `hub/<slug>` (clean URL — same as sitemap).
 
+
+## [Feb 2026] Iteration 9 — Admin donut chart + Quick-Answer reorder + full dark-mode sweep
+
+### What shipped (testing 324/324 PASSED ✅, testing_agent_v3_fork 100% pass — both backend + frontend)
+- 📊 **Sales-by-Category donut chart** — Chart.js 4.4.1 doughnut on the Admin Dashboard.  Aggregates `order_items.qty * order_items.price` for paid orders in the active region grouped by `products.category`.  Renders with a centre label ("TOTAL REVENUE / $X / N categories"), custom legend with proportional bars + revenue per row, dark-mode aware borders.  Chart.js CDN is **only loaded when there's data** to chart — `<script src="chart.umd.min.js">` is gated on `$catTotalRev > 0`.  Empty state shows a friendly icon + copy when no paid orders exist.
+- 📦 **Quick Answer reorder** — Category pages now show **product cards FIRST**, then the AEO Quick-Answer block below them.  Logic in `category.php`: the `render_aeo_answer()` call moved from line ~58 (above intro) to line ~135 (after the product grid).  Improves UX (buyers see inventory immediately) without losing AEO JSON-LD.
+- 🌙 **Full dark-mode sweep** — `dark-mode-polish.css` extended with 90+ lines of `!important` overrides for every light-bg block visible in the user's screenshot:
+  - `.cat-topic-hub` / `[data-testid=category-topic-hub]` — was a near-white gradient → now dark blue/green tint with light text
+  - `[data-testid=category-hub-link]` + `[data-testid=product-hub-link]` — dark bg with brightness/saturation boost so each hub's brand accent stays visible
+  - `[data-testid=cluster-popular]` (popular search badges) — dark blue tint with light blue text
+  - `.cat-deep-cluster` + `.pd-deep-cluster` — H2/H3, links, secondary text all light
+  - `.shop-toolbar` + `.platform-seg` + `.sort-select` — dark bg, light text
+  - `.cat-faq` accordion — dark accordion-button + accordion-body
+  - `.aeo-quick-answer` body + bold + strong — light text (fixes inline `color:#1e293b` bug)
+  - `.cat-buying-guide` H2/H3/p/li — light text
+  - `.alert-light` empty state — dark bg
+  - `.pd-reviews` + `.pd-spec` + `.pd-summary` — dark bg
+  - `[data-testid=hub-related-link]` + hub-toc + hub-stats badges — dark
+- 🔧 **DB query fix** — initial draft used `oi.unit_price`/`oi.quantity` (wrong); corrected to `oi.price`/`oi.qty` matching the actual `order_items` schema.
+
+### Files touched
+- `/app/php-version/category.php` — Quick Answer block moved from line 58 to line 135 (after `category-list`).
+- `/app/php-version/admin.php` — new "Sales by Category" card with Chart.js inline script + custom legend CSS at lines 1535-1700.
+- `/app/php-version/assets/css/dark-mode-polish.css` — 100+ lines of dark-mode overrides for every called-out element.
+- `/app/backend/tests/test_iteration9_dashboard_dark_mode.py` — NEW 18 regression tests (all passing).
+
+### Verified end-to-end
+- 324/324 pytest assertions pass.
+- testing_agent_v3_fork confirms: topic-hub callout bg = `linear-gradient(135deg, rgba(59,130,246,0.16), rgba(16,185,129,0.1))`, body text = `rgb(236,236,240)`, `bg_near_white: false` ✅.
+- Quick Answer y=1055 > product list y=627 (correctly ordered).
+- Donut chart renders: 1 legend row, total = $229, conditional CDN load works.
+- Admin tabs dashboard / ai-blogger / products / orders / sales all return 200 with zero PHP warnings.
+- Hub page + product page dark-mode regressions clean.
+
