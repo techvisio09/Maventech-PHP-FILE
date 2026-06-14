@@ -163,11 +163,12 @@
     Hi, I'm <span class="ai-intro-title-brand"><?= esc($brandName) ?></span><span class="ai-intro-title-suffix"> AI</span>
   </h3>
   <p class="ai-intro-body">
-    Just bought a license &mdash; or thinking about it? I can walk you through <strong>activation steps</strong>, find the right edition for your device, share live deals, and resend your <strong>order receipt &amp; invoice PDFs</strong> in seconds.
+    Need help with activation, deals or your receipt? I'm here 24/7.
   </p>
   <div class="ai-intro-actions">
-    <button type="button" class="ai-intro-btn ai-intro-btn-secondary" onclick="aiIntroDismiss()" data-testid="ai-intro-close-btn">Close</button>
-    <button type="button" class="ai-intro-btn ai-intro-btn-primary" onclick="aiIntroOpen()" data-testid="ai-intro-learn-btn">Learn more</button>
+    <button type="button" class="ai-intro-btn ai-intro-btn-primary" onclick="aiIntroOpen()" data-testid="ai-intro-chat-btn">
+      <i class="bi bi-chat-dots-fill me-1"></i>Chat now
+    </button>
   </div>
   <!-- Friendly little robot mascot — pure CSS/SVG, no emoji, theme-matched. -->
   <div class="ai-intro-bot" aria-hidden="true">
@@ -222,14 +223,14 @@
    ============================================================ */
 .ai-intro {
   position: fixed; right: 20px; bottom: 100px;
-  width: 360px; max-width: calc(100vw - 32px);
+  width: 280px; max-width: calc(100vw - 32px);
   background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
   border: 1px solid rgba(99, 102, 241, .18);
-  border-radius: 22px;
-  padding: 22px 22px 20px;
+  border-radius: 18px;
+  padding: 16px 18px 14px;
   box-shadow:
-    0 24px 60px rgba(30, 41, 99, .22),
-    0 4px 18px rgba(59, 130, 246, .10),
+    0 20px 50px rgba(30, 41, 99, .22),
+    0 4px 14px rgba(59, 130, 246, .10),
     0 0 0 1px rgba(255, 255, 255, .65) inset;
   z-index: 1080;
   animation: ai-intro-in .55s cubic-bezier(.18,.89,.32,1.28) both;
@@ -255,10 +256,11 @@
 .ai-intro-x i { font-size: 16px; line-height: 1; }
 
 .ai-intro-title {
-  font-size: 22px; font-weight: 800;
+  font-size: 17px; font-weight: 800;
   color: #1e3a8a; letter-spacing: -.3px;
-  margin: 4px 0 10px;
+  margin: 2px 0 6px;
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  padding-right: 22px;
 }
 .ai-intro-title .ai-intro-title-brand {
   color: #2563eb;
@@ -268,9 +270,9 @@
 .ai-intro-title .ai-intro-title-suffix { color: #6366f1; font-weight: 600; }
 
 .ai-intro-body {
-  font-size: 14px; line-height: 1.55;
-  color: #334155;
-  margin: 0 0 18px;
+  font-size: 13px; line-height: 1.5;
+  color: #475569;
+  margin: 0 0 12px;
 }
 [data-bs-theme="dark"] .ai-intro {
   background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
@@ -292,11 +294,12 @@
 }
 .ai-intro-btn {
   border: none; cursor: pointer;
-  padding: 11px 24px; border-radius: 999px;
-  font-weight: 700; font-size: 14px;
+  padding: 9px 18px; border-radius: 999px;
+  font-weight: 700; font-size: 13px;
   font-family: inherit;
   transition: transform .15s ease, box-shadow .2s ease, filter .15s ease;
   white-space: nowrap;
+  display: inline-flex; align-items: center;
 }
 .ai-intro-btn:active { transform: translateY(1px); }
 .ai-intro-btn-secondary {
@@ -315,8 +318,8 @@
    so it feels alive.  Subtle float animation. */
 .ai-intro-bot {
   position: absolute;
-  right: -22px; bottom: -28px;
-  width: 92px; height: 92px;
+  right: -18px; bottom: -22px;
+  width: 76px; height: 76px;
   background: radial-gradient(closest-side, rgba(99, 102, 241, .35), rgba(99, 102, 241, 0));
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
@@ -324,6 +327,7 @@
   filter: drop-shadow(0 8px 18px rgba(99, 102, 241, .35));
   pointer-events: none;
 }
+.ai-intro-bot svg { width: 72px; height: 72px; }
 @keyframes ai-bot-float {
   0%, 100% { transform: translateY(0)   rotate(-3deg); }
   50%      { transform: translateY(-6px) rotate(3deg); }
