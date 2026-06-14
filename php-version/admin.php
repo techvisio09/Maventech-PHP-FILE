@@ -2711,11 +2711,28 @@ elseif ($tab === 'ai-blogger'):
     </summary>
     <div class="ai-body">
       <!-- Country filter pills — JS-based, no page reload -->
-      <div class="d-flex align-items-center gap-1 flex-wrap mb-2" id="post-filters">
+      <div class="d-flex align-items-center gap-1 flex-wrap mb-2" id="post-filters" data-testid="post-filters">
         <button type="button" class="btn btn-sm btn-primary rounded-pill px-3 post-filter-btn active" data-region="all">All <span class="badge text-bg-light text-dark ms-1"><?= $totalAiAll ?></span></button>
         <?php foreach ($regionsList as $rc => $ri): ?>
           <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3 post-filter-btn" data-region="<?= esc($rc) ?>"><?= $ri['flag'] ?> <?= esc($rc) ?> <span class="badge text-bg-light text-dark ms-1"><?= (int)($perRegionCounts[$rc] ?? 0) ?></span></button>
         <?php endforeach; ?>
+        <!-- One-click generators — mirror the Trending Articles "Generate Now"
+             button so the operator can spawn new posts without scrolling back
+             to the Quick Actions cards.  Both buttons honour the country
+             picker at the top via a tiny per-section dropdown. -->
+        <div class="d-flex align-items-center gap-2 ms-auto" data-testid="posts-quick-actions">
+          <select id="posts-quick-region" class="form-select form-select-sm" style="width:auto;min-width:160px;" data-testid="posts-quick-region" aria-label="Target country for the next post">
+            <option value=""    selected>🌍 Auto / All Countries</option>
+            <option value="US">🇺🇸 United States</option>
+            <option value="UK">🇬🇧 United Kingdom</option>
+            <option value="AU">🇦🇺 Australia</option>
+            <option value="CA">🇨🇦 Canada</option>
+          </select>
+          <a href="admin.php?tab=ai-blogger&run_underserved_post=1" class="btn btn-sm btn-success rounded-pill px-3 posts-qa-link" data-base-href="admin.php?tab=ai-blogger&run_underserved_post=1" data-testid="posts-write-one-btn"
+             onclick="return confirm('Write and publish one new blog post now?')"><i class="bi bi-pencil-square me-1"></i>Write One Post</a>
+          <a href="admin.php?tab=ai-blogger&run_random_post=1" class="btn btn-sm btn-primary rounded-pill px-3 posts-qa-link" data-base-href="admin.php?tab=ai-blogger&run_random_post=1" data-testid="posts-random-btn"
+             onclick="return confirm('Write a random blog post now?')"><i class="bi bi-shuffle me-1"></i>Random Post</a>
+        </div>
       </div>
 
       <?php
@@ -2933,18 +2950,26 @@ elseif ($tab === 'ai-blogger'):
   <script>
   (function(){
     var btns = document.querySelectorAll('.post-filter-btn');
+    var qaSelect = document.getElementById('posts-quick-region');
+    var qaLinks  = document.querySelectorAll('.posts-qa-link[data-base-href]');
+
+    // Filter pills: clicking a country pill also pre-selects that country
+    // in the per-section dropdown so a click → click "Write One Post"
+    // flow stays consistent with what the operator is filtering by.
     btns.forEach(function(btn){
       btn.addEventListener('click', function(e){
         e.preventDefault();
         var region = btn.getAttribute('data-region');
-        // Toggle active state
         btns.forEach(function(b){ b.classList.remove('active','btn-primary'); b.classList.add('btn-outline-secondary'); });
         btn.classList.add('active','btn-primary');
         btn.classList.remove('btn-outline-secondary');
-        // Filter rows.  A row is visible when:
-        //   - the "All" pill is active, OR
-        //   - the row's region matches the picked region, OR
-        //   - the row is a global post (ALL / empty target_region).
+        if (qaSelect && region !== 'all' && ['US','UK','AU','CA'].indexOf(region) >= 0) {
+          qaSelect.value = region;
+          refreshQaLinks();
+        } else if (qaSelect && region === 'all') {
+          qaSelect.value = '';
+          refreshQaLinks();
+        }
         var rows = document.querySelectorAll('.post-row');
         var num = 0;
         rows.forEach(function(r){
@@ -2961,6 +2986,22 @@ elseif ($tab === 'ai-blogger'):
         });
       });
     });
+
+    // Quick-action country dropdown — rewrites the two per-section
+    // generator links so the next post targets the picked country.
+    function refreshQaLinks() {
+      if (!qaSelect) return;
+      var r = qaSelect.value;
+      qaLinks.forEach(function(a){
+        var base = a.getAttribute('data-base-href');
+        var sep  = base.indexOf('?') >= 0 ? '&' : '?';
+        a.setAttribute('href', r ? (base + sep + 'region=' + encodeURIComponent(r)) : base);
+      });
+    }
+    if (qaSelect) {
+      qaSelect.addEventListener('change', refreshQaLinks);
+      refreshQaLinks();
+    }
   })();
   </script>
 

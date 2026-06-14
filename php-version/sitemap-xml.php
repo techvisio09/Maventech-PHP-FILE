@@ -39,6 +39,12 @@ foreach ($catSlugs as $cs) {
     $urls[] = ['loc' => $base . '/category.php?slug=' . $cs, 'lastmod' => $today, 'freq' => 'weekly', 'pri' => '0.8', 'images' => []];
 }
 
+// Topic Cluster Hubs — strong topical-authority signals.  High priority
+// because they aggregate every product + post + FAQ on a topic.
+foreach (['microsoft-office', 'windows', 'antivirus'] as $hubSlug) {
+    $urls[] = ['loc' => $base . '/hub/' . $hubSlug, 'lastmod' => $today, 'freq' => 'weekly', 'pri' => '0.9', 'images' => []];
+}
+
 // Products — use real updated_at when present and emit the image URL so
 // Google Images / Lens / Bing visual search can index it from the sitemap.
 $prodCols = ['slug', 'name', 'image'];

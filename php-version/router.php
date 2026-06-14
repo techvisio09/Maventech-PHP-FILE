@@ -71,6 +71,12 @@ if ($path === '/ai.txt') {
     require __DIR__ . '/ai-txt.php';
     return true;
 }
+if (preg_match('#^/hub/([a-z0-9\-]+)/?$#', $path, $m)) {
+    // Topic Cluster Hub — /hub/microsoft-office → ?topic=microsoft-office
+    $_GET['topic'] = $m[1];
+    require __DIR__ . '/hub.php';
+    return true;
+}
 $file = __DIR__ . $path;
 if ($path !== '/' && file_exists($file) && !is_dir($file)) {
     return false; // let the built-in server handle real files (php, css, js, images)

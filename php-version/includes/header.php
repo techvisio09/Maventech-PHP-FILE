@@ -379,8 +379,11 @@ $ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.sv
               <?php endforeach; ?>
             </div>
             <?= render_menu_promo() ?>
-            <div class="mt-3 pt-2 border-top">
-              <a href="page.php?slug=disclaimer" class="text-decoration-none fw-semibold small" data-testid="menu-disclaimer-ms"><i class="bi bi-info-circle me-1"></i>Disclaimer</a>
+            <div class="mt-3 pt-2 border-top d-flex flex-wrap gap-2 align-items-center">
+              <span class="small fw-semibold text-secondary me-1"><i class="bi bi-collection-fill text-primary me-1"></i>Topic hubs:</span>
+              <a href="hub/microsoft-office" class="badge text-decoration-none" data-testid="menu-hub-office" style="background:#dc26261c;color:#dc2626;border:1px solid #dc26264a;padding:4px 10px;font-size:11px;font-weight:600;">Microsoft Office guide</a>
+              <a href="hub/windows" class="badge text-decoration-none" data-testid="menu-hub-windows" style="background:#0078d41c;color:#0078d4;border:1px solid #0078d44a;padding:4px 10px;font-size:11px;font-weight:600;">Windows guide</a>
+              <a href="page.php?slug=disclaimer" class="text-decoration-none small ms-auto" data-testid="menu-disclaimer-ms"><i class="bi bi-info-circle me-1"></i>Disclaimer</a>
             </div>
           </div>
         </li>
@@ -392,6 +395,9 @@ $ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.sv
             <a class="mega-year" href="category.php?slug=mcafee" data-testid="menu-mcafee">McAfee</a>
             <a class="mega-link fw-bold text-primary mt-2" href="category.php?slug=antivirus" data-testid="menu-all-antivirus">All Antivirus <i class="bi bi-arrow-right"></i></a>
             <a class="mega-link mt-1" href="page.php?slug=disclaimer" data-testid="menu-disclaimer-av"><i class="bi bi-info-circle me-1"></i>Disclaimer</a>
+            <div class="mt-2 pt-2 border-top">
+              <a href="hub/antivirus" class="badge text-decoration-none" data-testid="menu-hub-antivirus" style="background:#16a34a1c;color:#16a34a;border:1px solid #16a34a4a;padding:4px 10px;font-size:11px;font-weight:600;"><i class="bi bi-collection-fill me-1"></i>Antivirus topic hub</a>
+            </div>
             <?= render_menu_promo(true) ?>
           </div>
         </li>
