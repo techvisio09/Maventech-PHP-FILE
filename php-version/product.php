@@ -378,12 +378,12 @@ include __DIR__ . '/includes/header.php';
 
   <!-- Real customer reviews snippet — social proof + indexable text -->
   <?php $_reviewRows = product_review_snippets(3); ?>
-  <?php if ($_reviewRows): ?>
   <section class="pd-review-snippets mt-5" data-testid="product-review-snippets" aria-labelledby="pd-rev-heading">
     <div class="d-flex align-items-center gap-2 mb-3">
       <i class="bi bi-chat-quote-fill" style="font-size:22px;color:#2563eb;"></i>
       <h2 id="pd-rev-heading" class="fw-bold h4 mb-0">What buyers say about <?= esc($product['name']) ?></h2>
     </div>
+    <?php if ($_reviewRows): ?>
     <div class="row g-3">
       <?php foreach ($_reviewRows as $rv): ?>
         <div class="col-md-4">
@@ -403,8 +403,14 @@ include __DIR__ . '/includes/header.php';
       <?php endforeach; ?>
     </div>
     <div class="mt-3"><a href="reviews.php" class="text-decoration-none fw-semibold small">Read all <?= (int)$product['reviews'] ?> reviews <i class="bi bi-arrow-right"></i></a></div>
+    <?php else: ?>
+      <!-- Empty state: keeps the H2 hierarchy intact for SEO + invites first review. -->
+      <div class="card border p-4 text-center" data-testid="review-snippet-empty">
+        <p class="mb-2 text-secondary">Be the first to share your experience with <?= esc($product['name']) ?>.</p>
+        <a href="reviews.php" class="btn btn-outline-primary btn-sm rounded-pill mx-auto" style="max-width:240px;"><i class="bi bi-pencil-square me-1"></i>Write the first review</a>
+      </div>
+    <?php endif; ?>
   </section>
-  <?php endif; ?>
 
   <!-- Ask AI — Claude Haiku 4.5 powered Q&A grounded on this product's
        facts, FAQs, and recent reviews.  Answers free-form questions in

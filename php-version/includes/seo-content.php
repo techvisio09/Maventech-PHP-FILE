@@ -203,7 +203,7 @@ function product_review_items_jsonld(array $p, int $limit = 5): array
                 'reviewBody'   => (string)$r['comment'],
             ];
         }
-    } catch (Throwable $e) { /* best-effort */ }
+    } catch (Throwable $e) { error_log('[seo-content.product_review_items_jsonld] ' . $e->getMessage()); }
     return $out;
 }
 
@@ -224,7 +224,7 @@ function product_review_snippets(int $limit = 3): array
         $stmt->bindValue(1, max(1, $limit), PDO::PARAM_INT);
         $stmt->execute();
         return $stmt->fetchAll();
-    } catch (Throwable $e) { return []; }
+    } catch (Throwable $e) { error_log('[seo-content.product_review_snippets] ' . $e->getMessage()); return []; }
 }
 
 /* ------------------------------------------------------------------
@@ -244,7 +244,7 @@ function product_related_articles(array $p, int $limit = 3): array
         $stmt->bindValue(2, $limit, PDO::PARAM_INT);
         $stmt->execute();
         $out = $stmt->fetchAll();
-    } catch (Throwable $e) {}
+    } catch (Throwable $e) { error_log('[seo-content.product_related_articles primary] ' . $e->getMessage()); }
     if (!$out) {
         try {
             // Fallback — recent posts so the cluster section is never empty
@@ -253,7 +253,7 @@ function product_related_articles(array $p, int $limit = 3): array
             $stmt->bindValue(1, $limit, PDO::PARAM_INT);
             $stmt->execute();
             $out = $stmt->fetchAll();
-        } catch (Throwable $e) {}
+        } catch (Throwable $e) { error_log('[seo-content.product_related_articles fallback] ' . $e->getMessage()); }
     }
     return $out;
 }

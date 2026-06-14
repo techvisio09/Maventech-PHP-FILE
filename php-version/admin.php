@@ -601,6 +601,11 @@ if ($tab === 'ai-blogger') {
         // re-submit the sitemap to IndexNow using that new domain.  This is
         // what the operator expects — "upload the domain → take the sitemap".
         $autoSubmitMsg = '';
+        // Decide whether to auto-submit: a real domain change always triggers it;
+        // re-saving the same domain when there *was* a domain change in $updated[]
+        // (i.e. the operator hit Save with the field present) tells them the
+        // domain is unchanged so we won't spam IndexNow.
+        $isDomainResave = in_array('Website Domain', $updated, true);
         if ($domainChanged) {
             try {
                 // Re-generate the IndexNow verification file at the new webroot
@@ -621,6 +626,10 @@ if ($tab === 'ai-blogger') {
             } catch (Throwable $e) {
                 $autoSubmitMsg = ' ℹ Domain saved — sitemap submission will run on the next scheduled check.';
             }
+        } elseif ($isDomainResave) {
+            // Domain was present in the save but didn't actually change. Tell the
+            // operator we deliberately skipped IndexNow so they have feedback.
+            $autoSubmitMsg = ' ℹ Domain unchanged — skipping IndexNow resubmission. Use the "Submit Sitemap Now" button if you want to force a fresh ping.';
         }
 
         $_SESSION['seo_bot_flash'] = $updated
