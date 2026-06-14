@@ -1076,14 +1076,20 @@ function _seo_run_finish(PDO $pdo, int $runId, array $report): void
  * =================================================================== */
 if (!defined('SEOBOT_TRENDS_COOLDOWN_H')) define('SEOBOT_TRENDS_COOLDOWN_H', 20);
 
-function seo_publish_featured_trends_article(array &$report, bool $force = false): array
+function seo_publish_featured_trends_article(array &$report, bool $force = false, string $targetRegion = 'ALL'): array
 {
     $out = [
         'blog_post_id'    => null,
         'blog_post_title' => null,
         'blog_post_image' => null,
         'product_name'    => '',
+        'target_region'   => $targetRegion,
     ];
+
+    // Normalise the region — admin pickers send 'ALL' or a 2-letter code.
+    $targetRegion = strtoupper(trim($targetRegion));
+    $validRegions = ['ALL', 'US', 'UK', 'AU', 'CA'];
+    if (!in_array($targetRegion, $validRegions, true)) $targetRegion = 'ALL';
 
     $pdo = db();
     seo_bot_ensure_schema($pdo);
@@ -1122,11 +1128,22 @@ function seo_publish_featured_trends_article(array &$report, bool $force = false
     }
     $out['product_name'] = (string)$product['name'];
 
+    // Build a region-aware audience hint so the LLM tailors local
+    // signals (currency, regulations, idioms).  When the operator picks
+    // "All Countries" we keep the existing international framing.
+    $regionAudienceMap = [
+        'ALL' => 'an international audience (US, UK, AU, CA buyers)',
+        'US'  => 'a United States audience — use US English, mention NIST / SOC 2 / HIPAA where relevant, refer to prices in USD',
+        'UK'  => 'a United Kingdom audience — use British English, mention UK GDPR / Cyber Essentials Plus where relevant, refer to prices in GBP',
+        'AU'  => 'an Australian audience — use Australian English, mention the Privacy Act / Essential Eight where relevant, refer to prices in AUD',
+        'CA'  => 'a Canadian audience — use Canadian English, mention PIPEDA / Bill C-26 where relevant, refer to prices in CAD',
+    ];
+    $audienceLine = $regionAudienceMap[$targetRegion] ?? $regionAudienceMap['ALL'];
+
     $sys = <<<SYS
 You are the senior editorial writer for Maventech Software.  Your job is to
 publish ONE longer, opinion-piece-style article that contextualises a
-product against the broader industry trends of 2026.  Write for an
-international audience (US, UK, AU, CA buyers).
+product against the broader industry trends of 2026.  Write for {$audienceLine}.
 
 Return STRICT JSON with EXACTLY these keys (no markdown, no code fences):
   title:        Editorial-style title (55-75 chars). e.g. "Why ___ Still
@@ -1222,9 +1239,9 @@ SYS;
         $pdo->prepare("INSERT INTO blog_posts
             (id, title, date, read_time, image, content, ai_generated, product_id,
              target_region, is_featured_trends, internal_links_count, content_fingerprint, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, 1, ?, 'ALL', 1, ?, ?, NOW())")->execute([
+            VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, 1, ?, ?, NOW())")->execute([
             $postId, $title, date('M j, Y'), $readTime, $image, $content,
-            (int)$product['id'], (int)$internalLinks, $fingerprint,
+            (int)$product['id'], $targetRegion, (int)$internalLinks, $fingerprint,
         ]);
     } catch (Throwable $e) {
         $report['errors'][] = 'trends: insert failed — ' . $e->getMessage();
@@ -1254,6 +1271,7 @@ SYS;
     $out['blog_post_id']    = $postId;
     $out['blog_post_title'] = $title;
     $out['blog_post_image'] = $image;
+    $out['target_region']   = $targetRegion;
     return $out;
 }
 

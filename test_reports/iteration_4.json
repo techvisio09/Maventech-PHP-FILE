@@ -1,0 +1,57 @@
+{
+  "summary": "Iteration 4 verification of Maventech country/region extensions in the AI-Blogger admin. (a) Quick Actions country picker drives 3 cards via JS — verified end-to-end in Playwright: hrefs rewritten with &region=XX, hints update with flag+country (Target/Random product/Trends article for ...), default restores original copy + drops region param. (b) seo_publish_featured_trends_article signature is `(array &$report, bool $force=false, string $targetRegion='ALL')`; whitelist ['ALL','US','UK','AU','CA']; invalid falls back to 'ALL'; INSERT binds $targetRegion (no hard-coded 'ALL'); $out['target_region'] set. (c) regionAudienceMap has 5 distinct audience strings + audienceLine fallback to ALL. (d) New <details id=trends-section> with 6 filter pills, server-computed badge counts, generate-now btn with run_trends_article=1&force=1, JS filter rules verified live (US→US+global, Global→global only, All→everything, badges unchanged on click). (e) Handler at admin.php #899 normalises $reqRegion + passes 3rd arg + emits 'Global audience' vs 'Targeted at <region>' flash. Created /app/backend/tests/test_iteration4_features.py with 33 new tests; full pytest run = 111/111 PASSED (78 baseline + 33 iter4). One spec violation found: trends articles appear in BOTH published-blog-list and trends-list (spec says they must be SEPARATE).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "admin.php?tab=ai-blogger (Published Blog Posts list)",
+        "issue": "Published-blog-list query at admin.php:2715-2720 does NOT exclude is_featured_trends=1, so all 5 trends articles also render in the Published Blog Posts list. Spec: 'the new Trends section is SEPARATE from this list; the same article should NOT appear in BOTH lists.' Fix: add `AND (bp.is_featured_trends = 0 OR bp.is_featured_trends IS NULL)` to the WHERE clause."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Trending Articles vs Published Blog Posts deduplication",
+        "issue": "Playwright confirmed 5/5 trends rows (test-trend-uk-1, test-trend-au-1, test-trend-all-1, ai-trends-...home-student-windows, ai-trends-...mac-lifetime) appear in BOTH lists. Visible in screenshot: Published rows #4 UK Trends Test, #5 AU Trends Test, #6 Global Trends Test, #7+#9 the real LLM trends articles all duplicate.",
+        "affected_selectors": ["[data-testid='published-blog-list']", "[data-testid='trends-list']"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration4_features.py",
+    "/app/backend/tests/test_iteration3_features.py",
+    "/app/backend/tests/test_iteration2_features.py",
+    "/app/backend/tests/test_seo_php.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(only spec-violation) admin.php:2719 — exclude is_featured_trends rows from the Published Blog Posts query so trends articles only show in the new Trends section."
+  ],
+  "critical_code_review_comments": [
+    "seo-bot.php:1079-1092 — signature + region whitelist + ALL fallback all match spec.",
+    "seo-bot.php:1134-1141 — regionAudienceMap with 5 distinct entries; audienceLine uses ?? 'ALL' fallback.",
+    "seo-bot.php:1241+ — INSERT binds $targetRegion (verified via regex test_insert_uses_targetregion_var).",
+    "admin.php:803-804 — $reqRegion normalised + whitelist ['', 'ALL', 'US', 'UK', 'AU', 'CA'].",
+    "admin.php:899-924 — run_trends_article handler passes $trendsRegion as 3rd arg; flash branches on target_region ('Global audience' vs 'Targeted at <X>').",
+    "admin.php:2264-2315 — quick-action-region picker JS: rewrites hrefs in-place using data-base-href + region= encoded; hint templates per testid with default-text branch (r==='') and substituted-text branch ({flag}+{label}). Live-verified across US, UK, default.",
+    "admin.php:2793-2855 — Trending Articles details section: 6 pills + server-computed counts + trends-list/empty-state + generate-now btn (run_trends_article=1&force=1).",
+    "admin.php:2856-2891 — Trends filter JS: 'all'=true, 'ALL'=isGlobal, country='rRegion===region OR isGlobal' — verified live with 5 DB rows.",
+    "admin.php:2715-2720 — ISSUE: Published-blog-list query does NOT filter out is_featured_trends rows; trends articles duplicate in both lists."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration4_features.py (new — 33 tests across 11 test classes)"
+  ],
+  "success_rate": {
+    "backend": "100% (111/111 pytest: 78 baseline + 33 iter4)",
+    "frontend": "95% — every Quick Actions picker behaviour + every Trends filter pill behaviour verified live via Playwright on the preview host. Only failure is the published-vs-trends duplication, which is a backend query-scope issue, not a UI bug."
+  },
+  "test_credentials": "admin@maventechsoftware.com / Admin@123 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Reused the 5 trends rows already in DB (ai-trends-... ×2 real, test-trend-all-1, test-trend-uk-1, test-trend-au-1). To clean these up after testing: `mysql -uroot ucode_store -e \"DELETE FROM blog_posts WHERE id LIKE 'test-trend-%'\"`",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: PHP_BASE_URL=http://localhost:3000 python3 -m pytest /app/backend/tests/ -v — expect 111/111. Iter 4 covers the Quick Actions picker DOM/HTML + the trends function signature + the regionAudienceMap + the trends sub-section DOM + the filter JS rules + the flash branches. Note in HTML the rendered <a> tag has href BEFORE data-testid; regex selectors should accept either order. The Trends details element ships closed — use `document.querySelectorAll('details').forEach(d=>d.open=true)` before inspecting rows. Outstanding spec violation: published-blog-list query must be updated to exclude is_featured_trends=1.",
+  "rca of the issue": "Published-blog-list duplication: the query at admin.php:2715 selects all ai_generated=1 rows without filtering out trends articles. Since trends articles are inserted with is_featured_trends=1 AND ai_generated=1 (see seo-bot.php INSERT at line 1241), they qualify for the published list. The Trending Articles list (admin.php:2782) correctly restricts on is_featured_trends=1, but the published list never excludes them. Reproduction: visit /admin.php?tab=ai-blogger, expand both <details>, observe the trends rows appearing in both. Mitigation: change WHERE to `bp.ai_generated = 1 AND (bp.is_featured_trends = 0 OR bp.is_featured_trends IS NULL)` (or simply `AND COALESCE(bp.is_featured_trends,0) = 0`)."
+}

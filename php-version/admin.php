@@ -793,6 +793,16 @@ if ($tab === 'ai-blogger') {
     // write a single blog post and index it instantly. Separate from the
     // daily 24-post batch so the operator can ship an ad-hoc article without
     // touching the daily cooldown. 60-sec mini-cooldown stops button-mashing.
+    /* --------------------------------------------------------------------
+     * Region picker — every Quick-Action button accepts an optional
+     * ?region= query string ('US'/'UK'/'AU'/'CA' or 'ALL' / empty for auto).
+     * We normalise once at the top so the per-action handlers below stay
+     * simple.  '' or 'ALL' means "let the bot pick" for the regional
+     * generators, but is honoured as a target country for the trends one.
+     * ----------------------------------------------------------------- */
+    $reqRegion = strtoupper(trim((string)($_GET['region'] ?? '')));
+    if (!in_array($reqRegion, ['', 'ALL', 'US', 'UK', 'AU', 'CA'], true)) $reqRegion = '';
+
     if (!empty($_GET['run_random_post'])) {
         $lastRand = setting_get('seo_bot_random_post_last_at', '');
         if ($lastRand && (time() - strtotime($lastRand)) < 60) {
@@ -804,7 +814,13 @@ if ($tab === 'ai-blogger') {
                     throw new RuntimeException('LLM key not configured — add your AI key in the API Keys section');
                 }
                 $regions  = array_values(array_filter(array_map('trim', explode(',', SEOBOT_BLOG_REGIONS))));
-                $region   = $regions[array_rand($regions)];
+                // Honour the operator's country pick when provided; fall
+                // back to a random region otherwise.
+                if ($reqRegion !== '' && $reqRegion !== 'ALL' && in_array($reqRegion, $regions, true)) {
+                    $region = $reqRegion;
+                } else {
+                    $region = $regions[array_rand($regions)];
+                }
                 $rep      = ['errors' => []];
                 $one = _seo_generate_one_blog_post(db(), $apiKey, $baseUrl, $region, [], $rep);
                 if (!empty($one['blog_post_id'])) {
@@ -841,7 +857,11 @@ if ($tab === 'ai-blogger') {
             $_SESSION['seo_bot_flash'] = 'Just force-generated a post a moment ago — give it ~60 seconds before the next.';
         } else {
             try {
-                $res = seo_publish_one_post_now();
+                // When the operator picks a country, target that country
+                // directly; otherwise let the bot pick the next under-served
+                // one (the default round-robin behaviour).
+                $regionOverride = ($reqRegion !== '' && $reqRegion !== 'ALL') ? $reqRegion : null;
+                $res = seo_publish_one_post_now($regionOverride);
                 if (!empty($res['ok'])) {
                     setting_set('seo_bot_force_one_last_at', date('Y-m-d H:i:s'));
                     $_SESSION['seo_bot_flash'] = 'Force-published one post for the next under-served market (' . esc($res['region']) . ') — ' . esc($res['product_name'] ?: 'a product') . '.';
@@ -879,18 +899,23 @@ if ($tab === 'ai-blogger') {
     if (!empty($_GET['run_trends_article'])) {
         try {
             $report = ['errors' => []];
-            $res = seo_publish_featured_trends_article($report, !empty($_GET['force']));
+            // Default to 'ALL' (international) when the operator hasn't
+            // picked a country — preserves the existing behaviour.
+            $trendsRegion = ($reqRegion !== '' && $reqRegion !== 'ALL') ? $reqRegion : 'ALL';
+            $res = seo_publish_featured_trends_article($report, !empty($_GET['force']), $trendsRegion);
             if (!empty($res['skipped'])) {
-                $_SESSION['seo_bot_flash'] = 'Featured trends article skipped — ' . $res['reason'];
+                $_SESSION['seo_bot_flash'] = 'Featured trends article skipped — ' . $res['reason']
+                    . ' (use "Generate Trends Now" to force one).';
             } elseif (!empty($res['blog_post_id'])) {
-                $_SESSION['seo_bot_flash'] = 'Featured trends article published — ' . $res['blog_post_title'];
+                $regionLabel = ($res['target_region'] ?? 'ALL') === 'ALL' ? 'Global audience' : ('Targeted at ' . $res['target_region']);
+                $_SESSION['seo_bot_flash'] = '✓ Featured trends article published — "' . $res['blog_post_title'] . '" (' . $regionLabel . ').';
                 $_SESSION['seo_bot_blog_flash'] = [
                     'posts' => [[
                         'blog_post_id'    => $res['blog_post_id'],
                         'blog_post_title' => $res['blog_post_title'],
                         'blog_post_image' => $res['blog_post_image'] ?? '',
                         'product_name'    => $res['product_name'] ?? '',
-                        'target_region'   => 'TRENDS',
+                        'target_region'   => $res['target_region'] ?? 'ALL',
                     ]],
                 ];
             } else {
@@ -2165,40 +2190,59 @@ elseif ($tab === 'ai-blogger'):
 
   <!-- ====== 1. QUICK ACTIONS — always visible ====== -->
   <div class="card-e mb-3" style="border:1px solid #e2e8f0;border-radius:14px;padding:16px 20px;">
+
+    <!-- Shared country picker — drives every Quick-Action card below. -->
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3 pb-3" style="border-bottom:1px dashed #e2e8f0;">
+      <div>
+        <div class="fw-bold" style="font-size:13px;">Target country for the next post</div>
+        <div class="text-secondary" style="font-size:11px;">Picks which audience the AI writes for. "Auto / All" lets the bot pick the next under-served market.</div>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <label for="quick-action-region" class="small fw-semibold mb-0">Country:</label>
+        <select id="quick-action-region" class="form-select form-select-sm" style="width:auto;min-width:170px;" data-testid="quick-action-region">
+          <option value=""    selected>🌍 Auto / All Countries</option>
+          <option value="US">🇺🇸 United States</option>
+          <option value="UK">🇬🇧 United Kingdom</option>
+          <option value="AU">🇦🇺 Australia</option>
+          <option value="CA">🇨🇦 Canada</option>
+        </select>
+      </div>
+    </div>
+
     <div class="row g-3">
       <div class="col-md-6 col-lg-3">
-        <a href="admin.php?tab=ai-blogger&run_underserved_post=1" class="card text-decoration-none h-100" style="border:2px solid #d1fae5;border-radius:12px;padding:14px;transition:all .15s;" data-testid="ai-blogger-run-underserved"
+        <a href="admin.php?tab=ai-blogger&run_underserved_post=1" class="card text-decoration-none h-100 qa-card qa-card-underserved" data-base-href="admin.php?tab=ai-blogger&run_underserved_post=1" style="border:2px solid #d1fae5;border-radius:12px;padding:14px;transition:all .15s;" data-testid="ai-blogger-run-underserved"
            onmouseover="this.style.borderColor='#10b981';this.style.transform='translateY(-2px)'"
            onmouseout="this.style.borderColor='#d1fae5';this.style.transform='none'"
            onclick="return confirm('Write and publish one new blog post now?')">
           <div class="text-center">
             <div style="font-size:24px;color:#10b981;"><i class="bi bi-pencil-square"></i></div>
             <div class="fw-bold mt-1" style="font-size:13px;color:#0f172a;">Write One Post</div>
-            <div class="text-secondary" style="font-size:11px;">AI picks a product & writes a blog</div>
+            <div class="text-secondary qa-region-hint" style="font-size:11px;" data-testid="qa-underserved-hint">AI picks the next under-served country</div>
           </div>
         </a>
       </div>
       <div class="col-md-6 col-lg-3">
-        <a href="admin.php?tab=ai-blogger&run_random_post=1" class="card text-decoration-none h-100" style="border:2px solid #dbeafe;border-radius:12px;padding:14px;transition:all .15s;" data-testid="ai-blogger-run-random"
+        <a href="admin.php?tab=ai-blogger&run_random_post=1" class="card text-decoration-none h-100 qa-card qa-card-random" data-base-href="admin.php?tab=ai-blogger&run_random_post=1" style="border:2px solid #dbeafe;border-radius:12px;padding:14px;transition:all .15s;" data-testid="ai-blogger-run-random"
            onmouseover="this.style.borderColor='#3b82f6';this.style.transform='translateY(-2px)'"
            onmouseout="this.style.borderColor='#dbeafe';this.style.transform='none'"
            onclick="return confirm('Write a random blog post now?')">
           <div class="text-center">
             <div style="font-size:24px;color:#3b82f6;"><i class="bi bi-shuffle"></i></div>
             <div class="fw-bold mt-1" style="font-size:13px;color:#0f172a;">Random Post</div>
-            <div class="text-secondary" style="font-size:11px;">Random product & country</div>
+            <div class="text-secondary qa-region-hint" style="font-size:11px;" data-testid="qa-random-hint">Random product, random country</div>
           </div>
         </a>
       </div>
       <div class="col-md-6 col-lg-3">
-        <a href="admin.php?tab=ai-blogger&run_trends_article=1" class="card text-decoration-none h-100" style="border:2px solid #ede9fe;border-radius:12px;padding:14px;transition:all .15s;" data-testid="ai-blogger-run-trends"
+        <a href="admin.php?tab=ai-blogger&run_trends_article=1&force=1" class="card text-decoration-none h-100 qa-card qa-card-trends" data-base-href="admin.php?tab=ai-blogger&run_trends_article=1&force=1" style="border:2px solid #ede9fe;border-radius:12px;padding:14px;transition:all .15s;background:linear-gradient(135deg,#f5f3ff,#ede9fe);" data-testid="ai-blogger-run-trends"
            onmouseover="this.style.borderColor='#8b5cf6';this.style.transform='translateY(-2px)'"
            onmouseout="this.style.borderColor='#ede9fe';this.style.transform='none'"
-           onclick="return confirm('Write a trending topic article now?')">
+           onclick="return confirm('Generate a Trends Article right now (bypasses the 20-hour cooldown)?')">
           <div class="text-center">
             <div style="font-size:24px;color:#8b5cf6;"><i class="bi bi-newspaper"></i></div>
-            <div class="fw-bold mt-1" style="font-size:13px;color:#0f172a;">Trends Article</div>
-            <div class="text-secondary" style="font-size:11px;">Long-form industry trends</div>
+            <div class="fw-bold mt-1" style="font-size:13px;color:#0f172a;">Generate Trends Now</div>
+            <div class="text-secondary qa-region-hint" style="font-size:11px;" data-testid="qa-trends-hint">Long-form trends article on demand</div>
           </div>
         </a>
       </div>
@@ -2216,6 +2260,59 @@ elseif ($tab === 'ai-blogger'):
       </div>
     </div>
   </div>
+
+  <!-- Quick Actions country picker — rewrites each card's href in place. -->
+  <script>
+  (function(){
+    var sel = document.getElementById('quick-action-region');
+    if (!sel) return;
+    var REGION_LABELS = {
+      ''   : { label: 'Auto / All Countries', flag: '🌍' },
+      'US' : { label: 'United States',        flag: '🇺🇸' },
+      'UK' : { label: 'United Kingdom',       flag: '🇬🇧' },
+      'AU' : { label: 'Australia',            flag: '🇦🇺' },
+      'CA' : { label: 'Canada',               flag: '🇨🇦' }
+    };
+    var HINT_TEMPLATES = {
+      'qa-underserved-hint': {
+        ''  : 'AI picks the next under-served country',
+        '*' : 'Target: {flag} {label}'
+      },
+      'qa-random-hint': {
+        ''  : 'Random product, random country',
+        '*' : 'Random product · {flag} {label}'
+      },
+      'qa-trends-hint': {
+        ''  : 'Long-form trends article on demand',
+        '*' : 'Trends article for {flag} {label}'
+      }
+    };
+    function refresh() {
+      var r = sel.value;
+      // 1) Append/replace ?region= on every card with a data-base-href.
+      document.querySelectorAll('.qa-card[data-base-href]').forEach(function(card){
+        var base = card.getAttribute('data-base-href');
+        var sep  = base.indexOf('?') >= 0 ? '&' : '?';
+        card.setAttribute('href', r ? (base + sep + 'region=' + encodeURIComponent(r)) : base);
+      });
+      // 2) Update the small hint copy under each card title.
+      Object.keys(HINT_TEMPLATES).forEach(function(testid){
+        var el = document.querySelector('[data-testid="' + testid + '"]');
+        if (!el) return;
+        var t = HINT_TEMPLATES[testid];
+        if (r === '' || !REGION_LABELS[r]) {
+          el.textContent = t[''];
+        } else {
+          el.textContent = t['*']
+            .replace('{flag}', REGION_LABELS[r].flag)
+            .replace('{label}', REGION_LABELS[r].label);
+        }
+      });
+    }
+    sel.addEventListener('change', refresh);
+    refresh();
+  })();
+  </script>
 
   <!-- ====== 2. TODAY'S STATS — always visible (compact) ====== -->
   <?php
@@ -2669,6 +2766,130 @@ elseif ($tab === 'ai-blogger'):
       <?php endif; ?>
     </div>
   </details>
+
+  <!-- ====== Trending Articles — dedicated list with its own country filter ====== -->
+  <?php
+    /* Load every featured-trends article (is_featured_trends = 1) for the
+       dedicated list.  Independent from the regional posts query above so
+       the country pills below can filter exclusively over trends content. */
+    $trendsAll = [];
+    $trendsCounts = ['ALL' => 0, 'US' => 0, 'UK' => 0, 'AU' => 0, 'CA' => 0];
+    try {
+        $stT = $pdo->query("SELECT bp.id, bp.title, bp.date, bp.image, bp.product_id, bp.created_at,
+                                   bp.target_region, bp.verified_http, bp.read_time,
+                                   p.name AS product_name
+                              FROM blog_posts bp LEFT JOIN products p ON p.id = bp.product_id
+                             WHERE bp.is_featured_trends = 1
+                          ORDER BY COALESCE(bp.created_at, '1970-01-01') DESC, bp.id DESC
+                             LIMIT 100");
+        $trendsAll = $stT->fetchAll();
+        foreach ($trendsAll as $r) {
+            $rc = strtoupper((string)($r['target_region'] ?? ''));
+            if ($rc === '' || $rc === 'TRENDS') $rc = 'ALL';
+            if (isset($trendsCounts[$rc])) $trendsCounts[$rc]++;
+        }
+    } catch (Throwable $e) {}
+  ?>
+  <details class="ai-section" id="trends-section">
+    <summary>
+      <i class="bi bi-newspaper text-primary" style="color:#8b5cf6 !important;"></i> Trending Articles
+      <span class="ai-badge" style="background:#ede9fe;color:#5b21b6;"><?= count($trendsAll) ?> articles</span>
+    </summary>
+    <div class="ai-body">
+      <p class="text-secondary small mb-2">Long-form editorial trends pieces. Pick a country to see only the articles written for that audience &mdash; "All" includes global pieces too.</p>
+
+      <!-- Country filter pills for trends (independent from the posts ones) -->
+      <div class="d-flex align-items-center gap-1 flex-wrap mb-2" data-testid="trends-filters">
+        <button type="button" class="btn btn-sm btn-primary rounded-pill px-3 trends-filter-btn active" data-region="all" data-testid="trends-filter-all">All <span class="badge text-bg-light text-dark ms-1"><?= count($trendsAll) ?></span></button>
+        <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3 trends-filter-btn" data-region="ALL" data-testid="trends-filter-global">🌍 Global <span class="badge text-bg-light text-dark ms-1"><?= (int)$trendsCounts['ALL'] ?></span></button>
+        <?php foreach ($regionsList as $rc => $ri): ?>
+          <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3 trends-filter-btn" data-region="<?= esc($rc) ?>" data-testid="trends-filter-<?= esc(strtolower($rc)) ?>"><?= $ri['flag'] ?> <?= esc($rc) ?> <span class="badge text-bg-light text-dark ms-1"><?= (int)($trendsCounts[$rc] ?? 0) ?></span></button>
+        <?php endforeach; ?>
+        <a href="admin.php?tab=ai-blogger&run_trends_article=1&force=1" class="btn btn-sm btn-primary rounded-pill px-3 ms-auto" data-testid="trends-generate-now-btn"
+           onclick="return confirm('Generate a Trends Article right now (bypasses the 20-hour cooldown)?')">
+          <i class="bi bi-magic me-1"></i>Generate Trends Article Now
+        </a>
+      </div>
+
+      <?php if ($trendsAll): ?>
+      <div id="trends-list-box" style="max-height:420px;overflow-y:auto;border-radius:8px;" data-testid="trends-list">
+        <?php $tn = 0; foreach ($trendsAll as $bp): $tn++; ?>
+          <?php
+            $httpOk   = (int)($bp['verified_http'] ?? 0) === 200;
+            $postImg  = $bp['image'] ?? '';
+            $rCode    = strtoupper((string)($bp['target_region'] ?? ''));
+            if ($rCode === '' || $rCode === 'TRENDS') $rCode = 'ALL';
+            $isGlobal = ($rCode === 'ALL');
+            $rFlag    = $isGlobal ? '🌍' : ($regionsList[$rCode]['flag'] ?? '');
+            $rLabel   = $isGlobal ? 'Global' : $rCode;
+            $postDate = date('M j', strtotime($bp['created_at'] ?? $bp['date']));
+            $readTime = (string)($bp['read_time'] ?? '');
+          ?>
+          <a href="blog-post.php?id=<?= urlencode($bp['id']) ?>" target="_blank" rel="noopener"
+             class="post-row trends-row d-flex align-items-center gap-2 text-decoration-none"
+             data-region="<?= esc($rCode) ?>" data-is-global="<?= $isGlobal ? '1' : '0' ?>"
+             data-testid="trends-row">
+            <span class="post-num"><?= $tn ?></span>
+            <?php if ($postImg): ?>
+              <img src="<?= esc($postImg) ?>" alt="" class="post-thumb">
+            <?php else: ?>
+              <span class="post-thumb post-thumb-empty"><i class="bi bi-newspaper"></i></span>
+            <?php endif; ?>
+            <span class="post-title"><?= esc($bp['title']) ?></span>
+            <span class="post-flag" title="Targeted country: <?= esc($rLabel) ?>"><?= $rFlag ?> <span class="post-flag-label"><?= esc($rLabel) ?></span></span>
+            <?php if ($readTime !== ''): ?><span class="text-secondary" style="font-size:10px;flex-shrink:0;"><i class="bi bi-clock me-1"></i><?= esc($readTime) ?></span><?php endif; ?>
+            <span class="post-date"><?= $postDate ?></span>
+            <span class="badge rounded-pill post-status" style="background:<?= $httpOk ? '#166534' : '#92400e' ?>;color:<?= $httpOk ? '#bbf7d0' : '#fef3c7' ?>;"><?= $httpOk ? 'Live' : 'Pending' ?></span>
+            <i class="bi bi-chevron-right post-arrow"></i>
+          </a>
+        <?php endforeach; ?>
+      </div>
+      <?php else: ?>
+      <div class="text-center py-3" data-testid="trends-empty-state" style="color:#64748b;">
+        <i class="bi bi-newspaper" style="font-size:28px;color:#8b5cf6;"></i>
+        <div class="fw-semibold mt-1" style="font-size:13px;">No trending articles yet</div>
+        <div style="font-size:11px;">Click <strong>Generate Trends Article Now</strong> above to write your first one.</div>
+      </div>
+      <?php endif; ?>
+    </div>
+  </details>
+  <script>
+  (function(){
+    var btns = document.querySelectorAll('.trends-filter-btn');
+    if (!btns.length) return;
+    btns.forEach(function(btn){
+      btn.addEventListener('click', function(e){
+        e.preventDefault();
+        var region = btn.getAttribute('data-region');
+        btns.forEach(function(b){ b.classList.remove('active','btn-primary'); b.classList.add('btn-outline-secondary'); });
+        btn.classList.add('active','btn-primary');
+        btn.classList.remove('btn-outline-secondary');
+        // Trends filter rules:
+        //   - "All" shows everything.
+        //   - "Global" shows only data-is-global="1" rows.
+        //   - A country code (US/UK/AU/CA) shows that country's rows AND
+        //     global rows (so the operator sees the universal pieces too).
+        var rows = document.querySelectorAll('.trends-row');
+        var num  = 0;
+        rows.forEach(function(r){
+          var rRegion  = r.getAttribute('data-region');
+          var isGlobal = r.getAttribute('data-is-global') === '1';
+          var visible;
+          if (region === 'all')        visible = true;
+          else if (region === 'ALL')   visible = isGlobal;
+          else                         visible = (rRegion === region) || isGlobal;
+          if (visible) {
+            r.style.display = '';
+            num++;
+            r.querySelector('.post-num').textContent = num;
+          } else {
+            r.style.display = 'none';
+          }
+        });
+      });
+    });
+  })();
+  </script>
   <style>
     /* Blog post rows — dark mode native */
     .post-row { padding:8px 12px; border-bottom:1px solid rgba(255,255,255,.06); font-size:12px; color:#cbd5e1; transition:background .1s; }
