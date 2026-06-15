@@ -140,6 +140,39 @@ function ensure_db_schema(): void
             // throttle the "New chat message from {name}" admin alerts to
             // one per lead per 5 minutes during a fast back-and-forth.
             "ALTER TABLE chat_leads ADD COLUMN admin_notified_at DATETIME NULL DEFAULT NULL",
+            // categories.category_group → drives which header mega-menu column
+            // a category appears under ('microsoft' | 'antivirus' | 'standalone').
+            // Replaces the previously-hardcoded nav_microsoft() / antivirus
+            // dropdown so admins can attach a brand-new category (e.g. an
+            // "Adobe" line, a "Server" line) to either header group at
+            // create time without an engineer touching the templates.
+            "ALTER TABLE categories ADD COLUMN category_group VARCHAR(24) NOT NULL DEFAULT 'standalone'",
+            "ALTER TABLE categories ADD COLUMN nav_heading    VARCHAR(48) NOT NULL DEFAULT ''",
+            "ALTER TABLE categories ADD COLUMN sort_order     INT         NOT NULL DEFAULT 100",
+            "ALTER TABLE categories ADD KEY idx_cat_group (category_group, sort_order)",
+            // One-time backfill of category_group for the bundled SKUs.
+            // Re-applies on every boot but is idempotent — UPDATE is a no-op
+            // when the row already carries the target value.  Adds a
+            // nav_heading too so the mega-menu can group by column header
+            // (OFFICE FOR PC / OFFICE FOR MAC / WINDOWS / APPS).
+            "UPDATE categories SET category_group='microsoft', nav_heading='OFFICE FOR PC',  sort_order=10 WHERE slug='office-2024-pc'",
+            "UPDATE categories SET category_group='microsoft', nav_heading='OFFICE FOR PC',  sort_order=20 WHERE slug='office-2021-pc'",
+            "UPDATE categories SET category_group='microsoft', nav_heading='OFFICE FOR PC',  sort_order=30 WHERE slug='office-2019-pc'",
+            "UPDATE categories SET category_group='microsoft', nav_heading='OFFICE FOR PC',  sort_order=99 WHERE slug='office-pc'",
+            "UPDATE categories SET category_group='microsoft', nav_heading='OFFICE FOR MAC', sort_order=10 WHERE slug='office-2024-mac'",
+            "UPDATE categories SET category_group='microsoft', nav_heading='OFFICE FOR MAC', sort_order=20 WHERE slug='office-2021-mac'",
+            "UPDATE categories SET category_group='microsoft', nav_heading='OFFICE FOR MAC', sort_order=30 WHERE slug='office-2019-mac'",
+            "UPDATE categories SET category_group='microsoft', nav_heading='OFFICE FOR MAC', sort_order=99 WHERE slug='office-mac'",
+            "UPDATE categories SET category_group='microsoft', nav_heading='WINDOWS',        sort_order=10 WHERE slug='windows-11'",
+            "UPDATE categories SET category_group='microsoft', nav_heading='WINDOWS',        sort_order=20 WHERE slug='windows-10'",
+            "UPDATE categories SET category_group='microsoft', nav_heading='WINDOWS',        sort_order=99 WHERE slug='windows'",
+            "UPDATE categories SET category_group='microsoft', nav_heading='APPS',           sort_order=10 WHERE slug='microsoft-project'",
+            "UPDATE categories SET category_group='microsoft', nav_heading='APPS',           sort_order=20 WHERE slug='microsoft-visio'",
+            "UPDATE categories SET category_group='microsoft', nav_heading='APPS',           sort_order=99 WHERE slug='apps'",
+            "UPDATE categories SET category_group='microsoft', nav_heading='OFFICE FOR PC',  sort_order=99 WHERE slug='office'",
+            "UPDATE categories SET category_group='antivirus', nav_heading='ANTIVIRUS',      sort_order=10 WHERE slug='bitdefender'",
+            "UPDATE categories SET category_group='antivirus', nav_heading='ANTIVIRUS',      sort_order=20 WHERE slug='mcafee'",
+            "UPDATE categories SET category_group='antivirus', nav_heading='ANTIVIRUS',      sort_order=99 WHERE slug='antivirus'",
             // Paths to PDF attachments (Receipt + Invoice) generated per
             // paid order.  Stored as JSON array of absolute filesystem
             // paths; smtp_send_one() reads it and calls addAttachment()
@@ -512,26 +545,126 @@ function app_icons(): array
 
 /* ---------------- Mega menu data ---------------- */
 // Each column: heading => ['all' => [categorySlug, label], 'groups' => [yearLabel => categorySlug]]
+/**
+ * Header mega-menu — Microsoft Products column.
+ *
+ * Returns a nested array of `nav_heading` columns → label/category-slug
+ * groups, queried from the `categories` table where `category_group =
+ * 'microsoft'`.  Admins create new categories under any of these
+ * columns (or under "Antivirus", or as "Standalone" for back-office
+ * only) directly from the Add Product form — no engineer edits to
+ * this file required.
+ *
+ * Hard-coded column ordering preserves the "Office for PC, Office for
+ * Mac, Windows, Apps" sequence the storefront has shipped with; new
+ * `nav_heading` values added by admins fall in alphabetical order at
+ * the end.
+ */
 function nav_microsoft(): array
 {
-    return [
-        'OFFICE FOR PC' => [
-            'all' => ['office-pc', 'All Office for PC'],
-            'groups' => ['Office 2024' => 'office-2024-pc', 'Office 2021' => 'office-2021-pc', 'Office 2019' => 'office-2019-pc'],
-        ],
-        'OFFICE FOR MAC' => [
-            'all' => ['office-mac', 'All Office for Mac'],
-            'groups' => ['Office 2024 for Mac' => 'office-2024-mac', 'Office 2021 for Mac' => 'office-2021-mac', 'Office 2019 for Mac' => 'office-2019-mac'],
-        ],
-        'WINDOWS' => [
-            'all' => ['windows', 'All Windows'],
-            'groups' => ['Windows 11' => 'windows-11', 'Windows 10' => 'windows-10'],
-        ],
-        'APPS' => [
-            'all' => ['apps', 'All Microsoft Apps'],
-            'groups' => ['Microsoft Project' => 'microsoft-project', 'Microsoft Visio' => 'microsoft-visio'],
-        ],
-    ];
+    static $cache = null;
+    if ($cache !== null) return $cache;
+
+    $rows = [];
+    try {
+        $rows = db()->query(
+            "SELECT slug, name, nav_heading, sort_order
+             FROM categories
+             WHERE category_group = 'microsoft' AND slug <> '' AND nav_heading <> ''
+             ORDER BY sort_order ASC, slug ASC"
+        )->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    } catch (Throwable $e) { /* fresh install — fall through to defaults */ }
+
+    // Aggregate by nav_heading column, picking the row with sort_order=99
+    // as the "All X" link (e.g. office-pc → "All Office for PC").
+    $byCol = [];
+    foreach ($rows as $r) {
+        $h = (string)$r['nav_heading'];
+        if (!isset($byCol[$h])) $byCol[$h] = ['all' => null, 'groups' => []];
+        if ((int)$r['sort_order'] >= 99) {
+            $byCol[$h]['all'] = [(string)$r['slug'], 'All ' . ucwords(strtolower(str_replace('FOR ', 'for ', $h)))];
+        } else {
+            $byCol[$h]['groups'][(string)$r['name']] = (string)$r['slug'];
+        }
+    }
+
+    // Preserve the shipped column order, then append any custom headings
+    // alphabetically at the end.
+    $preferred = ['OFFICE FOR PC', 'OFFICE FOR MAC', 'WINDOWS', 'APPS'];
+    $out = [];
+    foreach ($preferred as $col) {
+        if (isset($byCol[$col])) {
+            $out[$col] = [
+                'all'    => $byCol[$col]['all'] ?? [strtolower(strtr($col, [' ' => '-', 'FOR ' => ''])), 'All ' . $col],
+                'groups' => $byCol[$col]['groups'],
+            ];
+            unset($byCol[$col]);
+        }
+    }
+    ksort($byCol);
+    foreach ($byCol as $col => $data) {
+        $out[$col] = [
+            'all'    => $data['all'] ?? [strtolower(strtr($col, [' ' => '-'])), 'All ' . $col],
+            'groups' => $data['groups'],
+        ];
+    }
+
+    // Fresh-install fallback — if no Microsoft-group rows yet, render the
+    // original hardcoded grid so the menu never goes blank during the
+    // first boot before the migrations run.
+    if (!$out) {
+        $out = [
+            'OFFICE FOR PC'  => ['all' => ['office-pc', 'All Office for PC'],
+                                 'groups' => ['Office 2024' => 'office-2024-pc', 'Office 2021' => 'office-2021-pc', 'Office 2019' => 'office-2019-pc']],
+            'OFFICE FOR MAC' => ['all' => ['office-mac', 'All Office for Mac'],
+                                 'groups' => ['Office 2024 for Mac' => 'office-2024-mac', 'Office 2021 for Mac' => 'office-2021-mac', 'Office 2019 for Mac' => 'office-2019-mac']],
+            'WINDOWS'        => ['all' => ['windows', 'All Windows'],
+                                 'groups' => ['Windows 11' => 'windows-11', 'Windows 10' => 'windows-10']],
+            'APPS'           => ['all' => ['apps', 'All Microsoft Apps'],
+                                 'groups' => ['Microsoft Project' => 'microsoft-project', 'Microsoft Visio' => 'microsoft-visio']],
+        ];
+    }
+    return $cache = $out;
+}
+
+/**
+ * Header mega-menu — Antivirus dropdown.
+ *
+ * Mirror of nav_microsoft() but for the slimmer Antivirus dropdown
+ * (single column).  Returns
+ *   ['brands' => ['Bitdefender' => 'bitdefender', ...],
+ *    'all'    => ['antivirus', 'All Antivirus']]
+ * Reads from categories.category_group='antivirus'.
+ */
+function nav_antivirus(): array
+{
+    static $cache = null;
+    if ($cache !== null) return $cache;
+
+    $brands  = [];
+    $allLink = ['antivirus', 'All Antivirus'];
+    try {
+        $rows = db()->query(
+            "SELECT slug, name, sort_order
+             FROM categories
+             WHERE category_group = 'antivirus' AND slug <> ''
+             ORDER BY sort_order ASC, slug ASC"
+        )->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        foreach ($rows as $r) {
+            if ((int)$r['sort_order'] >= 99) {
+                $allLink = [(string)$r['slug'], 'All ' . (string)$r['name']];
+            } else {
+                $brands[(string)$r['name']] = (string)$r['slug'];
+            }
+        }
+    } catch (Throwable $e) { /* fresh install */ }
+
+    if (!$brands) {
+        // Hardcoded fallback for fresh installs before migrations run.
+        $brands  = ['Bitdefender' => 'bitdefender', 'McAfee' => 'mcafee'];
+        $allLink = ['antivirus', 'All Antivirus'];
+    }
+    return $cache = ['brands' => $brands, 'all' => $allLink];
 }
 
 // Brand Vibe — bundles motion + gradient + font-weight + corner-radius.

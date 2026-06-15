@@ -2175,3 +2175,47 @@ Screenshot of homepage confirms:
 - `/app/php-version/admin.php` — new-product default category fix + improved error messaging in `regen_product_image`.
 - `/app/scripts/generate_product_images.py` — replaced ImageMagick `convert` + `cwebp` shell-outs with Pillow.
 
+
+## [Feb 2026] Triple feature drop — Header nav group picker · Real-time chat indicator · ProAssist email alert
+
+### Feature 1 — Header navigation parent-group picker
+When admin creates a new category via the inline "+ Add Category" flow on the Add Product form, a popover now asks where in the storefront header the new category should appear: **Microsoft Products** (mega-menu — admin picks the column: OFFICE FOR PC / OFFICE FOR MAC / WINDOWS / APPS / or a brand-new column), **Antivirus** (slim dropdown next to Bitdefender / McAfee), or **Standalone** (back-office only, never in header).
+
+- **Schema** (`includes/functions.php` migration block): added `categories.category_group VARCHAR(24) DEFAULT 'standalone'`, `categories.nav_heading VARCHAR(48)`, `categories.sort_order INT DEFAULT 100`, plus a composite key `idx_cat_group (category_group, sort_order)`.
+- **Seed migration**: 18 existing categories tagged on first boot — Office (2024/2021/2019) PC + Mac, Windows 10/11, Microsoft Project/Visio → `microsoft` with the right column heading; Bitdefender/McAfee → `antivirus`; everything else → `standalone`.
+- **`nav_microsoft()` refactored** to query DB rows where `category_group='microsoft'`, aggregating by `nav_heading` column. The 4 shipped columns (OFFICE FOR PC / OFFICE FOR MAC / WINDOWS / APPS) keep their original ordering via a preferred-headings list; any new admin-created column appends alphabetically. Fresh-install fallback preserves the original hardcoded grid so a brand-new install never renders an empty menu.
+- **`nav_antivirus()` new helper** + `header.php` refactored to iterate `$_av['brands']` instead of hardcoding `Bitdefender` / `McAfee`.
+- **Admin UI** (`admin.php`): new "+ Add Category" flow flow → admin types category name + Enter → green-bordered group picker popover appears → admin picks parent group + (when Microsoft) the column → "Add Category" button creates the chip and writes the picked values into hidden inputs `#f_cat_new_group` + `#f_cat_new_heading` which the `add_product` handler reads to INSERT the new categories row with the right `category_group` + `nav_heading`.
+- **Side effect**: the new product's hidden `category` field already defaulted to empty (from the previous fix), so even with this flow an admin can still pick an existing category if they prefer.
+
+### Feature 2 — Real-time chat indicator + new-lead toast
+- **New endpoint** `/ajax/leads-online.php` (admin-only) — returns `{ok, now, online_ids[], total, latest[]}`. `online_ids` lists `chat_leads.id` rows with `last_seen >= NOW() - INTERVAL 60 SECOND`. `latest[]` is the 5 most-recent leads (id / name / email / product / created_at) used for toast content.
+- **Existing chat-presence poller** in `admin.php` (the one that toggles `.chat-pill.is-online` / `.is-offline`) tightened from 20s → **10s** so the green pulsing dot matches the 60s last_seen threshold within a minute.
+- **New `newLeadNotifier()` IIFE**:
+  - Polls `/ajax/leads-online.php` every 10s.
+  - Compares the returned `total` against the previous tick — when `total` grows, fires a Bootstrap-styled **toast card** (bottom-right, slide-in animation, emerald `.is-online` accent, auto-dismiss after 12s, click-to-open-lead deep-link) AND plays a soft **WebAudio 880 Hz "ding"** (no MP3 — pure synthesis, doesn't need an asset).
+  - When the admin tab is **backgrounded**, also fires a **browser Notification** ("New chat lead — {name}") via the `Notification` API. Permission is requested non-intrusively on the first user click/keypress.
+  - Idempotent: never toasts the same lead twice, never fires on the very first poll (so a fresh page load doesn't ding 50 toasts at once).
+
+### Feature 3 — ProAssist install booking → email to company support
+- After a successful `INSERT`/`UPDATE` in `proassist_schedules` (both new bookings AND reschedules), the endpoint now enqueues a branded HTML email to the company's support inbox:
+  - Recipient: `setting_get('company_support_email')` with fallback to `setting_get('company_email')` (currently `services@maventechsoftware.com`).
+  - Subject prefix: `[New]` for first-time bookings, `[Rescheduled]` for updates — call-out the scheduled slot + customer name.
+  - Body: dark-themed branded card with Scheduled Slot / Customer Name / Email (tel-link) / Phone (tel-link) / Linked Order / Schedule ID + a CTA button deep-linking to `admin.php?tab=install-schedule&open={id}`.
+  - Uses `send_email(..., 'proassist_booked', 0)` with priority 0 so it's processed by the existing email queue immediately.
+- **Failure semantics**: the email send is wrapped in `try/catch` — a missing support email or transient SMTP failure NEVER blocks the customer's booking confirmation. The customer still sees `{ok:true}` even if the company-side email fails.
+
+### Verification (Playwright + direct PHP)
+| Feature | Verification |
+|---|---|
+| 1. Parent-group picker | Add Product page → typed "Server Licences" + Enter → group picker appeared → selected Microsoft + WINDOWS → chip created reading `Server Licences · WINDOWS` → hidden inputs: `f_cat='server-licences'`, `f_cat_new_group='microsoft'`, `f_cat_new_heading='WINDOWS'`. Migration verified — 18 existing categories tagged correctly. Storefront mega-menu still renders all 5 columns + 12 chips + 5 "All X" links. |
+| 2. New-lead toast | `/ajax/leads-online.php` → HTTP 200 with `{ok:true, total:3, online_ids:[], latest:[...]}`. Admin HTML contains `newLeadNotifier` IIFE + `function ding` WebAudio + `leads-online.php` URL. |
+| 3. ProAssist email | End-to-end PHP simulation: booked future Tuesday at 2pm EST → email row inserted with **recipient=`services@maventechsoftware.com`**, **subject=`[New] ProAssist install call — Wednesday, December 16 at 2:00 PM EST — Priya Sharma`**, **status=`sent`** within milliseconds of the booking. |
+
+### Files touched
+- `/app/php-version/includes/functions.php` — `nav_microsoft()` rewritten as DB-driven + new `nav_antivirus()` + migration ALTERs + seed UPDATEs.
+- `/app/php-version/includes/header.php` — Antivirus dropdown now iterates `nav_antivirus()`.
+- `/app/php-version/admin.php` — Category group picker UI + JS + handler in `add_product` to persist new category rows with `category_group` + `nav_heading`. New-lead toast notifier IIFE + tightened presence poller.
+- `/app/php-version/ajax/leads-online.php` — **NEW** endpoint.
+- `/app/php-version/ajax/proassist-schedule.php` — company-side notification email block after both insert + reschedule paths.
+

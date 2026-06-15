@@ -111,6 +111,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     } elseif ($action === 'add_product') {
         $categorySlug = ensure_category((string)($_POST['category'] ?? ''));
+        // Persist the parent-group + nav-heading the admin picked in the
+        // inline "+ Add Category" flow.  Only applies when the chip the
+        // admin just selected is a freshly-created one (a row that
+        // doesn't yet exist in `categories` is INSERT-ed below; existing
+        // rows are left untouched so we don't overwrite an admin's later
+        // re-organisation).
+        $catNewGroup   = strtolower(trim((string)($_POST['cat_new_group'] ?? '')));
+        $catNewHeading = strtoupper(trim((string)($_POST['cat_new_heading'] ?? '')));
+        if ($categorySlug !== '' && in_array($catNewGroup, ['microsoft', 'antivirus', 'standalone'], true)) {
+            try {
+                $exists = (int)$pdo->prepare('SELECT COUNT(*) FROM categories WHERE slug=?');
+                $check  = $pdo->prepare('SELECT COUNT(*) FROM categories WHERE slug=?');
+                $check->execute([$categorySlug]);
+                if ((int)$check->fetchColumn() === 0) {
+                    // First time we see this slug — create it with the
+                    // group + heading the admin chose.
+                    $prettyName = ucwords(str_replace(['-', '_'], ' ', $categorySlug));
+                    $pdo->prepare(
+                        "INSERT INTO categories (slug, name, category_group, nav_heading, sort_order)
+                         VALUES (?, ?, ?, ?, 50)"
+                    )->execute([$categorySlug, $prettyName, $catNewGroup, $catNewHeading]);
+                }
+            } catch (Throwable $e) { /* non-fatal — product still saves below */ }
+        }
         $slug = preg_replace('/[^a-z0-9]+/i','-', strtolower(trim($_POST['name']))) . '-' . substr(md5(uniqid()),0,5);
         $pdo->prepare('INSERT INTO products (slug,name,sku,brand,year,platform,category,license_type,price,original_price,badge,description,image,is_active,activation_url,install_guide_url,region,apps,rating,reviews) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,4.5,0)')
             ->execute([$slug, trim($_POST['name']), trim($_POST['sku']) ?: 'SKU-'.strtoupper(substr(md5($slug),0,8)), trim($_POST['brand']) ?: null,
@@ -6026,6 +6050,13 @@ elseif ($tab === 'products'):
                       <small class="text-muted" style="font-size:10.5px;"><i class="bi bi-info-circle me-1"></i>Click a chip to pick, or use <strong>Add Category +</strong> to create a new one</small>
                     </label>
                     <input type="hidden" id="f_cat" name="category" value="<?= esc($editing['category'] ?? '') ?>" data-testid="f-category">
+                    <!-- Hidden: which header mega-menu group a NEWLY-created
+                         category should be filed under (microsoft | antivirus
+                         | standalone).  Empty for existing categories; set by
+                         the inline "+ Add Category" flow when the admin picks
+                         one of the parent-group buttons. -->
+                    <input type="hidden" id="f_cat_new_group"   name="cat_new_group"   value="" data-testid="f-cat-new-group">
+                    <input type="hidden" id="f_cat_new_heading" name="cat_new_heading" value="" data-testid="f-cat-new-heading">
                     <div class="cat-chip-picker d-flex flex-wrap align-items-center gap-1 p-2"
                          data-testid="category-chip-picker"
                          style="border:1px solid var(--border,#cbd5e1);border-radius:.5rem;background:var(--bg,#0f172a);min-height:42px;">
@@ -6052,6 +6083,50 @@ elseif ($tab === 'products'):
                              data-testid="cat-chip-new-input"
                              placeholder="Type new category name & press Enter"
                              style="width:240px;display:inline-block!important;font-size:12px;">
+                    </div>
+                    <!-- Parent-group picker — appears AFTER admin presses
+                         Enter inside the "+ Add Category" input.  Lets the
+                         admin decide where in the storefront's header
+                         mega-menu the new category should appear.  Three
+                         options:
+                          • Microsoft Products → shown in the mega-menu under
+                            one of OFFICE FOR PC / OFFICE FOR MAC / WINDOWS /
+                            APPS (admin also picks the column).
+                          • Antivirus → shown in the Antivirus dropdown next
+                            to Bitdefender / McAfee.
+                          • Standalone → admin-only, never shown in the
+                            header menu (still browsable via /category.php). -->
+                    <div class="cat-group-picker d-none mt-2 p-3"
+                         data-testid="cat-group-picker"
+                         style="border:1px dashed #10b981;border-radius:.5rem;background:rgba(16,185,129,.06);">
+                      <div class="small fw-bold text-emerald mb-2" style="color:#10b981;font-size:12px;text-transform:uppercase;letter-spacing:.06em;">
+                        <i class="bi bi-signpost-2 me-1"></i>Where should <code class="cat-group-name" style="font-size:11px;padding:1px 6px;background:rgba(16,185,129,.15);border-radius:4px;color:#10b981;">new-category</code> appear in the storefront header?
+                      </div>
+                      <div class="row g-2">
+                        <div class="col-md-6">
+                          <label class="form-label small mb-1" style="font-size:11px;">Header group</label>
+                          <select class="form-select form-select-sm cat-group-select" data-testid="cat-group-select">
+                            <option value="microsoft">Microsoft Products (mega-menu)</option>
+                            <option value="antivirus">Antivirus (dropdown)</option>
+                            <option value="standalone" selected>Standalone — back-office only (no header link)</option>
+                          </select>
+                        </div>
+                        <div class="col-md-6 cat-group-heading-wrap d-none">
+                          <label class="form-label small mb-1" style="font-size:11px;">Column under Microsoft</label>
+                          <select class="form-select form-select-sm cat-group-heading-select" data-testid="cat-group-heading-select">
+                            <option value="OFFICE FOR PC">Office for PC</option>
+                            <option value="OFFICE FOR MAC">Office for Mac</option>
+                            <option value="WINDOWS">Windows</option>
+                            <option value="APPS">Apps</option>
+                            <option value="__new">+ New column (custom heading)</option>
+                          </select>
+                          <input type="text" class="form-control form-control-sm cat-group-heading-input d-none mt-1" placeholder="e.g. Server licences" maxlength="48" data-testid="cat-group-heading-custom" style="font-size:12px;">
+                        </div>
+                      </div>
+                      <div class="d-flex gap-2 mt-2">
+                        <button type="button" class="btn btn-sm btn-success cat-group-confirm" data-testid="cat-group-confirm" style="font-size:11.5px;font-weight:700;border-radius:999px;padding:5px 16px;"><i class="bi bi-check2 me-1"></i>Add Category</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary cat-group-cancel" data-testid="cat-group-cancel" style="font-size:11.5px;border-radius:999px;padding:5px 14px;">Cancel</button>
+                      </div>
                     </div>
                   </div>
                   <div class="col-4 d-flex align-items-end"><div class="form-check form-switch mt-2"><input type="checkbox" class="form-check-input" name="is_active" id="f_act" <?= ($editing['is_active'] ?? 1)?'checked':'' ?>><label class="form-check-label small" for="f_act">Active</label></div></div>
@@ -6484,41 +6559,116 @@ elseif ($tab === 'products'):
       newInp.focus();
     });
 
-    // Enter inside new-category input → create chip and select it.
+    // Enter inside new-category input → reveal the parent-group picker
+    // (does NOT create the chip yet — admin must choose where it sits in
+    // the storefront header first).
     newInp.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { newInp.value = ''; newInp.classList.add('d-none'); return; }
       if (e.key !== 'Enter') return;
       e.preventDefault();
       const slug = slugify(newInp.value);
       if (!slug) { newInp.classList.add('d-none'); return; }
 
-      // Re-use existing chip if it already exists (in case admin re-typed
-      // an existing category by hand).
-      let existing = picker.querySelector('.cat-chip[data-cat="' + slug + '"]');
-      if (!existing) {
+      // If the slug already exists in the picker, short-circuit straight
+      // to selection (don't make the admin pick a group for a category
+      // that's already shipped).
+      const existing = picker.querySelector('.cat-chip[data-cat="' + slug + '"]');
+      if (existing) {
+        selectChip(slug);
+        newInp.value = '';
+        newInp.classList.add('d-none');
+        return;
+      }
+      // Otherwise show the group picker.
+      openGroupPicker(slug, newInp.value.trim());
+    });
+
+    /* ----------------------------------------------------------------
+     *  Parent-group picker — admin chooses Microsoft / Antivirus /
+     *  Standalone for the brand-new category before it's added to the
+     *  chip row.  Two hidden inputs (#f_cat_new_group, #f_cat_new_heading)
+     *  travel with the form so the server can persist the new category
+     *  into the categories table with the right category_group +
+     *  nav_heading values.
+     * --------------------------------------------------------------- */
+    const groupPicker  = document.querySelector('[data-testid="cat-group-picker"]');
+    const groupSelect  = groupPicker && groupPicker.querySelector('.cat-group-select');
+    const headWrap     = groupPicker && groupPicker.querySelector('.cat-group-heading-wrap');
+    const headSelect   = groupPicker && groupPicker.querySelector('.cat-group-heading-select');
+    const headInput    = groupPicker && groupPicker.querySelector('.cat-group-heading-input');
+    const groupName    = groupPicker && groupPicker.querySelector('.cat-group-name');
+    const groupConfirm = groupPicker && groupPicker.querySelector('.cat-group-confirm');
+    const groupCancel  = groupPicker && groupPicker.querySelector('.cat-group-cancel');
+    const newGroupIn   = document.getElementById('f_cat_new_group');
+    const newHeadIn    = document.getElementById('f_cat_new_heading');
+    let pendingSlug = '', pendingLabel = '';
+
+    function openGroupPicker(slug, label) {
+      if (!groupPicker) return;
+      pendingSlug  = slug;
+      pendingLabel = label || slug;
+      if (groupName) groupName.textContent = label;
+      groupSelect.value = 'standalone';
+      headWrap.classList.add('d-none');
+      headInput.classList.add('d-none');
+      headInput.value = '';
+      groupPicker.classList.remove('d-none');
+      newInp.classList.add('d-none');
+    }
+    function closeGroupPicker() {
+      if (!groupPicker) return;
+      groupPicker.classList.add('d-none');
+      pendingSlug = ''; pendingLabel = '';
+    }
+
+    if (groupSelect) {
+      groupSelect.addEventListener('change', function () {
+        const v = groupSelect.value;
+        headWrap.classList.toggle('d-none', v !== 'microsoft');
+        if (v !== 'microsoft') headInput.classList.add('d-none');
+      });
+    }
+    if (headSelect) {
+      headSelect.addEventListener('change', function () {
+        headInput.classList.toggle('d-none', headSelect.value !== '__new');
+        if (headSelect.value === '__new') headInput.focus();
+      });
+    }
+
+    if (groupConfirm) {
+      groupConfirm.addEventListener('click', function () {
+        if (!pendingSlug) { closeGroupPicker(); return; }
+        const group = groupSelect.value || 'standalone';
+        let heading = '';
+        if (group === 'microsoft') {
+          heading = headSelect.value === '__new'
+            ? (headInput.value.trim() || pendingLabel).toUpperCase()
+            : (headSelect.value || 'APPS');
+        } else if (group === 'antivirus') {
+          heading = 'ANTIVIRUS';
+        }
+        // Persist for the form submit.
+        newGroupIn.value = group;
+        newHeadIn.value  = heading;
+        // Create the chip + select it.
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'cat-chip';
-        btn.dataset.cat = slug;
-        btn.dataset.testid = 'cat-chip-' + slug;
-        btn.textContent = slug;
+        btn.dataset.cat = pendingSlug;
+        btn.dataset.testid = 'cat-chip-' + pendingSlug;
+        btn.textContent = pendingLabel + (group === 'standalone' ? '  •  back-office' : '  •  ' + (heading || group));
         btn.setAttribute('style',
           'font-size:11.5px;font-weight:600;padding:4px 12px;border-radius:999px;'
           + 'border:1px solid var(--border,#cbd5e1);background:transparent;'
           + 'color:var(--text,#cbd5e1);cursor:pointer;transition:all .12s ease;'
         );
-        // Insert before the "+ Add Category" button so the new chip stays
-        // in the left/grouped section.
         picker.insertBefore(btn, addBtn);
-      }
-      selectChip(slug);
-      newInp.value = '';
-      newInp.classList.add('d-none');
-    });
-
-    // Escape closes the new-category input without saving.
-    newInp.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') { newInp.value = ''; newInp.classList.add('d-none'); }
-    });
+        selectChip(pendingSlug);
+        newInp.value = '';
+        closeGroupPicker();
+      });
+    }
+    if (groupCancel) groupCancel.addEventListener('click', closeGroupPicker);
   })();
   </script>
   <?php endif; ?>
@@ -7469,9 +7619,129 @@ elseif ($tab === 'leads'):
           });
         } catch(e){ /* offline — retry next tick */ }
       }
-      // First refresh after 5 sec (lets the page settle), then every 20.
+      // First refresh after 5 sec (lets the page settle), then every 10.
+      // Tightened from 20s → 10s so the chat-pill flips back to grey within
+      // ~1 minute of the customer leaving the page (matches the
+      // last_seen < 60s "online" threshold in /ajax/leads-online.php).
       setTimeout(refresh, 5000);
-      setInterval(refresh, 20000);
+      setInterval(refresh, 10000);
+    })();
+
+    /* -------------------------------------------------------------------
+     *  New-lead toast + ding-sound notifier.
+     *  Polls /ajax/leads-online.php every 10 sec; when the `total`
+     *  lead count increases compared to the previous response we know a
+     *  brand-new chat lead just landed → fire a Bootstrap-styled toast,
+     *  play a soft "ding" via WebAudio, and (if the admin tab is
+     *  backgrounded) fire a desktop Notification.  Idempotent: shows
+     *  one toast per new lead and never on the very first poll.
+     * ----------------------------------------------------------------- */
+    (function newLeadNotifier(){
+      const POLL_MS = 10000;
+      let lastTotal   = null;
+      let lastLatestId = null;
+      let audioCtx    = null;
+      function ding(){
+        try {
+          audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+          if (audioCtx.state === 'suspended') audioCtx.resume();
+          const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+          o.type = 'sine'; o.frequency.value = 880;
+          g.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+          g.gain.exponentialRampToValueAtTime(0.18, audioCtx.currentTime + 0.02);
+          g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.45);
+          o.connect(g); g.connect(audioCtx.destination);
+          o.start(); o.stop(audioCtx.currentTime + 0.5);
+        } catch(e) { /* silent if audio is blocked */ }
+      }
+      function ensureContainer(){
+        let host = document.getElementById('admNewLeadToasts');
+        if (!host) {
+          host = document.createElement('div');
+          host.id = 'admNewLeadToasts';
+          host.setAttribute('data-testid', 'new-lead-toasts');
+          host.style.cssText = 'position:fixed;right:18px;bottom:18px;z-index:9999;display:flex;flex-direction:column;gap:10px;max-width:380px;';
+          document.body.appendChild(host);
+        }
+        return host;
+      }
+      function showToast(lead){
+        const host = ensureContainer();
+        const card = document.createElement('div');
+        card.setAttribute('data-testid', 'new-lead-toast-' + lead.id);
+        card.style.cssText = 'background:#0f172a;color:#f1f5f9;border-left:4px solid #10b981;border-radius:10px;padding:14px 16px;box-shadow:0 12px 32px rgba(15,23,42,.4);font-family:inherit;font-size:13px;line-height:1.45;cursor:pointer;animation:newLeadIn .35s ease-out;';
+        const name    = (lead.name && lead.name.trim()) ? lead.name : 'Anonymous lead';
+        const email   = lead.email ? '<div style="font-size:11.5px;color:#94a3b8;margin-top:2px;">'+escapeHtml(lead.email)+'</div>' : '';
+        const product = lead.product ? '<div style="font-size:11.5px;color:#94a3b8;margin-top:2px;">interested in '+escapeHtml(lead.product)+'</div>' : '';
+        card.innerHTML =
+          '<div style="display:flex;align-items:flex-start;gap:10px;">'
+        + '  <div style="width:32px;height:32px;border-radius:50%;background:#10b981;display:flex;align-items:center;justify-content:center;flex-shrink:0;animation:newLeadPulse 1.4s ease-in-out infinite;"><i class="bi bi-person-plus-fill" style="color:#fff;font-size:17px;"></i></div>'
+        + '  <div style="flex:1;min-width:0;">'
+        + '    <div style="font-size:10.5px;font-weight:800;letter-spacing:.12em;color:#10b981;text-transform:uppercase;">New chat lead</div>'
+        + '    <div style="font-size:14px;font-weight:700;color:#fff;margin-top:1px;">'+escapeHtml(name)+'</div>'
+        + email + product
+        + '    <div style="margin-top:8px;display:flex;gap:8px;">'
+        + '      <a href="?tab=leads&open='+lead.id+'" data-testid="new-lead-toast-open-'+lead.id+'" style="background:#10b981;color:#fff;text-decoration:none;font-weight:700;font-size:11px;padding:5px 12px;border-radius:999px;">Open lead &rsaquo;</a>'
+        + '      <button type="button" data-testid="new-lead-toast-dismiss-'+lead.id+'" style="background:transparent;border:1px solid #334155;color:#94a3b8;font-weight:600;font-size:11px;padding:5px 12px;border-radius:999px;cursor:pointer;">Dismiss</button>'
+        + '    </div>'
+        + '  </div>'
+        + '</div>';
+        const dismiss = () => { card.style.opacity = '0'; card.style.transform = 'translateX(40px)'; setTimeout(() => card.remove(), 250); };
+        card.querySelector('[data-testid="new-lead-toast-dismiss-' + lead.id + '"]').addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); dismiss(); });
+        card.addEventListener('click', () => { window.location.href = '?tab=leads&open=' + lead.id; });
+        host.prepend(card);
+        // Auto-dismiss after 12s.
+        setTimeout(dismiss, 12000);
+        // Browser Notification when the tab is backgrounded.
+        if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+          try {
+            const n = new Notification('New chat lead — ' + name, {
+              body: (lead.email || '') + (lead.product ? '\nInterested in ' + lead.product : ''),
+              tag:  'new-lead-' + lead.id,
+              renotify: true,
+            });
+            n.onclick = () => { window.focus(); window.location.href = '?tab=leads&open=' + lead.id; };
+          } catch(e) {}
+        }
+      }
+      function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c])); }
+      // Inject keyframes once.
+      if (!document.getElementById('admNewLeadKeyframes')) {
+        const st = document.createElement('style'); st.id = 'admNewLeadKeyframes';
+        st.textContent = '@keyframes newLeadIn{from{opacity:0;transform:translateX(40px);}to{opacity:1;transform:translateX(0);}}@keyframes newLeadPulse{0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,.55);}50%{box-shadow:0 0 0 9px rgba(16,185,129,0);}}';
+        document.head.appendChild(st);
+      }
+      // Ask for desktop-notification permission on the first user gesture.
+      function gesture(){
+        if ('Notification' in window && Notification.permission === 'default') {
+          try { Notification.requestPermission(); } catch(e) {}
+        }
+        document.removeEventListener('click', gesture);
+        document.removeEventListener('keydown', gesture);
+      }
+      document.addEventListener('click',   gesture, { once: true, capture: true });
+      document.addEventListener('keydown', gesture, { once: true, capture: true });
+      async function tick(){
+        try {
+          const r = await fetch((window.MAVEN_BASE || '/') + 'ajax/leads-online.php', { credentials:'same-origin', cache:'no-store' });
+          if (!r.ok) return;
+          const j = await r.json();
+          if (!j || !j.ok) return;
+          if (lastTotal !== null && j.total > lastTotal) {
+            // One or more new leads since the last poll.  Toast the latest
+            // delta (skip any lead we've already toasted via lastLatestId).
+            const latest = (j.latest || []).filter(l => !lastLatestId || l.id > lastLatestId);
+            if (latest.length) {
+              ding();
+              latest.slice(0, 3).reverse().forEach(showToast);   // up to 3 toasts, oldest-first
+            }
+          }
+          lastTotal = j.total;
+          if (j.latest && j.latest.length) lastLatestId = Math.max(lastLatestId || 0, parseInt(j.latest[0].id, 10) || 0);
+        } catch(e) { /* silent — try again next tick */ }
+      }
+      setTimeout(tick, 2500);
+      setInterval(tick, POLL_MS);
     })();
 
     // Auto-open chat if URL has ?autochat=<lead_id> (used by toast click-through)

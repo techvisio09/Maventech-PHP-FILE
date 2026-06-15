@@ -404,9 +404,10 @@ else:
           <a class="nav-link dropdown-toggle fw-semibold" href="#" data-bs-toggle="dropdown" data-testid="nav-antivirus">Antivirus</a>
           <div class="dropdown-menu p-3 shadow antivirus-menu" style="min-width: 320px;">
             <div class="mega-heading mb-1">ANTIVIRUS</div>
-            <a class="mega-year" href="category.php?slug=bitdefender" data-testid="menu-bitdefender">Bitdefender</a>
-            <a class="mega-year" href="category.php?slug=mcafee" data-testid="menu-mcafee">McAfee</a>
-            <a class="mega-link fw-bold text-primary mt-2" href="category.php?slug=antivirus" data-testid="menu-all-antivirus">All Antivirus <i class="bi bi-arrow-right"></i></a>
+            <?php $_av = nav_antivirus(); foreach ($_av['brands'] as $_avLabel => $_avSlug): ?>
+              <a class="mega-year" href="category.php?slug=<?= esc($_avSlug) ?>" data-testid="menu-<?= esc($_avSlug) ?>"><?= esc($_avLabel) ?></a>
+            <?php endforeach; ?>
+            <a class="mega-link fw-bold text-primary mt-2" href="category.php?slug=<?= esc($_av['all'][0]) ?>" data-testid="menu-all-<?= esc($_av['all'][0]) ?>"><?= esc($_av['all'][1]) ?> <i class="bi bi-arrow-right"></i></a>
             <a class="mega-link mt-1" href="page.php?slug=disclaimer" data-testid="menu-disclaimer-av"><i class="bi bi-info-circle me-1"></i>Disclaimer</a>
             <div class="mt-2 pt-2 border-top">
               <a href="hub/antivirus" class="badge text-decoration-none" data-testid="menu-hub-antivirus" style="background:#16a34a1c;color:#16a34a;border:1px solid #16a34a4a;padding:4px 10px;font-size:11px;font-weight:600;"><i class="bi bi-collection-fill me-1"></i>Antivirus topic hub</a>
