@@ -515,17 +515,64 @@ body[data-brand-motion="static"] .logo-3d > img:first-of-type {
   .hero-delivery-pill, .hero-rating-chip, .hero-brand-watermark { animation: none; }
 }
 
-/* ---------- Sticky limited-time deal bar (fixed bottom, countdown to local midnight) ---------- */
-.deal-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1070;
-  background: linear-gradient(110deg, #2a1430 0%, #1b2240 50%, #0e4f5c 100%);
-  color: #fff; box-shadow: 0 -8px 24px rgba(2, 6, 23, .35); }
-.deal-bar .deal-code { color: #67e8f9; letter-spacing: .06em; }
-.deal-bar .deal-countdown { color: #2dd4bf; font-variant-numeric: tabular-nums; }
-.deal-bar .deal-close { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: .6rem; }
-.deal-bar-flash { color: #ffc107; animation: pill-float 2.6s ease-in-out infinite; }
-body.has-deal-bar { padding-bottom: 56px; }
-body.has-deal-bar #chat-bubble { bottom: 84px; }
-/* Chat-panel-above-deal-bar override moved next to #chat-panel definition. */
+/* ---------- Sticky limited-time deal bar (fixed TOP, purple→blue gradient) ----------
+ * Reworked Feb 2026 to match the design reference: a vibrant
+ * purple-to-cyan-blue ribbon at the TOP of every page with the headline,
+ * a clickable "GSOFT20"-style coupon-pill that copies on click, a
+ * "Shop Now ›" link, an optional countdown (only when a scheduled vibe
+ * promo is live) and a small × dismiss control on the right. */
+.deal-bar { position: fixed; left: 0; right: 0; top: 0; z-index: 1070;
+  background: linear-gradient(90deg, #7c3aed 0%, #6366f1 32%, #3b82f6 65%, #06b6d4 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 18px rgba(99, 102, 241, .35);
+  font-size: .82rem; line-height: 1.35;
+  letter-spacing: .15px;
+}
+.deal-bar .container { position: relative; }
+.deal-bar-headline { font-weight: 600; color: #ffffff; }
+.deal-bar-code-pill {
+  display: inline-flex; align-items: center; gap: .35rem;
+  background: rgba(255, 255, 255, .14);
+  border: 1px dashed rgba(255, 255, 255, .55);
+  color: #ffffff;
+  border-radius: 999px; padding: 3px 12px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-weight: 700; letter-spacing: 1.5px; font-size: .8rem;
+  cursor: pointer;
+  transition: background .15s ease, transform .15s ease, border-color .15s ease;
+}
+.deal-bar-code-pill:hover { background: rgba(255, 255, 255, .25); transform: translateY(-1px); border-color: rgba(255, 255, 255, .85); }
+.deal-bar-code-pill .bi { font-size: .75rem; opacity: .85; }
+.deal-bar-code-pill.is-copied { background: rgba(16, 185, 129, .85); border-color: rgba(16, 185, 129, .95); }
+.deal-bar-shop-link {
+  color: #ffffff !important; text-decoration: none;
+  font-weight: 700; font-size: .85rem; letter-spacing: .2px;
+  display: inline-flex; align-items: center; gap: .2rem;
+}
+.deal-bar-shop-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.deal-bar-countdown-wrap {
+  display: inline-flex; align-items: center; gap: .3rem;
+  background: rgba(0, 0, 0, .18);
+  border-radius: 999px; padding: 2px 10px;
+  font-size: .76rem;
+}
+.deal-bar-countdown-wrap .deal-countdown { color: #fef3c7; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+.deal-bar-close-x {
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  background: transparent; color: rgba(255, 255, 255, .9);
+  border: 0; font-size: 1.05rem; line-height: 1; padding: 4px 8px;
+  border-radius: 50%; cursor: pointer;
+  transition: background .15s ease;
+}
+.deal-bar-close-x:hover { background: rgba(255, 255, 255, .18); color: #fff; }
+
+/* Push the page body down so the topbar/header don't sit UNDER the deal bar. */
+body.has-deal-bar { padding-top: 38px; padding-bottom: 0; }
+body.has-deal-bar #chat-bubble { bottom: 22px; }
+@media (max-width: 768px) {
+  body.has-deal-bar { padding-top: 56px; }
+  .deal-bar-headline { font-size: .78rem; }
+}
 
 /* ---------- Home: Best Sellers spotlight (featured + side list) ---------- */
 .spotlight-card { overflow: hidden; }
@@ -1752,14 +1799,13 @@ body.has-deal-bar #chat-panel { bottom: 72px; }
   .hero-tile img { width: 23px; height: 23px; }
   .hero-brand-watermark { margin-left: -120px; margin-top: -120px; }
   .hero-brand-watermark svg { width: 240px; height: 240px; }
-  body.has-deal-bar { padding-bottom: 86px; }
-  body.has-deal-bar #chat-bubble { bottom: 104px; }
-  body.has-deal-bar #chat-panel { bottom: 102px; }
-  .deal-bar .container { padding-right: 2.4rem; }
-  .deal-bar-flash { display: none; }
-  .deal-bar .fw-bold.small { font-size: .72rem; }
-  .deal-bar .small { font-size: .7rem; }
-  .deal-cta { padding: .2rem .8rem; font-size: .72rem; }
+  body.has-deal-bar { padding-top: 60px; padding-bottom: 0; }
+  body.has-deal-bar #chat-bubble { bottom: 22px; }
+  body.has-deal-bar #chat-panel { bottom: 16px; }
+  .deal-bar .container { padding-left: 14px !important; padding-right: 36px !important; }
+  .deal-bar-headline { font-size: .74rem; }
+  .deal-bar-code-pill { font-size: .72rem; padding: 2px 9px; }
+  .deal-bar-shop-link { font-size: .76rem; }
   .page-content { overflow-x: hidden; }
   .page-content table { display: block; overflow-x: auto; }
   #chat-panel { height: min(460px, 68vh); bottom: 88px; right: 16px; }

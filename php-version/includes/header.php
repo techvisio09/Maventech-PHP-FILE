@@ -316,19 +316,16 @@ $ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.sv
 </nav>
 <?php else: ?>
 
-<!-- Promo bar — dynamic when an admin-scheduled Brand Vibe is live
-     (replaces the static MAVEN20 strip with the scheduled label + coupon
-     code so the offer surfaces sitewide, not just on /cart.php). -->
+<!-- Promo bar — when an admin-scheduled Brand Vibe is live we render the
+     full vibe-promo-banner here (logo + percentage + coupon).  The
+     fallback static MAVEN20 strip was retired in Feb 2026 because the
+     top deal-bar (further below) now carries the default promo — having
+     both was redundant and made the page header feel cluttered. -->
 <?php
 $_vibeTopbar = function_exists('render_vibe_promo_banner') ? render_vibe_promo_banner('topbar') : '';
 if ($_vibeTopbar !== ''):
   echo $_vibeTopbar;
-else:
-?>
-<div class="topbar text-center py-2 px-3">
-  Save up to 20% on Microsoft Office 2024 — use code <strong>MAVEN20</strong> at checkout — <a href="shop.php" class="text-white fw-bold">Shop Now ›</a>
-</div>
-<?php endif; ?>
+endif; ?>
 
 <!-- Trust bar -->
 <div class="trustbar py-1 px-3 d-none d-md-block">
@@ -477,23 +474,38 @@ else:
      deal-bar tracks whatever promo is currently running. -->
 <?php
 $_vibePromo  = function_exists('active_vibe_promo') ? active_vibe_promo() : null;
-$_dealLabel  = '20% off sitewide';
-$_dealCode   = 'MAVEN20';
+$_dealHeadline = 'Save up to 20% on Microsoft Office 2024!';
+$_dealCode     = 'MAVEN20';
 if ($_vibePromo && !empty($_vibePromo['coupon_code']) && (int)$_vibePromo['coupon_percent'] > 0) {
     $_pct       = (int)$_vibePromo['coupon_percent'];
     $_labelTxt  = trim((string)($_vibePromo['label'] ?? ''));
-    // Plain-text label so the rendered span doesn't show raw `&mdash;`.
-    $_dealLabel = $_labelTxt !== '' ? esc($_labelTxt . ' — ' . $_pct . '% off') : ($_pct . '% off');
+    $_dealHeadline = $_labelTxt !== ''
+        ? ($_labelTxt . ' — Save ' . $_pct . '%!')
+        : ('Save up to ' . $_pct . '% sitewide!');
     $_dealCode  = strtoupper((string)$_vibePromo['coupon_code']);
 }
 ?>
 <div class="deal-bar" id="deal-bar" data-testid="deal-bar">
-  <div class="container d-flex align-items-center justify-content-center gap-2 gap-sm-3 flex-wrap py-2 pe-5">
-    <span class="deal-bar-flash"><i class="bi bi-lightning-charge-fill"></i></span>
-    <span class="fw-bold small">Limited-Time Deal: <?= $_dealLabel ?> with code <span class="deal-code" data-testid="deal-bar-code"><?= esc($_dealCode) ?></span></span>
-    <span class="small">Ends in <strong class="deal-countdown" id="deal-countdown" data-testid="deal-bar-countdown">--:--:--</strong></span>
-    <a href="shop.php" class="btn btn-sm btn-light rounded-pill fw-bold px-3 deal-cta" data-testid="deal-bar-cta">Shop Now</a>
-    <button type="button" class="btn-close btn-close-white deal-close" aria-label="Dismiss deal bar" data-testid="deal-bar-close"></button>
+  <div class="container d-flex align-items-center justify-content-center gap-2 gap-md-3 flex-wrap py-2 px-4">
+    <span class="deal-bar-headline" data-testid="deal-bar-headline"><?= esc($_dealHeadline) ?></span>
+    <button type="button"
+            class="deal-bar-code-pill"
+            onclick="(function(b){var c=b.getAttribute('data-code');if(!c)return;function done(){var o=b.dataset.orig||b.innerHTML;b.dataset.orig=b.dataset.orig||b.innerHTML;b.innerHTML='<i class=\'bi bi-check2\'></i> Copied';b.classList.add('is-copied');setTimeout(function(){b.innerHTML=o;b.classList.remove('is-copied');},1500);}if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(c).then(done,done);}else{var t=document.createElement('textarea');t.value=c;document.body.appendChild(t);t.select();try{document.execCommand('copy');}catch(_){}t.remove();done();}})(this)"
+            data-code="<?= esc($_dealCode) ?>"
+            data-testid="deal-bar-code-pill"
+            title="Click to copy">
+      <span data-testid="deal-bar-code"><?= esc($_dealCode) ?></span>
+      <i class="bi bi-clipboard"></i>
+    </button>
+    <a href="shop.php" class="deal-bar-shop-link" data-testid="deal-bar-cta">Shop Now <i class="bi bi-chevron-right"></i></a>
+    <!-- Live countdown is kept (hidden by default; surfaces only when a
+         scheduled vibe-promo is active so the bar isn't permanently
+         counting down "fake" urgency on the homepage). -->
+    <span class="deal-bar-countdown-wrap" data-testid="deal-bar-countdown-wrap" hidden>
+      <i class="bi bi-clock"></i>
+      <strong class="deal-countdown" id="deal-countdown" data-testid="deal-bar-countdown">--:--:--</strong>
+    </span>
+    <button type="button" class="deal-bar-close-x" aria-label="Dismiss deal bar" data-testid="deal-bar-close">&times;</button>
   </div>
 </div>
 <?php endif; ?>

@@ -2621,3 +2621,30 @@ User feedback: "Footer especially gap not aligned · the top toll-free number sk
 - `/app/php-version/order-success.php` — `.receipt-qr-block` swapped `sticky-top` → inline `position:sticky;top:24px;z-index:1`
 - `/app/php-version/assets/js/main.js` — `toggleChat()` ELSE branch now hides the form, welcome msg, chips for returning visitors; removed `playChatTypingIntro()` call entirely
 
+
+## [Feb 2026 — Iteration 22] Deal-bar redesigned (top · purple-blue gradient · copy-code pill)
+
+### User reference design
+Vibrant purple→indigo→blue→cyan gradient ribbon at the TOP of the page with:
+- Centered headline "Save up to 20% on Microsoft Office 2024!"
+- Clickable coupon-code pill (`MAVEN20 📋`) that copies on click
+- "Shop Now ›" link
+- × dismiss button on the right
+
+### Completed
+- **Deal bar repositioned from bottom → top.** `.deal-bar` is now `position:fixed; top:0;` with `body.has-deal-bar { padding-top:38px; }` so the topbar/header sits below it without overlap.
+- **New gradient** — `linear-gradient(90deg, #7c3aed 0%, #6366f1 32%, #3b82f6 65%, #06b6d4 100%)` (purple → indigo → blue → cyan). Matches the design reference precisely.
+- **New coupon-code pill** — `.deal-bar-code-pill` is a dashed-white-border, translucent-white-fill pill that copies the code on click and confirms with a green "✓ Copied" pulse. Replaces the previous `.deal-code` inline span.
+- **New "Shop Now ›" link** — `.deal-bar-shop-link` is plain underline-on-hover white text instead of the previous solid white button (cleaner ribbon look).
+- **Optional live countdown** — kept the existing `.deal-countdown` element but wrapped it in `.deal-bar-countdown-wrap` with `hidden` attribute so it only surfaces when a scheduled vibe-promo is actually counting down. Default homepage no longer shows fake "Ends in 00:29:56" urgency.
+- **× dismiss button** — replaced Bootstrap `.btn-close-white` with a custom `.deal-bar-close-x` ghost button (circular hover, no border).
+- **Removed redundant fallback topbar strip** — `includes/header.php` had a static "Save up to 20%…" topbar that duplicated the deal-bar text.  Removed; the dynamic `render_vibe_promo_banner('topbar')` still fires when an admin Brand Vibe is scheduled (per-page promo) so we keep that conditional intact.
+- **Mobile breakpoint** — at <576 px the deal bar grows to 60 px tall (two lines), and the chat bubble/panel no longer offsets upward (they sit at the bottom corner unaffected by the now-top deal bar).
+
+### Files touched
+- `/app/php-version/includes/header.php` — deal-bar markup rebuilt; static topbar fallback strip removed
+- `/app/php-version/assets/css/style.css` — `.deal-bar` ruleset rewritten (new gradient + position:top), `.deal-bar-headline`, `.deal-bar-code-pill`, `.deal-bar-shop-link`, `.deal-bar-countdown-wrap`, `.deal-bar-close-x` added, mobile breakpoint adjusted
+
+### Visual verification
+- Screenshot at 1280×250: deal bar renders cleanly at the top in the exact gradient + pill + link + × layout from the user's reference. No content overlap. Chat bubble stays bottom-right.
+
