@@ -1199,3 +1199,28 @@ Specifically:
 - Live product page now bobs vertically without rotating; AI image preserved.
 - Live admin Edit Product modal screenshot shows the new sparkles button and the Live Website Preview rendering the freshly regenerated retail card.
 
+
+---
+
+## [Feb 2026] Iteration 23 — Free-form Category input + auto-propagation to storefront
+
+### What the user asked
+"Also allow us to add a category — whatever changes we do, that should be applied on the website."
+
+### What changed
+1. **Category dropdown → free-text input with autocomplete** in the Admin Edit Product modal. The admin can now type ANY category name (e.g. "AI Tools", "Cybersecurity Suite", or a totally new niche) — the existing categories are still suggested via `<datalist>` so typing the first few letters offers them as completions.
+2. **Same field upgraded for the "Move to another category" form** in the inventory side-panel.
+3. **`ensure_category()` helper** added to `admin.php` (top of file): normalises the typed value into a kebab-case slug, INSERTs a row into the `categories` table (`INSERT IGNORE`) using the slug + a friendly title-case display name so the storefront's nav, sitemap, category landing page and shop grouping all pick the new category up automatically.
+4. **Wired into all three category-writing actions**: `update_product`, `add_product`, `move_product`.
+
+### Files touched
+- `/app/php-version/admin.php` — `ensure_category()` helper + datalist input in two places + slug normalisation in three POST actions.
+
+### Verification (curl end-to-end)
+- Created a product with `category=AI Tools` (a typed free-form string):
+  - `products.category` saved as `ai-tools` ✓
+  - `categories` row created: `{"slug":"ai-tools","name":"Ai Tools"}` ✓
+  - `/category.php?slug=ai-tools` renders with `<h1>Ai Tools Products</h1>` and lists the new product ✓
+- Move action with `category=Cybersecurity Suite` → product moved + new `cybersecurity-suite` row in the categories table ✓
+- Pre-existing categories continue to work unchanged (autocomplete suggestions preserved).
+

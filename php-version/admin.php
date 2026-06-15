@@ -9,6 +9,31 @@ $pdo = db();
 // Drain the email queue on every admin page load (no cron required for low-volume sites)
 try { smtp_process_queue(3); } catch (Throwable $e) { /* never block the UI */ }
 $tab = $_GET['tab'] ?? 'dashboard';
+
+/**
+ * Normalise a typed-in category value and make sure a matching row exists
+ * in the `categories` table so the new category surfaces everywhere on
+ * the storefront (nav, shop page, sitemap) — without needing a separate
+ * "add category" screen.  Returns the canonical slug.
+ */
+function ensure_category(string $input): string
+{
+    $slug = strtolower(trim($input));
+    // kebab-case: spaces / underscores / non-alnum → hyphen, collapse repeats.
+    $slug = preg_replace('/[^a-z0-9]+/', '-', $slug) ?? '';
+    $slug = trim($slug, '-');
+    if ($slug === '') return '';
+    // Derive a friendly display name from the slug.
+    $display = ucwords(str_replace('-', ' ', $slug));
+    try {
+        // INSERT IGNORE so existing rows are untouched.
+        db()->prepare(
+            "INSERT IGNORE INTO categories (slug, name) VALUES (?, ?)"
+        )->execute([$slug, $display]);
+    } catch (Throwable $e) { /* table may not exist on a fresh install */ }
+    return $slug;
+}
+
 // Legacy `keys` tab merged into Products tab — keep URLs working
 if ($tab === 'keys') { header('Location: admin.php?tab=products'); exit; }
 $flash = $_GET['msg'] ?? '';
@@ -22,11 +47,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
     if ($action === 'update_product') {
+        $categorySlug = ensure_category((string)($_POST['category'] ?? ''));
         $pdo->prepare('UPDATE products SET name=?, sku=?, brand=?, year=?, platform=?, category=?, license_type=?,
             price=?, original_price=?, badge=?, description=?, is_active=?, activation_url=?, install_guide_url=?, image=COALESCE(NULLIF(?,""),image) WHERE slug=?')
             ->execute([
                 trim($_POST['name']), trim($_POST['sku']), trim($_POST['brand']) ?: null,
-                $_POST['year']!==''?(int)$_POST['year']:null, $_POST['platform'], $_POST['category'],
+                $_POST['year']!==''?(int)$_POST['year']:null, $_POST['platform'], $categorySlug,
                 $_POST['license_type'], (float)$_POST['price'],
                 $_POST['original_price']!==''?(float)$_POST['original_price']:null,
                 trim($_POST['badge']) ?: null, trim($_POST['description'] ?? '') ?: null,
@@ -38,10 +64,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: admin.php?tab=products&edit='.urlencode($_POST['slug']).'&msg=Saved'); exit;
 
     } elseif ($action === 'add_product') {
+        $categorySlug = ensure_category((string)($_POST['category'] ?? ''));
         $slug = preg_replace('/[^a-z0-9]+/i','-', strtolower(trim($_POST['name']))) . '-' . substr(md5(uniqid()),0,5);
         $pdo->prepare('INSERT INTO products (slug,name,sku,brand,year,platform,category,license_type,price,original_price,badge,description,image,is_active,activation_url,install_guide_url,region,apps,rating,reviews) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,4.5,0)')
             ->execute([$slug, trim($_POST['name']), trim($_POST['sku']) ?: 'SKU-'.strtoupper(substr(md5($slug),0,8)), trim($_POST['brand']) ?: null,
-                $_POST['year']!==''?(int)$_POST['year']:null, $_POST['platform'], $_POST['category'], $_POST['license_type'],
+                $_POST['year']!==''?(int)$_POST['year']:null, $_POST['platform'], $categorySlug, $_POST['license_type'],
                 (float)$_POST['price'], $_POST['original_price']!==''?(float)$_POST['original_price']:null,
                 trim($_POST['badge']) ?: null, trim($_POST['description'] ?? '') ?: null, trim($_POST['image'] ?? '') ?: null,
                 isset($_POST['is_active']) ? 1 : 0, trim($_POST['activation_url'] ?? '') ?: null, trim($_POST['install_guide_url'] ?? '') ?: null, $region_code, '']);
@@ -137,7 +164,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: admin.php?tab=products&msg=Status+toggled'); exit;
 
     } elseif ($action === 'move_product') {
-        $pdo->prepare('UPDATE products SET category=? WHERE slug=?')->execute([$_POST['category'], $_POST['slug']]);
+        $categorySlug = ensure_category((string)($_POST['category'] ?? ''));
+        $pdo->prepare('UPDATE products SET category=? WHERE slug=?')->execute([$categorySlug, $_POST['slug']]);
         header('Location: admin.php?tab=products&msg=Moved'); exit;
 
     } elseif ($action === 'ai_autofill_urls') {
@@ -5100,10 +5128,19 @@ elseif ($tab === 'products'):
                       <?php foreach (['lifetime','subscription','single_use','multi_use'] as $o): ?><option value="<?= $o ?>" <?= ($editing['license_type'] ?? '')===$o?'selected':'' ?>><?= ucfirst(str_replace('_',' ',$o)) ?></option><?php endforeach; ?>
                     </select>
                   </div>
-                  <div class="col-8"><label class="form-label small mb-0">Category</label>
-                    <select class="form-select form-select-sm" id="f_cat" name="category">
-                      <?php foreach ($cats as $c): ?><option value="<?= esc($c) ?>" <?= $editing['category']===$c?'selected':'' ?>><?= esc($c) ?></option><?php endforeach; ?>
-                    </select>
+                  <div class="col-8"><label class="form-label small mb-0 d-flex justify-content-between align-items-center">
+                      <span>Category</span>
+                      <small class="text-muted" style="font-size:10.5px;"><i class="bi bi-info-circle me-1"></i>Pick an existing one — or type a new category, it'll be created on save</small>
+                    </label>
+                    <input type="text" class="form-control form-control-sm" id="f_cat" name="category"
+                           list="category-suggestions"
+                           value="<?= esc($editing['category'] ?? '') ?>"
+                           placeholder="e.g. office-2024-pc, bitdefender, windows-11, my-new-category"
+                           autocomplete="off"
+                           data-testid="f-category">
+                    <datalist id="category-suggestions">
+                      <?php foreach ($cats as $c): ?><option value="<?= esc($c) ?>"><?php endforeach; ?>
+                    </datalist>
                   </div>
                   <div class="col-4 d-flex align-items-end"><div class="form-check form-switch mt-2"><input type="checkbox" class="form-check-input" name="is_active" id="f_act" <?= ($editing['is_active'] ?? 1)?'checked':'' ?>><label class="form-check-label small" for="f_act">Active</label></div></div>
                   <div class="col-12">
@@ -5224,9 +5261,11 @@ elseif ($tab === 'products'):
                   <hr>
                   <h6 class="fw-bold mb-2 small"><i class="bi bi-arrow-left-right me-1"></i>Move to another category</h6>
                   <div class="d-flex gap-2">
-                    <select id="moveCat" class="form-select form-select-sm">
-                      <?php foreach ($cats as $c): ?><option value="<?= esc($c) ?>" <?= $editing['category']===$c?'selected':'' ?>><?= esc($c) ?></option><?php endforeach; ?>
-                    </select>
+                    <input type="text" id="moveCat" class="form-control form-control-sm"
+                           list="category-suggestions"
+                           value="<?= esc($editing['category'] ?? '') ?>"
+                           placeholder="Type any category — new or existing"
+                           autocomplete="off">
                     <form method="post" onsubmit="document.getElementById('moveCatHidden').value=document.getElementById('moveCat').value;">
                       <input type="hidden" name="action" value="move_product">
                       <input type="hidden" name="slug" value="<?= esc($editing['slug']) ?>">
