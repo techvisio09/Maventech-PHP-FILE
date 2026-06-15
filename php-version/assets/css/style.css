@@ -1233,17 +1233,34 @@ body.has-deal-bar #chat-panel { bottom: 72px; }
 .chat-talk-band {
   border-top: 1px solid var(--chat-border);
   background: var(--chat-surface-soft);
-  color: var(--chat-text-soft); font-weight: 400;
-  font-size: .64rem;
+  color: var(--chat-text-soft); font-weight: 500;
+  font-size: .68rem;
   line-height: 1.4;
   white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis;
-  padding: .35rem .65rem !important;
+  padding: .4rem .7rem !important;
+  display: flex; align-items: center; justify-content: center; gap: .4rem;
 }
-.chat-talk-band a {
+.chat-talk-band .chat-talk-phone {
+  display: inline-flex; align-items: center; gap: .3rem;
   color: var(--chat-navy-3); text-decoration: none;
-  font-weight: 600; font-size: .68rem;
+  font-weight: 700; font-size: .76rem; letter-spacing: .1px;
   white-space: nowrap;
+}
+.chat-talk-band .chat-talk-phone:hover { color: var(--chat-navy-2); }
+.chat-talk-phone-ring {
+  color: #2563eb; font-size: .7rem;
+  animation: chat-call-flicker 1.4s ease-in-out infinite;
+}
+@keyframes chat-call-flicker {
+  0%, 100% { opacity: 1;   transform: rotate(0deg)   scale(1); }
+  18%      { opacity: .35; transform: rotate(-12deg) scale(1.08); }
+  36%      { opacity: 1;   transform: rotate(12deg)  scale(1.08); }
+  55%      { opacity: .55; transform: rotate(-8deg)  scale(1); }
+  72%      { opacity: 1;   transform: rotate(0deg)   scale(1.04); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-talk-phone-ring { animation: none; }
 }
 .chat-talk-band .ttf-sep { margin: 0 .35rem; opacity: .45; }
 [data-bs-theme="dark"] .chat-talk-band a { color: #93c5fd; }
@@ -1284,8 +1301,19 @@ body.has-deal-bar #chat-panel { bottom: 72px; }
   4% { transform: rotate(-16deg); } 8% { transform: rotate(14deg); }
   12% { transform: rotate(-10deg); } 16% { transform: rotate(7deg); } 20% { transform: rotate(0); }
 }
-.trustbar-phone { font-size: .98rem; font-weight: 800; color: #67e8f9 !important; letter-spacing: .01em; }
-.trustbar-phone .bi { animation: phone-ring 2.6s ease-in-out infinite; display: inline-block; }
+.trustbar-phone {
+  font-size: .95rem; font-weight: 700; letter-spacing: .02em;
+  color: #ffffff !important;                 /* clean white — elegant over the dark trustbar */
+  display: inline-flex; align-items: center; gap: .35rem;
+  transition: color .15s ease;
+}
+.trustbar-phone:hover { color: #f8fafc !important; }
+.trustbar-phone .bi {
+  color: #fbbf24;                            /* warm amber accent on the ring icon */
+  font-size: .9rem;
+  animation: phone-ring 2.6s ease-in-out infinite;
+  display: inline-block;
+}
 .phone-cta-mobile { font-size: .78rem; background: linear-gradient(135deg, #ff7849, #ea580c); color: #fff;
   border: none; box-shadow: 0 4px 12px rgba(255, 120, 73, .35); animation: phone-pulse 2.6s ease-in-out infinite; }
 .phone-cta-mobile:hover { color: #fff; }

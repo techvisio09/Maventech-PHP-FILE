@@ -144,7 +144,7 @@ if ($order && $order['status'] === 'paid') {
     <!-- ===== QR code rail (pulled toward the left edge so the centered
          thank-you block has more breathing room) ===== -->
     <div class="col-12 col-md-3 ms-md-n2">
-      <div class="receipt-qr-block sticky-top" data-testid="receipt-qr-card" style="top:24px;text-align:left;">
+      <div class="receipt-qr-block" data-testid="receipt-qr-card" style="text-align:left;position:sticky;top:24px;z-index:1;">
         <div class="receipt-qr-tag" data-testid="receipt-qr-tag">
           <i class="bi bi-qr-code-scan me-1"></i>SCAN WITH YOUR PHONE
         </div>

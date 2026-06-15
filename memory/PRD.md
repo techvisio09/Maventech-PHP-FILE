@@ -2603,3 +2603,21 @@ User: "Chat size is still too big. I want to reduce the size, make it half of it
   - No AI auto-reply, no admin auto-reply ✓
 - DB verification: latest chat_leads row created (id=11, Mary Davis), `chat_messages` has ONLY the customer's question — zero auto-admin rows
 
+
+## [Feb 2026 — Iteration 21] Trustbar polish · QR z-index fix · chat footer simplification
+
+User feedback: "Footer especially gap not aligned · the top toll-free number sky-blue not elegant · QR is mixing with the banner · chat footer should just be 'Prefer to talk?' + number + flickering call icon."
+
+### Completed
+- **Trustbar phone color** — changed from neon sky-blue `#67e8f9` to elegant white `#ffffff` with a warm amber `#fbbf24` phone-ring icon. The dark trustbar now reads as a clean, professional band instead of a screaming cyan accent.
+- **QR z-index fix** — `.receipt-qr-block` was using Bootstrap's `sticky-top` (z-index: 1020) which was making the QR rail render OVER the header mega-menu dropdown. Swapped to plain `position:sticky; top:24px; z-index:1` so the mega-menu (default 1020) correctly renders above the QR. Verified by hovering "Microsoft Products" on `/order-success.php` — dropdown fully covers the QR area now.
+- **Chat footer ("talk-band") simplified** — was: `[headset icon] Prefer to talk? · Mon-Sat, 9 AM-6 PM EST · 1-877-555-0199`.  Now: `Prefer to talk? [flickering call icon] 1-877-555-0199`. New `.chat-talk-phone-ring` rule pulses the icon via `@keyframes chat-call-flicker` (rotate -12° ↔ +12° + scale + opacity ramp, 1.4 s loop, respects `prefers-reduced-motion`).
+- **Chat panel: hide AI welcome + chips for EVERYONE** — `playChatTypingIntro()` was un-hiding the legacy AI welcome bubble + quick chips for returning visitors with `uc_lead_done`. Removed that call; the welcome + chips now stay hidden in BOTH branches of `toggleChat()`. Customer never sees "Max · AI Assistant" wording anymore.
+- **Returning-visitor flow polish** — when `uc_lead_done=1` is set (ProAssist customer landing on `/order-success.php`), the contact form is now ALSO hidden (was previously visible on top of the composer). Customer sees only the composer + prior chat history.
+
+### Files touched
+- `/app/php-version/assets/css/style.css` — `.trustbar-phone` color/animation, `.chat-talk-band` simplified flex layout, `.chat-talk-phone` + `.chat-talk-phone-ring` + `@keyframes chat-call-flicker` added
+- `/app/php-version/includes/footer.php` — chat-talk-band markup simplified to `Prefer to talk? <a><icon><number></a>`
+- `/app/php-version/order-success.php` — `.receipt-qr-block` swapped `sticky-top` → inline `position:sticky;top:24px;z-index:1`
+- `/app/php-version/assets/js/main.js` — `toggleChat()` ELSE branch now hides the form, welcome msg, chips for returning visitors; removed `playChatTypingIntro()` call entirely
+

@@ -334,13 +334,17 @@ function toggleChat() {
     } else {
       // Returning visitor — lead already done; surface the composer.
       revealChatInputRow();
-      // Play the typing intro for ProAssist / returning customers only.
-      try {
-        if (!sessionStorage.getItem('uc_chat_intro_played')) {
-          playChatTypingIntro();
-          sessionStorage.setItem('uc_chat_intro_played', '1');
-        }
-      } catch (e) { /* private-mode browsers: skip the intro silently */ }
+      // Hide the contact form too — they've already given us their details
+      // on a previous visit (or on the order-success ProAssist flow).
+      const form = document.getElementById('chat-lead-form');
+      if (form) form.style.display = 'none';
+      // Keep the AI welcome + chips HIDDEN (human-only chat mode).  The
+      // customer should see only their own prior messages + real admin
+      // replies, never the legacy "Max · AI Assistant" greeting.
+      const welcome = document.getElementById('chat-welcome-msg');
+      const chips   = document.getElementById('chat-chips');
+      if (welcome) welcome.style.display = 'none';
+      if (chips)   chips.style.display   = 'none';
     }
   }
 }
