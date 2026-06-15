@@ -1400,7 +1400,7 @@ if ($tab === 'ai-blogger') {
                 $_SESSION['seo_bot_flash'] = '✓ Already up to date — all ' . count($skipped) . ' busy categor' . (count($skipped) === 1 ? 'y has' : 'ies have') . ' a topic hub: ' . esc(implode(', ', array_slice($skipped, 0, 8))) . (count($skipped) > 8 ? '…' : '') . '.';
                 $_SESSION['seo_bot_flash_kind'] = 'success';
             } else {
-                $_SESSION['seo_bot_flash'] = 'No categories with 2 or more active products were found yet. Add more products first, or use the New hub form below to add one manually.';
+                $_SESSION['seo_bot_flash'] = 'No categories with 2 or more active products were found yet. Add more products first, then click "Auto-generate from top categories" again — or scroll to the SEO Discovery Lab below and spin a hub from a Google Search Console cluster.';
                 $_SESSION['seo_bot_flash_kind'] = 'info';
             }
         } catch (Throwable $e) {
@@ -4361,14 +4361,11 @@ elseif ($tab === 'ai-blogger'):
       <span class="ai-badge" style="background:#dbeafe;color:#1e40af;" data-testid="hubs-count-badge"><?= $hubLive ?>/<?= $hubCount ?> live</span>
     </summary>
     <div class="ai-body">
-      <p class="text-secondary small mb-3">Each hub publishes a deep <code>/hub/&lt;slug&gt;</code> landing page that aggregates every related product, blog post and FAQ on one URL — exactly what Google's topical-authority model + ChatGPT / Perplexity reward.  Add hubs manually, auto-generate from your busiest categories, or spin one up from a Google Search Console cluster (below).</p>
+      <p class="text-secondary small mb-3">Each hub publishes a deep <code>/hub/&lt;slug&gt;</code> landing page that aggregates every related product, blog post and FAQ on one URL — exactly what Google's topical-authority model + ChatGPT / Perplexity reward.  Hubs are <strong>auto-generated</strong> from your busiest categories with one click, or spun up from a <strong>Google Search Console cluster</strong> in the section below.</p>
 
       <div class="d-flex flex-wrap gap-2 mb-3" data-testid="hubs-toolbar">
         <a href="admin.php?tab=ai-blogger&autogen_topic_hubs=1#topic-hubs-section" class="btn btn-sm btn-primary rounded-pill px-3" data-testid="hubs-autogen-btn"
-           onclick="return confirm('Auto-generate topic hubs for every busy category (4+ products) that doesn\u0027t already have one?')"><i class="bi bi-magic me-1"></i>Auto-generate from top categories</a>
-        <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3" data-testid="hubs-new-btn"
-           onclick="document.getElementById('hub-form-card').scrollIntoView({behavior:'smooth'});document.getElementById('hub-form-card').classList.add('hub-form-glow');document.querySelector('#hub-form-card input[name=hub_slug]').focus();">
-           <i class="bi bi-plus-lg me-1"></i>New hub</button>
+           onclick="return confirm('Auto-generate topic hubs for every busy category (2+ products) that doesn\u0027t already have one?')"><i class="bi bi-magic me-1"></i>Auto-generate from top categories</a>
         <a href="<?= esc(rtrim(site_url(), '/')) ?>/sitemap.xml" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary rounded-pill px-3"><i class="bi bi-filetype-xml me-1"></i>View sitemap</a>
       </div>
 
@@ -4423,9 +4420,13 @@ elseif ($tab === 'ai-blogger'):
         <div class="alert alert-info mb-3" style="font-size:13px;"><i class="bi bi-info-circle me-1"></i>No hubs yet — create one below or auto-generate from your top categories.</div>
       <?php endif; ?>
 
-      <!-- Hub edit / create form -->
+      <!-- Hub edit form — only rendered when the admin clicks the pencil on
+           an existing row (?edit_hub=<slug>).  Manual creation has been removed
+           per product direction: hubs are now AI-generated from top categories
+           or spun up from a GSC cluster only. -->
+      <?php if ($editingHub): ?>
       <div class="card mb-2" id="hub-form-card" data-testid="hub-form-card" style="border:1px solid #e2e8f0;border-radius:12px;padding:16px;">
-        <h3 class="h6 fw-bold mb-3"><i class="bi <?= $editingHub ? 'bi-pencil-square' : 'bi-plus-circle' ?> me-1"></i><?= $editingHub ? 'Edit hub' : 'Create new hub' ?></h3>
+        <h3 class="h6 fw-bold mb-3"><i class="bi bi-pencil-square me-1"></i>Edit hub</h3>
         <form method="post" action="admin.php?tab=ai-blogger" data-testid="hub-form">
           <input type="hidden" name="save_topic_hub" value="1">
           <input type="hidden" name="hub_id" value="<?= $editingHub ? (int)$editingHub['id'] : 0 ?>">
@@ -4488,15 +4489,14 @@ https://youtu.be/YYYYY"><?php
               </div>
             </div>
             <div class="col-12 d-flex gap-2 align-items-center pt-2" style="border-top:1px solid #f1f5f9;">
-              <button type="submit" class="btn btn-primary rounded-pill px-4" data-testid="hub-save-btn"><i class="bi bi-save me-1"></i><?= $editingHub ? 'Update hub' : 'Create hub' ?></button>
-              <?php if ($editingHub): ?>
-                <a href="admin.php?tab=ai-blogger#topic-hubs-section" class="btn btn-link text-secondary">Cancel</a>
-                <a href="<?= esc(rtrim(site_url(), '/')) ?>/hub/<?= esc($editingHub['slug']) ?>" target="_blank" rel="noopener" class="btn btn-link ms-auto"><i class="bi bi-box-arrow-up-right me-1"></i>Preview hub</a>
-              <?php endif; ?>
+              <button type="submit" class="btn btn-primary rounded-pill px-4" data-testid="hub-save-btn"><i class="bi bi-save me-1"></i>Update hub</button>
+              <a href="admin.php?tab=ai-blogger#topic-hubs-section" class="btn btn-link text-secondary">Cancel</a>
+              <a href="<?= esc(rtrim(site_url(), '/')) ?>/hub/<?= esc($editingHub['slug']) ?>" target="_blank" rel="noopener" class="btn btn-link ms-auto"><i class="bi bi-box-arrow-up-right me-1"></i>Preview hub</a>
             </div>
           </div>
         </form>
       </div>
+      <?php endif; ?>
       <style>
         .hub-form-glow { animation: hub-form-pulse 1.4s ease-in-out 1; }
         @keyframes hub-form-pulse { 0% { box-shadow: 0 0 0 0 rgba(59,130,246,.45); } 70% { box-shadow: 0 0 0 14px rgba(59,130,246,0); } 100% { box-shadow: 0 0 0 0 rgba(59,130,246,0); } }

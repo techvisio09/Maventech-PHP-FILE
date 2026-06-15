@@ -1738,3 +1738,28 @@ Net effect: the clear DID happen in DB, but the visible state still claimed "Key
 3. **Click Change → leave empty → Save** → green "✓ Cleared: AI Key" flash → card returns to BLUE "Using built-in fallback key" (NOT phantom-green anymore).
 
 
+---
+
+## [Feb 2026] Iteration 36 — Remove manual "New hub" surface from Topic Cluster Hubs
+
+### What the user asked
+"Remove this `+ New hub` button — I don't want to add hubs manually. I want auto-generate from AI from all our busiest categories, or spin one up from a Google Search Console cluster (below)."
+
+### What changed (`admin.php`)
+- **Description rewritten** — dropped the "Add hubs manually" phrase. Now reads: *"Each hub publishes a deep `/hub/<slug>` landing page that aggregates every related product, blog post and FAQ on one URL — exactly what Google's topical-authority model + ChatGPT / Perplexity reward. Hubs are **auto-generated** from your busiest categories with one click, or spun up from a **Google Search Console cluster** in the section below."*
+- **"+ New hub" button removed** from the Hubs toolbar.
+- **"Create new hub" form removed** from the rendered output — the form is only emitted now when the admin clicks the pencil-icon `?edit_hub=<slug>` action on an existing hub row (Edit mode preserved for fine-tuning copy, accent colour, categories, etc.).
+- **Empty-state copy updated** — `topic_hubs_auto_generate()` flash no longer suggests "use the New hub form below"; instead it directs the admin to the SEO Discovery Lab to spin one from a GSC cluster.
+- The auto-generate threshold confirm-dialog text updated from "4+ products" to "2+ products" to match the actual function (which was lowered in iteration 33).
+
+### Files touched
+- `/app/php-version/admin.php` (Topic Cluster Hubs description, toolbar, hub form wrapper, empty-state flash)
+
+### Verification (Playwright)
+- Opened `?tab=ai-blogger#topic-hubs-section`, expanded the panel:
+  - `[data-testid="hubs-new-btn"]` — **gone** ✓
+  - `[data-testid="hub-form-card"]` — **gone** (only "Auto-generate" + "View sitemap" buttons remain in the toolbar) ✓
+  - `[data-testid="hubs-autogen-btn"]` — still present ✓
+  - Pencil-Edit pathway still works: visit `?edit_hub=microsoft-office` would set `$editingHub`, which causes the form to render in Edit mode only.
+
+
