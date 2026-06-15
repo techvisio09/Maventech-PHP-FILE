@@ -706,8 +706,16 @@ function render_vibe_promo_banner(string $variant = 'cart'): string
     $code = strtoupper(trim((string)($p['coupon_code'] ?? '')));
     $pct  = (int)($p['coupon_percent'] ?? 0);
     if ($code !== '' && $pct > 0) {
-        $couponLine = '<span class="vp-coupon" data-testid="vibe-promo-coupon" style="display:inline-flex;align-items:center;gap:6px;margin-left:14px;padding:5px 12px;border:1px dashed rgba(255,255,255,.55);border-radius:999px;background:rgba(255,255,255,.10);color:#fff;font-size:12px;font-weight:700;letter-spacing:.5px;">'
-                    . 'Use <strong style="background:#fff;color:#dc2626;padding:1px 8px;border-radius:6px;letter-spacing:.6px;">' . htmlspecialchars($code, ENT_QUOTES, 'UTF-8') . '</strong> for ' . $pct . '% off'
+        $codeEsc = htmlspecialchars($code, ENT_QUOTES, 'UTF-8');
+        $couponLine = '<span class="vp-coupon" data-testid="vibe-promo-coupon" style="display:inline-flex;align-items:center;gap:6px;margin-left:14px;padding:5px 6px 5px 12px;border:1px dashed rgba(255,255,255,.55);border-radius:999px;background:rgba(255,255,255,.10);color:#fff;font-size:12px;font-weight:700;letter-spacing:.5px;">'
+                    . 'Use <strong style="background:#fff;color:#dc2626;padding:1px 8px;border-radius:6px;letter-spacing:.6px;">' . $codeEsc . '</strong> for ' . $pct . '% off'
+                    . '<button type="button" data-testid="vibe-promo-copy" data-promo-code="' . $codeEsc . '" aria-label="Copy code ' . $codeEsc . '" '
+                    . 'onclick="(function(b){var c=b.getAttribute(\'data-promo-code\');function done(){var o=b.innerHTML;b.innerHTML=\'<i class=\\\'bi bi-check2\\\'></i> Copied\';setTimeout(function(){b.innerHTML=o;},1800);}'
+                    . 'if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(c).then(done,done);}'
+                    . 'else{var t=document.createElement(\'textarea\');t.value=c;document.body.appendChild(t);t.select();try{document.execCommand(\'copy\');}catch(e){}t.remove();done();}})(this);return false;" '
+                    . 'style="display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,.18);color:#fff;border:1px solid rgba(255,255,255,.30);border-radius:999px;padding:3px 10px;font-size:11px;font-weight:700;letter-spacing:.3px;cursor:pointer;transition:background .15s ease;" '
+                    . 'onmouseover="this.style.background=\'rgba(255,255,255,.30)\'" onmouseout="this.style.background=\'rgba(255,255,255,.18)\'">'
+                    . '<i class="bi bi-clipboard"></i> Copy</button>'
                     . '</span>';
     }
     // Variant-specific styling.  `cart` = full bar on top of the cart;
@@ -869,9 +877,9 @@ function coupons(): array
 {
     $base = ['MAVEN20' => 20, 'BIT20' => 20, 'MATRIX20' => 20, 'ZED20' => 20, 'FIVE20' => 20, 'UCODE90' => 20, 'WELCOME10' => 10, 'SAVE15' => 15, 'OFFICE25' => 25];
     // Any active vibe-schedule with a coupon_code + coupon_percent auto-
-    // registers it as a usable coupon during the schedule window.  So a
-    // "Black Friday Sale → BF26 → 20% off" schedule lets checkout accept
-    // BF26 ONLY between starts_at and ends_at.
+    // registers it so it works when buyers COPY+PASTE the code at checkout
+    // (the banner does NOT auto-apply the code — it just announces it with
+    // a Copy button).  The code is only valid during the schedule window.
     if (function_exists('active_vibe_promo')) {
         $p = active_vibe_promo();
         if ($p && !empty($p['coupon_code']) && (int)$p['coupon_percent'] > 0) {

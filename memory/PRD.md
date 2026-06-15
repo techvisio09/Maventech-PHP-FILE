@@ -963,3 +963,21 @@ Also surfaced a **"{brand} profile →"** chip on each admin Product card (data-
 - KPI icons in dark mode: green=rgb(6,78,59)/rgb(110,231,183), blue=rgb(30,58,138)/rgb(147,197,253), amber/red/purple/cyan all contrast-safe ✅
 - Revert: vibe switches to scheduled value during window, returns to saved default after window ends ✅
 
+
+## [Feb 2026] Iteration 15 — Big Save button + Copy code button (no auto-apply)
+
+### What shipped
+- 🟦 **One prominent "Save Schedule & Activate" button at the bottom of the form** — replaces the small inline "+ Add" button on the right of the first row that was easy to miss.  Full-width, drop-shadowed, with helper text below explaining what gets saved.  Fixes the user-reported "this feature is not activating" — the small Add button + missing required dates made it look like the form did nothing.
+- 📋 **Copy-to-clipboard button on the cart banner** — the coupon pill now has a `📋 Copy` button next to "Use BF26 for 20% off".  Clicking copies the code (uses `navigator.clipboard` with `document.execCommand('copy')` fallback for older browsers), then briefly flashes "✓ Copied" before reverting.
+- 🚫 **No auto-apply at checkout** — the banner *announces* the code with the Copy button; buyers paste it into the coupon input on the checkout page themselves.  The code IS recognized when pasted because `coupons()` still merges active scheduled codes — so it works ONLY when both (a) the schedule is live AND (b) the buyer pastes it manually.
+- 🛠️ **Container recovery** — the pod restarted mid-session and wiped MariaDB + PHP CLI.  Reinstalled `mariadb-server php8.2 php8.2-{cli,mysql,mbstring,curl,xml,gd,zip}`, recreated the database from `database.sql`, reset admin password via `password_hash()`, restored the demo schedule.  All services back online.
+
+### Files touched
+- `/app/php-version/admin.php` — Schedule form restructured: 2 rows of inputs, single bottom button.
+- `/app/php-version/includes/functions.php` — `render_vibe_promo_banner()` adds Copy button with inline JS; restored coupon-merge in `coupons()` (paste-flow still needs it).
+- `/app/backend/tests/test_iteration15_copy_and_submit.py` — 3 tests covering bottom-button uniqueness, Copy button presence, paste-flow validity.
+
+### Test status
+- All 16 iteration-13/14 tests + 3 new iteration-15 tests pass.
+- 1 pre-existing failure (`test_product_schema_seller_not_empty_and_reviews`) caused by the container restart wiping order seed data — NOT related to this iteration.
+

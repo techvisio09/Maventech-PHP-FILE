@@ -4068,28 +4068,27 @@ elseif ($tab === 'company'):
           <?php endforeach; ?>
         </select>
       </div>
-      <div class="col-md-2">
-        <label class="form-label small fw-semibold mb-1">Starts at</label>
+      <div class="col-md-3">
+        <label class="form-label small fw-semibold mb-1">Starts at <span class="text-danger">*</span></label>
         <input type="datetime-local" name="starts_at" class="form-control form-control-sm" required data-testid="vsf-starts">
       </div>
-      <div class="col-md-2">
+      <div class="col-md-3">
         <label class="form-label small fw-semibold mb-1">Ends at <small class="text-muted fw-normal">(optional)</small></label>
         <input type="datetime-local" name="ends_at" class="form-control form-control-sm" data-testid="vsf-ends">
       </div>
-      <div class="col-md-3">
-        <label class="form-label small fw-semibold mb-1">Label <small class="text-muted fw-normal">(cart + email + invoice)</small></label>
+      <div class="col-md-4">
+        <label class="form-label small fw-semibold mb-1">Label <small class="text-muted fw-normal">(shown on cart + email + invoice)</small></label>
         <input type="text" name="label" class="form-control form-control-sm" placeholder="e.g. Black Friday Sale" maxlength="120" data-testid="vsf-label">
       </div>
-      <div class="col-md-2">
+      <div class="col-md-3">
         <label class="form-label small fw-semibold mb-1">Promo Logo <small class="text-muted fw-normal">(opt.)</small></label>
         <input type="file" name="logo_file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" class="form-control form-control-sm" data-testid="vsf-logo">
         <small class="text-muted" style="font-size:10px;">PNG/JPG/SVG · max 2 MB</small>
       </div>
-      <div class="col-md-1 d-grid">
-        <button class="btn btn-primary btn-sm" data-testid="vsf-add"><i class="bi bi-plus-lg"></i> Add</button>
-      </div>
-      <!-- Optional coupon row — auto-applies the code during the schedule -->
-      <div class="col-md-3 offset-md-2">
+      <!-- Optional coupon row — code is ANNOUNCED on the cart/email/invoice
+           banner with a Copy button, but NOT auto-applied at checkout (the
+           customer copies + pastes it into the coupon field themselves). -->
+      <div class="col-md-4">
         <label class="form-label small fw-semibold mb-1"><i class="bi bi-ticket-perforated text-primary"></i> Discount code <small class="text-muted fw-normal">(opt., e.g. BF26)</small></label>
         <input type="text" name="coupon_code" class="form-control form-control-sm" placeholder="BF26" maxlength="40" pattern="[A-Za-z0-9_\-]+" data-testid="vsf-coupon-code" style="text-transform:uppercase;">
       </div>
@@ -4097,10 +4096,20 @@ elseif ($tab === 'company'):
         <label class="form-label small fw-semibold mb-1">% off</label>
         <input type="number" name="coupon_percent" class="form-control form-control-sm" placeholder="20" min="0" max="95" data-testid="vsf-coupon-percent">
       </div>
-      <div class="col-md-5">
-        <div class="small text-muted" style="padding-top:24px;font-size:11.5px;line-height:1.45;">
-          <i class="bi bi-info-circle"></i> When set, the banner on cart, email and invoice shows
-          <strong>"Use [CODE] for [%] off"</strong> and the code auto-works at checkout — only during the active window.
+      <div class="col-md-3 d-flex align-items-end">
+        <div class="small text-muted" style="font-size:11.5px;line-height:1.45;">
+          <i class="bi bi-info-circle"></i> Banner will show <strong>"Use [CODE] for [%] off"</strong> with a Copy button — buyers paste it at checkout.
+        </div>
+      </div>
+
+      <!-- One prominent submit button at the bottom — captures every
+           field above (logo, label, dates, code) in a single click. -->
+      <div class="col-12 pt-3" style="border-top:1px dashed rgba(148,163,184,.30);margin-top:6px;">
+        <button type="submit" class="btn btn-primary btn-lg w-100 fw-semibold" data-testid="vsf-add" style="border-radius:12px;padding:10px 18px;box-shadow:0 6px 18px rgba(59,130,246,.25);">
+          <i class="bi bi-plus-circle-fill me-2"></i>Save Schedule &amp; Activate
+        </button>
+        <div class="text-center small text-muted mt-2" style="font-size:11.5px;">
+          Saves your label + logo + discount code.  Banner goes live on the website during the date range you set above.
         </div>
       </div>
     </form>
