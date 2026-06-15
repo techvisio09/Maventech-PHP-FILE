@@ -2491,6 +2491,24 @@ On the receipt page (`/order-history.php`), the "Resend link" button (which re-s
   - Message bubbles padding 0.6 0.85 → 0.5 0.75 rem, font 0.87 → 0.8 rem
 - Both light + dark modes verified.
 
+
+## [Feb 2026 — Iteration 18] Chat panel halved again
+
+User: "Chat size is still too big. I want to reduce the size, make it half of it."
+
+### Completed
+- `#chat-panel` width 320 → 280 px, height 440 → 380 px (anchored bottom: 80 px, right: 18 px)
+- All internal elements proportionally shrunk:
+  - Head padding 0.75/0.9 → 0.6/0.75 rem; avatar 32 → 28 px; name 0.88 → 0.82 rem
+  - Body padding 0.75/0.7 → 0.65/0.6 rem; msg padding 0.5/0.75 → 0.45/0.7 rem; msg font 0.8 → 0.77 rem
+  - Chips font 0.75 → 0.68 rem; padding 0.35/0.8 → 0.25/0.6 rem
+  - Input padding 0.35/0.85 rem font 0.77 rem; send button 36 → 30 px
+  - Talk-band font 0.72 → 0.64 rem; padding 0.55/0.9 → 0.35/0.65 rem
+- Order page content is no longer obscured by the chat — only the right edge of the order-details row overlaps slightly (chat is still bottom-right anchored)
+
+### Files touched
+- `/app/php-version/assets/css/style.css` — `#chat-panel`, `#chat-head`, `.chat-avatar`, `.chat-head-name`, `.chat-head-sub`, `#chat-body`, `.chat-msg`, `.chat-chips`, `.chat-chip`, `.chat-input-row`, `.chat-input`, `.chat-send-btn`, `.chat-talk-band` all proportionally smaller
+
 ### Files touched
 - `/app/php-version/order-success.php` — col-md-3/9 split, QR matrix render param 132×132
 - `/app/php-version/assets/css/style.css` — `.receipt-qr-*` dimensions + `#chat-panel`, `#chat-head`, `.chat-avatar`, `#chat-body`, `.chat-msg` shrunk
