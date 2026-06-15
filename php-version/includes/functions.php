@@ -416,6 +416,29 @@ function require_admin(): array
     return $user;
 }
 
+/**
+ * AJAX-flavoured auth gate.  Returns the authenticated admin row OR
+ * short-circuits the request with HTTP 403 + a JSON error body so the
+ * client gets a parseable response instead of a 302 redirect to /login.
+ *
+ * Use this in /ajax/*.php endpoints that must NEVER leak data to
+ * anonymous callers.  It replaces the misnamed ensure_admin() which
+ * only SEEDS the admin row in the database (not an auth check).
+ */
+function require_admin_json(): array
+{
+    $user = current_user();
+    if (!$user || ($user['role'] ?? '') !== 'admin') {
+        http_response_code(403);
+        if (!headers_sent()) {
+            header('Content-Type: application/json; charset=utf-8');
+        }
+        echo json_encode(['ok' => false, 'error' => 'admin auth required']);
+        exit;
+    }
+    return $user;
+}
+
 /* ---------------- Cart (session) ---------------- */
 function cart(): array
 {

@@ -23,14 +23,7 @@
  */
 require_once __DIR__ . '/../includes/functions.php';
 ensure_admin();
-// JSON 403 for unauthenticated callers — never redirect on this AJAX path.
-$_authedUser = current_user();
-if (!$_authedUser || ($_authedUser['role'] ?? '') !== 'admin') {
-    http_response_code(403);
-    header('Content-Type: application/json; charset=utf-8');
-    echo json_encode(['ok' => false, 'error' => 'admin auth required']);
-    exit;
-}
+require_admin_json();
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate');

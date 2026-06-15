@@ -2288,3 +2288,54 @@ When admin creates a new category via the inline "+ Add Category" flow on the Ad
 - `/app/php-version/blog-post.php` — removed visible `blog-post-author-badge` span, simplified JSON-LD author to a single Organization entry (no separate "AI Editorial Team" job title)
 - `/app/php-version/includes/functions.php` — `render_vibe_promo_banner('cart')` rewritten as compact pulsing pill with new `vibe-pill-bounce` + `vibe-pill-flash` keyframes
 
+
+## [Feb 2026 — Iteration 12] Lead Mgmt live · Install Schedule alerts · Email validation · Payment Gateway key validation
+
+**Scope**: 4-pillar production hardening before go-live on the operator's real domain. User reported wrong-email forms still showing "sent", asked for live install-pending alerts, real chat-active indicators, and proper test/live payment-gateway key validation.
+
+### Completed
+- **Email validation hardening (Pillar #3 — the real bug)** — wrong/typo email addresses no longer silently mark rows as "sent":
+  - `/ajax/lead.php`, `/ajax/notify-stock.php`, `/contact.php` all now call `email_address_deliverable()` (RFC 5321 + MX + typo-domain dictionary) BEFORE inserting or sending. Bogus addresses are rejected at the API layer with a clear "Likely typo: yaho.com. Did the customer mean yahoo.com?" error.
+  - `send_email()` dev/preview path (no SMTP + no Resend configured) now inserts `status='queued'` with a "Pending delivery — configure SMTP" note. Previously inserted `status='sent'` which was misleading on production. Once the operator configures SMTP on the real domain, the queue cron drains these queued rows correctly.
+- **Install Schedule live alerts (Pillar #2)** — ProAssist bookings now fire `admin_notify('install', ...)` so:
+  - The Topbar bell counter +1's instantly
+  - A new `navInstallBadge` (amber, data-testid `adm-nav-schedule-badge`) appears on the sidebar Commerce → Install Schedule item
+  - A pulsing amber banner (data-testid `install-pending-banner`) appears at the top of `/admin.php?tab=schedule` when there's at least 1 pending install in the next 24 h or last 60 min
+  - Toast notification "Install pending — A customer just booked a ProAssist call" pops on every admin page when the live poller detects a new pending row
+- **Lead Management live updates (Pillar #1)** — `/ajax/leads-online.php` extended with an `install_pending` field; the admin-shell.php JS poller now updates BOTH the chat-unread sidebar badge AND the new install-pending sidebar badge every 8 s, with a celebratory amber toast when a new pending install lands. Existing green pulsing "online" dot on lead rows + sound-ping toast on new chat already in place.
+- **Payment Gateway key validation (Pillar #4)** — new `/ajax/validate-gateway-key.php` admin-only AJAX endpoint:
+  - Stripe: pings `https://api.stripe.com/v1/balance` with the pasted secret to confirm the key is alive AND that it matches the test/live slot it was pasted into (rejects `sk_live_*` in the Test slot with a friendly "Paste it in the Live slot" message)
+  - PayPal: runs the real `POST /v1/oauth2/token` OAuth flow against either sandbox or live endpoint to confirm both Client ID + Secret are accepted
+  - "Validate test key" and "Validate live key" buttons inside both Stripe and PayPal key cards (data-testid `api-card-validate-{test,live}`, `api-paypal-validate-{test,live}`)
+  - Inline green ✓ / red ✗ result with balance / scope details displayed in the matching `*-result-*` div
+
+### Critical security bugs found by testing agent + fixed
+- **`ensure_admin()` vs `require_admin()` naming bug** — `ensure_admin()` in `includes/functions.php:391` is a SEED function (inserts the admin row when missing); it does NOT authenticate. Two new AJAX endpoints (`leads-online.php`, `validate-gateway-key.php`) used it as an auth gate, leaving customer PII reachable by anonymous callers + allowing Stripe/PayPal ping abuse.
+- **Fix**: introduced `require_admin_json()` helper in `functions.php:419` that emits HTTP 403 + JSON `{ok:false,error:'admin auth required'}` for unauthenticated AJAX callers (vs the existing `require_admin()` which redirects to `login.php`). All AJAX admin endpoints should use the new helper going forward.
+- **`notify-stock.php` dead validation block** — the `function_exists('email_address_deliverable')` guard silently skipped validation because `mailer.php` wasn't `require_once`'d. Bogus emails were accepted with HTTP 200. Fixed: explicit `require_once mailer.php` at the top of the file.
+
+### Files touched
+- `/app/php-version/ajax/lead.php` — added `email_address_deliverable()` block (~line 23)
+- `/app/php-version/ajax/notify-stock.php` — added `require_once mailer.php` + deliverability block
+- `/app/php-version/contact.php` — added deliverability block in POST handler
+- `/app/php-version/includes/email.php` — dev-mode insert flipped from `'sent'` to `'queued'` with explicit note
+- `/app/php-version/ajax/proassist-schedule.php` — added `admin_notify('install', ...)` call after successful book/reschedule (~line 234)
+- `/app/php-version/includes/admin-shell.php` — query `installPending` count, render `navInstallBadge` + amber sidebar badge, new `tickInstall()` poller (8 s cadence) with toast
+- `/app/php-version/admin.php` — new pulsing amber `install-pending-banner` at top of Schedule tab, new Validate buttons + result divs in Stripe/PayPal key cards, shared `.validate-key-btn` JS handler at bottom of API tab
+- `/app/php-version/ajax/leads-online.php` — returns `install_pending` field, uses `require_admin_json()` auth gate
+- `/app/php-version/ajax/validate-gateway-key.php` (NEW) — Stripe `/v1/balance` + PayPal OAuth ping endpoint, uses `require_admin_json()`
+- `/app/php-version/includes/functions.php` — added `require_admin_json()` helper
+
+### Testing
+- **`testing_agent_v3_fork` iteration 11 → 25/27 PASS** (caught 2 critical security bugs + 1 dead-code bug)
+- **`testing_agent_v3_fork` iteration 12 retest → 27/27 PASS** after fixes
+- Pytest suite: `/app/backend/tests/test_iteration11_email_validation_and_gateway.py`
+- Verified end-to-end via curl:
+  - `foo@yaho.com` → ✅ `"Likely typo: yaho.com. Did the customer mean yahoo.com?"`
+  - `foo@no-such-domain-xyzz123.con` → ✅ `"Domain has no MX or A records — mail server doesn't exist."`
+  - Anonymous `/ajax/leads-online.php` → HTTP 403
+  - Anonymous `/ajax/validate-gateway-key.php` → HTTP 403
+  - Stripe wrong-slot key short-circuits → friendly hint
+  - Real Stripe API 401 → "Stripe rejected the key: Invalid API Key provided"
+  - Real PayPal OAuth 401 → "PayPal rejected the credentials: Client Authentication failed"
+
