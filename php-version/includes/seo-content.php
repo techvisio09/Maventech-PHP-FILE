@@ -932,15 +932,81 @@ function topic_hubs_for_product(array $p): array
  *  that has >= $minProducts active products and isn't already covered by
  *  an existing hub, then inserts a new auto-source hub for each.
  *  Returns the list of new slugs created. */
+/**
+ * Best-effort LLM call that polishes a single topic-hub's copy.
+ * Returns ['title' => …, 'headline' => …, 'audience' => …, 'keywords' => …]
+ * — or null if the AI key is missing / the call fails for any reason
+ * (caller falls back to the static templates so the function NEVER blocks
+ * hub creation on a flaky LLM).
+ */
+function topic_hub_ai_polish(string $categorySlug, string $brand): ?array
+{
+    if (!defined('OPENAI_API_KEY') || !defined('OPENAI_BASE_URL') || OPENAI_API_KEY === '') return null;
+    $catTitle = function_exists('category_title') ? category_title($categorySlug) : ucwords(str_replace('-', ' ', $categorySlug));
+    if ($catTitle === '' || strtolower($catTitle) === strtolower($categorySlug)) {
+        $catTitle = ucwords(str_replace('-', ' ', $categorySlug));
+    }
+    $prompt = "Write the on-page copy for a topical-authority HUB landing page at /hub/" . $categorySlug . " on \"" . $brand . "\".\n"
+            . "Topic / category: \"" . $catTitle . "\".\n\n"
+            . "Return STRICT JSON, schema:\n"
+            . "{\n"
+            . "  \"title\":    \"<short H1 — 6 to 10 words — for the hub landing page>\",\n"
+            . "  \"headline\": \"<3 to 4 sentences, 65 to 110 words, telling shoppers what's on this page and why they should trust the recommendations — premium calm trustworthy tone, no hype>\",\n"
+            . "  \"audience\": \"<one sentence describing who the page is for>\",\n"
+            . "  \"keywords\": \"<10 to 15 comma-separated SEO keyword phrases ranging from short-tail to long-tail — include 'buy', 'license key', 'lifetime activation', 'best deals' variants>\"\n"
+            . "}\n\n"
+            . "RULES:\n- Plain text only, no markdown, no emoji, no asterisks.\n- Never invent product names that don't exist (talk about the category, not specific SKUs).\n- Never mention prices or discount percentages.\n- The headline must include the phrases 'genuine licence' (or 'genuine licences'), 'instant email delivery', and one trust signal.";
+
+    $body = json_encode([
+        'model' => 'gpt-4o-mini',
+        'messages' => [
+            ['role'=>'system','content'=>'You return strict JSON only. Never use markdown. Never wrap output in code fences.'],
+            ['role'=>'user','content'=>$prompt],
+        ],
+        'temperature' => 0.55,
+        'max_tokens'  => 600,
+        'response_format' => ['type' => 'json_object'],
+    ]);
+    $ch = curl_init(rtrim(OPENAI_BASE_URL, '/') . '/chat/completions');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,
+        CURLOPT_HTTPHEADER     => ['Content-Type: application/json', 'Authorization: Bearer ' . OPENAI_API_KEY],
+        CURLOPT_POSTFIELDS     => $body,
+        CURLOPT_TIMEOUT        => 30,
+    ]);
+    $resp     = (string)curl_exec($ch);
+    $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($httpCode !== 200 || $resp === '') return null;
+    $data = json_decode($resp, true);
+    $content = $data['choices'][0]['message']['content'] ?? '';
+    if (!is_string($content) || $content === '') return null;
+    $parsed = json_decode($content, true);
+    if (!is_array($parsed)) return null;
+    // Trim + validate the four expected keys; bail if any are missing/empty.
+    $title    = trim((string)($parsed['title']    ?? ''));
+    $headline = trim((string)($parsed['headline'] ?? ''));
+    $audience = trim((string)($parsed['audience'] ?? ''));
+    $keywords = trim((string)($parsed['keywords'] ?? ''));
+    if ($title === '' || $headline === '' || $audience === '' || $keywords === '') return null;
+    return ['title' => $title, 'headline' => $headline, 'audience' => $audience, 'keywords' => $keywords];
+}
+
 function topic_hubs_auto_generate(int $minProducts = 2): array
 {
     topic_hubs_seed_defaults();
     $pdo  = db();
     $hubs = topic_hubs_all(false);
-    $covered = [];
-    foreach ($hubs as $h) {
-        foreach ($h['categories'] as $c) $covered[strtolower((string)$c)] = 1;
-    }
+    // Track ONLY existing hub-slugs to avoid creating duplicate rows for the
+    // same category-slug.  We deliberately do NOT skip categories that are
+    // already part of an umbrella hub's `categories_json` list — those
+    // umbrella hubs (e.g. `microsoft-office`) are broad theme pages, the
+    // auto-gen creates focused per-category siblings (`office-2021-pc`,
+    // `office-2024-pc`, …) that complement them with deeper topical signal.
+    $existingHubSlugs = [];
+    foreach ($hubs as $h) $existingHubSlugs[strtolower((string)$h['slug'])] = 1;
+
     $rows = $pdo->query(
         "SELECT LOWER(category) AS cat, COUNT(*) AS n
            FROM products
@@ -950,31 +1016,50 @@ function topic_hubs_auto_generate(int $minProducts = 2): array
           ORDER BY n DESC"
     )->fetchAll();
 
-    $created = [];
-    $skipped = []; // already-covered categories, surfaced in the flash so admins don't think the button did nothing
+    $created    = [];
+    $skipped    = []; // categories that already have a same-slug hub
+    $aiPolished = []; // category slugs whose copy was AI-generated (vs templated)
     $insert = $pdo->prepare("INSERT IGNORE INTO topic_hubs
         (slug, title, headline, audience, categories_json, blog_tags_json, keywords, about_link, color, videos_json, active, source)
         VALUES (?,?,?,?,?,?,?,?,?,?,1,'auto')");
     $palette = ['#0078d4','#16a34a','#dc2626','#9333ea','#0ea5e9','#f59e0b','#ec4899','#22c55e','#6366f1','#14b8a6'];
     $brand   = function_exists('site_brand_safe') ? site_brand_safe() : (defined('SITE_BRAND') ? SITE_BRAND : 'our store');
+    // Cap the LLM calls per run so a slow GPT round-trip doesn't time out
+    // the admin page.  Templates take over once the cap is hit.
+    $aiCallsRemaining = 8;
 
     foreach ($rows as $r) {
         $slugCat = (string)$r['cat'];
         if ($slugCat === '') continue;
-        if (isset($covered[$slugCat])) {
+        if (isset($existingHubSlugs[$slugCat])) {
             $skipped[] = $slugCat;
             continue;
         }
-        $title    = function_exists('category_title') ? category_title($slugCat) : ucwords(str_replace('-', ' ', $slugCat));
-        if ($title === '' || strtolower($title) === strtolower($slugCat)) {
-            $title = ucwords(str_replace('-', ' ', $slugCat));
+        $catTitle = function_exists('category_title') ? category_title($slugCat) : ucwords(str_replace('-', ' ', $slugCat));
+        if ($catTitle === '' || strtolower($catTitle) === strtolower($slugCat)) {
+            $catTitle = ucwords(str_replace('-', ' ', $slugCat));
         }
-        $hubTitle = $title . ' — buying guide & best picks';
-        $headline = $title . ' products are available at ' . $brand . ' with genuine licences, lifetime activation and instant email delivery. Compare the most popular ' . $title . ' titles, read editorial guides, and get answers to common buyer questions on one page.';
-        $audience = 'shoppers comparing ' . $title . ' options before they buy';
-        $keywords = $title . ', buy ' . $title . ', ' . $title . ' license key, best ' . $title . ' deals, ' . $title . ' product key, ' . $title . ' lifetime activation';
-        $tags     = ['%' . strtolower($title) . '%'];
-        $color    = $palette[count($created) % count($palette)];
+        // Try AI first (better headline + audience + keywords).  Fall back
+        // to the original templates if the LLM is unavailable / slow / off-budget.
+        $ai = null;
+        if ($aiCallsRemaining > 0) {
+            $ai = topic_hub_ai_polish($slugCat, $brand);
+            $aiCallsRemaining--;
+        }
+        if ($ai) {
+            $hubTitle = $ai['title'];
+            $headline = $ai['headline'];
+            $audience = $ai['audience'];
+            $keywords = $ai['keywords'];
+            $aiPolished[] = $slugCat;
+        } else {
+            $hubTitle = $catTitle . ' — buying guide & best picks';
+            $headline = $catTitle . ' products are available at ' . $brand . ' with genuine licences, lifetime activation and instant email delivery. Compare the most popular ' . $catTitle . ' titles, read editorial guides, and get answers to common buyer questions on one page.';
+            $audience = 'shoppers comparing ' . $catTitle . ' options before they buy';
+            $keywords = $catTitle . ', buy ' . $catTitle . ', ' . $catTitle . ' license key, best ' . $catTitle . ' deals, ' . $catTitle . ' product key, ' . $catTitle . ' lifetime activation';
+        }
+        $tags  = ['%' . strtolower($catTitle) . '%'];
+        $color = $palette[count($created) % count($palette)];
         try {
             $insert->execute([
                 $slugCat, $hubTitle, $headline, $audience,
@@ -983,16 +1068,16 @@ function topic_hubs_auto_generate(int $minProducts = 2): array
             ]);
             if ($pdo->lastInsertId()) {
                 $created[] = $slugCat;
-                $covered[$slugCat] = 1;
+                $existingHubSlugs[$slugCat] = 1;
             }
         } catch (Throwable $e) {
             @error_log('[topic_hubs_auto_generate] ' . $e->getMessage());
         }
     }
-    // Stash the skipped list in a session-like global so the admin caller
-    // can build a meaningful "already covered" message — without breaking
-    // the existing call sites that just want the created list.
-    $GLOBALS['__topic_hubs_skipped'] = $skipped;
+    // Expose ancillary results to the admin handler via globals (lighter
+    // than restructuring the public return type, which other callers depend on).
+    $GLOBALS['__topic_hubs_skipped']     = $skipped;
+    $GLOBALS['__topic_hubs_ai_polished'] = $aiPolished;
     return $created;
 }
 

@@ -1763,3 +1763,45 @@ Net effect: the clear DID happen in DB, but the visible state still claimed "Key
   - Pencil-Edit pathway still works: visit `?edit_hub=microsoft-office` would set `$editingHub`, which causes the form to render in Edit mode only.
 
 
+---
+
+## [Feb 2026] Iteration 37 — Published blog "Live" status, dark-mode fallback card, AI-polished hub auto-gen
+
+### What the user asked
+1. **"On published blog post, whatever blog has been posted on the website must show Live in status."** — Many posts were showing "Pending" because the legacy `verified_http` IndexNow ping was returning 403 (Bing rate-limiting). The posts WERE live on the website; only the IndexNow ping was pending.
+2. **"Correct dark mode."** — The new AI Key "Using built-in fallback key" card had hardcoded light-blue background/text and was unreadable in dark mode.
+3. **"Auto generated from top category button should work fine properly."** — Clicking the button kept saying "Already up to date" because the umbrella `microsoft-office` hub (covering `office-2021-pc`, `office-2024-pc`, …) was making the per-category-coverage gate skip every busy category.
+4. **"Yes"** to plugging GPT into `topic_hubs_auto_generate()` for editorial-quality copy.
+
+### What changed
+
+**Always-Live blog status (`admin.php`)**
+- Removed the `verified_http === 200` gate from both the Published Blog Posts AND Trending Articles row renderers.
+- Any post that lives in `blog_posts` is now badged "Live" unconditionally — because by definition it's already served at `/blog-post.php?id=…`.
+- The `indexnow_status` (`ok` / `accepted` / `submitted` vs anything else) is now surfaced via the badge's `title=` tooltip ("Published live on the website. IndexNow ping is pending — Bing / Yandex will pick it up on their next crawl.") so admins keep the visibility they need without false "Pending" alarmism.
+
+**Dark-mode fallback card (`admin.php`)**
+- Extracted the inline `style` from the AI Key fallback panel into themed CSS classes (`.ai-fallback-card`, `.ai-fallback-icon`, `.ai-fallback-title`, `.ai-fallback-help`, `.ai-fallback-mono`).
+- Light theme: pale-blue card on white (unchanged visual).
+- Dark theme: `background: rgba(37,99,235,.10)`, dashed `#3b82f6` border, bright `#dbeafe` title and `#cbd5e1` help text — readable on the navy admin canvas.
+
+**AI-polished per-category hub auto-generation (`includes/seo-content.php` + `admin.php`)**
+- New helper `topic_hub_ai_polish(slug, brand)` — calls `gpt-4o-mini` via the same `OPENAI_BASE_URL` + `OPENAI_API_KEY` chain used for the product-description writer.  Returns `{title, headline, audience, keywords}` or `null` on any error.
+  - Headline rule: 3–4 sentences (65–110 words), must include "genuine licence", "instant email delivery", and one trust signal.
+  - Keywords: 10–15 comma-separated SEO phrases.
+  - Audience: 1 sentence.
+- `topic_hubs_auto_generate()` updated:
+  - Dedupe by HUB SLUG, not by "covered by umbrella hub's categories list".  Result: an umbrella hub like `microsoft-office` no longer blocks creation of focused siblings `office-2021-pc`, `office-2024-pc`, `office-2019-mac`, …
+  - Calls `topic_hub_ai_polish()` for each new hub (capped at 8 calls per click to prevent admin-page timeout); falls back to the existing static template if the LLM is unreachable.
+  - Exposes `$GLOBALS['__topic_hubs_ai_polished']` so the flash banner can report "8 of them have AI-written headlines (the rest use the editorial template)."
+
+### Files touched
+- `/app/php-version/admin.php` (Published Blog Posts + Trending Articles row renderers; AI Key fallback card CSS extraction; auto-gen handler flash text)
+- `/app/php-version/includes/seo-content.php` (`topic_hub_ai_polish()`, `topic_hubs_auto_generate()` dedupe-by-slug + AI polish)
+
+### Verification (Playwright + DB)
+- **Auto-gen real run**: `?autogen_topic_hubs=1` → green flash *"✓ Auto-generated 9 new topic hub(s): bitdefender, office-2021-pc, office-2024-pc, office-2021-mac, microsoft-project, windows-10, windows-11, office-2019-mac, office-2024-mac. **8 of them have AI-written headlines** (the rest use the editorial template)."*  Topic Cluster Hubs counter went from 3/3 → 14/14 live.  Sample stored headlines start with *"Welcome to our dedicated hub for Bitdefender software by Maventech. Here, you will…"* — clearly LLM-written, not templated.
+- **Live status**: Published Blog Posts list — 34 rows, **34 "Live" badges**, **0 "Pending"** (was previously ~24 pending).
+- **Dark-mode fallback card**: cleared AI key → rendered with soft navy card on dark canvas, bright `#dbeafe` title, readable help line, "Use my own" button visible.
+
+

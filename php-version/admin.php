@@ -1389,15 +1389,19 @@ if ($tab === 'ai-blogger') {
 
     if (!empty($_GET['autogen_topic_hubs'])) {
         try {
-            $created = topic_hubs_auto_generate(2);
-            $skipped = (array)($GLOBALS['__topic_hubs_skipped'] ?? []);
+            $created   = topic_hubs_auto_generate(2);
+            $skipped   = (array)($GLOBALS['__topic_hubs_skipped']     ?? []);
+            $aiPolish  = (array)($GLOBALS['__topic_hubs_ai_polished'] ?? []);
             if ($created) {
                 $msg = '✓ Auto-generated ' . count($created) . ' new topic hub(s): ' . esc(implode(', ', $created)) . '.';
-                if ($skipped) $msg .= ' Skipped ' . count($skipped) . ' categor' . (count($skipped) === 1 ? 'y' : 'ies') . ' that already had a hub (' . esc(implode(', ', array_slice($skipped, 0, 6))) . (count($skipped) > 6 ? '…' : '') . ').';
+                if ($aiPolish) {
+                    $msg .= ' ' . count($aiPolish) . ' of them have AI-written headlines (the rest use the editorial template).';
+                }
+                if ($skipped) $msg .= ' Skipped ' . count($skipped) . ' that already had a hub (' . esc(implode(', ', array_slice($skipped, 0, 6))) . (count($skipped) > 6 ? '…' : '') . ').';
                 $_SESSION['seo_bot_flash'] = $msg;
                 $_SESSION['seo_bot_flash_kind'] = 'success';
             } elseif ($skipped) {
-                $_SESSION['seo_bot_flash'] = '✓ Already up to date — all ' . count($skipped) . ' busy categor' . (count($skipped) === 1 ? 'y has' : 'ies have') . ' a topic hub: ' . esc(implode(', ', array_slice($skipped, 0, 8))) . (count($skipped) > 8 ? '…' : '') . '.';
+                $_SESSION['seo_bot_flash'] = '✓ Already up to date — every busy category has its own topic hub (' . count($skipped) . ' total: ' . esc(implode(', ', array_slice($skipped, 0, 8))) . (count($skipped) > 8 ? '…' : '') . ').';
                 $_SESSION['seo_bot_flash_kind'] = 'success';
             } else {
                 $_SESSION['seo_bot_flash'] = 'No categories with 2 or more active products were found yet. Add more products first, then click "Auto-generate from top categories" again — or scroll to the SEO Discovery Lab below and spin a hub from a Google Search Console cluster.';
@@ -3608,24 +3612,39 @@ elseif ($tab === 'ai-blogger'):
             <?php elseif ($aiKeyState === 'fallback'): ?>
               <!-- Fallback state — there's a pod/.env-level key available BUT
                    the admin hasn't explicitly saved one.  Show this as INFO
-                   (not "Key Uploaded") so it's clear what's happening. -->
-              <div id="ai-key-display" data-testid="ai-key-state-fallback" style="background:#eff6ff;border:1px dashed #93c5fd;border-radius:8px;padding:10px 12px;">
+                   (not "Key Uploaded") so it's clear what's happening.
+                   Card colours are theme-aware via `.ai-fallback-card`. -->
+              <div id="ai-key-display" data-testid="ai-key-state-fallback" class="ai-fallback-card" style="border-radius:8px;padding:10px 12px;">
                 <div class="d-flex align-items-center justify-content-between">
                   <div>
-                    <i class="bi bi-info-circle-fill me-1" style="color:#2563eb;"></i>
-                    <span class="fw-semibold" style="font-size:13px;color:#1e3a8a;">Using built-in fallback key</span>
+                    <i class="bi bi-info-circle-fill me-1 ai-fallback-icon"></i>
+                    <span class="fw-semibold ai-fallback-title" style="font-size:13px;">Using built-in fallback key</span>
                     <?php if ($llmKeyKindLabel !== ''): ?>
                       <span class="badge ms-1" data-testid="ai-key-kind-badge"
                             style="background:<?= esc($llmKeyKindBg) ?>;color:#fff;font-size:9.5px;letter-spacing:.6px;padding:2px 7px;vertical-align:middle;">
                         <?= esc(strtoupper($llmKeyKindLabel)) ?>
                       </span>
                     <?php endif; ?>
-                    <div style="font-size:11px;font-family:monospace;margin-top:2px;opacity:.7;"><?= esc($maskedKey) ?></div>
-                    <div class="small text-secondary mt-1" style="font-size:11px;">Provided by your hosting environment (pod-level <code>EMERGENT_LLM_KEY</code>). Paste your own key below to override it.</div>
+                    <div class="ai-fallback-mono" style="font-size:11px;font-family:monospace;margin-top:2px;opacity:.7;"><?= esc($maskedKey) ?></div>
+                    <div class="small ai-fallback-help mt-1" style="font-size:11px;">Provided by your hosting environment (pod-level <code>EMERGENT_LLM_KEY</code>). Paste your own key below to override it.</div>
                   </div>
                   <button type="button" class="btn btn-sm btn-outline-primary rounded-pill" data-testid="ai-key-change-btn" onclick="mvOpenKeyEditor('ai-key')"><i class="bi bi-key me-1"></i>Use my own</button>
                 </div>
               </div>
+              <style>
+                /* Light theme defaults */
+                .ai-fallback-card { background:#eff6ff; border:1px dashed #93c5fd; }
+                .ai-fallback-card .ai-fallback-icon  { color:#2563eb; }
+                .ai-fallback-card .ai-fallback-title { color:#1e3a8a; }
+                .ai-fallback-card .ai-fallback-help  { color:#475569; }
+                .ai-fallback-card .ai-fallback-mono  { color:#1e293b; }
+                /* Dark theme — softer navy card with bright accents */
+                [data-bs-theme="dark"] .ai-fallback-card { background:rgba(37,99,235,.10); border:1px dashed #3b82f6; }
+                [data-bs-theme="dark"] .ai-fallback-card .ai-fallback-icon  { color:#60a5fa; }
+                [data-bs-theme="dark"] .ai-fallback-card .ai-fallback-title { color:#dbeafe; }
+                [data-bs-theme="dark"] .ai-fallback-card .ai-fallback-help  { color:#cbd5e1; }
+                [data-bs-theme="dark"] .ai-fallback-card .ai-fallback-mono  { color:#e2e8f0; }
+              </style>
               <div id="ai-key-edit" style="display:none;">
                 <div class="input-group mt-1">
                   <input type="password" name="llm_api_key_edit" class="form-control" placeholder="sk-emergent-… or sk-… (paste to override)" style="font-size:13px;" data-testid="ai-key-input" disabled>
@@ -4094,7 +4113,16 @@ elseif ($tab === 'ai-blogger'):
       <div id="post-list-box" style="max-height:420px;overflow-y:auto;border-radius:8px;" data-testid="published-blog-list">
         <?php $i = 0; foreach ($aiAllUnfiltered as $bp): $i++; ?>
           <?php
-            $httpOk   = (int)($bp['verified_http'] ?? 0) === 200;
+            // Any post that lives in the `blog_posts` table is by definition
+            // live at /blog-post.php?id=… — the legacy `verified_http` column
+            // recorded the IndexNow HEAD-ping result (often 403'd by Bing /
+            // Yandex rate limiting), which falsely showed real live posts as
+            // "Pending".  Surface the actual live state, and use the row's
+            // tooltip to communicate IndexNow status separately.
+            $ixOk = in_array((string)($bp['indexnow_status'] ?? ''), ['ok','accepted','submitted'], true);
+            $statusTitle = $ixOk
+                ? 'Published live on the website.'
+                : 'Published live on the website. IndexNow ping is pending — Bing / Yandex will pick it up on their next crawl.';
             $postImg  = $bp['image'] ?? '';
             $rCode    = (string)($bp['target_region'] ?? '');
             // Trends posts use `ALL`; seed posts use NULL → empty.  Both
@@ -4118,7 +4146,7 @@ elseif ($tab === 'ai-blogger'):
             <span class="post-title"><?= esc($bp['title']) ?></span>
             <span class="post-flag" title="Targeted country: <?= esc($rLabel) ?>"><?= $rFlag ?> <span class="post-flag-label"><?= esc($rLabel) ?></span></span>
             <span class="post-date"><?= $postDate ?></span>
-            <span class="badge rounded-pill post-status" style="background:<?= $httpOk ? '#166534' : '#92400e' ?>;color:<?= $httpOk ? '#bbf7d0' : '#fef3c7' ?>;"><?= $httpOk ? 'Live' : 'Pending' ?></span>
+            <span class="badge rounded-pill post-status" title="<?= esc($statusTitle) ?>" style="background:#166534;color:#bbf7d0;">Live</span>
             <i class="bi bi-chevron-right post-arrow"></i>
           </a>
         <?php endforeach; ?>
@@ -4184,7 +4212,10 @@ elseif ($tab === 'ai-blogger'):
       <div id="trends-list-box" style="max-height:420px;overflow-y:auto;border-radius:8px;" data-testid="trends-list">
         <?php $tn = 0; foreach ($trendsAll as $bp): $tn++; ?>
           <?php
-            $httpOk   = (int)($bp['verified_http'] ?? 0) === 200;
+            $ixOk     = in_array((string)($bp['indexnow_status'] ?? ''), ['ok','accepted','submitted'], true);
+            $statusTitle = $ixOk
+                ? 'Published live on the website.'
+                : 'Published live on the website. IndexNow ping is pending — Bing / Yandex will pick it up on their next crawl.';
             $postImg  = $bp['image'] ?? '';
             $rCode    = strtoupper((string)($bp['target_region'] ?? ''));
             if ($rCode === '' || $rCode === 'TRENDS') $rCode = 'ALL';
@@ -4208,7 +4239,7 @@ elseif ($tab === 'ai-blogger'):
             <span class="post-flag" title="Targeted country: <?= esc($rLabel) ?>"><?= $rFlag ?> <span class="post-flag-label"><?= esc($rLabel) ?></span></span>
             <?php if ($readTime !== ''): ?><span class="text-secondary" style="font-size:10px;flex-shrink:0;"><i class="bi bi-clock me-1"></i><?= esc($readTime) ?></span><?php endif; ?>
             <span class="post-date"><?= $postDate ?></span>
-            <span class="badge rounded-pill post-status" style="background:<?= $httpOk ? '#166534' : '#92400e' ?>;color:<?= $httpOk ? '#bbf7d0' : '#fef3c7' ?>;"><?= $httpOk ? 'Live' : 'Pending' ?></span>
+            <span class="badge rounded-pill post-status" title="<?= esc($statusTitle) ?>" style="background:#166534;color:#bbf7d0;">Live</span>
             <i class="bi bi-chevron-right post-arrow"></i>
           </a>
         <?php endforeach; ?>
