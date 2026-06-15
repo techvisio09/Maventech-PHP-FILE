@@ -2339,3 +2339,46 @@ When admin creates a new category via the inline "+ Add Category" flow on the Ad
   - Real Stripe API 401 → "Stripe rejected the key: Invalid API Key provided"
   - Real PayPal OAuth 401 → "PayPal rejected the credentials: Client Authentication failed"
 
+
+## [Feb 2026 — Iteration 13] Header alignment fix + Go-Live checklist dashboard banner
+
+### Completed
+- **Header alignment regression** — fixed the wide "CALL TOLL-FREE 1-877-555-0199" pill that was pushing the Cart button onto a second row at 1366px. Now all 5 navbar action items (phone CTA, Ask AI, USD ▾, theme toggle, Cart) sit on a single elegant row at ~31.5 px height each:
+  - `.phone-cta` slimmed: 24×24 icon (was 32×32), `.85rem` font (was `1rem`), `.25rem .85rem` padding (was `.35rem 1rem`), gradient + ring animation kept for brand pop
+  - HTML simplified to single-line `<icon><number>` (was 2-line with separate CALL TOLL-FREE label)
+  - Parent container: `gap-2 flex-wrap` → `gap-1 flex-nowrap`
+  - Every child got `flex-shrink-0 white-space:nowrap` so text inside never wraps
+- **Go-Live checklist dashboard banner** — NEW one-click pre-flight probe on `/admin.php?tab=dashboard`:
+  - Pulsing rocket-icon pill at the top of the dashboard with a real-time "score badge" (`X FAILING` / `Y WARNINGS` / `ALL N/N ✓ READY FOR LIVE`)
+  - "Run checklist now" button → calls `/ajax/go-live-check.php` which probes 8 production dependencies:
+    1. AI Writing Key (Emergent LLM key format check)
+    2. SMTP / Mail Server (SMTP host + Resend key presence)
+    3. Stripe (real `/v1/balance` call against the active mode key)
+    4. PayPal (real `/v1/oauth2/token` OAuth handshake)
+    5. Google Search Console (token saved + format)
+    6. Bing Webmaster (token saved + format)
+    7. 5 SEO public endpoints (sitemap.xml, robots.txt, ai.txt, llms.txt, merchant-feed.xml) — reuses `seo_health_probe()`
+    8. IndexNow key file (reachable from real domain)
+  - Each row in the results shows a colored dot (🟢🟡🔴), the check name, a one-line reason, and a "Fix →" deep-link to the relevant admin tab
+  - Verdict persisted to `setting_get('go_live_check_last_run')` so the banner tone (red/amber/green/neutral) + "Last run Xm ago" stamp + score pill stays accurate across reloads without re-probing
+  - Banner color auto-updates: red border + red button when red>0, amber when amber>0 + red=0, green when all pass, neutral blue when never run
+
+### Files touched
+- `/app/php-version/assets/css/style.css` — `.phone-cta` rewritten as slim single-line pill (~31.5 px tall)
+- `/app/php-version/includes/header.php` — `navbar-actions` container now `gap-1 flex-nowrap`, every child has `flex-shrink-0` + inline `white-space:nowrap`, phone CTA HTML simplified
+- `/app/php-version/admin.php` — Go-Live banner block (~80 lines) added between the new-leads alert and the Dashboard h1 (lines ~2161-2245)
+- `/app/php-version/ajax/go-live-check.php` (NEW) — admin-only AJAX endpoint that probes all 8 production dependencies + persists verdict
+
+### Testing
+- **`testing_agent_v3_fork` iteration 13 → 16/16 PASS** (backend + Playwright UI smoke)
+- Test report: `/app/test_reports/iteration_13.json`
+- Pytest suite: `/app/backend/tests/test_iteration13_header_and_golive.py`
+- Verified:
+  - Header at 1366×800: all 5 action items aligned within 1.2 px y-coord delta, phone CTA height = 31.5 px (under 40 px ceiling)
+  - Anonymous `/ajax/go-live-check.php` → HTTP 403
+  - Admin `/ajax/go-live-check.php` → HTTP 200 with exactly 8 checks in the documented shape
+  - UI click flow: Run button → loading state → 8 rows render → Fix → links deep-link to specific admin tab
+  - State persistence: reload shows "Last run just now" + score pill `2 FAILING`
+  - Tone correctly switches red/amber/green based on score
+  - On preview env: real probes correctly detect missing Stripe TEST key + SMTP config → 2 red (expected behaviour, not a bug)
+

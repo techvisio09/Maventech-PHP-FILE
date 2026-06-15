@@ -2178,7 +2178,7 @@ if ($tab === 'dashboard'):
         <?php endif; ?>
       </div>
       <div class="text-secondary" style="font-size:13px;line-height:1.45;">
-        One-click probe of all <strong>9 production dependencies</strong> (AI key · SMTP · Stripe · PayPal · GSC · Bing · sitemap/robots/ai.txt/llms.txt/merchant-feed · IndexNow). Run this before flipping your real domain — green means ready, amber/red means do this first.
+        One-click probe of all <strong>8 production dependencies</strong> (AI key · SMTP · Stripe · PayPal · GSC · Bing · 5 SEO public endpoints · IndexNow). Run this before flipping your real domain — green means ready, amber/red means do this first.
       </div>
     </div>
     <button type="button" class="btn fw-bold flex-shrink-0" data-testid="go-live-run-btn" id="goLiveRunBtn"
