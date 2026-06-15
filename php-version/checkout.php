@@ -234,6 +234,20 @@ include __DIR__ . '/includes/header.php';
     <div class="alert alert-danger"><ul class="mb-0"><?php foreach ($errors as $e): ?><li><?= esc($e) ?></li><?php endforeach; ?></ul></div>
   <?php endif; ?>
 
+  <?php if (setting_get('gw_mode', 'test') !== 'live'): ?>
+    <!-- Payment gateway is currently in TEST mode — make that crystal clear
+         to whoever is on the page (typically the admin doing a dry run). -->
+    <div class="alert alert-warning small mb-3 d-flex align-items-start gap-2"
+         data-testid="checkout-test-mode-banner"
+         style="border-radius:12px;line-height:1.5;font-weight:600;border:1px solid #f59e0b;background:linear-gradient(135deg,rgba(245,158,11,.08),rgba(234,88,12,.08));">
+      <i class="bi bi-flask text-warning mt-1" style="font-size:18px;"></i>
+      <div>
+        <span class="badge bg-warning text-dark me-1" style="font-size:10.5px;letter-spacing:1px;">TEST MODE</span>
+        Payments are not charged in this environment.  The order will be created and emails will be delivered, but no real money moves. Switch to <a href="/admin.php?tab=api&gw=toggles" class="alert-link">Live</a> from Admin → API to start processing real payments.
+      </div>
+    </div>
+  <?php endif; ?>
+
   <form method="post" class="row g-3 align-items-start">
     <input type="hidden" name="pro" value="<?= $proAssist ? '1' : '0' ?>">
     <input type="hidden" name="payment_method" id="payment-method-input" value="card">

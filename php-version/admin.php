@@ -214,6 +214,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->prepare('UPDATE products SET category=? WHERE slug=?')->execute([$categorySlug, $_POST['slug']]);
         header('Location: admin.php?tab=products&msg=Moved'); exit;
 
+    } elseif ($action === 'update_gw_mode') {
+        // Switch the global payment-gateway mode between 'test' and 'live'.
+        // Stored in the settings table so checkout.php + the webhook
+        // handlers can branch on it without restarting anything.
+        $newMode = ($_POST['mode'] ?? 'test') === 'live' ? 'live' : 'test';
+        setting_set('gw_mode', $newMode);
+        // Audit trail in the admin notification bell.
+        admin_notify(
+            'template',
+            'Payment mode changed to ' . strtoupper($newMode),
+            $newMode === 'live'
+                ? 'Real customer payments are now being processed.'
+                : 'Test mode — orders are created but no money is charged.',
+            '/admin.php?tab=api&gw=toggles'
+        );
+        header('Location: admin.php?tab=api&gw=toggles&msg=' . ($newMode === 'live' ? 'Switched+to+LIVE+mode' : 'Switched+to+TEST+mode')); exit;
+
     } elseif ($action === 'ai_autofill_urls') {
         // ---------------------------------------------------------------------
         // AI Auto-fill activation_url + install_guide_url for ALL products with
@@ -8603,7 +8620,76 @@ elseif ($tab === 'api'):
   <?php if ($isToggles):
     $cardOn = $cardStatus === 'active';
     $ppOn   = $ppStatus   === 'active';
+    // Global Test ↔ Live mode (covers BOTH gateways).  Default is 'test'
+    // so a freshly-configured store never accidentally takes real money
+    // before the admin has verified the flow end-to-end.
+    $gwMode = setting_get('gw_mode', 'test'); // 'test' or 'live'
+    $modeLive = ($gwMode === 'live');
   ?>
+    <!-- ==================== TEST ↔ LIVE MODE TOGGLE ==================== -->
+    <div class="card-e p-4 mb-3" data-testid="gw-mode-card" style="border:2px solid <?= $modeLive ? '#10b981' : '#f59e0b' ?>;">
+      <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+        <div class="flex-grow-1" style="min-width:240px;">
+          <div class="d-flex align-items-center gap-2 mb-1">
+            <span class="badge" style="font-size:11px;font-weight:800;letter-spacing:1.3px;padding:6px 12px;border-radius:999px;background:<?= $modeLive ? '#10b981' : '#f59e0b' ?>;color:#fff;text-transform:uppercase;" data-testid="gw-mode-badge"><i class="bi bi-<?= $modeLive ? 'broadcast' : 'tools' ?> me-1"></i><?= $modeLive ? 'Live mode' : 'Test mode' ?></span>
+            <h6 class="fw-bold mb-0">Payment processing</h6>
+          </div>
+          <small class="text-muted d-block" style="line-height:1.55;" data-testid="gw-mode-hint">
+            <?php if ($modeLive): ?>
+              <i class="bi bi-shield-fill-check text-success me-1"></i>Real customer payments are being processed and funds are being charged through the active gateway.
+            <?php else: ?>
+              <i class="bi bi-flask text-warning me-1"></i>Sandbox / test environment — orders are created and the full payment flow runs end-to-end, but no real money moves.  Use this to verify callbacks, webhooks, order creation and email delivery before going live.
+            <?php endif; ?>
+          </small>
+        </div>
+        <form method="post" id="gwModeForm" class="d-flex align-items-center gap-2 flex-shrink-0">
+          <input type="hidden" name="action" value="update_gw_mode">
+          <input type="hidden" name="mode" id="gwModeHidden" value="<?= $modeLive ? 'live' : 'test' ?>">
+          <span class="small fw-bold" style="font-size:11.5px;color:<?= $modeLive ? '#94a3b8' : '#f59e0b' ?>;">Test</span>
+          <button type="button"
+                  class="gw-switch <?= $modeLive ? 'on' : 'off' ?>"
+                  id="gwModeSwitch"
+                  data-testid="gw-mode-switch"
+                  role="switch"
+                  aria-checked="<?= $modeLive ? 'true' : 'false' ?>"
+                  aria-label="Switch between Test and Live payment mode"
+                  style="--gw-switch-on-bg:#10b981;">
+            <span class="gw-switch-thumb"></span>
+          </button>
+          <span class="small fw-bold" style="font-size:11.5px;color:<?= $modeLive ? '#10b981' : '#94a3b8' ?>;">Live</span>
+        </form>
+      </div>
+    </div>
+    <?php if (!$modeLive): ?>
+      <!-- Helpful next-step prompts when in Test mode. -->
+      <div class="alert alert-warning small mb-3 d-flex align-items-start gap-2" style="border-radius:10px;line-height:1.5;" data-testid="gw-mode-test-helper">
+        <i class="bi bi-info-circle-fill mt-1"></i>
+        <div>
+          <strong>You're in Test mode.</strong> Place an end-to-end test order from the storefront — checkout will complete, the order row + emails + invoice PDF will all be produced, but no charge happens.  When everything looks right, flip the switch above to <strong>Live</strong>.
+          <a href="/checkout.php" class="btn btn-sm btn-soft-yellow ms-2" target="_blank"><i class="bi bi-arrow-up-right me-1"></i>Open a test checkout</a>
+        </div>
+      </div>
+    <?php endif; ?>
+    <script>
+    (function () {
+      const sw = document.getElementById('gwModeSwitch');
+      const hidden = document.getElementById('gwModeHidden');
+      const form = document.getElementById('gwModeForm');
+      if (!sw) return;
+      sw.addEventListener('click', function () {
+        const goingLive = sw.classList.contains('off');
+        // Going LIVE is a destructive choice — confirm before submitting.
+        if (goingLive && !confirm('Switch to LIVE mode?\n\nReal customer payments will be processed and funds will be charged. Make sure you have completed your end-to-end test order first.')) {
+          return;
+        }
+        sw.classList.toggle('on');
+        sw.classList.toggle('off');
+        sw.setAttribute('aria-checked', goingLive ? 'true' : 'false');
+        hidden.value = goingLive ? 'live' : 'test';
+        form.submit();
+      });
+    })();
+    </script>
     <!-- ==================== UPDATE GATEWAY (single-click switches) ==================== -->
     <div data-testid="gateway-toggles">
       <div class="row g-3">

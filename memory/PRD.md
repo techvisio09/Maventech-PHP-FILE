@@ -1345,3 +1345,46 @@ Specifically:
 - Live admin screenshot: activity bell badge `4`, dropdown lists install + review + lead + order with correct icons, titles, bodies, "31 s ago" timestamps, and "Mark all read" action.
 - Install button is registered on `beforeinstallprompt` (verified in code; only shown when Chrome/Edge fires the event — Playwright headless Chromium suppresses it).
 
+
+---
+
+## [Feb 2026] Iteration 27 — Notification chime + Test/Live payment mode toggle
+
+### What the user asked
+1. **Play a sound** on the admin bell (web + phone) when a notification arrives.
+2. Add a **Test Mode ↔ Live Mode** toggle on the Admin → API / Payment Gateway page.  Test = orders + emails + invoice still run end-to-end but no real money moves; Live = real payments.  The active mode must be clearly indicated.
+
+### What changed
+
+**Notification chime + bell buzz**
+- Added a Web Audio chime in `includes/admin-shell.php` — two-note descending sine pair (A5 → C#6, ~220 ms) generated client-side so there's **no audio file to download**.
+- Polling loop now tracks the previous unread count.  When the count goes UP (e.g. 2 → 5) the chime fires + the bell icon shakes (`adm-bell-buzz` keyframes).
+- "🔇 Sound on / Sound off" toggle inside the bell dropdown header (`data-testid="adm-bell-mute"`) — persisted in `localStorage.mv_admin_mute`, clicking it from "Sound off → Sound on" previews the chime.
+- Service-worker `showNotification()` now passes `silent: false` + `vibrate: [180, 80, 180]` so phones get the OS-default tone + a short haptic buzz when the PWA receives an event in the background.
+- Cache name bumped (`maventech-admin-v3` → `v4`) so installed clients pick up the updated SW immediately.
+
+**Payment gateway: Test ↔ Live toggle**
+- New `gw_mode` setting (default `test`, valid values `test` / `live`).
+- New POST action `update_gw_mode` in `admin.php` that flips the setting and posts an entry to the activity bell ("Payment mode changed to LIVE").
+- New **Payment processing** card at the top of `?tab=api&gw=toggles`:
+  - Orange-bordered card with a "TEST MODE" badge + plain-English explanation, or green-bordered with "LIVE MODE" badge when active.
+  - A real toggle switch (`Test ↔ Live`) — clicking to flip to **LIVE** triggers a browser `confirm()` warning because it starts charging real customers.
+  - In Test mode a yellow helper alert appears below with an "Open a test checkout" button so the admin can dry-run the flow.
+- Permanent **mode pill** in the admin topbar (`data-testid="adm-gw-mode-pill"`):
+  - Orange "🧪 TEST MODE" / green "📡 LIVE" depending on current setting.
+  - Visible on every admin page so the admin always knows which mode they're in.
+- **Checkout page** also shows a "TEST MODE — Payments are not charged" alert when `gw_mode !== 'live'` (`data-testid="checkout-test-mode-banner"`).
+
+### Files touched
+- `/app/php-version/includes/admin-shell.php` — chime + bell-buzz CSS + mute toggle + mode pill in topbar.
+- `/app/php-version/admin-sw.js` — `silent:false` + `vibrate` + cache bump.
+- `/app/php-version/admin.php` — `update_gw_mode` POST handler + Payment-processing card + JS toggle.
+- `/app/php-version/checkout.php` — Test-mode banner above the form.
+
+### Verification (curl)
+- `gw_mode` starts as `test` (safe default).
+- `POST action=update_gw_mode&mode=live` → 302 → setting becomes `live`.  Activity bell records "Payment mode changed to LIVE".
+- `POST action=update_gw_mode&mode=test` → 302 → setting becomes `test` again.
+- Playwright screenshot: topbar shows orange "TEST MODE" pill, API tab shows orange-bordered Payment processing card with toggle + helper alert + open-test-checkout link, activity bell shows the unread badge with the previous notifications.
+- Lint clean across all 4 edited PHP files.
+

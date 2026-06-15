@@ -1270,6 +1270,18 @@ hr { border-color: var(--border); opacity:.5; }
   </div>
 
   <div class="right">
+    <?php $gwModeNow = setting_get('gw_mode', 'test'); ?>
+    <?php if ($gwModeNow !== 'live'): ?>
+      <a href="?tab=api&gw=toggles" class="adm-pill" title="Currently in Test mode — no real payments are processed. Click to switch to Live." data-testid="adm-gw-mode-pill"
+         style="background:linear-gradient(135deg,#f59e0b,#ea580c);color:#fff;font-weight:700;letter-spacing:.8px;text-transform:uppercase;font-size:11px;border:0;">
+        <i class="bi bi-flask"></i> Test mode
+      </a>
+    <?php else: ?>
+      <a href="?tab=api&gw=toggles" class="adm-pill" title="Live mode — real payments are being processed." data-testid="adm-gw-mode-pill"
+         style="background:linear-gradient(135deg,#10b981,#059669);color:#fff;font-weight:700;letter-spacing:.8px;text-transform:uppercase;font-size:11px;border:0;">
+        <i class="bi bi-broadcast"></i> Live
+      </a>
+    <?php endif; ?>
     <div class="adm-dropdown" id="ddRegion" data-testid="region-dropdown">
       <button class="adm-pill" onclick="document.getElementById('ddRegion').classList.toggle('open')" title="Switch region / currency">
         <i class="bi bi-globe"></i> <?= esc($rg['code']) ?> · <?= esc($rg['currency_symbol']) ?>
@@ -1307,7 +1319,12 @@ hr { border-color: var(--border); opacity:.5; }
       <div class="adm-dropdown-menu" style="min-width:340px;max-width:90vw;max-height:480px;overflow-y:auto;padding:6px 0;">
         <div class="px-3 py-2 d-flex justify-content-between align-items-center" style="border-bottom:1px solid var(--border);">
           <strong style="font-size:13px;">Activity</strong>
-          <a href="#" class="text-decoration-none" style="font-size:11.5px;" onclick="event.preventDefault();markActivityRead(true);return false;" data-testid="adm-activity-mark-all">Mark all read</a>
+          <div class="d-flex align-items-center gap-2">
+            <button class="adm-bell-mute" id="admBellMuteBtn" type="button" title="Toggle notification sound" data-testid="adm-bell-mute">
+              <i class="bi bi-volume-up-fill" id="admBellMuteIcon"></i> <span id="admBellMuteLabel">Sound on</span>
+            </button>
+            <a href="#" class="text-decoration-none" style="font-size:11.5px;" onclick="event.preventDefault();markActivityRead(true);return false;" data-testid="adm-activity-mark-all">Mark all read</a>
+          </div>
         </div>
         <div id="admActivityList" style="font-size:13px;">
           <div class="text-center py-4 text-muted" style="font-size:12px;">
@@ -1651,6 +1668,20 @@ document.addEventListener('click', function(e){
 .adm-activity-title { font-weight: 600; font-size: 12.5px; line-height: 1.3; margin: 0; }
 .adm-activity-body  { font-size: 11.5px; color: var(--muted); margin-top: 2px; line-height: 1.4; }
 .adm-activity-time  { font-size: 10.5px; color: var(--muted); margin-top: 4px; }
+/* Bell buzz: short shake when a new notification arrives, paired with chime. */
+@keyframes adm-bell-buzz {
+  0%, 100% { transform: rotate(0); }
+  15%      { transform: rotate(-12deg); }
+  30%      { transform: rotate(10deg); }
+  45%      { transform: rotate(-8deg); }
+  60%      { transform: rotate(6deg); }
+  75%      { transform: rotate(-3deg); }
+}
+.adm-bell-buzz { animation: adm-bell-buzz 1.1s cubic-bezier(.36,.07,.19,.97); transform-origin: center 30%; }
+/* Tiny mute toggle inside the activity dropdown header. */
+.adm-bell-mute { background:none; border:0; padding:2px 6px; color:var(--muted); cursor:pointer; font-size:11px; line-height:1; }
+.adm-bell-mute:hover { color:#06b6d4; }
+.adm-bell-mute.muted { color:#ef4444; }
 </style>
 <script>
 (function () {
@@ -1713,6 +1744,35 @@ document.addEventListener('click', function(e){
   const badgeEl = document.getElementById('admActivityBadge');
   if (!listEl || !badgeEl) return;
 
+  // ---- 5) Notification chime (Web Audio — no asset to download) ----
+  // Pleasant two-note descending tone. Honours user's mute preference
+  // stored in localStorage ("mv_admin_mute"=1 silences) so they can
+  // dial it down without coding.
+  let _ac = null;
+  function chime() {
+    try {
+      if (localStorage.getItem('mv_admin_mute') === '1') return;
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      _ac = _ac || new AC();
+      // Resume the context if it's been suspended (autoplay policy).
+      if (_ac.state === 'suspended') _ac.resume();
+      const now = _ac.currentTime;
+      // Two short overlapping tones — A5 then C#6 — feels modern + crisp.
+      [[880, 0.00, 0.18], [1108.73, 0.10, 0.22]].forEach(([f, off, dur]) => {
+        const o = _ac.createOscillator(), g = _ac.createGain();
+        o.type = 'sine'; o.frequency.value = f;
+        o.connect(g); g.connect(_ac.destination);
+        g.gain.setValueAtTime(0.0001, now + off);
+        g.gain.exponentialRampToValueAtTime(0.16, now + off + 0.03);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + off + dur);
+        o.start(now + off); o.stop(now + off + dur + 0.02);
+      });
+    } catch (e) { /* silent */ }
+  }
+  // Expose so the "Mute" toggle button can call playPing() to preview.
+  window._mvChime = chime;
+
   const TIMEAGO = (iso) => {
     const d = new Date(iso.replace(' ', 'T') + 'Z');
     const s = Math.max(1, Math.floor((Date.now() - d.getTime()) / 1000));
@@ -1727,12 +1787,25 @@ document.addEventListener('click', function(e){
     template: 'bi-file-earmark-text', default: 'bi-bell',
   };
 
+  let _lastUnread = -1;
   async function refresh() {
     try {
       const r = await fetch('/admin.php?ajax=notif_poll', { credentials: 'same-origin' });
       const j = await r.json();
       if (!j || !j.ok) return;
       const unread = j.unread || 0;
+      // Play the chime ONLY when the unread count actually increased
+      // (e.g. -1 → 0 on first load doesn't ring; 2 → 5 does).
+      if (_lastUnread >= 0 && unread > _lastUnread) {
+        chime();
+        // Subtle pulse on the bell so the visual matches the audio.
+        const bell = document.querySelector('.adm-bell-activity');
+        if (bell) {
+          bell.classList.add('adm-bell-buzz');
+          setTimeout(() => bell.classList.remove('adm-bell-buzz'), 1200);
+        }
+      }
+      _lastUnread = unread;
       if (unread > 0) {
         badgeEl.textContent = unread > 99 ? '99+' : String(unread);
         badgeEl.classList.remove('d-none');
@@ -1764,6 +1837,28 @@ document.addEventListener('click', function(e){
     }
     refresh();
   };
+  // Mute toggle inside the bell dropdown.
+  (function () {
+    const btn   = document.getElementById('admBellMuteBtn');
+    const icon  = document.getElementById('admBellMuteIcon');
+    const label = document.getElementById('admBellMuteLabel');
+    if (!btn) return;
+    function render() {
+      const muted = localStorage.getItem('mv_admin_mute') === '1';
+      btn.classList.toggle('muted', muted);
+      icon.className = muted ? 'bi bi-volume-mute-fill' : 'bi bi-volume-up-fill';
+      label.textContent = muted ? 'Sound off' : 'Sound on';
+    }
+    render();
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      const wasMuted = localStorage.getItem('mv_admin_mute') === '1';
+      localStorage.setItem('mv_admin_mute', wasMuted ? '0' : '1');
+      render();
+      if (!wasMuted) return;       // just muted → no preview
+      if (window._mvChime) window._mvChime();   // un-muted → preview the chime
+    });
+  })();
   refresh();
   setInterval(refresh, 30000);
 

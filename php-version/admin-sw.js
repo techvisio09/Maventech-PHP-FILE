@@ -12,7 +12,7 @@
  * Real Web Push (VAPID) is intentionally NOT used — the admin is a
  * single-user product and a periodic background sync is enough.
  */
-const CACHE_NAME = 'maventech-admin-v3';
+const CACHE_NAME = 'maventech-admin-v4';
 const CORE_ASSETS = [
   '/admin-manifest.json',
   '/assets/css/style.css',
@@ -79,6 +79,10 @@ async function pollForNewNotifications() {
         badge: '/assets/images/icons/admin-192.png',
         tag:   'maventech-' + n.id,
         renotify: true,
+        // OS plays its default notification sound for non-silent toasts;
+        // vibrate buzzes the phone for ~600 ms total (Android only).
+        silent: false,
+        vibrate: [180, 80, 180],
         data:  { link: n.link || '/admin.php', id: n.id, type: n.type },
       });
     }
