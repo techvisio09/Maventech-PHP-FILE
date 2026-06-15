@@ -408,7 +408,7 @@ include __DIR__ . '/includes/header.php';
     <h2 class="fw-bold">Trusted by Thousands of Customers</h2>
     <p class="text-secondary">Join satisfied customers who chose authentic Microsoft Office software</p>
     <div class="row g-4 mt-2" data-testid="trusted-stats">
-      <?php foreach ([['5+ Yrs', 'In Business'], ['50,000+', 'Happy Customers'], ['15-30min', 'Delivery Time'], ['4.6/5', 'Customer Rating']] as [$v, $l]): ?>
+      <?php foreach ([['2+ Yrs', 'In Business'], ['50,000+', 'Happy Customers'], ['15-30min', 'Delivery Time'], ['4.6/5', 'Customer Rating']] as [$v, $l]): ?>
         <div class="col-md-3 col-6"><div class="fs-2 fw-bold text-primary"><?= $v ?></div><small class="text-secondary"><?= $l ?></small></div>
       <?php endforeach; ?>
     </div>
@@ -503,7 +503,7 @@ include __DIR__ . '/includes/header.php';
       </div>
       <div class="col-lg-5">
         <div class="row g-3 text-center">
-          <?php foreach ([['50,000+', 'Happy Customers'], ['5+ Yrs', 'In Business'], ['15-30min', 'Delivery Time'], ['4.6/5', 'Customer Rating']] as [$v, $l]): ?>
+          <?php foreach ([['50,000+', 'Happy Customers'], ['2+ Yrs', 'In Business'], ['15-30min', 'Delivery Time'], ['4.6/5', 'Customer Rating']] as [$v, $l]): ?>
             <div class="col-6"><div class="card p-4 h-100"><div class="fs-3 fw-bold text-primary"><?= $v ?></div><small class="text-secondary"><?= $l ?></small></div></div>
           <?php endforeach; ?>
         </div>
