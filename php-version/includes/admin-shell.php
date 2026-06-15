@@ -386,13 +386,16 @@ body::before { content: none; }
 .adm-floats { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
 .adm-floats i {
   position: absolute;
-  font-size: 56px;
-  opacity: 0.18;
-  filter: drop-shadow(0 2px 4px rgba(15,23,42,.08));
+  font-size: 64px;
+  opacity: 0.32;
+  filter: drop-shadow(0 4px 10px rgba(15,23,42,.15));
   animation: adm-float-drift 16s ease-in-out infinite;
   will-change: transform;
 }
-[data-bs-theme="dark"] .adm-floats i { opacity: 0.22; }
+[data-bs-theme="dark"] .adm-floats i {
+  opacity: 0.40;
+  filter: drop-shadow(0 4px 14px rgba(0,0,0,.55));
+}
 .adm-floats i:nth-child(odd)  { animation-name: adm-float-drift; }
 .adm-floats i:nth-child(even) { animation-name: adm-float-drift-rev; animation-duration: 18s; }
 .adm-floats i:nth-child(3n)   { animation-duration: 14s; }

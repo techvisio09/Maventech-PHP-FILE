@@ -1505,3 +1505,36 @@ Specifically:
   - `charge.refunded` event → order flipped `paid→refunded`, refund row added to transaction_logs.
 
 
+---
+
+## [Feb 2026] Iteration 30 — Dark/Light theme on login + visible floating Microsoft-product icons
+
+### What the user asked
+1. **Add dark and light theme feature** to the admin login page.
+2. **Same animated floating Microsoft-product icons** that the admin panel uses, behind the login card.
+3. **Make the floating icons more visible** on the admin pages (they were ~18 % opacity / 56 px — too subtle).
+
+### What changed
+
+**Login page (`login.php`)**
+- New theme-toggle pill (top-right) — flips `data-bs-theme` between `dark` and `light` and persists in **both** `localStorage.uc_theme` and the `adm_mode` cookie so the choice carries straight into the admin panel after sign-in.
+- Pre-paint script reads the cookie first, falls back to localStorage, defaults to `light`.  No FOUC.
+- Full dark-mode palette: `--ml-bg:#0f172a`, `--ml-card:#1e293b`, light cyan accent (`#38bdf8`), softer shadows, dark text on dark inputs that brighten on focus.  Error banner adapts to dark too.
+- Embedded the same 18 animated floating-icon set from the admin shell (Windows, Microsoft, Shield, Key, Cloud, Laptop, Fingerprint, CPU, Envelope, Bag-check, Globe, Card, Bell, Apple, Android, etc.) with real product colours (#0078D4 Windows blue, #D24726 Office orange, #3DDC84 Android green, #6b7280 Apple gray, etc.) — drift / drift-rev keyframes at 12–20 s/loop.
+- Phones: icons shrink to 42 px and dim to 22 % so they don't fight the card on small screens.
+
+**Admin shell (`includes/admin-shell.php`)**
+- Bumped floating-icon defaults from `56 px / 18 %` to `64 px / 32 %` in light mode and from `22 %` to `40 %` in dark mode.
+- Boosted the drop-shadow filter so the icons read clearly on both white-grey and navy backgrounds.
+
+### Files touched
+- `/app/php-version/login.php` — theme toggle UI + JS, dark palette CSS, floating-icon block, cookie+localStorage persistence.
+- `/app/php-version/includes/admin-shell.php` — `.adm-floats i` opacity + font-size + filter bumps.
+
+### Verification
+- `php -l` clean on both files.
+- Playwright: opened `/login.php` in default (light) — 18 floating icons rendered, opacity 0.32, theme toggle present.  Manually toggled to dark, theme flipped + `localStorage.uc_theme=dark` persisted.
+- Logged in with the `adm_mode=light` cookie set → admin dashboard rendered in **light** theme with floating icons clearly visible at 0.32 opacity.
+- Re-tested with `adm_mode=dark` → admin dashboard renders in dark theme with icons at 0.40 opacity, still readable but not distracting.
+
+
