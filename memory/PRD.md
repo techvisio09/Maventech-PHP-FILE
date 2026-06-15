@@ -1805,3 +1805,52 @@ Net effect: the clear DID happen in DB, but the visible state still claimed "Key
 - **Dark-mode fallback card**: cleared AI key → rendered with soft navy card on dark canvas, bright `#dbeafe` title, readable help line, "Use my own" button visible.
 
 
+
+## [Feb 2026] Sitemap Button Fix + Microsoft Office SEO/GEO/AEO Keyword Library
+
+### What shipped
+1. **P0 — "View Sitemap" admin button** (`admin.php` line 3897)
+   - Changed `href="sitemap.xml"` → `href="<?= site_url() ?>/sitemap.xml"` (absolute URL).
+   - Added `data-testid="view-sitemap-btn"`.
+   - Verified end-to-end: button now resolves to `https://…/sitemap.xml`; page returns HTTP 200 with 179 URLs, `xmlns:image` + `xmlns:news` namespaces, lastmod and priority intact.
+
+2. **P1 — Microsoft Office high-intent keyword injection (broad/phrase/exact)**
+   The user supplied a curated keyword library for Office 2024 / 2021 / 2019 (Professional Plus, Home & Business, Home & Student, standalone Word/Excel). Rather than hardcoding per-product PHP variables (which would break the dynamic site), the library was folded into the existing data-driven SEO infrastructure.
+
+   - **`includes/seo-content.php`** — two new helpers:
+     - `office_edition_meta(array $p)` → detects `is_office`, `year` (2024/2021/2019), `edition` (Professional Plus / Home & Business / Home & Student / standalone Word / Excel / PowerPoint / Outlook).
+     - `office_intent_keywords(array $meta)` → returns the full transactional keyword cluster (universal + year-specific). Year-aware: 2024 SKUs get the 2024 library, 2021 SKUs get the 2021 library, etc.
+   - **`product_long_tail_keywords()`** — appends `office_intent_keywords()` output when an Office SKU is detected.
+   - **`category_long_tail_keywords()`** — same for category pages (e.g. `category.php?slug=office-2024-pc`).
+   - **`product_seo_copy()`** — new H3 block *"Office {year} {edition} — lifetime license, product key & instant download"* with intent phrases (lifetime license, product key, one-time purchase, instant download, full version Office for Windows 11) woven into the visible HTML. Year-specific paragraph (2024 / 2021 / 2019) targets the matching intent queries.
+   - **`includes/email.php > product_faqs()`** — appends 3 Office-specific FAQ entries when Office is detected:
+     1. *"Is this Microsoft Office {year} {edition} a one-time purchase or a subscription?"*
+     2. *"Will Microsoft Office {year} {edition} work on Windows 11 PC?"*
+     3. *"What is the difference between Microsoft Office {year} {edition} and Microsoft 365?"*
+     These auto-render in the visible FAQ accordion AND in the FAQPage JSON-LD.
+   - **`includes/functions.php > product_img_alt()`** — alt text now reads *"{name} product key box - genuine lifetime license for {platform}, instant digital delivery, {pct}% off | {SITE_BRAND}"*. Switched to plain hyphens so the alt isn't double-encoded when piped through `esc()`.
+   - **`product.php`** — JSON-LD `Product` schema now includes:
+     - `keywords` (full long-tail string, including the Office intent library)
+     - `additionalProperty` array: License Type / Purchase Model / Delivery / Platform — plus `Office Year` and `Office Edition` for Office SKUs.
+
+### Regression safety
+- Non-Office products (e.g. Bitdefender) verified NOT to receive Office FAQs, Office keywords or `additionalProperty.Office Year` (curl-grep returned 0 on all three).
+- 2021 SKUs verified to pick up the 2021 keyword cluster (not 2024).
+- All edited files pass `php -l` with no syntax errors.
+
+### Files touched
+- `/app/php-version/admin.php` (sitemap button href fix + data-testid)
+- `/app/php-version/includes/seo-content.php` (added `office_edition_meta()`, `office_intent_keywords()`; extended `product_long_tail_keywords()`, `category_long_tail_keywords()`, `product_seo_copy()`)
+- `/app/php-version/includes/functions.php` (`product_img_alt()` enhanced)
+- `/app/php-version/includes/email.php` (`product_faqs()` Office-specific append)
+- `/app/php-version/product.php` (JSON-LD `keywords` + `additionalProperty`)
+
+### Verification (curl + Playwright)
+- Office 2024 Pro Plus product page:
+  - HTTP 200, meta `keywords` length > 1.5 KB containing exact `Microsoft Office 2024 Professional Plus product key`, `buy Office 2024 lifetime license Windows`, `Microsoft Office 2024 Professional Plus lifetime license Windows PC`.
+  - JSON-LD parsed: `additionalProperty` = `[License Type, Purchase Model, Delivery, Platform, Office Year=2024, Office Edition=Professional Plus]`.
+  - FAQ accordion shows 8 entries (5 base + 3 Office-specific).
+  - Image alt = *"Microsoft Office 2024 Professional Plus Lifetime License Windows PC product key box - genuine lifetime license for Windows, instant digital delivery, 56% off | Maventech Software"* (no `&amp;mdash;`).
+  - Visible H3 *"Office 2024 Professional Plus — lifetime license, product key & instant download"* renders below the activation steps.
+- Office 2021 product page → year-specific keywords confirmed (`Office 2021 Professional Plus download`, `Office 2021 Home Business download PC`, `Office 2021 Home Student Windows license`, etc.).
+- Admin sitemap button → clickable, opens `/sitemap.xml` in a new tab; sitemap renders with image + news XML namespaces and 179 URL entries.

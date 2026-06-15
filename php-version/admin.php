@@ -3894,7 +3894,7 @@ elseif ($tab === 'ai-blogger'):
         <a href="admin.php?tab=ai-blogger&submit_sitemaps=1" class="btn btn-primary rounded-pill px-4" data-testid="checklist-submit-sitemaps" onclick="return confirm('Submit your sitemap to Google, Bing &amp; other search engines now?')"><i class="bi bi-send-check me-1"></i>Submit Sitemap to All Search Engines</a>
       <?php endif; ?>
       <a href="blog.php" target="_blank" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-journal-text me-1"></i>View Blog</a>
-      <a href="sitemap.xml" target="_blank" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-filetype-xml me-1"></i>View Sitemap</a>
+      <a href="<?= esc(rtrim(site_url(), '/')) ?>/sitemap.xml" target="_blank" rel="noopener" class="btn btn-outline-secondary rounded-pill px-3" data-testid="view-sitemap-btn"><i class="bi bi-filetype-xml me-1"></i>View Sitemap</a>
     </div>
 
     <!-- Auto-resubmit daily toggle — drives seo_bot_weekly_sitemap_tick() (24h cadence) -->

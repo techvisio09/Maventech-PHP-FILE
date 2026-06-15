@@ -446,7 +446,7 @@ function product_faqs(array $product): array {
     $brandStore = $co['name'] ?? 'Maventech Software';
     $supportHrs = defined('SITE_HOURS') ? SITE_HOURS : 'Mon-Sat, 9 AM - 6 PM EST';
 
-    return [
+    $faqs = [
         [
             'question' => 'How long does delivery take for ' . $name . '?',
             'answer'   => 'Your ' . $name . ' license key is delivered by email almost instantly — typically within 15-30 minutes of completing payment, often in seconds. The email includes the activation key, the official ' . $brand . ' download link, and step-by-step activation instructions. There is no physical shipping — everything is digital and reaches the email address you provided at checkout.',
@@ -468,6 +468,36 @@ function product_faqs(array $product): array {
             'answer'   => 'Each license key activates one device under the ' . $brand . ' end-user license agreement. For multi-device coverage, pick a multi-seat product (e.g. 3-device or 5-device variants when available) or buy additional keys with the volume discount applied automatically at checkout for 5+ units.',
         ],
     ];
+
+    // Office-specific FAQ block — appended only when the product is a
+    // Microsoft Office SKU.  These three questions target the highest-
+    // volume AEO intent variants ("one time purchase vs subscription",
+    // "Windows 11 compatibility", "Office vs Microsoft 365").  They are
+    // emitted into both the visible accordion AND the FAQPage JSON-LD.
+    if (function_exists('office_edition_meta')) {
+        $officeMeta = office_edition_meta($product);
+        if (!empty($officeMeta['is_office'])) {
+            $year       = $officeMeta['year'] ?: '';
+            $edition    = $officeMeta['edition'] ?: '';
+            $editionTxt = $edition !== '' ? ' ' . $edition : '';
+            $yearTxt    = $year !== ''    ? ' ' . $year    : '';
+
+            $faqs[] = [
+                'question' => 'Is this Microsoft Office' . $yearTxt . $editionTxt . ' a one-time purchase or a subscription?',
+                'answer'   => 'This is a one-time purchase with a perpetual lifetime license — not a Microsoft 365 subscription. Pay once at the price shown, activate the key inside the official Microsoft Office' . $yearTxt . ' installer on your Windows PC, and use Word, Excel, PowerPoint' . ($edition === 'Home & Business' || $edition === 'Professional Plus' ? ' and Outlook' : '') . ' for as long as you own the device. There are no monthly fees, no auto-renewals and no cloud account that locks you out if you stop paying.',
+            ];
+            $faqs[] = [
+                'question' => 'Will Microsoft Office' . $yearTxt . $editionTxt . ' work on Windows 11 PC?',
+                'answer'   => 'Yes. Microsoft Office' . $yearTxt . $editionTxt . ' is fully supported on Windows 11 and Windows 10 PCs (and Windows 8.1/7 for Office 2019). The product key you receive activates the official 64-bit installer directly from Microsoft, so every Word, Excel, PowerPoint and (where applicable) Outlook update for this edition is included for the life of the license. If your PC meets Microsoft\'s minimum system requirements, activation completes in under five minutes.',
+            ];
+            $faqs[] = [
+                'question' => 'What is the difference between Microsoft Office' . $yearTxt . $editionTxt . ' and Microsoft 365?',
+                'answer'   => 'Microsoft Office' . $yearTxt . $editionTxt . ' is a one-time-purchase perpetual license — you pay once and own this version forever. Microsoft 365 is a monthly or yearly subscription that includes always-updated apps plus 1 TB OneDrive storage. If you do not need the cloud storage or the constant feature drops, Office' . $yearTxt . $editionTxt . ' is dramatically cheaper over five years and still delivers genuine Word, Excel and PowerPoint with full security updates for the version you bought.',
+            ];
+        }
+    }
+
+    return $faqs;
 }
 
 

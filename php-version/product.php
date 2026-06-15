@@ -108,6 +108,24 @@ if ((float)$product['rating'] > 0 && (int)$product['reviews'] > 0) {
         'worstRating' => '1',
     ];
 }
+// Inject the long-tail keyword library + edition/year/license-type as
+// structured `additionalProperty` items.  AI search engines (ChatGPT,
+// Perplexity, Google AI Overviews) consume both signals to map this SKU
+// against high-intent transactional queries — "lifetime license",
+// "product key", "one-time purchase", "Professional Plus", etc.
+$jsonLd['keywords'] = product_long_tail_keywords($product);
+$_addProps = [
+    ['@type' => 'PropertyValue', 'name' => 'License Type',   'value' => 'Lifetime / Perpetual'],
+    ['@type' => 'PropertyValue', 'name' => 'Purchase Model', 'value' => 'One-time purchase — no subscription'],
+    ['@type' => 'PropertyValue', 'name' => 'Delivery',       'value' => 'Digital download — email delivery in 15-30 minutes'],
+    ['@type' => 'PropertyValue', 'name' => 'Platform',       'value' => $product['platform'] ?: 'Windows'],
+];
+$_officeMeta = office_edition_meta($product);
+if ($_officeMeta['is_office']) {
+    if ($_officeMeta['year']    !== '') $_addProps[] = ['@type' => 'PropertyValue', 'name' => 'Office Year',    'value' => $_officeMeta['year']];
+    if ($_officeMeta['edition'] !== '') $_addProps[] = ['@type' => 'PropertyValue', 'name' => 'Office Edition', 'value' => $_officeMeta['edition']];
+}
+$jsonLd['additionalProperty'] = $_addProps;
 // Embed up to 5 real reviews inside the Product schema for richer rich-result eligibility.
 $_reviewItems = product_review_items_jsonld($product, 5);
 if ($_reviewItems) {

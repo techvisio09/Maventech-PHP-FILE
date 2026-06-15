@@ -899,7 +899,14 @@ function product_img_alt(array $p): string
 {
     $pct = (!empty($p['original_price']) && $p['original_price'] > $p['price'])
         ? round((1 - $p['price'] / $p['original_price']) * 100) : 0;
-    $alt = $p['name'] . ' — genuine lifetime license key for ' . ($p['platform'] ?: 'Windows') . ', instant digital delivery';
+    $platform = $p['platform'] ?: 'Windows';
+    // Build a descriptive alt that names the SKU + license type + delivery,
+    // so Google Images, Bing Visual Search and AI multimodal models can
+    // surface the listing for "Microsoft Office 2024 Professional Plus
+    // product key box", "Office 2021 lifetime license key" etc.
+    // Use plain dashes (not HTML entities) so the alt text isn't double-
+    // encoded when the caller pipes it through esc().
+    $alt = $p['name'] . ' product key box - genuine lifetime license for ' . $platform . ', instant digital delivery';
     if ($pct > 0) $alt .= ', ' . $pct . '% off';
     return $alt . ' | ' . SITE_BRAND;
 }

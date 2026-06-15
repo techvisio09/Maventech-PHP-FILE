@@ -60,6 +60,14 @@ function product_long_tail_keywords(array $p): string
         $kw[] = $base . ' ' . $year . ' lifetime activation';
         $kw[] = $name . ' new edition';
     }
+    // Microsoft Office high-intent keyword library (broad / phrase / exact
+    // match — covers 2024, 2021, 2019, Professional Plus, Home & Business,
+    // Home & Student, standalone Word / Excel).  Only injected when the
+    // product is detected as Microsoft Office.
+    $officeMeta = office_edition_meta($p);
+    if (!empty($officeMeta['is_office'])) {
+        $kw = array_merge($kw, office_intent_keywords($officeMeta));
+    }
     return implode(', ', array_values(array_unique(array_filter($kw))));
 }
 
@@ -84,6 +92,192 @@ function product_detected_brand(array $p): string
         if (strpos($needle, $kw) !== false) return $br;
     }
     return 'Microsoft';
+}
+
+/* ------------------------------------------------------------------
+ *  office_edition_meta()
+ *  Detects the Microsoft Office release year + edition + suite from
+ *  the product name.  Used by every SEO helper that needs to inject
+ *  intent-matched Office keywords (2024 / 2021 / 2019 Professional
+ *  Plus / Home & Business / Home & Student / standalone Word / Excel).
+ *
+ *  Returns an associative array shape:
+ *    [
+ *      'is_office'   => bool,
+ *      'year'        => '2024' | '2021' | '2019' | '',
+ *      'edition'     => 'Professional Plus' | 'Home & Business' | 'Home & Student' | 'Word' | 'Excel' | '',
+ *      'edition_key' => 'pro_plus' | 'home_business' | 'home_student' | 'word' | 'excel' | '',
+ *      'platform'    => 'Windows' | 'Mac' | 'PC',
+ *    ]
+ * ----------------------------------------------------------------- */
+function office_edition_meta(array $p): array
+{
+    $name   = strtolower((string)($p['name'] ?? ''));
+    $isOfc  = (strpos($name, 'office') !== false
+              || strpos($name, 'microsoft word') !== false
+              || strpos($name, 'microsoft excel') !== false
+              || strpos($name, 'microsoft powerpoint') !== false
+              || strpos($name, 'microsoft outlook') !== false);
+    $year = '';
+    if (preg_match('/\b(2024|2021|2019|2016)\b/', $name, $m)) $year = $m[1];
+
+    $edition    = '';
+    $editionKey = '';
+    if (strpos($name, 'professional plus') !== false || strpos($name, 'pro plus') !== false) {
+        $edition = 'Professional Plus';   $editionKey = 'pro_plus';
+    } elseif (strpos($name, 'home & business') !== false || strpos($name, 'home and business') !== false) {
+        $edition = 'Home & Business';     $editionKey = 'home_business';
+    } elseif (strpos($name, 'home & student') !== false || strpos($name, 'home and student') !== false) {
+        $edition = 'Home & Student';      $editionKey = 'home_student';
+    } elseif (strpos($name, 'home 2024') !== false || strpos($name, 'office home') !== false) {
+        $edition = 'Home';                $editionKey = 'home';
+    } elseif (strpos($name, 'word') !== false && strpos($name, 'office') === false) {
+        $edition = 'Word';                $editionKey = 'word';
+    } elseif (strpos($name, 'excel') !== false && strpos($name, 'office') === false) {
+        $edition = 'Excel';               $editionKey = 'excel';
+    } elseif (strpos($name, 'powerpoint') !== false && strpos($name, 'office') === false) {
+        $edition = 'PowerPoint';          $editionKey = 'powerpoint';
+    } elseif (strpos($name, 'outlook') !== false && strpos($name, 'office') === false) {
+        $edition = 'Outlook';             $editionKey = 'outlook';
+    }
+
+    $platform = ($p['platform'] ?? '') ?: 'Windows';
+    return [
+        'is_office'   => $isOfc,
+        'year'        => $year,
+        'edition'     => $edition,
+        'edition_key' => $editionKey,
+        'platform'    => $platform,
+    ];
+}
+
+/* ------------------------------------------------------------------
+ *  office_intent_keywords()
+ *  Curated high-intent / transactional Microsoft Office keyword
+ *  library — broad match, phrase match and exact match clusters.
+ *
+ *  These keywords are appended to product_long_tail_keywords() and
+ *  category_long_tail_keywords() whenever a Microsoft Office product
+ *  or category is detected, ensuring meta keywords, JSON-LD `keywords`
+ *  and AI-Article schemas all surface the high-converting intent.
+ *
+ *  Returns a flat de-duplicated array of phrases.  The caller decides
+ *  whether to comma-join (meta keywords) or pipe-join (schema).
+ * ----------------------------------------------------------------- */
+function office_intent_keywords(array $meta): array
+{
+    if (empty($meta['is_office'])) return [];
+
+    $year = $meta['year'] ?? '';
+    $ed   = $meta['edition'] ?? '';
+
+    // Universal Microsoft Office high-intent / transactional cluster.
+    $universal = [
+        // Broad / commercial intent
+        'buy Microsoft Office lifetime license',
+        'cheap Microsoft Office product key',
+        'download Office Professional Plus legal copy',
+        'Microsoft Office digital download instant delivery',
+        'original Microsoft Office activation key',
+        'Office for Windows PC full version',
+        'Microsoft Office one time purchase',
+        // Problem-solving / search intent
+        'Microsoft Office without monthly subscription',
+        'Office 2024 vs Office 2021 differences',
+        'best place to buy Microsoft Office keys',
+        'full version Office for Windows 11',
+        'lifetime MS Office license for business',
+    ];
+
+    // Year-specific clusters
+    $yearLib = [
+        '2024' => [
+            // Broad match
+            'Microsoft Office 2024 Professional Plus Windows PC',
+            'buy Office Home 2024 PC license',
+            'Microsoft Office Home Business 2024 key Windows',
+            // Phrase match
+            'Microsoft Office 2024 Professional Plus product key',
+            'buy Office 2024 lifetime license Windows',
+            'Microsoft Office Home 2024 PC download',
+            'Office Home and Business 2024 key',
+            'latest Microsoft Office 2024 for Windows',
+            'purchase Office 2024 Pro Plus genuine code',
+            // Exact match
+            'Microsoft Office 2024 Professional Plus',
+            'Office 2024 Professional Plus lifetime license',
+            'Microsoft Office Home 2024',
+            'Microsoft Office Home & Business 2024',
+            'Office 2024 product key',
+            'Microsoft Office 2024 Professional Plus lifetime license Windows PC',
+            'Microsoft Office Home 2024 (PC)',
+            'Microsoft Office Home & Business 2024 (PC)',
+            'buy Office 2024 lifetime license Windows PC',
+        ],
+        '2021' => [
+            // Broad match
+            'Microsoft Office 2021 Professional Plus download',
+            'Office 2021 Home and Business Windows PC',
+            'Microsoft Office 2021 Home and Student key',
+            'standalone Microsoft Word 2021 product key',
+            'standalone Microsoft Excel 2021 genuine license',
+            'cheap Office 2021 license key PC',
+            // Phrase match
+            'Office 2021 Professional Plus Windows product key',
+            'Microsoft Office 2021 Home Business download PC',
+            'Microsoft Office 2021 Home Student Windows license',
+            // Exact match
+            'Microsoft Office 2021 Professional Plus',
+            'Microsoft Office 2021 Home & Business',
+            'Microsoft Office 2021 Home & Student',
+            'Microsoft Word 2021',
+            'Microsoft Excel 2021',
+            'Microsoft Office 2021 Professional Plus (Windows)',
+            'Microsoft Office 2021 Home & Business (Windows)',
+            'Microsoft Office 2021 Home & Student (Windows)',
+            'Microsoft Word 2021 (Windows)',
+            'Microsoft Excel 2021 (Windows)',
+        ],
+        '2019' => [
+            // Broad match
+            'Microsoft Office 2019 Professional Plus lifetime',
+            'Office 2019 Home and Student PC purchase',
+            'Microsoft Office 2019 Home and Business download',
+            'Office 2019 retail key for Windows',
+            'cheap Microsoft Office 2019 activation code',
+            // Phrase match
+            'cheap Office 2019 Professional Plus Windows license',
+            'Microsoft Office 2019 Home Student PC download',
+            'Office 2019 Home Business key Windows PC',
+            // Exact match
+            'Microsoft Office 2019 Professional Plus',
+            'Microsoft Office 2019 Home & Student',
+            'Microsoft Office 2019 Home & Business PC',
+            'Office 2019 product key Windows',
+            'Microsoft Office 2019 Professional Plus (Windows)',
+            'Microsoft Office 2019 Home & Student (Windows)',
+            'Microsoft Office 2019 Home & Business (PC)',
+            'buy Microsoft Office 2019 Professional Plus',
+        ],
+    ];
+
+    $out = $universal;
+    if ($year !== '' && isset($yearLib[$year])) {
+        $out = array_merge($out, $yearLib[$year]);
+    } else {
+        // No year detected: include the highest-volume 2024 + 2021 keys so
+        // generic "Microsoft Office" products still benefit.
+        $out = array_merge($out, $yearLib['2024'], $yearLib['2021']);
+    }
+
+    // Edition-specific tail variants (helps standalone Word/Excel SKUs too).
+    if ($ed !== '' && $year !== '') {
+        $out[] = 'Microsoft ' . $ed . ' ' . $year . ' lifetime license';
+        $out[] = 'buy Microsoft ' . $ed . ' ' . $year . ' product key';
+        $out[] = 'Microsoft ' . $ed . ' ' . $year . ' digital download';
+    }
+
+    return array_values(array_unique(array_filter($out)));
 }
 
 /* ------------------------------------------------------------------
@@ -133,6 +327,35 @@ function product_seo_copy(array $p): string
     $h .= '<p class="text-secondary mb-0">' . esc(SITE_BRAND) . ' partners directly with authorised channels, which is how we can sell ' . $name . ' for ' . esc($price) . ' &mdash; up to 81% below the manufacturer&rsquo;s retail price. ';
     $h .= 'Every key is verified pre-dispatch, every payment is encrypted, and every order is protected by our 30-day money-back guarantee. ';
     $h .= 'Compare us with any other reseller on price, delivery speed and support quality &mdash; we are confident you will buy here.</p>';
+
+    // Microsoft Office intent block — only renders for Office products.
+    // Naturally weaves the highest-volume transactional phrases (lifetime
+    // license, product key, instant delivery, one-time purchase, no
+    // subscription) into a paragraph crawlers and AI models can quote.
+    $officeMeta = office_edition_meta($p);
+    if (!empty($officeMeta['is_office'])) {
+        $year = $officeMeta['year'] ?: '';
+        $ed   = $officeMeta['edition'] ?: '';
+        $yearTxt = $year !== '' ? ('Office ' . esc($year)) : 'Microsoft Office';
+        $edTxt   = $ed !== ''   ? (' ' . esc($ed)) : '';
+
+        $h .= '<h3 class="fw-bold h5 mt-5 mb-2">' . $yearTxt . $edTxt . ' &mdash; lifetime license, product key &amp; instant download</h3>';
+        $h .= '<p class="text-secondary mb-3">Searching for a <strong>' . $yearTxt . $edTxt . ' product key</strong>, a <strong>lifetime license</strong> or a <strong>genuine activation code</strong> for your ' . $platform . ' PC? This is the right listing. ';
+        $h .= 'Pay once, no monthly subscription, no recurring fees &mdash; just a <strong>one-time purchase</strong> of ' . $name . ' delivered as a digital download by email in 15&ndash;30 minutes. ';
+        $h .= 'The key activates the official ' . esc($brand) . ' installer downloaded directly from Microsoft, so you get the <strong>full version of ' . $yearTxt . $edTxt . '</strong> with every Word, Excel, PowerPoint and Outlook update included for the life of the licence.</p>';
+
+        if ($year === '2024') {
+            $h .= '<p class="text-secondary mb-3"><strong>Why Office 2024?</strong> The newest perpetual release of Microsoft Office for Windows 11 and Windows 10 PCs &mdash; faster start-up, refreshed ribbon, native ARM64 support and the latest Word, Excel and PowerPoint features. Best buy for shoppers asking "<em>Microsoft Office 2024 Professional Plus product key</em>", "<em>buy Office 2024 lifetime license Windows</em>" or "<em>latest Microsoft Office 2024 for Windows</em>".</p>';
+        } elseif ($year === '2021') {
+            $h .= '<p class="text-secondary mb-3"><strong>Why Office 2021?</strong> Still the value champion in 2026 &mdash; same core apps as the cloud subscription, but a true <em>one-time purchase</em>. Perfect for shoppers searching "<em>Microsoft Office 2021 Professional Plus download</em>", "<em>Office 2021 Home and Business Windows PC</em>" or "<em>standalone Microsoft Word 2021 product key</em>".</p>';
+        } elseif ($year === '2019') {
+            $h .= '<p class="text-secondary mb-3"><strong>Why Office 2019?</strong> The most affordable genuine Office release for older PCs and tight budgets. Activates on Windows 11, Windows 10 and Windows 7. Matches intent for "<em>Microsoft Office 2019 Professional Plus lifetime</em>", "<em>Office 2019 retail key for Windows</em>" or "<em>cheap Microsoft Office 2019 activation code</em>".</p>';
+        }
+
+        $h .= '<h3 class="fw-bold h5 mt-4 mb-2">Office without a monthly subscription &mdash; how it works</h3>';
+        $h .= '<p class="text-secondary mb-3">Unlike Microsoft 365, ' . $name . ' is a <strong>perpetual licence</strong>. There is no annual renewal, no subscription auto-charge and no &ldquo;cloud account&rdquo; that locks you out the day you stop paying. Buy ' . $yearTxt . ' once at ' . esc($price) . ', activate inside the genuine ' . esc($brand) . ' installer on your ' . $platform . ' PC, and use Word, Excel, PowerPoint (and Outlook on Home &amp; Business and Professional Plus) for as long as you own the device.</p>';
+    }
+
     $h .= '</section>';
     return $h;
 }
@@ -396,6 +619,20 @@ function category_long_tail_keywords(string $title, string $platform = ''): stri
         $kw[] = $title . ' for ' . $platform;
         $kw[] = $title . ' for ' . $platform . ' download';
         $kw[] = $title . ' ' . $platform . ' license key';
+    }
+    // Microsoft Office high-intent keyword library — appended when the
+    // category title references Office (matches "Office 2024", "Office 2021",
+    // "Office 2019" or generic "Office") so the same broad/phrase/exact
+    // intent variants surface for both product AND category pages.
+    $titleLc = strtolower($title);
+    if (strpos($titleLc, 'office') !== false || strpos($titleLc, 'word ') !== false || strpos($titleLc, 'excel ') !== false) {
+        $year = '';
+        if (preg_match('/\b(2024|2021|2019)\b/', $titleLc, $ym)) $year = $ym[1];
+        $kw = array_merge($kw, office_intent_keywords([
+            'is_office' => true,
+            'year'      => $year,
+            'edition'   => '',
+        ]));
     }
     return implode(', ', array_values(array_unique(array_filter($kw))));
 }
