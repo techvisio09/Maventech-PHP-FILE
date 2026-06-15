@@ -196,7 +196,16 @@ include __DIR__ . '/includes/header.php';
           <span class="pd-360-ring" aria-hidden="true"></span>
           <span class="pd-360-podium" aria-hidden="true"></span>
           <div class="pd-360-stage">
-            <img src="<?= esc($product['image']) ?>" alt="<?= esc(product_img_alt($product)) ?>" title="<?= esc($product['name']) ?>" class="pd-360-img" draggable="false" data-testid="product-360-img" fetchpriority="high" decoding="async" width="640" height="640">
+            <img src="<?= esc($product['image']) ?>"
+                 alt="<?= esc(product_img_alt($product)) ?>"
+                 title="<?= esc($product['name']) ?>"
+                 class="pd-360-img"
+                 draggable="false"
+                 data-testid="product-360-img"
+                 fetchpriority="high"
+                 decoding="async"
+                 loading="eager"
+                 width="640" height="640">
           </div>
           <span class="pd-360-badge" data-testid="product-360-badge"><i class="bi bi-arrow-repeat me-1"></i>360° view · drag to spin</span>
         </div>

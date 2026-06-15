@@ -1051,7 +1051,7 @@ function render_product_card(array $p): string
       ' . $badge . $discount . '
       <a href="product.php?slug=' . esc($p['slug']) . '" class="text-decoration-none">
         <div class="ratio ratio-1x1 bg-body-tertiary rounded-top product-img-wrap">
-          <img src="' . esc($p['image']) . '" alt="' . esc(product_img_alt($p)) . '" title="' . esc($p['name']) . '" class="object-fit-contain p-3" loading="lazy">
+          <img src="' . esc($p['image']) . '" alt="' . esc(product_img_alt($p)) . '" title="' . esc($p['name']) . '" class="object-fit-contain p-3" loading="lazy" decoding="async" width="320" height="320">
         </div>
       </a>
       <div class="card-body d-flex flex-column">
