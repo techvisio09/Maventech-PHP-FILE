@@ -1667,3 +1667,40 @@ Pointing at the SEO/AI Auto-Blogger settings field labelled `AI Key (Emergent / 
   - **Daily tick**: CLI ran `seo_bot_weekly_sitemap_tick()` → submitted 45 URLs to IndexNow, `last_sitemap_submit_kind=auto_daily`.
 
 
+---
+
+## [Feb 2026] Iteration 34 — "Verify all" button + per-row live-verify pills
+
+### What the user asked
+"Yes" to: add a "Verify all" button next to the SEO Health Check title that runs Google + Bing live verifies in one click and updates each row's status in-place.
+
+### What changed (`admin.php`)
+
+**Shared `$runLiveVerify` closure**
+- Extracted the homepage-fetch + meta-tag-grep + token-compare logic out of the single-verify handler into a reusable closure.
+- Returns a structured result `['status' => 'ok|missing|mismatch|unreachable|empty', 'msg' => string]`.
+- Side effect: persists the verdict + timestamp in settings as `verify_status_<which>` = `'<status>|<YYYY-mm-dd HH:ii:ss>|<msg>'`.
+
+**Two handlers now share the closure**
+- `?verify_token=google|bing` (the per-card Verify button) — single-target, builds a chatty flash with the full message.
+- `?verify_all=1` (the new title-level button) — runs Google + Bing back-to-back, builds a concise flash: *"Live verify: ✓ Google: matches · ✓ Bing: matches"* (or the failure breakdown).
+
+**Health Check title gets a "Verify all" pill**
+- Cyan-outline rounded button next to the `X% — N/M ready` badge.
+- `event.stopPropagation()` on click so it doesn't toggle the `<details>` open/closed.
+
+**Per-row LIVE pill on token rows**
+- Each token-bearing health-check row now carries a `verify_kind` ('google' | 'bing') and reads the persisted `verify_status_*` to render one of four micro-pills next to the row name:
+  - `LIVE ✓` (mint, on match — tooltip shows when it was verified + the verdict message).
+  - `LIVE ✗` (red, on mismatch / missing meta / unreachable — tooltip shows what went wrong).
+  - `NO TOKEN` (amber, when no token is saved).
+  - `NEVER VERIFIED` (slate, default — admin hasn't run a verify yet).
+
+### Files touched
+- `/app/php-version/admin.php` (`$runLiveVerify` closure, `verify_token` handler refactor, new `verify_all` handler, Health Check check-list `verify_kind`/`verify` annotations, summary header "Verify all" button, per-row LIVE/NO-TOKEN/NEVER-VERIFIED pills).
+
+### Verification
+- `php -l` clean.
+- Playwright: visited `?verify_all=1` → green banner *"Live verify: ✓ Google: matches · ✓ Bing: matches"*; expanded Health Check → both Google Search Console and Bing & AI Search rows now carry a mint `LIVE ✓` pill (with tooltip showing the verdict + timestamp); 100% — 11/11 ready badge unchanged.
+
+

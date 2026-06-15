@@ -1292,20 +1292,31 @@ if ($tab === 'ai-blogger') {
     // confirming the meta-tag actually rendered with the saved value.
     // This catches typo'd tokens that LOOK well-formatted but aren't the
     // ones Google / Bing have on record. -----
-    if (!empty($_GET['verify_token'])) {
-        $which = (string)$_GET['verify_token'];
+
+    /**
+     * Live-verify one token by fetching the homepage and checking that the
+     * verification meta-tag actually rendered with the saved value.
+     * Returns ['status' => 'ok|missing|mismatch|unreachable|empty', 'msg' => string].
+     * Side effect: stores the verdict + timestamp in settings under
+     *   verify_status_<which>  =  '<status>|<YYYY-mm-dd HH:ii:ss>|<msg>'
+     * so the SEO Health Check rows can render the live state inline.
+     */
+    $runLiveVerify = function (string $which) : array {
         $saved = $which === 'bing'
             ? (string)setting_get('bing_site_verification_token', '')
             : (string)setting_get('google_site_verification_token', '');
         $metaName = $which === 'bing' ? 'msvalidate.01' : 'google-site-verification';
         $label    = $which === 'bing' ? 'Bing Webmaster' : 'Google Search Console';
 
-        if ($saved === '') {
-            $_SESSION['seo_bot_flash'] = '⚠ No ' . $label . ' token is saved — paste your token and click Save first.';
-            $_SESSION['seo_bot_flash_kind'] = 'warning';
-            header('Location: admin.php?tab=ai-blogger'); exit;
-        }
+        $verdict = function (string $status, string $msg) use ($which) : array {
+            // Persist the verdict so the next page-load shows the live state.
+            setting_set('verify_status_' . $which, $status . '|' . date('Y-m-d H:i:s') . '|' . $msg);
+            return ['status' => $status, 'msg' => $msg];
+        };
 
+        if ($saved === '') {
+            return $verdict('empty', 'No ' . $label . ' token is saved.');
+        }
         $base = trim((string)setting_get('site_domain_url', '')) ?: ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https://' : 'http://') . $_SERVER['HTTP_HOST']);
         $base = rtrim($base, '/');
 
@@ -1322,32 +1333,58 @@ if ($tab === 'ai-blogger') {
         curl_close($ch);
 
         if ($httpCode !== 200 || $html === '') {
-            $_SESSION['seo_bot_flash'] = '⚠ Couldn\'t reach ' . esc($base) . ' to verify (' . ($curlErr ?: 'HTTP ' . $httpCode) . '). Check the Website Domain field above and try again.';
-            $_SESSION['seo_bot_flash_kind'] = 'danger';
-            header('Location: admin.php?tab=ai-blogger'); exit;
+            return $verdict('unreachable', 'Could not reach ' . $base . ' (' . ($curlErr ?: 'HTTP ' . $httpCode) . ').');
         }
 
-        // Hunt for the meta tag in the served HTML.  Be flexible about
-        // attribute order and quote style — accept both single and double quotes.
         $foundContent = '';
         if (preg_match('~<meta\s+[^>]*name\s*=\s*["\']' . preg_quote($metaName, '~') . '["\'][^>]*content\s*=\s*["\']([^"\']+)["\']~i', $html, $m)) {
             $foundContent = $m[1];
         } elseif (preg_match('~<meta\s+[^>]*content\s*=\s*["\']([^"\']+)["\'][^>]*name\s*=\s*["\']' . preg_quote($metaName, '~') . '["\']~i', $html, $m)) {
             $foundContent = $m[1];
         }
-
         if ($foundContent === '') {
-            $_SESSION['seo_bot_flash'] = '✗ ' . $label . ' meta tag was NOT found on ' . esc($base) . '. Save the token, then click Verify again. The page must render a <code>&lt;meta name="' . esc($metaName) . '"&gt;</code> tag.';
-            $_SESSION['seo_bot_flash_kind'] = 'danger';
-        } elseif (trim($foundContent) !== trim($saved)) {
-            $_SESSION['seo_bot_flash'] = '✗ ' . $label . ' meta tag is present but its content does not match the saved token. Found "' . esc(substr($foundContent, 0, 12) . '…') . '" expected "' . esc(substr($saved, 0, 12) . '…') . '". Try clearing the cache / hard refresh, then click Verify again.';
-            $_SESSION['seo_bot_flash_kind'] = 'danger';
-        } else {
-            setting_set('verify_status_' . $which, 'ok|' . date('Y-m-d H:i:s'));
-            $_SESSION['seo_bot_flash'] = '✓ ' . $label . ' token verified live — the meta tag matches the saved value on ' . esc($base) . '. Search engines will be able to confirm site ownership.';
-            $_SESSION['seo_bot_flash_kind'] = 'success';
+            return $verdict('missing', $label . ' meta tag not rendered on the home page.');
         }
-        header('Location: admin.php?tab=ai-blogger'); exit;
+        if (trim($foundContent) !== trim($saved)) {
+            return $verdict('mismatch', $label . ' meta content does not match the saved token (found "' . substr($foundContent, 0, 12) . '…", expected "' . substr($saved, 0, 12) . '…").');
+        }
+        return $verdict('ok', $label . ' meta tag matches the saved value.');
+    };
+
+    // Single-target verify (button on the card).
+    if (!empty($_GET['verify_token'])) {
+        $which = (string)$_GET['verify_token'];
+        if (!in_array($which, ['google', 'bing'], true)) {
+            header('Location: admin.php?tab=ai-blogger'); exit;
+        }
+        $res = $runLiveVerify($which);
+        $kind = $res['status'] === 'ok' ? 'success' : ($res['status'] === 'empty' ? 'warning' : 'danger');
+        $base = trim((string)setting_get('site_domain_url', '')) ?: ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https://' : 'http://') . $_SERVER['HTTP_HOST']);
+        $label = $which === 'bing' ? 'Bing Webmaster' : 'Google Search Console';
+        $_SESSION['seo_bot_flash'] = ($res['status'] === 'ok' ? '✓ ' : '✗ ')
+            . $label . ' — ' . $res['msg']
+            . ($res['status'] === 'ok' ? ' on ' . rtrim($base, '/') . '.' : '');
+        $_SESSION['seo_bot_flash_kind'] = $kind;
+        header('Location: admin.php?tab=ai-blogger#health-check-section'); exit;
+    }
+
+    // Bulk verify (button next to the Health Check title).
+    if (!empty($_GET['verify_all'])) {
+        $gscRes  = $runLiveVerify('google');
+        $bingRes = $runLiveVerify('bing');
+        $okCount = (int)($gscRes['status'] === 'ok') + (int)($bingRes['status'] === 'ok');
+        $totals  = ($gscRes['status'] !== 'empty' ? 1 : 0) + ($bingRes['status'] !== 'empty' ? 1 : 0);
+        if ($totals === 0) {
+            $_SESSION['seo_bot_flash'] = '⚠ No tokens saved — paste your Google Search Console and Bing tokens above, then Verify all again.';
+            $_SESSION['seo_bot_flash_kind'] = 'warning';
+        } else {
+            $bits = [];
+            $bits[] = ($gscRes['status'] === 'ok'    ? '✓ Google: matches'    : ($gscRes['status'] === 'empty'  ? 'Google: no token saved'  : '✗ Google: ' . $gscRes['msg']));
+            $bits[] = ($bingRes['status'] === 'ok'   ? '✓ Bing: matches'      : ($bingRes['status'] === 'empty' ? 'Bing: no token saved'    : '✗ Bing: ' . $bingRes['msg']));
+            $_SESSION['seo_bot_flash']      = 'Live verify: ' . implode(' &middot; ', $bits);
+            $_SESSION['seo_bot_flash_kind'] = $okCount === $totals ? 'success' : 'danger';
+        }
+        header('Location: admin.php?tab=ai-blogger#health-check-section'); exit;
     }
 
     if (!empty($_GET['autogen_topic_hubs'])) {
@@ -4613,10 +4650,26 @@ https://youtu.be/YYYYY"><?php
                         ? 'A key is saved but the format looks invalid. Go to <strong>API Keys & Settings → AI Key → Change</strong> and paste a key starting with <code>sk-emergent-</code> or <code>sk-</code>.'
                         : 'No AI key set. Go to API Keys above and add your key.')];
 
+    // Read the persisted live-verify verdicts so each token row in the
+    // health check can show its real state (matches / mismatch / missing /
+    // never run).  Format: 'status|YYYY-mm-dd HH:ii:ss|msg'.
+    $parseVerifyStatus = function (string $raw) : array {
+        $parts = explode('|', $raw, 3);
+        return [
+            'status' => $parts[0] ?? '',
+            'ts'     => $parts[1] ?? '',
+            'msg'    => $parts[2] ?? '',
+        ];
+    };
+    $gscLiveVerify  = $parseVerifyStatus((string)setting_get('verify_status_google', ''));
+    $bingLiveVerify = $parseVerifyStatus((string)setting_get('verify_status_bing', ''));
+
     // 2. Google Search Console — validate token format too.
     $gscOk = $hcValidGsc((string)($seoGsc ?? ''));
     $gscHasButBad = (($seoGsc ?? '') !== '' && !$gscOk);
     $checks[] = ['name' => 'Google Search Console', 'ok' => $gscOk, 'icon' => 'bi-google', 'color' => '#ea4335',
+                 'verify_kind' => 'google',
+                 'verify' => $gscLiveVerify,
                  'desc' => $gscOk
                     ? 'Verification token is set. Google can index your pages.'
                     : ($gscHasButBad
@@ -4627,6 +4680,8 @@ https://youtu.be/YYYYY"><?php
     $bingOk = $hcValidBing((string)($seoBing ?? ''));
     $bingHasButBad = (($seoBing ?? '') !== '' && !$bingOk);
     $checks[] = ['name' => 'Bing & AI Search', 'ok' => $bingOk, 'icon' => 'bi-microsoft', 'color' => '#00a4ef',
+                 'verify_kind' => 'bing',
+                 'verify' => $bingLiveVerify,
                  'desc' => $bingOk
                     ? 'Bing token set. Your site will appear in Bing, Copilot & ChatGPT search.'
                     : ($bingHasButBad
@@ -4683,12 +4738,38 @@ https://youtu.be/YYYYY"><?php
     <summary>
       <i class="bi bi-shield-check" style="color:<?= $healthColor ?>;"></i> Go-Live SEO Health Check
       <span class="ai-badge" style="background:<?= $healthPct >= 80 ? '#d1fae5' : '#fef3c7' ?>;color:<?= $healthPct >= 80 ? '#065f46' : '#92400e' ?>;"><?= $healthPct ?>% — <?= $passCount ?>/<?= $totalChecks ?> ready</span>
+      <a href="admin.php?tab=ai-blogger&verify_all=1#health-check-section"
+         class="btn btn-sm btn-outline-primary rounded-pill ms-2"
+         data-testid="verify-all-btn"
+         title="Live-verify both Google and Bing tokens by fetching the home page and comparing the meta tags"
+         onclick="event.stopPropagation();"
+         style="font-size:11px;padding:3px 12px;">
+        <i class="bi bi-shield-check me-1"></i>Verify all
+      </a>
     </summary>
     <div class="ai-body">
     <p class="text-secondary small mb-3">Covers <strong>SEO</strong> (Google/Bing), <strong>AEO</strong> (ChatGPT, Perplexity, Claude), and <strong>GEO</strong> (AI-powered search). All green = maximum reach.</p>
 
     <div class="row g-2">
-      <?php foreach ($checks as $ch): ?>
+      <?php foreach ($checks as $ch):
+        $hasVerify = !empty($ch['verify_kind']);
+        $v = $ch['verify'] ?? null;
+        // Translate the persisted verify verdict into a tiny pill displayed
+        // next to the row's name — so admins can see at a glance whether the
+        // last live-check matched, mismatched, or has never been run.
+        $vPill = null;
+        if ($hasVerify) {
+          if (!is_array($v) || empty($v['status'])) {
+            $vPill = ['label'=>'NEVER VERIFIED','bg'=>'#e2e8f0','fg'=>'#475569','title'=>'Click "Verify all" or the Verify button on the card above to run a live check.'];
+          } elseif ($v['status'] === 'ok') {
+            $vPill = ['label'=>'LIVE ✓','bg'=>'#10b981','fg'=>'#fff','title'=>'Live-verified on ' . $v['ts'] . ' — ' . $v['msg']];
+          } elseif ($v['status'] === 'empty') {
+            $vPill = ['label'=>'NO TOKEN','bg'=>'#fde68a','fg'=>'#92400e','title'=>$v['msg']];
+          } else { // missing, mismatch, unreachable
+            $vPill = ['label'=>'LIVE ✗','bg'=>'#ef4444','fg'=>'#fff','title'=>$v['msg'] . ' (' . $v['ts'] . ')'];
+          }
+        }
+      ?>
         <div class="col-md-6">
           <div class="d-flex align-items-start gap-2 p-2" style="background:<?= $ch['ok'] ? '#f0fdf4' : '#fef2f2' ?>;border-radius:8px;border:1px solid <?= $ch['ok'] ? '#bbf7d0' : '#fecaca' ?>;">
             <div style="flex-shrink:0;width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:<?= $ch['ok'] ? '#dcfce7' : '#fee2e2' ?>;color:<?= $ch['ok'] ? '#15803d' : '#dc2626' ?>;">
@@ -4698,9 +4779,16 @@ https://youtu.be/YYYYY"><?php
                 <i class="bi bi-x-lg" style="font-size:12px;"></i>
               <?php endif; ?>
             </div>
-            <div style="min-width:0;">
-              <div class="fw-semibold" style="font-size:12.5px;color:#0f172a;">
-                <i class="<?= $ch['icon'] ?> me-1" style="color:<?= $ch['color'] ?>;"></i><?= $ch['name'] ?>
+            <div style="min-width:0;flex:1;">
+              <div class="fw-semibold d-flex align-items-center flex-wrap gap-1" style="font-size:12.5px;color:#0f172a;">
+                <span><i class="<?= $ch['icon'] ?> me-1" style="color:<?= $ch['color'] ?>;"></i><?= $ch['name'] ?></span>
+                <?php if ($vPill): ?>
+                  <span class="ms-1" data-testid="verify-pill-<?= esc($ch['verify_kind']) ?>"
+                        style="background:<?= esc($vPill['bg']) ?>;color:<?= esc($vPill['fg']) ?>;font-size:8.5px;font-weight:700;letter-spacing:.7px;padding:2px 6px;border-radius:999px;"
+                        title="<?= esc($vPill['title']) ?>">
+                    <?= esc($vPill['label']) ?>
+                  </span>
+                <?php endif; ?>
               </div>
               <div class="text-secondary" style="font-size:11px;line-height:1.4;"><?= $ch['desc'] ?></div>
             </div>
