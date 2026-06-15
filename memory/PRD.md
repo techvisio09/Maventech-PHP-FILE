@@ -892,3 +892,47 @@ Also surfaced a **"{brand} profile →"** chip on each admin Product card (data-
 - `/app/php-version/includes/admin-shell.php` — `.kpi-spark` CSS (block display, 42 px height, 34 px on mobile) so the canvas slots cleanly inside the tile.
 - `/app/backend/tests/test_iteration9_dashboard_dark_mode.py` — added `test_category_page_order_quick_answer_then_intro_below_products`, `test_dashboard_revenue_sparkline_renders`, `test_dashboard_chartjs_loaded_unconditionally_on_dashboard`.
 
+
+## [Feb 2026] Iteration 11+12 — Dark-mode polish for badges + icons, Flatpickr calendar everywhere
+
+### What shipped (331/331 pytest pass ✅)
+- 🌙 **Admin dark-mode pill / icon fixes** — the "License delivery" pill, "License Key" chips, `.ec-tpl-chip`, `.ec-meta` clock + tag icons, `.ec-k` recipient / delivered labels (and their icons) were nearly invisible in dark mode because `--blue-soft` (#1e40af) and `--brand-dk` (#1d4ed8) are *both* dark blues.  Added explicit overrides: pills get a `rgba(59,130,246,.18)` background with `#bfdbfe` text + soft blue border; icons inside `.ec-k`/`.ec-meta` brightened to `#93c5fd`/`#94a3b8`; bordered `.ec-field` line gets a subtle slate divider.
+- 🎨 **Inline-style status badge dark-mode overrides** — Published / Hidden / Pending pills across the admin (and review-status fields, lead-status fields, etc.) used hardcoded light backgrounds (`#d1fae5`, `#fef3c7`, `#fee2e2`, `#dbeafe`, `#ede9fe`, `#cffafe`, `#fce7f3`).  Each now has a matching translucent dark-mode tint + light text via `[data-bs-theme="dark"] .badge.rounded-pill[style*="#X"]` attribute selectors.
+- 🎨 **Public hub badges** — `.badge.text-bg-light` (24 products / 12 guides / 9 answers / Updated stats) + inline `#f1f5f9` background related-topic chips now render dark in dark mode with light text + brightened icon hue.
+- 🎨 **Bootstrap text-utility brightening** — `.text-primary`, `.text-info`, `.text-success`, `.text-warning`, `.text-danger`, `.text-secondary` brightened in dark mode so inline icons (`<i class="bi bi-star-fill text-warning">`) remain visible.
+- 📅 **Flatpickr calendar everywhere** — every `<input type="date">` and `<input type="datetime-local">` in the admin is now auto-enhanced with Flatpickr.  Features: calendar grid, 24-h time picker, "Today" highlighted, range pairing (selecting Starts at sets the Ends at minDate), dark-mode theme that matches the rest of the admin, mobile-friendly (`disableMobile: true`), and dynamic — newly-inserted inputs (modals, drawers) are picked up by a MutationObserver.  Original inputs are kept as `type=hidden` so existing form POSTs receive the same ISO format.
+- 🐛 **Sales-by-Category SQL fix** — corrected the column names from `oi.unit_price`/`oi.quantity` to `oi.price`/`oi.qty` matching the actual `order_items` schema.
+
+### Files touched (iteration 11 + 12)
+- `/app/php-version/includes/admin-shell.php` — `.ec-tpl-chip`, `.ec-key`, `.ec-meta`, `.ec-k`, status-badge `[style*=]` overrides, Flatpickr dark-mode polish (~80 lines).
+- `/app/php-version/includes/admin-shell-end.php` — Flatpickr CSS+JS CDN, auto-enhancement script with range-pairing logic + MutationObserver.
+- `/app/php-version/assets/css/dark-mode-polish.css` — hub `.badge.text-bg-light`, inline `#f1f5f9`/`#fff` badge anchor overrides.
+- `/app/backend/tests/test_iteration11_dark_mode_pills.py` — 2 tests.
+- `/app/backend/tests/test_iteration12_flatpickr.py` — 3 tests.
+
+### Visually verified in dark mode
+- Email Activity card pills + icons readable ✅
+- Hub page stats badges + related topic chips readable ✅
+- Brand Vibe Schedule date pickers open a full calendar with time picker ✅
+- Dashboard vh_from / vh_to / vrange-from / vrange-to all enhanced (4 inputs) ✅
+
+
+## [Feb 2026] Iteration 13 — Brand-Vibe Schedule Label + Promo Logo broadcast everywhere
+
+### What shipped (337/337 pytest pass ✅)
+- 🏷️ **`vibe_schedule.logo_path`** — new column (idempotent ALTER) to store an admin-uploaded promo logo per scheduled label.
+- 📤 **Admin form upload** — Schedule a Brand Vibe switch now has a `<input type="file" name="logo_file">` (PNG / JPG / WebP / GIF / SVG, ≤ 2 MB).  Uploaded files are saved under `/uploads/vibe-promos/promo-YYYYMMDD-HHMMSS-XXXXXX.ext` with a random suffix.  `enctype="multipart/form-data"` added to the form.
+- 🎯 **`active_vibe_promo()` helper** — single source of truth.  Returns the currently-live entry with absolute `logo_url` (for HTML email + cart) and `logo_file` (for Dompdf invoices).  Cached per-request so calling it on every page is free.
+- 🛒 **Cart banner** — `render_vibe_promo_banner('cart')` renders a red gradient bar at the very top of `cart.php` with the label (e.g. **"BLACK FRIDAY SALE"**), uploaded logo (or a ★ fallback) and the schedule's `Ends MMM dd · HH:mm` time.
+- ✉️ **Transactional emails** — `email_promo_banner_html()` builds an email-safe inline-table banner (Gmail / Outlook / Apple Mail compatible).  Added `{{promo_banner}}` placeholder to both `build_order_email_html()` (order delivery) and `render_template()` (review request, refund, lead follow-up, order confirmation, order pending …).  If a template doesn't include the placeholder, `inject_promo_banner()` automatically inserts the banner right after `<body...>` — every transactional email gets the promo at the top without any admin editing.
+- 🧾 **Invoice + Receipt PDFs** — `_pdf_shell()` now renders `$promoBarHtml` (red bar with the label + optional embedded logo image) at the very top of every page.  Verified via `pdftotext` extraction: the label shows up as the first line of the PDF body before the "Thank you" greeting.
+- 🧪 **Test coverage** — new file `test_iteration13_vibe_promo.py` (6 tests): column exists, cart banner renders, order email banner present, invoice PDF contains the label, file upload accepted + persisted to disk, admin form has correct `enctype` + file input.
+
+### Files touched
+- `/app/php-version/includes/functions.php` — `vibe_schedule.logo_path` schema + `active_vibe_promo()` + `render_vibe_promo_banner()`.
+- `/app/php-version/includes/email.php` — `email_promo_banner_html()`, `inject_promo_banner()`, `{{promo_banner}}` placeholder in `render_template()` + `build_order_email_html()`.
+- `/app/php-version/includes/pdf.php` — promo bar rendered in `_pdf_shell()` for invoice + receipt PDFs.
+- `/app/php-version/admin.php` — file upload handling + form `enctype` + new "Promo Logo" column + list view shows the uploaded logo.
+- `/app/php-version/cart.php` — promo banner at the top.
+- `/app/backend/tests/test_iteration13_vibe_promo.py` — NEW 6 regression tests.
+

@@ -205,11 +205,14 @@ function ensure_db_schema(): void
             starts_at   DATETIME NOT NULL,
             ends_at     DATETIME NULL DEFAULT NULL,
             label       VARCHAR(120) NOT NULL DEFAULT '',
+            logo_path   VARCHAR(255) NOT NULL DEFAULT '',
             applied_at  DATETIME NULL DEFAULT NULL,
             created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             KEY idx_starts (starts_at),
             KEY idx_ends (ends_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        // Idempotent add of `logo_path` for installs that pre-date the column.
+        try { $pdo->exec("ALTER TABLE vibe_schedule ADD COLUMN logo_path VARCHAR(255) NOT NULL DEFAULT '' AFTER label"); } catch (Throwable $e) {}
 
         // Brand-vibe history — append-only log of every vibe switch (manual
         // or scheduled).  Powers the "Vibe Performance" dashboard widget
@@ -600,6 +603,80 @@ function apply_vibe_schedule(): void
                 ->execute([$row['id']]);
         }
     } catch (Throwable $e) { /* table missing on a fresh install — ignore */ }
+}
+
+/**
+ * Returns the currently-active vibe schedule entry (if any) so the cart,
+ * invoice PDFs, email templates and storefront banner can show its label
+ * + optional logo (e.g. "BLACK FRIDAY SALE" with a promo logo).
+ *
+ * Cached per-request because every page render touches this.
+ *
+ * @return array|null  ['id', 'vibe', 'label', 'logo_path', 'logo_url',
+ *                       'starts_at', 'ends_at'] or null when no promo active.
+ */
+function active_vibe_promo(): ?array
+{
+    static $cache = null;
+    static $ran = false;
+    if ($ran) return $cache;
+    $ran = true;
+    try {
+        $row = db()->query(
+            "SELECT id, vibe, label, logo_path, starts_at, ends_at
+               FROM vibe_schedule
+              WHERE starts_at <= NOW() AND (ends_at IS NULL OR ends_at >= NOW())
+                AND label <> ''
+              ORDER BY starts_at DESC, id DESC LIMIT 1"
+        )->fetch();
+    } catch (Throwable $e) { return null; }
+    if (!$row || trim((string)$row['label']) === '') return null;
+    $row['logo_url'] = '';
+    if (!empty($row['logo_path'])) {
+        // logo_path is stored as a relative path like "uploads/vibe-promos/X.png".
+        // Build a site-rooted URL for HTML email + cart, and an absolute path
+        // for Dompdf which doesn't follow same-origin URLs reliably.
+        $rel = ltrim((string)$row['logo_path'], '/');
+        $row['logo_url']  = rtrim(site_url(), '/') . '/' . $rel;
+        $row['logo_file'] = __DIR__ . '/../' . $rel;
+    } else {
+        $row['logo_file'] = '';
+    }
+    $cache = $row;
+    return $cache;
+}
+
+/**
+ * Tiny HTML snippet that renders the active vibe-schedule promo banner.
+ * Safe to call on every page — returns '' when no promo is live.
+ */
+function render_vibe_promo_banner(string $variant = 'cart'): string
+{
+    $p = active_vibe_promo();
+    if (!$p) return '';
+    $label = htmlspecialchars((string)$p['label'], ENT_QUOTES, 'UTF-8');
+    $logo  = (string)$p['logo_url'];
+    $logoTag = $logo !== ''
+        ? '<img src="' . htmlspecialchars($logo, ENT_QUOTES, 'UTF-8') . '" alt="' . $label . '" class="vp-logo" style="height:34px;width:auto;object-fit:contain;background:#fff;border-radius:8px;padding:4px 8px;">'
+        : '<span class="vp-icon" aria-hidden="true" style="display:inline-block;width:34px;height:34px;border-radius:50%;background:#fff;color:#dc2626;font-size:18px;font-weight:900;text-align:center;line-height:34px;">★</span>';
+    $endsAt = trim((string)($p['ends_at'] ?? ''));
+    $endsLine = $endsAt !== ''
+        ? '<span class="vp-ends" style="font-size:11px;opacity:.85;margin-left:10px;letter-spacing:.4px;">Ends ' . htmlspecialchars(date('M j · H:i', strtotime($endsAt)), ENT_QUOTES, 'UTF-8') . '</span>'
+        : '';
+    // Variant-specific styling.  `cart` = full bar on top of the cart;
+    // `inline` = compact pill for use inside email html / invoice header.
+    if ($variant === 'inline') {
+        return '<div class="vibe-promo-inline" data-testid="vibe-promo-inline" style="display:inline-flex;align-items:center;gap:10px;background:#dc2626;color:#fff;padding:8px 14px;border-radius:999px;font-weight:700;font-size:13px;letter-spacing:.3px;">'
+             . $logoTag
+             . '<span>' . $label . '</span>'
+             . $endsLine
+             . '</div>';
+    }
+    return '<div class="vibe-promo-banner" data-testid="vibe-promo-banner" style="display:flex;align-items:center;justify-content:center;gap:14px;background:linear-gradient(120deg,#dc2626,#b91c1c);color:#fff;padding:14px 22px;border-radius:14px;margin:0 0 22px;box-shadow:0 6px 18px rgba(220,38,38,.22);">'
+         . $logoTag
+         . '<div style="font-weight:800;letter-spacing:.6px;font-size:18px;text-transform:uppercase;">' . $label . '</div>'
+         . $endsLine
+         . '</div>';
 }
 
 /**

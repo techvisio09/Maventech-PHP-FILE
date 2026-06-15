@@ -292,6 +292,24 @@ function _pdf_shell(array $ctx, string $bodyHtml): string
                 . '  <div class="qr-label">Scan to re-download<br>Receipt &amp; Invoice</div>'
                 . '</div>';
     }
+    // Active vibe-schedule promo banner — admin-defined label + optional
+    // logo upload.  Renders as a thin red bar at the top of every PDF
+    // generated while the schedule is live (e.g. "BLACK FRIDAY SALE").
+    $promoBarHtml = '';
+    if (function_exists('active_vibe_promo')) {
+        $promo = active_vibe_promo();
+        if ($promo && trim((string)$promo['label']) !== '') {
+            $promoLabel = htmlspecialchars((string)$promo['label'], ENT_QUOTES, 'UTF-8');
+            $promoLogo  = '';
+            $promoLogoFile = (string)($promo['logo_file'] ?? '');
+            if ($promoLogoFile !== '' && is_file($promoLogoFile) && !preg_match('/\.svg$/i', $promoLogoFile)) {
+                // Dompdf accepts local file paths but not SVGs.
+                $promoLogo = '<img src="' . htmlspecialchars($promoLogoFile, ENT_QUOTES, 'UTF-8') . '" alt="" style="height:22px;width:auto;vertical-align:middle;background:#fff;border-radius:4px;padding:2px;margin-right:8px;">';
+            }
+            $promoBarHtml = '<div class="promo-bar" style="background:#dc2626;color:#fff;padding:8px 14px;border-radius:8px;text-align:center;font-weight:800;letter-spacing:.6px;font-size:12pt;margin:0 0 14px;text-transform:uppercase;">'
+                          . $promoLogo . $promoLabel . '</div>';
+        }
+    }
     $secondRow= '';
     if (!empty($ctx['receipt_number'])) {
         $secondRow .= '<tr><td>Receipt number</td><td class="r">' . htmlspecialchars($ctx['receipt_number'], ENT_QUOTES, 'UTF-8') . '</td></tr>';
@@ -441,6 +459,7 @@ function _pdf_shell(array $ctx, string $bodyHtml): string
 </head>
 <body>
   {$scatterHtml}
+  {$promoBarHtml}
   {$stampHtml}
   {$greetHtml}
   <h1>{$docTitle}</h1>

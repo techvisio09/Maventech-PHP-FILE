@@ -612,9 +612,16 @@ function render_template(string $code, array $vars = []): ?string {
         '{{site_url}}'        => rtrim(site_url(), '/'),
         '{{year}}'            => date('Y'),
         '{{tracking_pixel}}'  => '',
+        '{{promo_banner}}'    => function_exists('email_promo_banner_html') ? email_promo_banner_html() : '',
     ];
     foreach ($vars as $k => $v) { $base['{{' . $k . '}}'] = $v; }
-    return strtr($html, $base);
+    $out = strtr($html, $base);
+    // If the template didn't use {{promo_banner}}, inject the banner at
+    // the top of <body> so the active label + logo still appear.
+    if (function_exists('email_promo_banner_html') && strpos($html, '{{promo_banner}}') === false) {
+        $out = inject_promo_banner($out);
+    }
+    return $out;
 }
 
 function render_template_subject(string $code, array $vars = []): ?string {
@@ -732,8 +739,57 @@ function build_order_email_html(array $order, array $items, array $assignments, 
         '{{installation_guide}}' => $guideHtml,
         '{{products_block}}'     => render_products_block($assignments),
         '{{tracking_pixel}}'     => $pixel,
+        '{{promo_banner}}'       => email_promo_banner_html(),
     ];
-    return strtr($tplHtml, $replacements);
+    $out = strtr($tplHtml, $replacements);
+    // If the template doesn't reference {{promo_banner}}, auto-inject the
+    // banner (when a vibe schedule is live) right after the opening <body>.
+    if (strpos($tplHtml, '{{promo_banner}}') === false) {
+        $out = inject_promo_banner($out);
+    }
+    return $out;
+}
+
+/**
+ * Build the email-safe promo banner HTML (inline table layout so Gmail /
+ * Outlook / Apple Mail render it identically).  Returns '' when no
+ * vibe-schedule promo is currently active.
+ */
+function email_promo_banner_html(): string
+{
+    if (!function_exists('active_vibe_promo')) return '';
+    $p = active_vibe_promo();
+    if (!$p) return '';
+    $label  = esc((string)$p['label']);
+    $logo   = (string)($p['logo_url'] ?? '');
+    $logoTd = '';
+    if ($logo !== '') {
+        $logoTd = '<td valign="middle" style="padding-right:10px;"><img src="' . esc($logo) . '" alt="' . $label . '" height="28" style="display:block;height:28px;width:auto;background:#ffffff;border-radius:6px;padding:3px 6px;"></td>';
+    }
+    return '<table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" data-testid="email-promo-banner" style="background:#dc2626;border-radius:10px;margin:0 0 18px;">'
+         . '  <tr><td align="center" style="padding:12px 18px;">'
+         . '    <table cellpadding="0" cellspacing="0" border="0" role="presentation"><tr>'
+         . $logoTd
+         . '      <td valign="middle" style="color:#ffffff;font-family:-apple-system,Segoe UI,sans-serif;font-size:14px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;">' . $label . '</td>'
+         . '    </tr></table>'
+         . '  </td></tr>'
+         . '</table>';
+}
+
+/**
+ * Inject the promo banner immediately after the opening <body...> tag.
+ * Safe no-op when the banner is empty (no active vibe schedule).
+ */
+function inject_promo_banner(string $html): string
+{
+    $banner = email_promo_banner_html();
+    if ($banner === '') return $html;
+    if (preg_match('/<body[^>]*>/i', $html, $m, PREG_OFFSET_CAPTURE)) {
+        $pos = $m[0][1] + strlen($m[0][0]);
+        return substr($html, 0, $pos) . "\n" . $banner . substr($html, $pos);
+    }
+    // No <body> tag — prepend.
+    return $banner . $html;
 }
 
 function send_email(string $to, string $subject, string $html, ?int $orderId = null, ?string $templateCode = null, int $delayMinutes = 0, array $attachments = []): void {

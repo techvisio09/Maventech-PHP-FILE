@@ -300,6 +300,31 @@
   color: #e2e8f0 !important;
   border-color: rgba(148,163,184,.25) !important;
 }
+/* Hub stats badges + related topic chips that use Bootstrap text-bg-light
+   or inline #f1f5f9 backgrounds become invisible on dark.  Force-light text. */
+[data-bs-theme="dark"] .hub-hero .badge.text-bg-light,
+[data-bs-theme="dark"] .badge.text-bg-light {
+  background: rgba(30,41,59,.85) !important;
+  color: #e2e8f0 !important;
+  border-color: rgba(148,163,184,.25) !important;
+}
+[data-bs-theme="dark"] .hub-hero .badge.text-bg-light .bi,
+[data-bs-theme="dark"] .badge.text-bg-light .bi { filter: brightness(1.35) saturate(1.1); }
+[data-bs-theme="dark"] .badge.bg-light,
+[data-bs-theme="dark"] .badge.bg-light.text-dark,
+[data-bs-theme="dark"] .badge.bg-light.text-secondary {
+  background: rgba(30,41,59,.85) !important;
+  color: #e2e8f0 !important;
+  border-color: rgba(148,163,184,.25) !important;
+}
+/* Generic "background:#f1f5f9/#fff" inline badge anchor (hub related topics). */
+[data-bs-theme="dark"] a.badge[style*="#f1f5f9"],
+[data-bs-theme="dark"] a.badge[style*="#fff"],
+[data-bs-theme="dark"] a.badge[style*="#ffffff"] {
+  background: rgba(30,41,59,.85) !important;
+  color: #e2e8f0 !important;
+  border-color: rgba(148,163,184,.30) !important;
+}
 
 /* ---- AEO Quick-Answer card (works everywhere it renders — product,
         category, hub).  Inline color #1e293b is invisible on dark bg. */

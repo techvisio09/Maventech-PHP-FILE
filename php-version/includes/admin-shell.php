@@ -104,7 +104,66 @@ $adm_brand_logo   = function_exists('company_info') ? (company_info()['logo'] ??
 [data-bs-theme="dark"] a { color:#93c5fd; }
 [data-bs-theme="dark"] a:hover { color:#bfdbfe; }
 [data-bs-theme="dark"] .text-muted { color:#cbd5e1 !important; }
+[data-bs-theme="dark"] .text-secondary { color:#cbd5e1 !important; }
 [data-bs-theme="dark"] .s-badge { color:#f1f5f9; }
+
+/* ---- Universal dark-mode polish for the patterns the admin uses
+   everywhere: blue-soft pills, dotted-blue icons, license-key chips.
+   In dark mode the underlying CSS variables are also dark colours so
+   "blue-soft bg + brand-dk text" became "deep blue text on deep blue
+   bg" → invisible (especially the License delivery / License Key pills
+   inside the Email Activity center and Lead drawer). */
+[data-bs-theme="dark"] .ec-tpl-chip,
+[data-bs-theme="dark"] .ec-key,
+[data-bs-theme="dark"] .ec-v a,
+[data-bs-theme="dark"] code[style*="var(--blue-soft)"] {
+  background: rgba(59,130,246,.18) !important;
+  color: #bfdbfe !important;
+  border: 1px solid rgba(96,165,250,.30) !important;
+}
+[data-bs-theme="dark"] .ec-tpl-chip .bi,
+[data-bs-theme="dark"] .ec-meta .bi,
+[data-bs-theme="dark"] .ec-k .bi,
+[data-bs-theme="dark"] .ec-meta { color:#cbd5e1 !important; }
+[data-bs-theme="dark"] .ec-k .bi { color:#93c5fd !important; }
+[data-bs-theme="dark"] .ec-meta .bi { color:#94a3b8 !important; }
+[data-bs-theme="dark"] .ec-field { border-bottom-color: rgba(148,163,184,.20) !important; }
+[data-bs-theme="dark"] .ec-k { color:#cbd5e1 !important; }
+[data-bs-theme="dark"] .ec-v { color:#f1f5f9 !important; }
+[data-bs-theme="dark"] .ec-v .text-muted { color:#94a3b8 !important; }
+[data-bs-theme="dark"] .ec-v a { background:transparent !important; border:none !important; color:#93c5fd !important; }
+
+/* Pill toggles + selected lead row */
+[data-bs-theme="dark"] .pill-toggle:hover {
+  background: rgba(59,130,246,.18) !important;
+  color: #bfdbfe !important;
+}
+[data-bs-theme="dark"] tr[style*="var(--blue-soft)"] {
+  background: rgba(59,130,246,.14) !important;
+  color: #f1f5f9 !important;
+}
+[data-bs-theme="dark"] tr[style*="var(--blue-soft)"] td { color: #f1f5f9 !important; }
+
+/* Status badges with inline light-bg / dark-text colours (Published,
+   Hidden, Pending …) inside admin tables — force-brighten. */
+[data-bs-theme="dark"] .badge.rounded-pill[style*="#d1fae5"] { background:rgba(16,185,129,.22) !important; color:#86efac !important; }
+[data-bs-theme="dark"] .badge.rounded-pill[style*="#fef3c7"] { background:rgba(245,158,11,.22) !important; color:#fcd34d !important; }
+[data-bs-theme="dark"] .badge.rounded-pill[style*="#f1f5f9"] { background:rgba(148,163,184,.22) !important; color:#cbd5e1 !important; }
+[data-bs-theme="dark"] .badge.rounded-pill[style*="#dbeafe"] { background:rgba(59,130,246,.22) !important; color:#bfdbfe !important; }
+[data-bs-theme="dark"] .badge.rounded-pill[style*="#fee2e2"] { background:rgba(239,68,68,.22) !important; color:#fca5a5 !important; }
+[data-bs-theme="dark"] .badge.rounded-pill[style*="#fce7f3"] { background:rgba(236,72,153,.22) !important; color:#fbcfe8 !important; }
+[data-bs-theme="dark"] .badge.rounded-pill[style*="#ede9fe"] { background:rgba(139,92,246,.22) !important; color:#ddd6fe !important; }
+[data-bs-theme="dark"] .badge.rounded-pill[style*="#cffafe"] { background:rgba(6,182,212,.22) !important; color:#a5f3fc !important; }
+
+/* General brightening for icons inline-styled with brand-dk/brand text
+   (covers the small bi-tag, bi-clock, bi-person-circle in countless
+   widgets across the admin). */
+[data-bs-theme="dark"] .text-primary { color:#93c5fd !important; }
+[data-bs-theme="dark"] .text-info    { color:#67e8f9 !important; }
+[data-bs-theme="dark"] .text-success { color:#86efac !important; }
+[data-bs-theme="dark"] .text-warning { color:#fcd34d !important; }
+[data-bs-theme="dark"] .text-danger  { color:#fca5a5 !important; }
+
 /* ---- Status badges: complete dark-mode palette (every keyword present in
    admin.php).  Without these, statuses like "new" / "contacted" / "qualified"
    inherited light-mode `color:#92400e` against the now-dark `--amber-soft`
@@ -781,6 +840,48 @@ body[data-brand-motion="static"] .adm-top .brand-center .m-logo-img {
 .kpi-tile.cyan   .kpi-icon { background:#cffafe; color:#0e7490; }            .kpi-tile.cyan   .kpi-value { color:#06b6d4; }
 [data-bs-theme="dark"] .kpi-tile.purple .kpi-icon { background:#312e81; color:#c4b5fd; }
 [data-bs-theme="dark"] .kpi-tile.cyan   .kpi-icon { background:#155e75; color:#a5f3fc; }
+
+/* ---- Flatpickr calendar — dark-mode polish so the popup matches the
+   rest of the admin (slate-700 card bg, slate-100 text, blue brand). */
+.flatpickr-calendar { font-family: inherit; border-radius: 12px; box-shadow: 0 8px 28px rgba(15,23,42,.18); }
+.flatpickr-calendar .flatpickr-day.selected,
+.flatpickr-calendar .flatpickr-day.startRange,
+.flatpickr-calendar .flatpickr-day.endRange { background: #3b82f6; border-color: #3b82f6; color:#fff; }
+.flatpickr-calendar .flatpickr-day.today { border-color: #3b82f6; color: #3b82f6; }
+.flatpickr-input.fp-enhanced + .form-control,
+.flatpickr-input.fp-enhanced + .form-control-sm { background-color: var(--card-bg); color: var(--text); border-color: var(--border); cursor: pointer; }
+[data-bs-theme="dark"] .flatpickr-calendar {
+  background: #1e293b !important; color: #f1f5f9 !important;
+  border: 1px solid #334155 !important;
+}
+[data-bs-theme="dark"] .flatpickr-calendar.arrowTop:before,
+[data-bs-theme="dark"] .flatpickr-calendar.arrowBottom:before { border-bottom-color: #334155 !important; border-top-color: #334155 !important; }
+[data-bs-theme="dark"] .flatpickr-calendar.arrowTop:after,
+[data-bs-theme="dark"] .flatpickr-calendar.arrowBottom:after { border-bottom-color: #1e293b !important; border-top-color: #1e293b !important; }
+[data-bs-theme="dark"] .flatpickr-months,
+[data-bs-theme="dark"] .flatpickr-month,
+[data-bs-theme="dark"] .flatpickr-current-month,
+[data-bs-theme="dark"] .flatpickr-current-month input.cur-year,
+[data-bs-theme="dark"] .flatpickr-monthDropdown-months,
+[data-bs-theme="dark"] .flatpickr-weekday { color: #f1f5f9 !important; fill: #f1f5f9 !important; background: transparent !important; }
+[data-bs-theme="dark"] .flatpickr-current-month .numInputWrapper span.arrowUp:after { border-bottom-color: #cbd5e1 !important; }
+[data-bs-theme="dark"] .flatpickr-current-month .numInputWrapper span.arrowDown:after { border-top-color: #cbd5e1 !important; }
+[data-bs-theme="dark"] .flatpickr-prev-month svg, [data-bs-theme="dark"] .flatpickr-next-month svg { fill: #cbd5e1 !important; }
+[data-bs-theme="dark"] .flatpickr-prev-month:hover svg, [data-bs-theme="dark"] .flatpickr-next-month:hover svg { fill: #93c5fd !important; }
+[data-bs-theme="dark"] .flatpickr-monthDropdown-months .flatpickr-monthDropdown-month { background: #1e293b !important; color:#f1f5f9 !important; }
+[data-bs-theme="dark"] .flatpickr-day {
+  color: #e2e8f0 !important; background: transparent !important; border-color: transparent !important;
+}
+[data-bs-theme="dark"] .flatpickr-day.prevMonthDay, [data-bs-theme="dark"] .flatpickr-day.nextMonthDay { color: #64748b !important; }
+[data-bs-theme="dark"] .flatpickr-day:hover, [data-bs-theme="dark"] .flatpickr-day.inRange { background: rgba(59,130,246,.18) !important; border-color: rgba(96,165,250,.30) !important; color:#bfdbfe !important; }
+[data-bs-theme="dark"] .flatpickr-day.flatpickr-disabled { color: #475569 !important; }
+[data-bs-theme="dark"] .flatpickr-day.today { border-color: #3b82f6 !important; color: #93c5fd !important; }
+[data-bs-theme="dark"] .flatpickr-day.selected, [data-bs-theme="dark"] .flatpickr-day.startRange, [data-bs-theme="dark"] .flatpickr-day.endRange { background:#3b82f6 !important; border-color:#3b82f6 !important; color:#fff !important; }
+[data-bs-theme="dark"] .flatpickr-time, [data-bs-theme="dark"] .flatpickr-time .numInputWrapper input,
+[data-bs-theme="dark"] .flatpickr-time .flatpickr-time-separator,
+[data-bs-theme="dark"] .flatpickr-time .flatpickr-am-pm { color: #f1f5f9 !important; background: transparent !important; }
+[data-bs-theme="dark"] .flatpickr-time input:hover, [data-bs-theme="dark"] .flatpickr-time .flatpickr-am-pm:hover { background: rgba(59,130,246,.18) !important; }
+[data-bs-theme="dark"] .flatpickr-time { border-top: 1px solid #334155 !important; }
 
 /* In-tile Chart.js sparkline (Revenue KPI) — slots between the value
    and the kpi-delta line.  `.has-spark` reserves the canvas height so

@@ -198,13 +198,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $label  = trim($_POST['label']     ?? '');
         $startsTs = $starts !== '' ? strtotime($starts) : false;
         $endsTs   = $ends   !== '' ? strtotime($ends)   : null;
+
+        // Optional promo logo upload — saved under /uploads/vibe-promos/
+        // and displayed on the cart, in invoice PDFs and in email banners
+        // for the entire duration of the schedule.
+        $logoRel = '';
+        if (!empty($_FILES['logo_file']['tmp_name']) && is_uploaded_file($_FILES['logo_file']['tmp_name'])) {
+            $f = $_FILES['logo_file'];
+            $okTypes = ['image/png','image/jpeg','image/webp','image/gif','image/svg+xml'];
+            $mime = function_exists('mime_content_type') ? (string)mime_content_type($f['tmp_name']) : ($f['type'] ?? '');
+            if (in_array($mime, $okTypes, true) && (int)$f['size'] <= 2 * 1024 * 1024) {
+                $extMap = ['image/png'=>'png','image/jpeg'=>'jpg','image/webp'=>'webp','image/gif'=>'gif','image/svg+xml'=>'svg'];
+                $ext = $extMap[$mime] ?? 'png';
+                $dir = __DIR__ . '/uploads/vibe-promos';
+                if (!is_dir($dir)) @mkdir($dir, 0775, true);
+                $fname = 'promo-' . date('Ymd-His') . '-' . bin2hex(random_bytes(3)) . '.' . $ext;
+                if (@move_uploaded_file($f['tmp_name'], $dir . '/' . $fname)) {
+                    $logoRel = 'uploads/vibe-promos/' . $fname;
+                }
+            }
+        }
+
         if ($startsTs && (!$endsTs || $endsTs > $startsTs)) {
-            $pdo->prepare('INSERT INTO vibe_schedule (vibe, starts_at, ends_at, label) VALUES (?,?,?,?)')
+            $pdo->prepare('INSERT INTO vibe_schedule (vibe, starts_at, ends_at, label, logo_path) VALUES (?,?,?,?,?)')
                 ->execute([
                     $svibe,
                     date('Y-m-d H:i:s', $startsTs),
                     $endsTs ? date('Y-m-d H:i:s', $endsTs) : null,
                     mb_substr($label, 0, 120),
+                    $logoRel,
                 ]);
             header('Location: admin.php?tab=company&msg=Schedule+added'); exit;
         }
@@ -4021,7 +4043,7 @@ elseif ($tab === 'company'):
 
   <!-- Brand Vibe schedule -->
   <?php
-    $vsRows = $pdo->query("SELECT id, vibe, starts_at, ends_at, label, applied_at FROM vibe_schedule ORDER BY starts_at ASC")->fetchAll();
+    $vsRows = $pdo->query("SELECT id, vibe, starts_at, ends_at, label, logo_path, applied_at FROM vibe_schedule ORDER BY starts_at ASC")->fetchAll();
     $vsVibes = brand_vibes();
     $vsNow = time();
   ?>
@@ -4032,7 +4054,7 @@ elseif ($tab === 'company'):
         <small class="text-muted">Queue future re-skins (Black Friday → Playful, January → Premium). The active schedule auto-applies on every page load — no cron needed.</small>
       </div>
     </div>
-    <form method="post" class="row g-2 align-items-end mb-3" data-testid="vibe-schedule-form">
+    <form method="post" enctype="multipart/form-data" class="row g-2 align-items-end mb-3" data-testid="vibe-schedule-form">
       <input type="hidden" name="action" value="add_vibe_schedule">
       <div class="col-md-2">
         <label class="form-label small fw-semibold mb-1">Vibe</label>
@@ -4042,17 +4064,22 @@ elseif ($tab === 'company'):
           <?php endforeach; ?>
         </select>
       </div>
-      <div class="col-md-3">
+      <div class="col-md-2">
         <label class="form-label small fw-semibold mb-1">Starts at</label>
         <input type="datetime-local" name="starts_at" class="form-control form-control-sm" required data-testid="vsf-starts">
       </div>
-      <div class="col-md-3">
+      <div class="col-md-2">
         <label class="form-label small fw-semibold mb-1">Ends at <small class="text-muted fw-normal">(optional)</small></label>
         <input type="datetime-local" name="ends_at" class="form-control form-control-sm" data-testid="vsf-ends">
       </div>
       <div class="col-md-3">
-        <label class="form-label small fw-semibold mb-1">Label <small class="text-muted fw-normal">(optional)</small></label>
-        <input type="text" name="label" class="form-control form-control-sm" placeholder="e.g. Black Friday 2026" maxlength="120" data-testid="vsf-label">
+        <label class="form-label small fw-semibold mb-1">Label <small class="text-muted fw-normal">(shown on cart + email + invoice)</small></label>
+        <input type="text" name="label" class="form-control form-control-sm" placeholder="e.g. Black Friday Sale" maxlength="120" data-testid="vsf-label">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small fw-semibold mb-1">Promo Logo <small class="text-muted fw-normal">(opt.)</small></label>
+        <input type="file" name="logo_file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" class="form-control form-control-sm" data-testid="vsf-logo">
+        <small class="text-muted" style="font-size:10px;">PNG/JPG/SVG · max 2 MB</small>
       </div>
       <div class="col-md-1 d-grid">
         <button class="btn btn-primary btn-sm" data-testid="vsf-add"><i class="bi bi-plus-lg"></i> Add</button>
@@ -4078,7 +4105,11 @@ elseif ($tab === 'company'):
                style="--vibe-g0: <?= $v['gradient'][0] ?>; --vibe-g1: <?= $v['gradient'][1] ?>; --vibe-g2: <?= $v['gradient'][2] ?>; --vibe-accent: <?= $v['accent'] ?>;"
                data-testid="vibe-schedule-row-<?= (int)$row['id'] ?>">
             <span class="vibe-sched-swatch">
-              <span class="vibe-sched-letter"><?= esc(strtoupper(substr(setting_get('company_name', 'M'), 0, 1) ?: 'M')) ?></span>
+              <?php if (!empty($row['logo_path']) && file_exists(__DIR__ . '/' . $row['logo_path'])): ?>
+                <img src="<?= esc(rtrim(site_url(),'/').'/'.$row['logo_path']) ?>" alt="<?= esc($row['label'] ?: 'Promo logo') ?>" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;background:#fff;padding:3px;" data-testid="vibe-sched-logo-<?= (int)$row['id'] ?>">
+              <?php else: ?>
+                <span class="vibe-sched-letter"><?= esc(strtoupper(substr(setting_get('company_name', 'M'), 0, 1) ?: 'M')) ?></span>
+              <?php endif; ?>
             </span>
             <div class="vibe-sched-meta">
               <div class="vibe-sched-title">
