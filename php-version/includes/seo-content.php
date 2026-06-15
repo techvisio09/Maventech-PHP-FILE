@@ -1026,7 +1026,7 @@ function category_faqs(string $slug, string $title): array
     $brand = (strpos($slug, 'bitdefender') !== false) ? 'Bitdefender'
            : ((strpos($slug, 'mcafee') !== false) ? 'McAfee'
            : ((strpos($slug, 'office') !== false || strpos($slug, 'microsoft') === 0 || strpos($slug, 'windows') !== false || $slug === 'apps') ? 'Microsoft' : 'the vendor'));
-    return [
+    $faqs = [
         [
             'question' => 'Are the ' . $title . ' license keys genuine?',
             'answer'   => 'Yes. Every ' . $title . ' licence key sold by ' . SITE_BRAND . ' is genuine and sourced through authorised channels. The key activates directly inside the official ' . $brand . ' software downloaded from the manufacturer&rsquo;s website. We never sell cracked, repackaged or modified installers, and every key is verified before dispatch.',
@@ -1048,6 +1048,93 @@ function category_faqs(string $slug, string $title): array
             'answer'   => 'Yes. Buying 5 or more ' . $title . ' licences automatically applies our volume discount at checkout. For larger orders (10+) or for a consolidated invoice, contact us for a custom quote &mdash; we deliver hundreds of licences daily to schools, agencies and IT teams.',
         ],
     ];
+
+    // ----------------------------------------------------------------
+    // Category-aware FAQ append.  Mirrors the per-product pattern but
+    // uses category-wide angle questions (choosing edition / comparing
+    // years / Mac-vs-PC / brand-vs-brand) instead of edition-specific
+    // wording.  Detection is done from the slug + title so categories
+    // route into the right cluster even when they have no products yet.
+    // ----------------------------------------------------------------
+    $slugLc  = strtolower($slug);
+    $titleLc = strtolower($title);
+    $isOffice = (strpos($slugLc, 'office') !== false
+                 || strpos($slugLc, 'word')   !== false
+                 || strpos($slugLc, 'excel')  !== false
+                 || strpos($slugLc, 'powerpoint') !== false
+                 || $slug === 'microsoft-office'
+                 || $slug === 'office');
+    $isWin    = (preg_match('/\bwindows[-\s](10|11)/i', $slugLc) === 1) || in_array($slug, ['windows-11','windows-10','windows'], true);
+    $isProj   = (strpos($slugLc, 'project') !== false);
+    $isVisio  = (strpos($slugLc, 'visio')   !== false);
+    $isAv     = (strpos($slugLc, 'bitdefender') !== false
+                 || strpos($slugLc, 'mcafee') !== false
+                 || strpos($slugLc, 'norton') !== false
+                 || strpos($slugLc, 'kaspersky') !== false
+                 || $slug === 'antivirus');
+    $year = '';
+    if (preg_match('/\b(2024|2021|2019)\b/', $slugLc, $ym)) $year = $ym[1];
+    $isMac = (strpos($slugLc, 'mac') !== false);
+
+    if ($isOffice && !$isProj && !$isVisio) {
+        $yearTxt = $year !== '' ? ' ' . $year : '';
+        $faqs[] = [
+            'question' => 'Which Microsoft Office' . $yearTxt . ' edition should I pick: Home & Student, Home & Business or Professional Plus?',
+            'answer'   => 'Choose <strong>Home &amp; Student</strong> if you mainly write documents (Word), crunch spreadsheets (Excel) and build presentations (PowerPoint) &mdash; it is the cheapest one-time-purchase tier. Pick <strong>Home &amp; Business</strong> if you also send email from Outlook for a side business or consulting work &mdash; same three apps plus Outlook. Power users who need <strong>Publisher, Access, Skype for Business or Teams Classic</strong> should pick <strong>Professional Plus</strong>. All three editions on this page are perpetual lifetime licences &mdash; no Microsoft 365 subscription required.',
+        ];
+        if ($year !== '') {
+            $faqs[] = [
+                'question' => 'Office 2024 vs Office 2021 vs Office 2019 &mdash; which year is best for me?',
+                'answer'   => '<strong>Office 2024</strong> is the latest perpetual release &mdash; faster start-up, refreshed ribbon, native ARM64 support and Windows 11 polish. <strong>Office 2021</strong> remains the best value-for-money tier and runs on Windows 10 + 11 with the same core Word / Excel / PowerPoint feature set. <strong>Office 2019</strong> is the cheapest legit option for older PCs, including Windows 7 / 8.1 / 10. All three are <em>one-time purchases</em> &mdash; the only differences are minor feature drops and how long Microsoft will keep shipping security updates for them.',
+            ];
+        }
+        $faqs[] = [
+            'question' => 'Microsoft Office for Mac vs Office for Windows &mdash; what is the difference?',
+            'answer'   => 'The Word, Excel and PowerPoint experience is essentially the same on both platforms &mdash; same file formats (.docx / .xlsx / .pptx), same ribbon, same templates, same OneDrive sync. The Windows editions add <strong>Publisher and Access</strong> (not available on Mac). Outlook for Mac and Outlook for Windows differ in a few enterprise features. A licence is platform-locked, so make sure you pick the <strong>Mac</strong> or <strong>Windows / PC</strong> edition that matches the computer you will install on &mdash; we will swap free of charge within 30 days if you pick wrong.',
+        ];
+    } elseif ($isWin) {
+        $faqs[] = [
+            'question' => 'Windows Home vs Pro vs Education &mdash; which edition do I need?',
+            'answer'   => '<strong>Home</strong> covers everyday personal use, gaming, web browsing and the Microsoft Store. <strong>Pro</strong> adds the features remote workers, IT pros and small businesses depend on: <em>BitLocker</em> drive encryption, <em>Remote Desktop host</em>, <em>Hyper-V</em> virtualisation, <em>Group Policy Editor</em>, <em>Windows Sandbox</em> and <em>Azure AD join</em>. <strong>Education</strong> is functionally Pro with school-friendly defaults and is restricted to verified students / staff. For most home users, Home is plenty; for any work-from-home scenario, Pro is the right pick.',
+        ];
+        $faqs[] = [
+            'question' => 'Windows 11 vs Windows 10 &mdash; which should I buy in ' . date('Y') . '?',
+            'answer'   => '<strong>Windows 11</strong> is Microsoft\'s current focus &mdash; new Start menu, Snap Layouts, DirectStorage gaming, native Copilot, and security updates committed through 2031. <strong>Windows 10</strong> mainstream support already ended (Oct 2025), but it is still a great pick for older PCs that lack a TPM 2.0 chip or fail the Windows 11 PC Health Check. Run Microsoft\'s free <em>PC Health Check</em> tool first; if your PC passes, buy Windows 11 &mdash; otherwise the Windows 10 licence is the legitimate path.',
+        ];
+        $faqs[] = [
+            'question' => 'Can I move my Windows licence to a new PC later?',
+            'answer'   => 'Retail Windows licences are <strong>fully transferable</strong> to a new PC under Microsoft\'s EULA &mdash; you simply deactivate the old machine (uninstall the key with <code>slmgr.vbs /upk</code>) and activate the new one with the same code. OEM licences (the kind that come pre-installed on store-bought laptops) are tied to the original motherboard. Every Windows licence sold on this page is the <strong>retail</strong> tier, so it travels with you across hardware upgrades.',
+        ];
+    } elseif ($isProj || $isVisio) {
+        $kind = $isProj ? 'Project' : 'Visio';
+        $faqs[] = [
+            'question' => 'Microsoft Project vs Microsoft Visio &mdash; which do I need?',
+            'answer'   => '<strong>Microsoft Project</strong> is for project managers, PMOs and construction teams &mdash; Gantt charts, resource levelling, baseline tracking, earned-value analysis and task dependencies. <strong>Microsoft Visio</strong> is for diagram-driven work &mdash; network maps, BPMN flows, UML diagrams, floor plans, AWS / Azure / GCP architecture diagrams and ERDs. They are completely separate apps; many engineers and architects own both.',
+        ];
+        $faqs[] = [
+            'question' => 'Is this Microsoft ' . $kind . ' the same as ' . $kind . ' Online / ' . $kind . ' Plan 1?',
+            'answer'   => 'No. <strong>' . $kind . ' Online / ' . $kind . ' Plan 1 and Plan 2</strong> are monthly subscriptions sold by Microsoft 365. The listings on this page are <strong>one-time-purchase perpetual licences</strong> for the desktop ' . $kind . ' app on Windows PC. Pay once, install once, no monthly seat fee &mdash; ideal for individual consultants, small PMOs and IT shops that don\'t need real-time multi-user collaboration.',
+        ];
+        $faqs[] = [
+            'question' => 'Can I install Microsoft ' . $kind . ' alongside my existing Microsoft Office?',
+            'answer'   => 'Yes. Microsoft ' . $kind . ' installs as a standalone app on the same Windows PC where Microsoft 365, Office 2024, Office 2021 or Office 2019 is already running. The installers do not conflict and you keep all your existing Word, Excel, PowerPoint and Outlook settings intact. ' . $kind . ' just appears as a new app in the Start menu.',
+        ];
+    } elseif ($isAv) {
+        $faqs[] = [
+            'question' => 'Bitdefender vs McAfee vs Norton &mdash; which antivirus brand should I choose?',
+            'answer'   => '<strong>Bitdefender</strong> consistently tops AV-Comparatives and AV-Test rankings with the lightest CPU footprint &mdash; the best pick if you want maximum protection without slowing the PC down. <strong>McAfee+</strong> bundles unlimited-device protection plus VPN, password manager and identity-theft monitoring on top of the antivirus engine &mdash; best for families. <strong>Norton 360</strong> ships with secure VPN, dark-web monitoring and (on Deluxe / Premium tiers) LifeLock identity protection &mdash; popular in the US. All three are genuine subscriptions activated via the brand\'s official portal.',
+        ];
+        $faqs[] = [
+            'question' => 'Will the antivirus subscription auto-renew when it expires?',
+            'answer'   => '<strong>No.</strong> Every antivirus listing on this page is a prepaid fixed-term subscription. Your credit card is never stored against the antivirus brand\'s billing system because we activate the licence from a redemption code, not a recurring card. When the term ends, protection simply pauses &mdash; renew at your own pace (or buy a fresh key from us at the same discount).',
+        ];
+        $faqs[] = [
+            'question' => 'Does my antivirus subscription cover phones, Macs and tablets too?',
+            'answer'   => 'It depends on the listing. Most modern security suites (McAfee+, Norton 360, Bitdefender Total Security / Family Pack) cover <strong>Windows PCs, Macs, Android phones and iPhones / iPads</strong> from the same subscription &mdash; install the brand\'s app on each device and sign in. Single-device subscriptions (e.g. <em>Bitdefender Antivirus for Mac, 1 Mac</em>) cover only the listed platform. Check the device-count badge on each card before buying.',
+        ];
+    }
+
+    return $faqs;
 }
 
 /* ------------------------------------------------------------------
@@ -1058,9 +1145,20 @@ function category_faqs(string $slug, string $title): array
 function category_buying_guide_html(string $slug, string $title, int $productCount): string
 {
     $year = date('Y');
-    $isOffice = (strpos($slug, 'office') !== false || strpos($slug, 'microsoft-') === 0 || $slug === 'apps');
-    $isWin    = (strpos($slug, 'windows') !== false);
-    $isAv     = (strpos($slug, 'bitdefender') !== false || strpos($slug, 'mcafee') !== false || $slug === 'antivirus');
+    $slugLc   = strtolower($slug);
+    $isOffice = (strpos($slugLc, 'office') !== false || strpos($slugLc, 'microsoft-') === 0 || $slug === 'apps')
+                && strpos($slugLc, 'project') === false && strpos($slugLc, 'visio') === false;
+    $isWin    = (preg_match('/\bwindows[-\s](10|11)/i', $slugLc) === 1) || in_array($slug, ['windows-11','windows-10','windows'], true);
+    $isProj   = (strpos($slugLc, 'project') !== false);
+    $isVisio  = (strpos($slugLc, 'visio')   !== false);
+    $isAv     = (strpos($slugLc, 'bitdefender') !== false
+                 || strpos($slugLc, 'mcafee') !== false
+                 || strpos($slugLc, 'norton') !== false
+                 || strpos($slugLc, 'kaspersky') !== false
+                 || $slug === 'antivirus');
+    $isMacCat = (strpos($slugLc, 'mac') !== false);
+    $catYear  = '';
+    if (preg_match('/\b(2024|2021|2019)\b/', $slugLc, $cym)) $catYear = $cym[1];
 
     $h = '<section class="cat-seo-copy mt-5" data-testid="category-seo-copy" aria-labelledby="cat-guide-heading">';
     $h .= '<h2 id="cat-guide-heading" class="fw-bold h4 mb-3">' . esc($title) . ' buying guide</h2>';
@@ -1076,9 +1174,24 @@ function category_buying_guide_html(string $slug, string $title, int $productCou
         $h .= 'Power users who need Publisher and Access should go for <strong>Professional Plus</strong>. ';
         $h .= 'Every edition is a single one-time payment &mdash; no Microsoft 365 monthly fees, no renewals.</p>';
 
+        if ($catYear !== '') {
+            $h .= '<h3 class="fw-bold h5 mt-4 mb-2">Why ' . esc($title) . ' specifically?</h3>';
+            if ($catYear === '2024') {
+                $h .= '<p class="text-secondary">Office 2024 is the latest perpetual release of Microsoft Office for Windows 11 and Windows 10 PCs (and macOS Sonoma / Sequoia for the Mac editions). Compared to Office 2021 you get a refreshed ribbon, native ARM64 support, faster cold-start times and the latest Word / Excel / PowerPoint feature drops. Best buy for shoppers searching "<em>Microsoft Office 2024 Professional Plus product key</em>", "<em>Office Home & Business 2024 (Mac)</em>" or "<em>latest Microsoft Office 2024 for Windows</em>".</p>';
+            } elseif ($catYear === '2021') {
+                $h .= '<p class="text-secondary">Office 2021 remains the best value-for-money perpetual release &mdash; the same core Word / Excel / PowerPoint feature set you would get from a Microsoft 365 subscription, but for a single one-time payment. Runs on Windows 11, Windows 10 and the Mac editions cover macOS Big Sur and newer. Targets "<em>Microsoft Office 2021 Professional Plus download</em>", "<em>Office 2021 Home & Student Mac</em>" and "<em>standalone Microsoft Word 2021 product key</em>".</p>';
+            } elseif ($catYear === '2019') {
+                $h .= '<p class="text-secondary">Office 2019 is the cheapest genuine perpetual Office release &mdash; ideal for older PCs (Windows 7 / 8.1 / 10) and tight budgets. Microsoft still ships security updates for Office 2019 LTSC until 2025+, so it remains a fully supported option. Targets "<em>Microsoft Office 2019 Professional Plus lifetime</em>" and "<em>cheap Office 2019 activation code</em>".</p>';
+            }
+        }
+
         $h .= '<h3 class="fw-bold h5 mt-4 mb-2">Mac or Windows?</h3>';
-        $h .= '<p class="text-secondary">Each ' . esc($title) . ' listing is tagged with its operating system. Make sure you pick the <strong>Mac</strong> edition for macOS computers and the <strong>Windows / PC</strong> edition for laptops and desktops. ';
-        $h .= 'If you accidentally buy the wrong one, we will exchange it free of charge within 30 days.</p>';
+        if ($isMacCat) {
+            $h .= '<p class="text-secondary">This category lists only the <strong>Mac</strong> editions of ' . esc($title) . '. They install via Microsoft AutoUpdate from microsoft.com (never a cracked DMG) and run natively on Apple Silicon and Intel Macs. Mac editions ship with <em>Word, Excel, PowerPoint and Outlook</em> (Home &amp; Business / Professional Plus) &mdash; Publisher and Access are Windows-only and not available on Mac. Use the <em>Platform</em> selector at the top of the page to swap to the Windows editions if needed.</p>';
+        } else {
+            $h .= '<p class="text-secondary">Each ' . esc($title) . ' listing is tagged with its operating system. Make sure you pick the <strong>Mac</strong> edition for macOS computers and the <strong>Windows / PC</strong> edition for laptops and desktops. ';
+            $h .= 'If you accidentally buy the wrong one, we will exchange it free of charge within 30 days.</p>';
+        }
     } elseif ($isWin) {
         $h .= '<h3 class="fw-bold h5 mt-4 mb-2">Home, Pro or Education &mdash; which ' . esc($title) . ' edition?</h3>';
         $h .= '<p class="text-secondary">For home computers and personal laptops, the <strong>Home</strong> edition covers everyday use, gaming and family productivity. ';
@@ -1088,6 +1201,19 @@ function category_buying_guide_html(string $slug, string $title, int $productCou
         $h .= '<h3 class="fw-bold h5 mt-4 mb-2">Will ' . esc($title) . ' work on my PC?</h3>';
         $h .= '<p class="text-secondary">Microsoft publishes a hardware compatibility checker called <em>PC Health Check</em> &mdash; run it before buying if you are upgrading from an older Windows version. ';
         $h .= 'If your PC meets the minimum specifications (1 GHz CPU, 4 GB RAM, 64 GB storage and TPM 2.0 for Windows 11), this licence will activate without issue.</p>';
+
+        $h .= '<h3 class="fw-bold h5 mt-4 mb-2">Retail vs OEM &mdash; what are you buying?</h3>';
+        $h .= '<p class="text-secondary">Every Windows key listed here is the <strong>retail</strong> tier &mdash; transferable to a new PC under Microsoft\'s EULA. OEM keys (which ship pre-installed on store-bought laptops) are tied to the original motherboard for life. Pay a few dollars more for retail and the licence travels with you across hardware upgrades.</p>';
+    } elseif ($isProj || $isVisio) {
+        $kind = $isProj ? 'Project' : 'Visio';
+        $h .= '<h3 class="fw-bold h5 mt-4 mb-2">Which Microsoft ' . $kind . ' edition do I need?</h3>';
+        if ($isProj) {
+            $h .= '<p class="text-secondary">For solo project managers, freelance PMOs and construction estimators, <strong>Microsoft Project Standard</strong> ' . ($catYear ?: '2024') . ' is the cheapest legitimate option &mdash; full Gantt charts, baselines, resource pools and earned-value reports. Step up to <strong>Project Professional</strong> if you need <em>resource levelling</em>, <em>sync with SharePoint task lists</em>, <em>multi-project consolidation</em> or <em>integration with Microsoft Project Server / Project Online</em> for cross-team visibility. Both ship as one-time-purchase perpetual licences on Windows PC &mdash; no monthly Project Online seat fee.</p>';
+        } else {
+            $h .= '<p class="text-secondary"><strong>Microsoft Visio Standard</strong> ' . ($catYear ?: '2024') . ' covers everyday flowcharts, org charts, basic network diagrams and floor plans. Step up to <strong>Visio Professional</strong> for the full advanced shape library &mdash; <em>BPMN 2.0</em>, <em>UML 2.5</em>, <em>AWS / Azure / GCP architecture</em>, <em>network rack and electrical layouts</em>, <em>data-linked diagrams</em>, <em>SharePoint workflow design</em> and <em>SQL/Excel data integration</em>. Both ship as perpetual licences on Windows PC &mdash; no Visio Plan 1 or Plan 2 subscription required.</p>';
+        }
+        $h .= '<h3 class="fw-bold h5 mt-4 mb-2">Installs alongside your existing Microsoft Office</h3>';
+        $h .= '<p class="text-secondary">Microsoft ' . $kind . ' ' . ($catYear ?: '2024') . ' installs as a standalone app on the same Windows PC where Microsoft 365, Office 2024, Office 2021 or Office 2019 is already running. The installers do not conflict, your Word / Excel / PowerPoint / Outlook settings are preserved, and ' . $kind . ' simply appears as a new tile in the Start menu. Activation uses your Microsoft account so you keep the licence when you change PCs.</p>';
     } elseif ($isAv) {
         $h .= '<h3 class="fw-bold h5 mt-4 mb-2">How many devices do I need to cover?</h3>';
         $h .= '<p class="text-secondary">Each ' . esc($title) . ' listing shows how many devices the licence covers (1, 3, 5 or 10) and how long the protection lasts (1 or 2 years). ';
@@ -1096,6 +1222,9 @@ function category_buying_guide_html(string $slug, string $title, int $productCou
         $h .= '<h3 class="fw-bold h5 mt-4 mb-2">Real-time protection vs full security suite</h3>';
         $h .= '<p class="text-secondary">If you just need malware and ransomware protection, the standard ' . esc($title) . ' antivirus is enough. ';
         $h .= 'Looking for a built-in VPN, password manager, parental controls and webcam protection? Pick a Total Security or Premium-tier edition where shown.</p>';
+
+        $h .= '<h3 class="fw-bold h5 mt-4 mb-2">No auto-renewal &mdash; ever</h3>';
+        $h .= '<p class="text-secondary">Every antivirus listing on this page is a <strong>prepaid fixed-term subscription</strong>. Your card is never stored against the security brand\'s billing system because we activate the licence from a redemption code, not a recurring card. When the term ends, protection simply pauses &mdash; you renew at your own pace.</p>';
     } else {
         $h .= '<h3 class="fw-bold h5 mt-4 mb-2">How to pick the right ' . esc($title) . '</h3>';
         $h .= '<p class="text-secondary">Compare the editions above by platform (Windows or Mac), included apps, and number of devices. ';

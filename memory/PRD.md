@@ -1905,3 +1905,66 @@ Extended the Office keyword pattern to **Windows OS (10/11)**, **Office for Mac*
 - `/app/php-version/product.php` (JSON-LD `additionalProperty` extended with Windows / Project-Visio / Antivirus property values)
 - `/app/php-version/includes/functions.php` (`product_img_alt()` already updated earlier — verified working across all 11 test SKUs)
 
+
+## [Feb 2026] Category pages — category-aware FAQs + buying-guide intent blocks
+
+### Background
+Per-product pages were already shipping rich JSON-LD + visible FAQ accordions. The category page (`category.php`) already emitted `CollectionPage`, `BreadcrumbList`, `FAQPage` and `ItemList` JSON-LD blocks plus a visible FAQ accordion and a buying-guide block — but the content of `category_faqs()` and `category_buying_guide_html()` was **generic** (same 5 FAQs for every category, only Office/Win/Antivirus branches in the buying guide, no Project/Visio branch, no Mac branch, no year-specific intent).
+
+### What shipped (in `includes/seo-content.php`)
+
+**`category_faqs($slug, $title)`** — base 5 FAQs preserved, then category-aware **3-FAQ append** based on the same dispatcher idea used for product pages:
+
+- **Office category** (slugs: `office`, `office-2024-pc`, `office-2024-mac`, `office-2021-pc`, `office-2021-mac`, `office-2019-pc`, `office-mac`, etc.):
+  1. "Which Microsoft Office {year} edition should I pick: Home & Student, Home & Business or Professional Plus?"
+  2. (when year detected) "Office 2024 vs Office 2021 vs Office 2019 — which year is best for me?"
+  3. "Microsoft Office for Mac vs Office for Windows — what is the difference?"
+- **Windows OS category** (slugs: `windows`, `windows-11`, `windows-10`):
+  1. "Windows Home vs Pro vs Education — which edition do I need?"
+  2. "Windows 11 vs Windows 10 — which should I buy in 2026?"
+  3. "Can I move my Windows licence to a new PC later?"
+- **Project / Visio category** (slugs: `microsoft-project`, `microsoft-visio`):
+  1. "Microsoft Project vs Microsoft Visio — which do I need?"
+  2. "Is this Microsoft {Project|Visio} the same as {Project|Visio} Online / Plan 1?"
+  3. "Can I install Microsoft {Project|Visio} alongside my existing Microsoft Office?"
+- **Antivirus category** (slugs: `antivirus`, `bitdefender`, `mcafee`, plus Norton/Kaspersky if added later):
+  1. "Bitdefender vs McAfee vs Norton — which antivirus brand should I choose?"
+  2. "Will the antivirus subscription auto-renew when it expires?"
+  3. "Does my antivirus subscription cover phones, Macs and tablets too?"
+
+All three new FAQs per category flow into the **visible accordion** (rendered in `category.php`) **and** the **FAQPage JSON-LD** that `category.php` already emits via `faq_to_jsonld($catFaqs)`. No category.php changes needed.
+
+**`category_buying_guide_html($slug, $title, $productCount)`** — three substantive enhancements:
+- Added a brand-new **Project / Visio branch** with edition-comparison H3 ("Project Standard vs Professional", "Visio Standard vs Professional") and an "Installs alongside your existing Microsoft Office" reassurance paragraph.
+- **Office Mac-aware paragraph** when the slug contains `mac` — explicitly explains that Publisher / Access are Windows-only and that the Mac editions install through Microsoft AutoUpdate.
+- **Year-specific Office paragraph** when the slug contains 2024 / 2021 / 2019 — surfaces the right intent phrases (ARM64, refreshed ribbon for 2024; value-for-money + macOS Big Sur+ for 2021; cheap-for-older-PCs + Windows 7/8.1 for 2019).
+- Added a "**Retail vs OEM — what are you buying?**" H3 for Windows categories.
+- Added a "**No auto-renewal — ever**" H3 for antivirus categories.
+
+### Verification (curl + JSON-LD parse — 12 category pages)
+All 12 category pages tested return all 4 JSON-LD blocks (CollectionPage / BreadcrumbList / **FAQPage** / ItemList) **and** 8 FAQs (5 base + 3 category-specific):
+
+| Category slug | FAQ count | Category-specific signals |
+|---|---|---|
+| office-2024-pc | 8 | office-year-h3 |
+| office-2024-mac | 8 | office-year-h3, **mac-only-paragraph** |
+| office-2021-pc | 8 | office-year-h3 |
+| office-2019-pc | 8 | office-year-h3 |
+| windows-11 | 8 | win-retail-vs-oem-h3 |
+| windows-10 | 8 | win-retail-vs-oem-h3 |
+| windows | 8 | win-retail-vs-oem-h3 |
+| microsoft-project | 8 | **project/visio-h3** |
+| microsoft-visio | 8 | **project/visio-h3** |
+| antivirus | 8 | **av-no-renew-h3** |
+| bitdefender | 8 | **av-no-renew-h3** |
+| mcafee | 8 | **av-no-renew-h3** |
+
+Playwright smoke test on `/category.php?slug=antivirus` confirmed the visible FAQ accordion renders 8 entries with the 6th entry reading "Bitdefender vs McAfee vs Norton — which antivirus brand should I choose?".
+
+### Files touched
+- `/app/php-version/includes/seo-content.php` — `category_faqs()` extended with 4 category branches (Office / Windows / Project-Visio / Antivirus); `category_buying_guide_html()` rewritten to add Project/Visio branch, Mac-only-paragraph, year-specific Office paragraph, "Retail vs OEM" H3, "No auto-renewal" H3.
+
+### No-regression footprint
+- `category.php`, `header.php` JSON-LD injection, `faq_to_jsonld()`, and `render_aeo_answer()` all untouched.
+- Pages outside the 4 categories (generic-fallback branch) continue to render the original 5 base FAQs + generic "How to pick the right X" guidance.
+
