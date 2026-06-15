@@ -1040,3 +1040,32 @@ Also surfaced a **"{brand} profile →"** chip on each admin Product card (data-
 - Editable resend: posted `to_email=forwarded@new-inbox.test` → newest outbox row recipient = `forwarded@new-inbox.test` (NOT the order's email), with the correct order subject.
 - Admin Company Info: `test-reset-card`, `test-reset-form`, `test-reset-send-btn`, `test-reset-recipient` testids present.  POST `action=send_test_reset_email` → outbox row recipient = `services@maventechsoftware.com`, subject prefix `[Test] Reset your …`, status sent.
 - Order delivery email body now contains the Track Order CTA: `<a href="https://example-test-domain-1781505840.com/track-order.php?email=...&order=MVT-DEMO-002">… View order MVT-DEMO-002 …</a>` — uses the admin's configured public domain.
+
+---
+
+## [Feb 2026] Iteration 19 — Elegant 3D motion for the public-site logo
+
+### What the user asked
+"On the entire website (not admin panel), put a 3D motion effect on the picture logo to make things more elegant."
+
+### What changed
+The public navbar brand mark now feels like a small floating premium coin instead of a flat 2D animation.  Implemented in `/app/php-version/assets/css/style.css` (appended block, lines ~1726+).  Scoped strictly to `.navbar .logo-3d` so the admin shell (`.brand-center.logo-3d` inside `admin-shell.php`) stays exactly as it was.
+
+Specifically:
+- **Deeper perspective** (`320px → 900px`) — the existing bounce/spin/pulse keyframes (`rotateY(360deg)`) now read as a true 3D coin-flip rather than a flat sweep.
+- **Glossy diagonal sheen sweep** — a `::after` pseudo-element with an animated linear-gradient sweeps across the mark every ~5.5s (`@keyframes logo-3d-sheen-sweep`).  Faster (2.2s) on hover, dark-mode aware (mix-blend-mode swapped from overlay to screen).
+- **Hover "lift"** — stacked drop-shadows (`drop-shadow(0 14px 26px …) drop-shadow(0 4px 8px …)`) on the inline SVG + uploaded image so the logo rises off the navbar tactilely.
+- **Tilt parallax now applies to uploaded images** — the existing `.tilting` JS (mouse-tracked rotateY/rotateX in `assets/js/main.js`) previously only modified `.brand-mark`; we added a matching `.navbar .logo-3d.tilting > img:first-of-type` rule and bumped both inline + image with `translateZ(14px) scale(~1.13)` for a real depth pop.
+- **Ambient "elegant float"** for the **Static** motion preset — `body[data-brand-motion="static"] .navbar .logo-3d …` now gently sways on Y/X with subtle Z-translate every 6.5s, so even the "no motion" vibe still feels premium and alive in the navbar.
+- **Soft ground shadow** for non-bounce vibes — `body:not([data-brand-motion="bounce"]) .navbar .logo-3d::before` paints a blurred elliptical shadow under the mark, anchoring it in space.  Bounce keeps its existing breathing halo ring untouched.
+- **prefers-reduced-motion** disables the sheen + static float.
+
+### Files touched
+- `/app/php-version/assets/css/style.css` — appended ~140 lines of scoped CSS (no existing rules rewritten).
+- `/app/memory/PRD.md` — this entry.
+
+### Verification
+- `php -l style.css` n/a (CSS).  Manual selector audit: every new selector is prefixed with `.navbar .logo-3d` so the admin shell stays clean.
+- Loaded `/index.php` via Playwright on the preview URL → captured two frames of the navbar logo mid-bounce: the deeper perspective is visible (logo rotates edge-on through depth, not a flat sweep), the cyan halo + tagline pickup the active vibe.
+- No regression on the admin (admin uses `.brand-center.logo-3d` which our new rules do not target).
+
