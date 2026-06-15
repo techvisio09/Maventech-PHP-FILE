@@ -892,70 +892,74 @@ function render_vibe_promo_banner(string $variant = 'cart'): string
              . '</div>';
     }
 
-    // CART variant — compact slim bar that opens a floating popup with the
-    // code + Copy button.  Slate-900 with an amber accent for an elegant
-    // premium feel (replaces the previous loud red gradient).
+    // CART variant — COMPACT light-blue floating pill (was a big slate
+    // rectangle).  Sits inline as a slim chip with a pulsing/bouncing
+    // sparkle icon that flashes to draw the shopper's eye without
+    // swallowing visual real estate.  Tapping it reveals the same popup
+    // card (code + Copy + ends-at) used by every other surface.
     $popupId = 'vibe-popup-' . substr(md5($label . $code), 0, 8);
-    $logoTagSmall = $logo !== ''
-        ? '<img src="' . htmlspecialchars($logo, ENT_QUOTES, 'UTF-8') . '" alt="" style="height:26px;width:auto;object-fit:contain;background:#fff;border-radius:6px;padding:2px 6px;">'
-        : '<span style="display:inline-block;width:26px;height:26px;border-radius:50%;background:#fbbf24;color:#0f172a;font-weight:900;text-align:center;line-height:26px;">★</span>';
     $logoTagLg = $logo !== ''
         ? '<img src="' . htmlspecialchars($logo, ENT_QUOTES, 'UTF-8') . '" alt="" style="height:36px;width:auto;object-fit:contain;background:#fff;border-radius:8px;padding:4px 8px;">'
-        : '<span style="display:inline-block;width:36px;height:36px;border-radius:50%;background:#fbbf24;color:#0f172a;font-weight:900;font-size:18px;text-align:center;line-height:36px;">★</span>';
-    $endsBadge = $endsTxt !== ''
-        ? '<span style="font-size:11px;color:#fcd34d;letter-spacing:.3px;"><i class="bi bi-clock"></i> Ends ' . $endsTxt . '</span>'
-        : '';
+        : '<span style="display:inline-block;width:36px;height:36px;border-radius:50%;background:#3b82f6;color:#fff;font-weight:900;font-size:18px;text-align:center;line-height:36px;">★</span>';
 
-    // Popup card (initially hidden — toggled by the "View offer" button).
+    // Popup card (initially hidden — toggled by the pill).
     $popupBody = '';
     if ($code !== '' && $pct > 0) {
-        $popupBody = '<div style="display:flex;align-items:center;gap:10px;background:#fef3c7;border:1px dashed #f59e0b;border-radius:10px;padding:10px 12px;margin-top:14px;">'
-                   . '<div style="font-family:ui-monospace,Menlo,monospace;font-size:18px;font-weight:800;letter-spacing:1.4px;color:#92400e;flex:1;text-align:center;" data-testid="vibe-popup-code">' . $codeEsc . '</div>'
+        $popupBody = '<div style="display:flex;align-items:center;gap:10px;background:#eff6ff;border:1px dashed #3b82f6;border-radius:10px;padding:10px 12px;margin-top:14px;">'
+                   . '<div style="font-family:ui-monospace,Menlo,monospace;font-size:18px;font-weight:800;letter-spacing:1.4px;color:#1e40af;flex:1;text-align:center;" data-testid="vibe-popup-code">' . $codeEsc . '</div>'
                    . '<button type="button" class="vibe-popup-copy" data-promo-code="' . $codeEsc . '" data-testid="vibe-popup-copy" '
-                   . 'style="background:#0f172a;color:#fbbf24;border:0;border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;">'
+                   . 'style="background:#1e40af;color:#fff;border:0;border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;">'
                    . '<i class="bi bi-clipboard"></i> Copy</button>'
                    . '</div>'
-                   . '<div style="text-align:center;color:#475569;font-size:11.5px;margin-top:10px;">Paste this code in the coupon field at checkout to save <strong style="color:#0f172a;">' . $pct . '%</strong>.</div>';
+                   . '<div style="text-align:center;color:#475569;font-size:11.5px;margin-top:10px;">Paste this code at checkout to save <strong style="color:#1e40af;">' . $pct . '%</strong>.</div>';
     }
     $popupHtml = '<div id="' . $popupId . '" class="vibe-popup" data-testid="vibe-promo-popup" role="dialog" aria-modal="false" hidden '
-               . 'style="position:absolute;top:calc(100% + 10px);right:8px;width:300px;background:#ffffff;border-radius:14px;box-shadow:0 14px 48px rgba(15,23,42,.22);border:1px solid #e2e8f0;padding:18px;z-index:1080;animation:vibe-popup-in .18s ease-out;">'
+               . 'style="position:absolute;top:calc(100% + 10px);left:0;width:300px;background:#ffffff;border-radius:14px;box-shadow:0 14px 48px rgba(15,23,42,.22);border:1px solid #dbeafe;padding:18px;z-index:1080;animation:vibe-popup-in .18s ease-out;">'
                . '<button type="button" class="vibe-popup-close" data-popup-target="' . $popupId . '" aria-label="Close" '
                . 'style="position:absolute;top:6px;right:8px;background:transparent;border:0;color:#94a3b8;font-size:18px;line-height:1;cursor:pointer;">&times;</button>'
                . '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">' . $logoTagLg
-               . '<div style="font-size:10.5px;color:#94a3b8;font-weight:700;letter-spacing:1px;text-transform:uppercase;">Limited offer</div></div>'
+               . '<div style="font-size:10.5px;color:#60a5fa;font-weight:700;letter-spacing:1px;text-transform:uppercase;">Limited offer</div></div>'
                . '<div style="font-size:18px;font-weight:800;color:#0f172a;line-height:1.25;letter-spacing:.2px;">' . $label . '</div>'
-               . ($pct > 0 ? '<div style="font-size:13px;color:#475569;margin-top:4px;">Save <strong style="color:#0f172a;">' . $pct . '%</strong> on every product.</div>' : '')
+               . ($pct > 0 ? '<div style="font-size:13px;color:#475569;margin-top:4px;">Save <strong style="color:#1e40af;">' . $pct . '%</strong> on every product.</div>' : '')
                . $popupBody
                . ($endsTxt !== '' ? '<div style="font-size:11px;color:#64748b;text-align:center;margin-top:10px;"><i class="bi bi-hourglass-split"></i> Ends ' . $endsTxt . '</div>' : '')
                . '</div>';
 
-    // Compact slim bar (≈ 44px tall) + popup wrapper.  position:relative
-    // so the popup anchors right of the "View offer" button.
-    $cta = ($code !== '' && $pct > 0)
-        ? '<button type="button" class="vibe-view-offer" data-popup-target="' . $popupId . '" data-testid="vibe-promo-view-offer" '
-        . 'style="background:#fbbf24;color:#0f172a;border:0;border-radius:999px;padding:6px 14px;font-size:11.5px;font-weight:800;letter-spacing:.4px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;text-transform:uppercase;transition:transform .12s ease, box-shadow .12s ease;">'
-        . '<i class="bi bi-gift-fill"></i> View offer'
-        . '</button>'
-        : '';
+    // The compact pill itself — light blue gradient, pulsing sparkle on
+    // the left, soft bouncing scale on hover.  Clicking it toggles the
+    // popup card above.  data-testid is preserved so test scripts that
+    // looked for `vibe-promo-banner` still find this control.
+    $pillLabel = $label;
+    if ($code !== '' && $pct > 0) {
+        $pillLabel .= ' &middot; <span style="font-weight:800;color:#1e40af;">' . $pct . '% off</span>';
+    }
 
-    return '<div class="vibe-promo-banner" data-testid="vibe-promo-banner" style="position:relative;background:linear-gradient(90deg,#0f172a 0%, #1e293b 100%);color:#f1f5f9;padding:9px 18px;border-radius:12px;margin:0 0 22px;border-left:3px solid #fbbf24;box-shadow:0 4px 14px rgba(15,23,42,.18);display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">'
-         . '<div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;">'
-         .   $logoTagSmall
-         .   '<div style="display:flex;flex-direction:column;line-height:1.2;min-width:0;">'
-         .     '<div style="font-size:13px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' . $label . '</div>'
-         .     $endsBadge
-         .   '</div>'
-         . '</div>'
-         . '<div style="display:flex;align-items:center;gap:10px;">' . $cta . '</div>'
+    return '<div style="margin:0 0 16px;position:relative;display:inline-flex;align-items:stretch;">'
+         . '<button type="button" class="vibe-promo-pill" data-popup-target="' . $popupId . '" data-testid="vibe-promo-banner" '
+         . 'style="display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,#dbeafe 0%,#bfdbfe 50%,#93c5fd 100%);color:#1e3a8a;border:1px solid #93c5fd;border-radius:999px;padding:6px 14px 6px 10px;font-size:12.5px;font-weight:700;letter-spacing:.2px;cursor:pointer;box-shadow:0 2px 10px rgba(59,130,246,.18);transition:transform .15s ease, box-shadow .15s ease;">'
+         . '<span class="vibe-pill-spark" aria-hidden="true" style="display:inline-flex;width:22px;height:22px;border-radius:50%;background:#3b82f6;color:#fff;align-items:center;justify-content:center;font-size:12px;box-shadow:0 0 0 0 rgba(59,130,246,.55);">'
+         . '<i class="bi bi-lightning-charge-fill"></i>'
+         . '</span>'
+         . '<span style="text-transform:uppercase;font-weight:800;letter-spacing:.7px;font-size:10.5px;color:#1d4ed8;">Offer</span>'
+         . '<span style="color:#1e3a8a;font-weight:600;font-size:12.5px;">' . $pillLabel . '</span>'
+         . ($endsTxt !== '' ? '<span style="font-size:10.5px;color:#1e40af;opacity:.78;margin-left:4px;"><i class="bi bi-clock"></i> ' . $endsTxt . '</span>' : '')
+         . '<i class="bi bi-chevron-down" style="font-size:10px;color:#1e40af;opacity:.6;margin-left:2px;"></i>'
+         . '</button>'
          . $popupHtml
          . '<style>'
          . '@keyframes vibe-popup-in { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:translateY(0); } }'
-         . '.vibe-view-offer:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(251,191,36,.40); }'
-         . '.vibe-popup-copy:hover { background:#1e293b !important; }'
+         . '@keyframes vibe-pill-bounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }'
+         . '@keyframes vibe-pill-flash  { 0%   { box-shadow: 0 0 0 0 rgba(59,130,246,.55);} 60%  { box-shadow: 0 0 0 10px rgba(59,130,246,0);} 100% { box-shadow: 0 0 0 0 rgba(59,130,246,0);} }'
+         . '.vibe-promo-pill { animation: vibe-pill-bounce 2.4s ease-in-out infinite; }'
+         . '.vibe-promo-pill .vibe-pill-spark { animation: vibe-pill-flash 1.8s ease-out infinite; }'
+         . '.vibe-promo-pill:hover { transform: translateY(-1px) scale(1.03); box-shadow: 0 8px 22px rgba(59,130,246,.32); }'
+         . '.vibe-promo-pill:focus { outline: none; box-shadow: 0 0 0 3px rgba(59,130,246,.35); }'
+         . '.vibe-popup-copy:hover { background:#1e3a8a !important; }'
+         . '@media (prefers-reduced-motion: reduce) { .vibe-promo-pill, .vibe-promo-pill .vibe-pill-spark { animation: none !important; } }'
          . '@media (max-width: 540px) { .vibe-popup { position:fixed !important; top:50% !important; left:50% !important; right:auto !important; transform:translate(-50%,-50%) !important; width:90% !important; max-width:340px !important; } }'
          . '</style>'
          . '<script>(function(){var open=null;function close(){if(open){open.setAttribute("hidden","");open=null;}}'
-         . 'document.querySelectorAll("[data-testid=vibe-promo-view-offer]").forEach(function(b){b.addEventListener("click",function(e){e.stopPropagation();var id=b.getAttribute("data-popup-target");var pop=document.getElementById(id);if(!pop)return;if(open===pop){close();return;}close();pop.removeAttribute("hidden");open=pop;});});'
+         . 'document.querySelectorAll("[data-testid=vibe-promo-banner]").forEach(function(b){if(b.dataset.vibeBound)return;b.dataset.vibeBound="1";b.addEventListener("click",function(e){e.stopPropagation();var id=b.getAttribute("data-popup-target");var pop=document.getElementById(id);if(!pop)return;if(open===pop){close();return;}close();pop.removeAttribute("hidden");open=pop;});});'
          . 'document.querySelectorAll(".vibe-popup-close").forEach(function(b){b.addEventListener("click",function(){close();});});'
          . 'document.addEventListener("click",function(e){if(open && !open.contains(e.target)){close();}});'
          . 'document.addEventListener("keydown",function(e){if(e.key==="Escape"){close();}});'

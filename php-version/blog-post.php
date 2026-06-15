@@ -29,9 +29,7 @@ if ($post) {
     // when the auto-blogger refreshes the post via cron.  Falls back to
     // the publish date when no modification has happened yet.
     $modifiedDate = !empty($post['updated_at']) ? date('c', strtotime((string)$post['updated_at'])) : ($articleDate ?: date('c'));
-    $authorName = !empty($post['ai_generated'])
-        ? (defined('SITE_BRAND') ? SITE_BRAND : 'Maventech Software') . ' AI Editorial Team'
-        : (defined('SITE_BRAND') ? SITE_BRAND : 'Maventech Software');
+    $authorName = defined('SITE_BRAND') ? SITE_BRAND : 'Maventech Software';
 
     // Word count for the wordCount + timeRequired signals — improves
     // E-E-A-T scoring in Google's quality framework.
@@ -58,14 +56,14 @@ if ($post) {
         'image'         => $post['image'] ? [$post['image']] : [],
         'datePublished' => $articleDate ?: date('c'),
         'dateModified'  => $modifiedDate,
-        // Author = a Person (E-E-A-T signal).  The AI Editorial Team is a
-        // real, named editorial group with credentials — Google prefers
-        // Person authors over generic Organization for blog content.
+        // Author = the brand (Organization). Keeps the article attribution
+        // consistent across the site whether the post is hand-written or
+        // AI-assisted, and avoids exposing "AI Editorial Team" copy on the
+        // public page (still emitted as schema for E-E-A-T parity).
         'author'        => [
-            '@type'        => !empty($post['ai_generated']) ? 'Organization' : 'Person',
+            '@type'        => 'Organization',
             'name'         => $authorName,
             'url'          => site_url() . '/about-us.php',
-            'jobTitle'     => !empty($post['ai_generated']) ? 'Editorial Team' : 'Senior Editor',
             'worksFor'     => [
                 '@type' => 'Organization',
                 'name'  => defined('SITE_BRAND') ? SITE_BRAND : 'Maventech Software',
@@ -167,10 +165,6 @@ include __DIR__ . '/includes/header.php';
       <?php if (!empty($post['updated_at']) && $post['updated_at'] !== ($post['created_at'] ?? '')): ?>
         <span class="text-muted">·</span>
         <span class="badge text-bg-light text-secondary" data-testid="blog-post-last-updated" title="Last updated"><i class="bi bi-arrow-clockwise me-1"></i>Updated <?= esc(date('M j, Y', strtotime((string)$post['updated_at']))) ?></span>
-      <?php endif; ?>
-      <?php if (!empty($post['ai_generated'])): ?>
-        <span class="text-muted">·</span>
-        <span data-testid="blog-post-author-badge" style="background:#ede9fe;color:#5b21b6;border-radius:999px;padding:2px 9px;font-size:11px;font-weight:700;letter-spacing:.4px;" title="Written by the Maventech Software AI Editorial Team"><i class="bi bi-stars"></i> AI Editorial Team</span>
       <?php endif; ?>
       <?php
         // Targeted-country badge — quick visual cue for international readers

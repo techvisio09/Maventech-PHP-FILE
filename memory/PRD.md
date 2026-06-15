@@ -2271,3 +2271,20 @@ When admin creates a new category via the inline "+ Add Category" flow on the Ad
 | Topic hubs `/hub/<slug>` | ✓ microsoft-office, windows, antivirus all return 200 |
 | Category breadcrumb regression | ✓ ONE breadcrumb, properly aligned inside hero band |
 | Token format validators | ✓ Reject garbage, accept valid AI/GSC/Bing/Yandex/Pinterest/Merchant ID formats |
+
+## [Feb 2026 — Iteration 11] Blog "AI Editorial Team" badge + Cart vibe-promo pill polish
+
+### Completed
+- **Removed the visible "AI Editorial Team" pill** on `/blog-post.php` (purple lavender chip in the meta row). Visitors now see only the date, read-time, optional updated-at, and the regional flag chip. JSON-LD `author` field still emits `Organization` with the brand name so Google's E-E-A-T attribution stays clean.
+- **Cart vibe-promo banner redesigned as a compact light-blue pulsing pill** (was a ~100 px-tall slate rectangle with a yellow "VIEW OFFER" button). New `cart` variant of `render_vibe_promo_banner()`:
+  - Light-blue gradient pill (`#dbeafe → #bfdbfe → #93c5fd`, navy text) ~38 px tall — inline-flex, sized to content
+  - Pulsing **lightning** icon in a circular blue badge with a `vibe-pill-flash` keyframe (radial box-shadow expansion, 1.8 s loop)
+  - Subtle `vibe-pill-bounce` keyframe (±2 px Y-translate, 2.4 s loop) for the whole pill
+  - Hover scales to 1.03 with a deeper blue glow; focus ring honours `prefers-reduced-motion: reduce`
+  - Tapping the pill toggles the same popup card (logo + label + coupon code + Copy button + ends-at) used by every other surface — single source of truth, no behavioural regression
+  - Existing test ID `vibe-promo-banner` preserved so the testing agent still wires through
+
+### Files touched
+- `/app/php-version/blog-post.php` — removed visible `blog-post-author-badge` span, simplified JSON-LD author to a single Organization entry (no separate "AI Editorial Team" job title)
+- `/app/php-version/includes/functions.php` — `render_vibe_promo_banner('cart')` rewritten as compact pulsing pill with new `vibe-pill-bounce` + `vibe-pill-flash` keyframes
+
