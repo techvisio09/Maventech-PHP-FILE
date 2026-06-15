@@ -140,7 +140,6 @@ include __DIR__ . '/includes/header.php';
     <p class="small text-center mt-3 mb-0">
       <a href="forgot-password.php" class="text-decoration-none fw-semibold" data-testid="login-forgot-link" style="color:var(--text-muted, #64748b);"><i class="bi bi-shield-lock me-1"></i>Forgot password?</a>
     </p>
-    <p class="small text-secondary text-center mt-2 mb-0">New here? <a href="register.php" class="fw-semibold">Create an account</a></p>
   </div>
 </div>
 <?php include __DIR__ . '/includes/footer.php'; ?>

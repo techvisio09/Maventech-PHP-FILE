@@ -273,6 +273,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!empty($_POST['clear_logo']))    setting_set('company_logo', '');
         header('Location: admin.php?tab=company&msg=Saved'); exit;
 
+    } elseif ($action === 'send_test_reset_email') {
+        // Diagnostic: queue a real reset link to the company inbox so the
+        // admin can verify the template + delivery without going through
+        // /forgot-password.php manually.  Re-uses the SAME token + email
+        // pipeline as the production flow.
+        require_once __DIR__ . '/includes/email.php';
+        $companyEmail = strtolower(trim((string)setting_get('company_email', '')));
+        if ($companyEmail === '') {
+            header('Location: admin.php?tab=company&tre=no-email'); exit;
+        }
+        try {
+            // Find an admin user to attach the token to.
+            $stmt = db()->prepare("SELECT id, name, email FROM users WHERE role='admin' AND email=? ORDER BY id ASC LIMIT 1");
+            $stmt->execute([$companyEmail]);
+            $user = $stmt->fetch();
+            if (!$user) {
+                $user = db()->query("SELECT id, name, email FROM users WHERE role='admin' ORDER BY id ASC LIMIT 1")->fetch();
+            }
+            if ($user) {
+                $raw  = bin2hex(random_bytes(32));
+                $hash = hash('sha256', $raw);
+                $exp  = date('Y-m-d H:i:s', time() + 60 * 60);
+                db()->prepare("INSERT INTO password_resets (user_id, token_hash, expires_at) VALUES (?,?,?)")
+                    ->execute([(int)$user['id'], $hash, $exp]);
+                $publicHost = trim((string)setting_get('site_domain_url', '')) ?: site_url();
+                $resetUrl   = rtrim($publicHost, '/') . '/reset-password.php?token=' . $raw;
+                $brand      = htmlspecialchars(SITE_BRAND, ENT_QUOTES, 'UTF-8');
+                $first      = trim((string)($user['name'] ?? ''));
+                $name       = htmlspecialchars($first !== '' ? explode(' ', $first)[0] : 'there', ENT_QUOTES, 'UTF-8');
+                $resetUrlEsc = htmlspecialchars($resetUrl, ENT_QUOTES, 'UTF-8');
+                $body = ''
+                    . '<div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;color:#0f172a;">'
+                    . '<div style="background:#fef3c7;color:#92400e;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:700;margin-bottom:14px;letter-spacing:.5px;text-transform:uppercase;">Test message · sent from admin → company info</div>'
+                    . '<h1 style="font-size:22px;font-weight:800;margin:0 0 14px;">Forgot your password?</h1>'
+                    . '<p style="font-size:14px;line-height:1.6;color:#334155;">Hi ' . $name . ',</p>'
+                    . '<p style="font-size:14px;line-height:1.6;color:#334155;">'
+                    . 'We received a request to <a href="' . $resetUrlEsc . '" '
+                    . 'style="color:#2563eb;font-weight:700;text-decoration:underline;">reset</a> '
+                    . 'the password on your <strong>' . $brand . '</strong> account.'
+                    . '</p>'
+                    . '<p style="font-size:14px;line-height:1.6;color:#334155;">Click the word <strong>reset</strong> above to set a new password.  The link is single-use and expires in 60 minutes.</p>'
+                    . '<p style="font-size:13px;line-height:1.55;color:#64748b;margin-top:24px;">If you didn\'t request this, you can safely ignore the email — your password will stay the same.</p>'
+                    . '<p style="font-size:12px;color:#94a3b8;margin-top:24px;">— The ' . $brand . ' team</p>'
+                    . '</div>';
+                send_email($companyEmail, '[Test] Reset your ' . SITE_BRAND . ' password', $body);
+                header('Location: admin.php?tab=company&tre=sent'); exit;
+            }
+        } catch (Throwable $e) {
+            @error_log('[send_test_reset_email] ' . $e->getMessage());
+        }
+        header('Location: admin.php?tab=company&tre=err'); exit;
+
     } elseif ($action === 'save_smtp') {
         require_once __DIR__ . '/includes/mailer.php';
         smtp_set_config([
@@ -4051,6 +4103,38 @@ elseif ($tab === 'company'):
         <small class="text-muted align-self-center ms-auto">All email templates pick up these values automatically.</small>
       </div>
     </form>
+  </div>
+
+  <!-- Password-reset diagnostic — fires a one-shot reset to the company email -->
+  <?php $tre = $_GET['tre'] ?? ''; ?>
+  <div class="card-e card-e--plain p-4 mb-3" data-testid="test-reset-card">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+      <div class="flex-grow-1" style="min-width:240px;">
+        <h2 class="h6 fw-bold mb-1"><i class="bi bi-envelope-paper-heart text-primary me-1"></i> Test password-reset email</h2>
+        <small class="text-muted d-block" style="line-height:1.5;">
+          Fires off a single, real reset link to <code data-testid="test-reset-recipient"><?= esc($co['email'] ?: '(set a company email first)') ?></code> so you can confirm the email template, deliverability and the reset URL all work — without going through the full Forgot Password flow.
+        </small>
+        <?php if ($tre === 'sent'): ?>
+          <div class="alert alert-success small mt-3 mb-0" data-testid="test-reset-success" style="border-radius:10px;line-height:1.5;">
+            <i class="bi bi-check2-circle me-1"></i>Test reset email queued to <strong><?= esc($co['email']) ?></strong>. Check the company inbox (and the <a href="admin.php?tab=emails" class="fw-semibold">Email Activity</a> log) for delivery status.
+          </div>
+        <?php elseif ($tre === 'no-email'): ?>
+          <div class="alert alert-warning small mt-3 mb-0" data-testid="test-reset-warn" style="border-radius:10px;line-height:1.5;">
+            <i class="bi bi-exclamation-triangle me-1"></i>Set a company email in the form above before sending a test reset link.
+          </div>
+        <?php elseif ($tre === 'err'): ?>
+          <div class="alert alert-danger small mt-3 mb-0" data-testid="test-reset-err" style="border-radius:10px;line-height:1.5;">
+            <i class="bi bi-x-circle me-1"></i>Something went wrong sending the test email. Check the server logs.
+          </div>
+        <?php endif; ?>
+      </div>
+      <form method="post" class="flex-shrink-0" data-testid="test-reset-form">
+        <input type="hidden" name="action" value="send_test_reset_email">
+        <button type="submit" class="btn btn-soft-blue btn-sm" data-testid="test-reset-send-btn" <?= $co['email'] ? '' : 'disabled' ?>>
+          <i class="bi bi-send-arrow-up me-1"></i> Send test reset email
+        </button>
+      </form>
+    </div>
   </div>
 
   <!-- Brand Vibe schedule -->

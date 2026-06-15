@@ -1007,3 +1007,36 @@ Also surfaced a **"{brand} profile →"** chip on each admin Product card (data-
 ### Verification (curl + DB, no testing-agent needed for two targeted bug fixes)
 - Vibe: Set classic with override, verified premium (current 2026-06-08→06-21 schedule) does NOT re-override on subsequent HTTP loads. Inserted a NEW schedule starting after the override and confirmed it correctly flipped the vibe to `playful`.
 - Forgot password: Submitting `stranger@example.com` → 0 password_resets rows, 0 outbox emails. Submitting `services@maventechsoftware.com` (company email) → 1 password_resets row tied to admin user id 1, 1 outbox row with `recipient = services@maventechsoftware.com`.
+
+
+---
+
+## [Feb 2026] Iteration 18 — Track Order portal, editable resend, admin tools
+
+### What changed
+1. **Removed self-service signup** — `/login.php` no longer shows the "New here? Create an account" link, and `/register.php` now 302-redirects to `/login.php` (the page returns 410 in the status to signal "gone").  Customers regain order access via the Track Order portal instead of a personal account.
+2. **"Test reset email" tool** in **Admin → Company Info** (new sub-card under the edit form).  Fires a real reset link to the registered company email, re-using the production token + email pipeline so the admin can sanity-check the template, the URL, and SMTP deliverability without going through `/forgot-password.php` manually.  New POST action: `send_test_reset_email`.
+3. **Track Order portal** — new `/track-order.php` alias 302→`/order-history.php`, plus a "Track Order" link in the public navbar (`data-testid="nav-track-order"`) and the footer.  The page heading is renamed **"Track Order & Receipts"**.
+4. **Editable resend recipient** — the "Resend License Key Email" link on the Order History page is replaced with a small `<form>` that pre-fills the email on file but allows the customer to change it before clicking **Resend link**.  The Order History `resend` action now accepts a `to_email` POST param (validated, falls back to the order's email when missing/invalid).
+5. **License keys now visible on the Track Order page** — a new "License Keys" section renders code-pill chips for every key tied to the order (grouped by product).
+6. **Track Order CTA in transactional emails** — `build_order_email_html()` (order delivery) and `render_template()` (review request + future templates) both expose `{{track_order_url}}` and `{{track_order_button}}` placeholders.  When the template doesn't reference `{{track_order_button}}`, the CTA is auto-injected right before `</body>`.  CTAs use the admin-configured public `site_domain_url` (preferred over `site_url()`) so the link always resolves on the live storefront.
+
+### Files touched
+- `/app/php-version/login.php` — removed Create-Account link
+- `/app/php-version/register.php` — rewritten as a 302 to /login.php
+- `/app/php-version/admin.php` — `send_test_reset_email` POST action + UI card on the Company tab
+- `/app/php-version/order-history.php` — license-key section + editable-recipient resend form + heading rename
+- `/app/php-version/track-order.php` — new alias route
+- `/app/php-version/includes/header.php` — Track Order nav link
+- `/app/php-version/includes/footer.php` — footer label updated to "Track Order & Receipts"
+- `/app/php-version/includes/email.php` — `track_order_button_html()`, `inject_track_order_cta()`, `{{track_order_url}}`/`{{track_order_button}}` placeholders in `build_order_email_html()` and `render_template()`; CTA host now prefers `site_domain_url`.
+
+### Verification (curl + DB)
+- Login page: `Create an account` count = 0.
+- `/register.php`: 302 → `login.php`.
+- `/track-order.php?...`: 302 → `order-history.php?email=...&order=...` (query preserved).
+- Navbar/footer: `nav-track-order` test-id present, footer points to `track-order.php`.
+- Order History lookup (`john.demo@example.com` + `MVT-DEMO-002`) → page renders `oh-keys-block`, `oh-key`, `oh-resend-form`, `oh-resend-email-input`, `oh-resend-email-btn`, plus download buttons.
+- Editable resend: posted `to_email=forwarded@new-inbox.test` → newest outbox row recipient = `forwarded@new-inbox.test` (NOT the order's email), with the correct order subject.
+- Admin Company Info: `test-reset-card`, `test-reset-form`, `test-reset-send-btn`, `test-reset-recipient` testids present.  POST `action=send_test_reset_email` → outbox row recipient = `services@maventechsoftware.com`, subject prefix `[Test] Reset your …`, status sent.
+- Order delivery email body now contains the Track Order CTA: `<a href="https://example-test-domain-1781505840.com/track-order.php?email=...&order=MVT-DEMO-002">… View order MVT-DEMO-002 …</a>` — uses the admin's configured public domain.

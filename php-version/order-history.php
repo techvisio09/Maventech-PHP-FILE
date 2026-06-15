@@ -109,6 +109,12 @@ if (!$order && !empty($_SESSION['oh_unlocked'])) {
 
 /* ---------- Action: download / resend ---------- */
 $action = $_GET['action'] ?? '';
+// `resend` is now POSTed (with optional editable to_email) so we accept it
+// from either method.  Downloads stay GET so the receipt/invoice anchors
+// work as plain links.
+if ($action === 'resend' || ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'resend')) {
+    $action = 'resend';
+}
 if (in_array($action, ['download', 'resend'], true)) {
     if (!$order) { http_response_code(403); exit('Locked.'); }
     if (!isset($_SESSION['oh_unlocked'][(int)$order['id']])) { http_response_code(403); exit('Locked.'); }
@@ -145,9 +151,15 @@ if (in_array($action, ['download', 'resend'], true)) {
     }
 
     if ($action === 'resend') {
-        // Re-trigger the order-delivery email (with PDFs attached).
-        // fulfill_order() is idempotent — when the order is already fulfilled
-        // it short-circuits.  So we synthesise the email directly instead.
+        // Resend the order-delivery email — with PDFs + license keys.
+        // The customer can optionally pass a NEW recipient email via the
+        // form ("to_email" POST param) — useful when their inbox changed
+        // or they want the keys forwarded to a different mailbox.  When
+        // omitted we fall back to the email on file.
+        $toEmail = strtolower(trim((string)($_POST['to_email'] ?? '')));
+        if ($toEmail === '' || !filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
+            $toEmail = (string)$order['email'];
+        }
         try {
             require_once __DIR__ . '/includes/pdf.php';
             $pdo = db();
@@ -201,8 +213,8 @@ if (in_array($action, ['download', 'resend'], true)) {
                 $pdfItems[] = array_merge($it, ['unit_price' => $it['price'] ?? 0, 'quantity' => $it['qty'] ?? 1]);
             }
             $pdfPaths = generate_order_pdfs($order, $pdfItems);
-            send_email($order['email'], $subject, $html, (int)$order['id'], 'order_delivery', 0, $pdfPaths);
-            $success = 'We\'ve resent your license keys + PDFs to ' . esc($order['email']) . '. Check your inbox in a few minutes.';
+            send_email($toEmail, $subject, $html, (int)$order['id'], 'order_delivery', 0, $pdfPaths);
+            $success = 'We\'ve resent your license keys + PDFs to ' . esc($toEmail) . '. Check that inbox in a few minutes.';
         } catch (Throwable $e) {
             error_log('[order-history resend] ' . $e->getMessage());
             $errors[] = 'Something went wrong while resending the email. Please contact support.';
@@ -214,8 +226,8 @@ include __DIR__ . '/includes/header.php';
 ?>
 <div class="container py-5" style="max-width: 900px;">
   <div class="text-center mb-4">
-    <h1 class="fw-bold mb-2" style="font-size:2.1rem;letter-spacing:-.5px;" data-testid="oh-heading">Order History &amp; Receipts</h1>
-    <p class="text-secondary mb-0" style="font-size:1.05rem;">Re-download your <strong>Receipt</strong> and <strong>Invoice</strong> PDFs, or get your license keys resent &mdash; no support ticket required.</p>
+    <h1 class="fw-bold mb-2" style="font-size:2.1rem;letter-spacing:-.5px;" data-testid="oh-heading">Track Order &amp; Receipts</h1>
+    <p class="text-secondary mb-0" style="font-size:1.05rem;">Look up your order with your <strong>email + order number</strong>, then re-download Receipts / Invoices or resend your license keys to any email.</p>
   </div>
 
   <?php if ($errors): ?>
@@ -263,6 +275,43 @@ include __DIR__ . '/includes/header.php';
           </ul>
         </div>
 
+        <?php
+        // License keys for this order (assigned at fulfilment).  Grouped by
+        // product slug so each row shows the SKU + every key associated.
+        $ohKeys = [];
+        try {
+            $stmt = db()->prepare("SELECT product_slug, license_key FROM license_keys WHERE order_id=? ORDER BY id ASC");
+            $stmt->execute([(int)$order['id']]);
+            foreach ($stmt->fetchAll() as $r) {
+                $ohKeys[$r['product_slug']][] = $r['license_key'];
+            }
+        } catch (Throwable $e) { /* keys not assigned yet */ }
+        ?>
+        <?php if ($ohKeys): ?>
+          <div class="border-top pt-3 mb-3" data-testid="oh-keys-block">
+            <div class="text-uppercase small text-secondary mb-2" style="letter-spacing:1.5px;font-weight:700;">
+              <i class="bi bi-key-fill text-warning me-1"></i>License Keys
+            </div>
+            <?php foreach ($order['items'] as $it):
+              $slug = $it['product_slug'] ?? '';
+              $myKeys = $ohKeys[$slug] ?? [];
+              if (!$myKeys) continue;
+            ?>
+              <div class="mb-2" data-testid="oh-keys-row">
+                <div class="small fw-semibold mb-1" style="color:#0f172a;"><?= esc($it['name']) ?></div>
+                <ul class="list-unstyled mb-0 d-flex flex-wrap gap-2">
+                  <?php foreach ($myKeys as $k): ?>
+                    <li>
+                      <code class="d-inline-block px-2 py-1 fw-bold" data-testid="oh-key" style="background:#fef3c7;color:#92400e;border-radius:6px;font-family:'SF Mono',Menlo,monospace;letter-spacing:.6px;font-size:13px;border:1px solid #fde68a;"><?= esc($k) ?></code>
+                    </li>
+                  <?php endforeach; ?>
+                </ul>
+              </div>
+            <?php endforeach; ?>
+            <small class="text-secondary"><i class="bi bi-shield-lock text-success me-1"></i>Keep your keys private — anyone with access to this page can use them.</small>
+          </div>
+        <?php endif; ?>
+
         <div class="border-top pt-3 d-flex flex-wrap gap-2 align-items-center">
           <a href="?action=download&kind=receipt" class="btn btn-primary rounded-pill px-4" data-testid="oh-download-receipt">
             <i class="bi bi-receipt me-1"></i> Download Receipt (PDF)
@@ -270,13 +319,36 @@ include __DIR__ . '/includes/header.php';
           <a href="?action=download&kind=invoice" class="btn btn-outline-primary rounded-pill px-4" data-testid="oh-download-invoice">
             <i class="bi bi-file-earmark-text me-1"></i> Download Invoice (PDF)
           </a>
-          <a href="?action=resend" class="btn btn-outline-secondary rounded-pill px-4 ms-auto" onclick="return confirm('Resend your license keys + PDFs to <?= esc($order['email']) ?>?')" data-testid="oh-resend-email">
-            <i class="bi bi-envelope-arrow-up me-1"></i> Resend License Key Email
-          </a>
         </div>
+
+        <!-- Resend link with editable recipient email -->
+        <div class="border-top pt-3 mt-3" data-testid="oh-resend-card">
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <i class="bi bi-envelope-arrow-up text-primary"></i>
+            <strong style="color:#0f172a;font-size:.95rem;">Resend license keys + PDFs</strong>
+          </div>
+          <p class="small text-secondary mb-2" style="line-height:1.5;">Need the keys at a different mailbox? Edit the email below before sending — we'll deliver to that address instead.</p>
+          <form method="post" class="row g-2 align-items-end" data-testid="oh-resend-form">
+            <input type="hidden" name="action" value="resend">
+            <div class="col-md-7">
+              <label class="form-label small fw-semibold mb-1" for="oh-resend-email"><i class="bi bi-envelope me-1"></i>Send to</label>
+              <input type="email" name="to_email" id="oh-resend-email" class="form-control" required
+                     value="<?= esc($order['email']) ?>"
+                     placeholder="you@example.com"
+                     data-testid="oh-resend-email-input">
+              <div class="form-text small">Defaults to the email on file (<strong><?= esc($order['email']) ?></strong>). Change it to forward to a different inbox.</div>
+            </div>
+            <div class="col-md-5">
+              <button type="submit" class="btn btn-outline-primary rounded-pill px-4 w-100" data-testid="oh-resend-email-btn">
+                <i class="bi bi-send-arrow-up me-1"></i> Resend link
+              </button>
+            </div>
+          </form>
+        </div>
+
         <div class="small text-secondary mt-3">
           <i class="bi bi-shield-lock text-success me-1"></i>
-          Documents are generated fresh on each download. Resend will go to the email on file: <strong><?= esc($order['email']) ?></strong>.
+          Documents are generated fresh on each download. Resend is rate-limited to prevent abuse.
         </div>
       </div>
     </div>

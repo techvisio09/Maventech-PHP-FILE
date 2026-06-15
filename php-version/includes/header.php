@@ -409,6 +409,7 @@ $ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.sv
         <li class="nav-item"><a class="nav-link fw-semibold" href="shop.php" data-testid="nav-shop">Shop</a></li>
         <li class="nav-item"><a class="nav-link fw-semibold" href="blog.php">Blog</a></li>
         <li class="nav-item"><a class="nav-link fw-semibold" href="affiliate.php" data-testid="nav-affiliates">Affiliates</a></li>
+        <li class="nav-item"><a class="nav-link fw-semibold" href="track-order.php" data-testid="nav-track-order"><i class="bi bi-truck me-1"></i>Track Order</a></li>
       </ul>
       <div class="d-flex align-items-center gap-2 flex-wrap">
         <a href="tel:<?= esc($brandPhone) ?>" class="phone-cta d-none d-xl-inline-flex" data-testid="navbar-phone-cta">
