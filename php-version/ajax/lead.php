@@ -20,6 +20,23 @@ if ($name === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($phone)
     exit;
 }
 
+// Catch typo domains / missing MX records BEFORE saving the lead so we
+// don't pile up un-reachable contacts in the CRM.  Matches the same
+// hardening applied to checkout + notify-stock.
+require_once __DIR__ . '/../includes/mailer.php';
+if (function_exists('email_address_deliverable')) {
+    $deliv = email_address_deliverable($email);
+    if (!$deliv['ok'] && in_array($deliv['reason'], ['no_mx','invalid_syntax'], true)) {
+        http_response_code(400);
+        echo json_encode([
+            'ok'    => false,
+            'error' => $deliv['detail'] ?: 'That email address looks undeliverable — please double-check the spelling.',
+            'reason'=> $deliv['reason'],
+        ]);
+        exit;
+    }
+}
+
 $pdo = db();
 $stmt = $pdo->prepare('INSERT INTO chat_leads (session_id, name, email, phone, callback_requested, message) VALUES (?, ?, ?, ?, ?, ?)');
 $stmt->execute([$sessionId, $name, $email, $phone, $callback ? 1 : 0, $callback ? 'Callback requested via chat form' : 'Chat form contact']);

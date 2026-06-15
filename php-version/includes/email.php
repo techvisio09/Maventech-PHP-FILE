@@ -1115,17 +1115,19 @@ function send_email(string $to, string $subject, string $html, ?int $orderId = n
         return;
     }
 
-    // Dev / preview mode — capture the email so the admin can verify content,
-    // tracking pixel, links, etc. In production configure SMTP from the admin.
-    // IMPORTANT: We deliberately mark these as `status='sent'` so the admin
-    // sees how the system WOULD behave in production, but the `note` makes
-    // it unmistakable that nothing actually left the building.  The Email
-    // Activity tab also shows a banner pointing the admin at the SMTP setup.
-    $pdo->prepare('INSERT INTO email_outbox (recipient, subject, html, status, note, order_id, tracking_token, delivered_at, template_code, attachments_json)
-        VALUES (?,?,?,"sent",?,?,?,?,?,?)')
+    // Dev / preview mode — neither SMTP nor Resend is configured.
+    // Historically these rows were marked `status='sent'` which made it
+    // look like email actually left the building — a foot-gun in
+    // production. Now we mark them `status='queued'` with a clear note
+    // so the admin Failed-or-Pending pill catches it on Email Activity.
+    // Once the operator configures SMTP (admin → SMTP / Mail Server) on
+    // the live domain, the same rows will be picked up by the cron
+    // worker and actually delivered + flipped to 'sent'.
+    $pdo->prepare('INSERT INTO email_outbox (recipient, subject, html, status, note, order_id, tracking_token, delivered_at, template_code, attachments_json, next_retry_at)
+        VALUES (?,?,?,"queued",?,?,?,NULL,?,?,NOW())')
         ->execute([$to, $subject, $html,
-            '⚠ Captured in dev mode — SMTP disabled, NOT delivered to customer',
-            $orderId, $tok, date('Y-m-d H:i:s'), $templateCode, $attachJson]);
+            '⚠ Pending delivery — configure SMTP (admin → SMTP / Mail Server) so the cron worker can dispatch this row.',
+            $orderId, $tok, $templateCode, $attachJson]);
 }
 
 function fulfill_order(int $orderId, bool $forceAdminOverride = false): void {

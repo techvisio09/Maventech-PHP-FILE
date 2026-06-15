@@ -20,6 +20,24 @@ if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
     exit;
 }
 
+// Stronger validation — catch typo domains (gmial.com / gmail.con / yaho.com
+// etc.) and missing MX records BEFORE we accept the subscription, so the
+// customer gets a clear "did you mean…?" hint instead of a silent failure
+// later when the confirmation email bounces.
+if (function_exists('email_address_deliverable')) {
+    $deliv = email_address_deliverable($email);
+    if (!$deliv['ok'] && in_array($deliv['reason'], ['no_mx','invalid_syntax'], true)) {
+        http_response_code(400);
+        echo json_encode([
+            'ok'     => false,
+            'error'  => $deliv['detail'] ?: 'That email address looks undeliverable — please double-check the spelling.',
+            'hint'   => $deliv['detail'],
+            'reason' => $deliv['reason'],
+        ]);
+        exit;
+    }
+}
+
 $pdo    = db();
 $region = active_region_code();
 

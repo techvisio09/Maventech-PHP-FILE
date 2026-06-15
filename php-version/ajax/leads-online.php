@@ -41,6 +41,18 @@ try {
 
     $total = (int)$pdo->query("SELECT COUNT(*) FROM chat_leads")->fetchColumn();
 
+    // Install-Schedule pending count — drives the amber badge on the
+    // Commerce → Install Schedule sidebar item.  Pending = status='pending'
+    // AND scheduled_utc is in the future OR within the last 60 min so a
+    // just-missed slot still flags.
+    try {
+        $installPending = (int)$pdo->query(
+            "SELECT COUNT(*) FROM proassist_schedules
+             WHERE status='pending'
+               AND scheduled_utc >= DATE_SUB(NOW(), INTERVAL 60 MINUTE)"
+        )->fetchColumn();
+    } catch (Throwable $e) { $installPending = 0; }
+
     $latest = $pdo->query(
         "SELECT id, name, email, requested_product AS product,
                 DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at
@@ -50,11 +62,12 @@ try {
     )->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
     echo json_encode([
-        'ok'         => true,
-        'now'        => date('c'),
-        'online_ids' => array_map('intval', $online),
-        'total'      => $total,
-        'latest'     => $latest,
+        'ok'              => true,
+        'now'             => date('c'),
+        'online_ids'      => array_map('intval', $online),
+        'total'           => $total,
+        'install_pending' => $installPending,
+        'latest'          => $latest,
     ]);
 } catch (Throwable $e) {
     http_response_code(500);

@@ -64,15 +64,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($name === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || $subject === '' || $message === '') {
         $formError = 'Please fill in all required fields with a valid email.';
     } else {
-        save_support_message([
-            'name' => $name, 'email' => strtolower($email),
-            'phone' => trim($_POST['phone'] ?? ''), 'order_number' => trim($_POST['order_number'] ?? ''),
-            'subject' => $subject, 'message' => $message, 'source' => 'contact',
-        ]);
-        // Customer-service auto-acknowledgement (5-minute delayed delivery)
-        require_once __DIR__ . '/includes/email.php';
-        send_customer_service_ack(strtolower($email), $name, $subject, $message, 'contact');
-        $sent = true;
+        // Reject typo domains (gmail.con / yaho.com etc.) BEFORE we save
+        // the ticket so the auto-acknowledgement email isn't sent into
+        // the void.  Mirror of the validation we apply at checkout +
+        // notify-stock + lead form.
+        require_once __DIR__ . '/includes/mailer.php';
+        $deliv = function_exists('email_address_deliverable')
+            ? email_address_deliverable($email)
+            : ['ok' => true];
+        if (!$deliv['ok'] && in_array($deliv['reason'] ?? '', ['no_mx','invalid_syntax'], true)) {
+            $formError = $deliv['detail'] ?: 'That email address looks undeliverable — please double-check the spelling.';
+        } else {
+            save_support_message([
+                'name' => $name, 'email' => strtolower($email),
+                'phone' => trim($_POST['phone'] ?? ''), 'order_number' => trim($_POST['order_number'] ?? ''),
+                'subject' => $subject, 'message' => $message, 'source' => 'contact',
+            ]);
+            // Customer-service auto-acknowledgement (5-minute delayed delivery)
+            require_once __DIR__ . '/includes/email.php';
+            send_customer_service_ack(strtolower($email), $name, $subject, $message, 'contact');
+            $sent = true;
+        }
     }
 }
 

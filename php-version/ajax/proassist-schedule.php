@@ -246,6 +246,28 @@ if ($action === 'book') {
     } catch (Throwable $e) { /* non-fatal */ }
 
     /* ----------------------------------------------------------------
+     *  Bell-badge alert — push a row into `admin_notifications` so the
+     *  Install Schedule sidebar item lights up + the topbar bell shows
+     *  a +1 counter the moment a customer books (or reschedules) a
+     *  ProAssist call.  Idempotent within a 30-minute window so admins
+     *  don't get spammed if the customer mis-clicks.
+     * --------------------------------------------------------------- */
+    try {
+        require_once __DIR__ . '/../includes/admin-notify.php';
+        $cName = (string)$lead['name']  ?: '(no name)';
+        $cEml  = (string)$lead['email'] ?: '(no email)';
+        $verb  = $wasReschedule ? 'rescheduled' : 'booked';
+        admin_notify(
+            'install',
+            'Install pending — ' . $cName,
+            $cName . ' ' . $verb . ' a ProAssist install call for ' . $pretty
+                . ($cEml ? ' · ' . $cEml : '')
+                . ($orderNumber !== '' ? ' · Order #' . $orderNumber : ''),
+            '/admin.php?tab=install-schedule&open=' . $scheduleId
+        );
+    } catch (Throwable $e) { @error_log('[proassist-schedule admin_notify] ' . $e->getMessage()); }
+
+    /* ----------------------------------------------------------------
      *  Email the company support address so the install team gets a
      *  real-time alert whenever a customer books (or reschedules) a
      *  ProAssist install call.  Pulls the recipient from Company Info

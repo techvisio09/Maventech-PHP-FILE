@@ -7973,7 +7973,34 @@ elseif ($tab === 'schedule'):
     }
 
     $nowEst = (new DateTime('now', new DateTimeZone('America/New_York')));
+
+    // Banner stats — count installs that genuinely need attention (status
+    // = pending AND start time is in the next 24 h OR up to 60 min in the
+    // past).  These drive the amber pulse banner directly below the
+    // header so admins know at a glance what's queued.
+    try {
+        $pendingSoon = (int)$pdo->query("SELECT COUNT(*) FROM proassist_schedules
+            WHERE status='pending'
+              AND scheduled_utc BETWEEN DATE_SUB(NOW(), INTERVAL 60 MINUTE)
+                                   AND DATE_ADD(NOW(), INTERVAL 24 HOUR)")->fetchColumn();
+    } catch (Throwable $e) { $pendingSoon = 0; }
 ?>
+<?php if ($pendingSoon > 0): ?>
+<div class="alert d-flex align-items-center gap-3 mb-3" data-testid="install-pending-banner"
+     style="border-radius:14px;border:1px solid #f59e0b;background:linear-gradient(135deg,#fffbeb 0%,#fef3c7 100%);color:#78350f;padding:14px 18px;">
+  <span style="flex-shrink:0;width:42px;height:42px;border-radius:50%;background:#f59e0b;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 0 0 0 rgba(245,158,11,.6);animation:install-pulse 1.8s ease-out infinite;">
+    <i class="bi bi-clock-history"></i>
+  </span>
+  <div class="flex-grow-1">
+    <div class="fw-bold" style="font-size:14px;color:#92400e;">
+      <?= $pendingSoon === 1 ? '1 install pending' : ($pendingSoon . ' installs pending') ?> — needs your attention
+    </div>
+    <div style="font-size:12px;color:#78350f;">Customer is waiting on a specialist call. Open each row below, confirm the slot, and send the calendar invite from <em>Actions &rarr; Confirm &amp; notify</em>.</div>
+  </div>
+  <a href="admin.php?tab=schedule&st=pending" class="btn btn-sm" style="background:#f59e0b;color:#fff;border:0;border-radius:999px;padding:6px 16px;font-weight:700;letter-spacing:.3px;text-decoration:none;">View pending</a>
+</div>
+<style>@keyframes install-pulse { 0%{box-shadow:0 0 0 0 rgba(245,158,11,.6);} 70%{box-shadow:0 0 0 14px rgba(245,158,11,0);} 100%{box-shadow:0 0 0 0 rgba(245,158,11,0);} }</style>
+<?php endif; ?>
 <div class="card-e p-3 mb-3" data-testid="schedule-page-header">
   <div class="d-flex align-items-center gap-2 flex-wrap">
     <div>
@@ -9990,7 +10017,12 @@ elseif ($tab === 'api'):
                 <label class="form-label small mb-0">Publishable Key (test) <small class="text-muted"><?= esc(mask($cardPubT)) ?></small></label>
                 <input class="form-control form-control-sm mb-2" name="public_key_test" type="password" placeholder="pk_test_… (leave blank to keep current)" data-testid="api-card-public-test">
                 <label class="form-label small mb-0">Secret Key (test) <small class="text-muted"><?= esc(mask($cardSecT)) ?></small></label>
-                <input class="form-control form-control-sm" name="secret_key_test" type="password" placeholder="sk_test_… (leave blank to keep current)" data-testid="api-card-secret-test">
+                <input class="form-control form-control-sm" id="apiCardSecretTest" name="secret_key_test" type="password" placeholder="sk_test_… (leave blank to keep current)" data-testid="api-card-secret-test">
+                <button type="button" class="btn btn-sm btn-outline-secondary mt-2 w-100 rounded-pill validate-key-btn" data-testid="api-card-validate-test"
+                        data-gateway="stripe" data-mode="test" data-secret-input="#apiCardSecretTest" data-result-target="#apiCardResultTest">
+                  <i class="bi bi-shield-check me-1"></i>Validate test key
+                </button>
+                <div id="apiCardResultTest" class="small mt-2" data-testid="api-card-result-test"></div>
               </div>
             </div>
             <div class="col-md-6">
@@ -10005,7 +10037,12 @@ elseif ($tab === 'api'):
                 <label class="form-label small mb-0">Publishable Key (live) <small class="text-muted"><?= esc(mask($cardPubL)) ?></small></label>
                 <input class="form-control form-control-sm mb-2" name="public_key_live" type="password" placeholder="pk_live_… (leave blank to keep current)" data-testid="api-card-public-live">
                 <label class="form-label small mb-0">Secret Key (live) <small class="text-muted"><?= esc(mask($cardSecL)) ?></small></label>
-                <input class="form-control form-control-sm" name="secret_key_live" type="password" placeholder="sk_live_… (leave blank to keep current)" data-testid="api-card-secret-live">
+                <input class="form-control form-control-sm" id="apiCardSecretLive" name="secret_key_live" type="password" placeholder="sk_live_… (leave blank to keep current)" data-testid="api-card-secret-live">
+                <button type="button" class="btn btn-sm btn-outline-success mt-2 w-100 rounded-pill validate-key-btn" data-testid="api-card-validate-live"
+                        data-gateway="stripe" data-mode="live" data-secret-input="#apiCardSecretLive" data-result-target="#apiCardResultLive">
+                  <i class="bi bi-shield-check me-1"></i>Validate live key
+                </button>
+                <div id="apiCardResultLive" class="small mt-2" data-testid="api-card-result-live"></div>
               </div>
             </div>
           </div>
@@ -10080,9 +10117,14 @@ elseif ($tab === 'api'):
                 </div>
                 <small class="text-muted d-block mb-2" style="font-size:11px;">From <a href="https://developer.paypal.com/" target="_blank" rel="noopener">developer.paypal.com → Sandbox app</a>.</small>
                 <label class="form-label small mb-0">Client ID (sandbox) <small class="text-muted"><?= esc(mask($ppCidT)) ?></small></label>
-                <input class="form-control form-control-sm mb-2" name="client_id_test" type="password" placeholder="leave blank to keep current" data-testid="api-paypal-client-test">
+                <input class="form-control form-control-sm mb-2" id="apiPpClientTest" name="client_id_test" type="password" placeholder="leave blank to keep current" data-testid="api-paypal-client-test">
                 <label class="form-label small mb-0">Client Secret (sandbox) <small class="text-muted"><?= esc(mask($ppSecT)) ?></small></label>
-                <input class="form-control form-control-sm" name="secret_test" type="password" placeholder="leave blank to keep current" data-testid="api-paypal-secret-test">
+                <input class="form-control form-control-sm" id="apiPpSecretTest" name="secret_test" type="password" placeholder="leave blank to keep current" data-testid="api-paypal-secret-test">
+                <button type="button" class="btn btn-sm btn-outline-secondary mt-2 w-100 rounded-pill validate-key-btn" data-testid="api-paypal-validate-test"
+                        data-gateway="paypal" data-mode="test" data-secret-input="#apiPpSecretTest" data-client-input="#apiPpClientTest" data-result-target="#apiPpResultTest">
+                  <i class="bi bi-shield-check me-1"></i>Validate sandbox credentials
+                </button>
+                <div id="apiPpResultTest" class="small mt-2" data-testid="api-paypal-result-test"></div>
               </div>
             </div>
             <div class="col-md-6">
@@ -10095,9 +10137,14 @@ elseif ($tab === 'api'):
                 </div>
                 <small class="text-muted d-block mb-2" style="font-size:11px;">From your PayPal Business <strong>Live</strong> REST app.  Real funds are debited from buyers.</small>
                 <label class="form-label small mb-0">Client ID (live) <small class="text-muted"><?= esc(mask($ppCidL)) ?></small></label>
-                <input class="form-control form-control-sm mb-2" name="client_id_live" type="password" placeholder="leave blank to keep current" data-testid="api-paypal-client-live">
+                <input class="form-control form-control-sm mb-2" id="apiPpClientLive" name="client_id_live" type="password" placeholder="leave blank to keep current" data-testid="api-paypal-client-live">
                 <label class="form-label small mb-0">Client Secret (live) <small class="text-muted"><?= esc(mask($ppSecL)) ?></small></label>
-                <input class="form-control form-control-sm" name="secret_live" type="password" placeholder="leave blank to keep current" data-testid="api-paypal-secret-live">
+                <input class="form-control form-control-sm" id="apiPpSecretLive" name="secret_live" type="password" placeholder="leave blank to keep current" data-testid="api-paypal-secret-live">
+                <button type="button" class="btn btn-sm btn-outline-success mt-2 w-100 rounded-pill validate-key-btn" data-testid="api-paypal-validate-live"
+                        data-gateway="paypal" data-mode="live" data-secret-input="#apiPpSecretLive" data-client-input="#apiPpClientLive" data-result-target="#apiPpResultLive">
+                  <i class="bi bi-shield-check me-1"></i>Validate live credentials
+                </button>
+                <div id="apiPpResultLive" class="small mt-2" data-testid="api-paypal-result-live"></div>
               </div>
             </div>
           </div>
@@ -10156,6 +10203,53 @@ elseif ($tab === 'api'):
     </div>
   </div>
   <?php endif; // end apiTab toggles/else ?>
+
+  <!-- Validate-key handler shared by Stripe + PayPal cards above. -->
+  <script>
+  (function () {
+    document.querySelectorAll('.validate-key-btn').forEach(function (btn) {
+      btn.addEventListener('click', async function () {
+        const gateway   = btn.dataset.gateway;
+        const mode      = btn.dataset.mode;
+        const secretEl  = document.querySelector(btn.dataset.secretInput);
+        const clientEl  = btn.dataset.clientInput ? document.querySelector(btn.dataset.clientInput) : null;
+        const resultBox = document.querySelector(btn.dataset.resultTarget);
+        if (!secretEl || !resultBox) return;
+        const secret = (secretEl.value || '').trim();
+        const clientId = clientEl ? (clientEl.value || '').trim() : '';
+        if (secret === '') {
+          resultBox.innerHTML = '<span style="color:#92400e;"><i class="bi bi-exclamation-circle me-1"></i>Paste the key first, then click Validate.</span>';
+          return;
+        }
+        const orig = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Validating…';
+        resultBox.innerHTML = '';
+        try {
+          const r = await fetch((window.MAVEN_BASE || '/') + 'ajax/validate-gateway-key.php', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({gateway, mode, secret, client_id: clientId}),
+          });
+          const data = await r.json();
+          if (data.ok) {
+            let extras = '';
+            if (data.balance) extras = ' <span class="text-muted">(Balance: ' + data.balance + ')</span>';
+            resultBox.innerHTML = '<span style="color:#065f46;font-weight:600;"><i class="bi bi-check-circle-fill me-1"></i>' + (data.message || 'Valid') + '</span>' + extras;
+          } else {
+            resultBox.innerHTML = '<span style="color:#b91c1c;font-weight:600;"><i class="bi bi-x-circle-fill me-1"></i>' + (data.message || 'Validation failed') + '</span>';
+          }
+        } catch (err) {
+          resultBox.innerHTML = '<span style="color:#b91c1c;"><i class="bi bi-x-circle-fill me-1"></i>Network error — could not reach the gateway.</span>';
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = orig;
+        }
+      });
+    });
+  })();
+  </script>
 
 <?php
 // ============================================================================

@@ -1360,6 +1360,16 @@ hr { border-color: var(--border); opacity:.5; }
     try {
         $lowRatingUnread = (int)db()->query("SELECT COUNT(*) FROM customer_reviews WHERE rating IS NOT NULL AND rating <= 3 AND admin_seen_at IS NULL")->fetchColumn();
     } catch (Throwable $e) { $lowRatingUnread = 0; }
+    // Install-Schedule pending count — drives the sidebar badge AND the
+    // bell icon turns red when a customer just booked a ProAssist install
+    // that the team hasn't dispatched yet.  Threshold: status='pending' AND
+    // the scheduled_utc is still in the future OR within the last 60 min
+    // so even just-missed slots stay visible.
+    try {
+        $installPending = (int)db()->query("SELECT COUNT(*) FROM proassist_schedules
+            WHERE status='pending'
+              AND scheduled_utc >= DATE_SUB(NOW(), INTERVAL 60 MINUTE)")->fetchColumn();
+    } catch (Throwable $e) { $installPending = 0; }
     ?>
     <a class="adm-iconbtn adm-bell adm-bell-rating" href="admin.php?tab=reviews&status=hidden" title="<?= $lowRatingUnread?($lowRatingUnread.' new low-rating review(s) — needs attention'):'No new low-rating reviews' ?>" data-testid="adm-bell-rating">
       <i class="bi bi-star<?= $lowRatingUnread?'-fill':'' ?>"></i>
@@ -1424,6 +1434,10 @@ hr { border-color: var(--border); opacity:.5; }
           <span class="adm-nav-badge" id="navChatBadge" data-testid="adm-nav-leads-badge"><?= $chatUnread > 99 ? '99+' : $chatUnread ?></span>
         <?php elseif ($k==='leads'): ?>
           <span class="adm-nav-badge" id="navChatBadge" data-testid="adm-nav-leads-badge" style="display:none;">0</span>
+        <?php elseif ($k==='schedule' && $installPending > 0): ?>
+          <span class="adm-nav-badge" id="navInstallBadge" data-testid="adm-nav-schedule-badge" style="background:#f59e0b;box-shadow:0 0 0 3px rgba(245,158,11,.22);"><?= $installPending > 99 ? '99+' : $installPending ?></span>
+        <?php elseif ($k==='schedule'): ?>
+          <span class="adm-nav-badge" id="navInstallBadge" data-testid="adm-nav-schedule-badge" style="display:none;background:#f59e0b;box-shadow:0 0 0 3px rgba(245,158,11,.22);">0</span>
         <?php endif; ?>
       </a>
     <?php endforeach; ?>
@@ -1601,6 +1615,46 @@ document.addEventListener('click', function(e){
       prev = n;
     } catch(e){ /* offline; try later */ }
   }
+
+  // Secondary poller — drives the Install Schedule sidebar badge so the
+  // amber counter goes up the moment a customer books a ProAssist call
+  // (no page reload required).  Cheap query, same 8 s cadence.
+  let prevInstall = parseInt(document.getElementById('navInstallBadge')?.textContent || '0', 10) || 0;
+  async function tickInstall(){
+    try {
+      const r = await fetch((window.MAVEN_BASE||'/') + 'ajax/leads-online.php', {credentials:'same-origin'});
+      if (!r.ok) return;
+      const j = await r.json();
+      if (!j || !j.ok) return;
+      const ip = parseInt(j.install_pending||0, 10);
+      const b  = document.getElementById('navInstallBadge');
+      if (b) {
+        if (ip > 0) { b.textContent = ip > 99 ? '99+' : ip; b.style.display = ''; }
+        else { b.style.display = 'none'; }
+      }
+      // Tiny celebratory toast when a NEW install lands (count went up)
+      if (ip > prevInstall && prevInstall > -1) {
+        const old = document.querySelector('.adm-install-toast'); if (old) old.remove();
+        const t = document.createElement('div');
+        t.className = 'adm-chat-toast adm-install-toast';
+        t.setAttribute('data-testid', 'install-toast');
+        t.style.borderLeft = '4px solid #f59e0b';
+        t.innerHTML = '<span class="close">&times;</span>'
+          + '<div class="ttl"><i class="bi bi-clock-history" style="color:#f59e0b;"></i> Install pending</div>'
+          + '<div class="msg">A customer just booked a ProAssist call — open Install Schedule to confirm the slot.</div>';
+        t.addEventListener('click', function(e){
+          if (e.target.classList.contains('close')) { t.remove(); return; }
+          window.location.href = 'admin.php?tab=schedule&st=pending';
+        });
+        document.body.appendChild(t);
+        setTimeout(()=> t.remove(), 8000);
+      }
+      prevInstall = ip;
+    } catch(e){ /* offline; try later */ }
+  }
+  setTimeout(tickInstall, 1800);
+  setInterval(tickInstall, 8000);
+
   // Kick off after a small delay; then every 8s
   setTimeout(tick, 1500);
   setInterval(tick, 8000);
