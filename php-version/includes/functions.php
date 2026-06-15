@@ -219,6 +219,21 @@ function ensure_db_schema(): void
         try { $pdo->exec("ALTER TABLE vibe_schedule ADD COLUMN coupon_code VARCHAR(40) NOT NULL DEFAULT '' AFTER logo_path"); } catch (Throwable $e) {}
         try { $pdo->exec("ALTER TABLE vibe_schedule ADD COLUMN coupon_percent INT NOT NULL DEFAULT 0 AFTER coupon_code"); } catch (Throwable $e) {}
 
+        // Password-reset tokens — issued when a user clicks "Forgot password?".
+        // Each token is single-use, 60-min TTL, and is hashed on disk so a
+        // DB leak doesn't immediately compromise live reset links.
+        $pdo->exec("CREATE TABLE IF NOT EXISTS password_resets (
+            id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            user_id    INT NOT NULL,
+            token_hash VARCHAR(128) NOT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            expires_at DATETIME NOT NULL,
+            used_at    DATETIME NULL DEFAULT NULL,
+            KEY idx_user (user_id),
+            KEY idx_token (token_hash),
+            KEY idx_expires (expires_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
         // Brand-vibe history — append-only log of every vibe switch (manual
         // or scheduled).  Powers the "Vibe Performance" dashboard widget
         // that shows which vibe was live each day + per-vibe conversion.
@@ -691,48 +706,95 @@ function render_vibe_promo_banner(string $variant = 'cart'): string
     if (!$p) return '';
     $label = htmlspecialchars((string)$p['label'], ENT_QUOTES, 'UTF-8');
     $logo  = (string)$p['logo_url'];
-    $logoTag = $logo !== ''
-        ? '<img src="' . htmlspecialchars($logo, ENT_QUOTES, 'UTF-8') . '" alt="' . $label . '" class="vp-logo" style="height:34px;width:auto;object-fit:contain;background:#fff;border-radius:8px;padding:4px 8px;">'
-        : '<span class="vp-icon" aria-hidden="true" style="display:inline-block;width:34px;height:34px;border-radius:50%;background:#fff;color:#dc2626;font-size:18px;font-weight:900;text-align:center;line-height:34px;">★</span>';
     $endsAt = trim((string)($p['ends_at'] ?? ''));
-    $endsLine = $endsAt !== ''
-        ? '<span class="vp-ends" style="font-size:11px;opacity:.85;margin-left:10px;letter-spacing:.4px;">Ends ' . htmlspecialchars(date('M j · H:i', strtotime($endsAt)), ENT_QUOTES, 'UTF-8') . '</span>'
-        : '';
-    // Coupon-code call-out — admin can attach a discount code to the
-    // schedule (e.g. BF26 → 20% off).  Renders as a dashed pill that
-    // sits next to the label so shoppers see exactly what to type at
-    // checkout.
-    $couponLine = '';
+    $endsTxt = $endsAt !== '' ? htmlspecialchars(date('M j · H:i', strtotime($endsAt)), ENT_QUOTES, 'UTF-8') : '';
     $code = strtoupper(trim((string)($p['coupon_code'] ?? '')));
     $pct  = (int)($p['coupon_percent'] ?? 0);
-    if ($code !== '' && $pct > 0) {
-        $codeEsc = htmlspecialchars($code, ENT_QUOTES, 'UTF-8');
-        $couponLine = '<span class="vp-coupon" data-testid="vibe-promo-coupon" style="display:inline-flex;align-items:center;gap:6px;margin-left:14px;padding:5px 6px 5px 12px;border:1px dashed rgba(255,255,255,.55);border-radius:999px;background:rgba(255,255,255,.10);color:#fff;font-size:12px;font-weight:700;letter-spacing:.5px;">'
-                    . 'Use <strong style="background:#fff;color:#dc2626;padding:1px 8px;border-radius:6px;letter-spacing:.6px;">' . $codeEsc . '</strong> for ' . $pct . '% off'
-                    . '<button type="button" data-testid="vibe-promo-copy" data-promo-code="' . $codeEsc . '" aria-label="Copy code ' . $codeEsc . '" '
-                    . 'onclick="(function(b){var c=b.getAttribute(\'data-promo-code\');function done(){var o=b.innerHTML;b.innerHTML=\'<i class=\\\'bi bi-check2\\\'></i> Copied\';setTimeout(function(){b.innerHTML=o;},1800);}'
-                    . 'if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(c).then(done,done);}'
-                    . 'else{var t=document.createElement(\'textarea\');t.value=c;document.body.appendChild(t);t.select();try{document.execCommand(\'copy\');}catch(e){}t.remove();done();}})(this);return false;" '
-                    . 'style="display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,.18);color:#fff;border:1px solid rgba(255,255,255,.30);border-radius:999px;padding:3px 10px;font-size:11px;font-weight:700;letter-spacing:.3px;cursor:pointer;transition:background .15s ease;" '
-                    . 'onmouseover="this.style.background=\'rgba(255,255,255,.30)\'" onmouseout="this.style.background=\'rgba(255,255,255,.18)\'">'
-                    . '<i class="bi bi-clipboard"></i> Copy</button>'
-                    . '</span>';
-    }
-    // Variant-specific styling.  `cart` = full bar on top of the cart;
-    // `inline` = compact pill for use inside email html / invoice header.
+    $codeEsc = htmlspecialchars($code, ENT_QUOTES, 'UTF-8');
+
+    // Inline variant — used inside emails / invoice PDFs.  Email clients
+    // can't render JS popovers, so we keep this as a single static pill.
     if ($variant === 'inline') {
-        return '<div class="vibe-promo-inline" data-testid="vibe-promo-inline" style="display:inline-flex;align-items:center;gap:10px;background:#dc2626;color:#fff;padding:8px 14px;border-radius:999px;font-weight:700;font-size:13px;letter-spacing:.3px;">'
-             . $logoTag
-             . '<span>' . $label . '</span>'
-             . $couponLine
-             . $endsLine
-             . '</div>';
+        $couponLine = '';
+        if ($code !== '' && $pct > 0) {
+            $couponLine = '<span style="margin-left:10px;background:rgba(251,191,36,.20);color:#fcd34d;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.5px;">Use <strong style="background:#fbbf24;color:#0f172a;padding:1px 7px;border-radius:5px;">' . $codeEsc . '</strong> · ' . $pct . '% off</span>';
+        }
+        $logoTag = $logo !== ''
+            ? '<img src="' . htmlspecialchars($logo, ENT_QUOTES, 'UTF-8') . '" alt="" style="height:22px;width:auto;background:#fff;border-radius:4px;padding:2px 6px;">'
+            : '<span style="color:#fbbf24;font-weight:900;">★</span>';
+        return '<div class="vibe-promo-inline" data-testid="vibe-promo-inline" style="display:inline-flex;align-items:center;gap:10px;background:#0f172a;color:#f1f5f9;padding:7px 14px;border-radius:999px;font-size:12.5px;font-weight:600;letter-spacing:.3px;border-left:3px solid #fbbf24;">'
+             . $logoTag . '<span style="text-transform:uppercase;font-weight:800;letter-spacing:.6px;font-size:11.5px;">' . $label . '</span>' . $couponLine . '</div>';
     }
-    return '<div class="vibe-promo-banner" data-testid="vibe-promo-banner" style="display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:14px;background:linear-gradient(120deg,#dc2626,#b91c1c);color:#fff;padding:14px 22px;border-radius:14px;margin:0 0 22px;box-shadow:0 6px 18px rgba(220,38,38,.22);">'
-         . $logoTag
-         . '<div style="font-weight:800;letter-spacing:.6px;font-size:18px;text-transform:uppercase;">' . $label . '</div>'
-         . $couponLine
-         . $endsLine
+
+    // CART variant — compact slim bar that opens a floating popup with the
+    // code + Copy button.  Slate-900 with an amber accent for an elegant
+    // premium feel (replaces the previous loud red gradient).
+    $popupId = 'vibe-popup-' . substr(md5($label . $code), 0, 8);
+    $logoTagSmall = $logo !== ''
+        ? '<img src="' . htmlspecialchars($logo, ENT_QUOTES, 'UTF-8') . '" alt="" style="height:26px;width:auto;object-fit:contain;background:#fff;border-radius:6px;padding:2px 6px;">'
+        : '<span style="display:inline-block;width:26px;height:26px;border-radius:50%;background:#fbbf24;color:#0f172a;font-weight:900;text-align:center;line-height:26px;">★</span>';
+    $logoTagLg = $logo !== ''
+        ? '<img src="' . htmlspecialchars($logo, ENT_QUOTES, 'UTF-8') . '" alt="" style="height:36px;width:auto;object-fit:contain;background:#fff;border-radius:8px;padding:4px 8px;">'
+        : '<span style="display:inline-block;width:36px;height:36px;border-radius:50%;background:#fbbf24;color:#0f172a;font-weight:900;font-size:18px;text-align:center;line-height:36px;">★</span>';
+    $endsBadge = $endsTxt !== ''
+        ? '<span style="font-size:11px;color:#fcd34d;letter-spacing:.3px;"><i class="bi bi-clock"></i> Ends ' . $endsTxt . '</span>'
+        : '';
+
+    // Popup card (initially hidden — toggled by the "View offer" button).
+    $popupBody = '';
+    if ($code !== '' && $pct > 0) {
+        $popupBody = '<div style="display:flex;align-items:center;gap:10px;background:#fef3c7;border:1px dashed #f59e0b;border-radius:10px;padding:10px 12px;margin-top:14px;">'
+                   . '<div style="font-family:ui-monospace,Menlo,monospace;font-size:18px;font-weight:800;letter-spacing:1.4px;color:#92400e;flex:1;text-align:center;" data-testid="vibe-popup-code">' . $codeEsc . '</div>'
+                   . '<button type="button" class="vibe-popup-copy" data-promo-code="' . $codeEsc . '" data-testid="vibe-popup-copy" '
+                   . 'style="background:#0f172a;color:#fbbf24;border:0;border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;">'
+                   . '<i class="bi bi-clipboard"></i> Copy</button>'
+                   . '</div>'
+                   . '<div style="text-align:center;color:#475569;font-size:11.5px;margin-top:10px;">Paste this code in the coupon field at checkout to save <strong style="color:#0f172a;">' . $pct . '%</strong>.</div>';
+    }
+    $popupHtml = '<div id="' . $popupId . '" class="vibe-popup" data-testid="vibe-promo-popup" role="dialog" aria-modal="false" hidden '
+               . 'style="position:absolute;top:calc(100% + 10px);right:8px;width:300px;background:#ffffff;border-radius:14px;box-shadow:0 14px 48px rgba(15,23,42,.22);border:1px solid #e2e8f0;padding:18px;z-index:1080;animation:vibe-popup-in .18s ease-out;">'
+               . '<button type="button" class="vibe-popup-close" data-popup-target="' . $popupId . '" aria-label="Close" '
+               . 'style="position:absolute;top:6px;right:8px;background:transparent;border:0;color:#94a3b8;font-size:18px;line-height:1;cursor:pointer;">&times;</button>'
+               . '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">' . $logoTagLg
+               . '<div style="font-size:10.5px;color:#94a3b8;font-weight:700;letter-spacing:1px;text-transform:uppercase;">Limited offer</div></div>'
+               . '<div style="font-size:18px;font-weight:800;color:#0f172a;line-height:1.25;letter-spacing:.2px;">' . $label . '</div>'
+               . ($pct > 0 ? '<div style="font-size:13px;color:#475569;margin-top:4px;">Save <strong style="color:#0f172a;">' . $pct . '%</strong> on every product.</div>' : '')
+               . $popupBody
+               . ($endsTxt !== '' ? '<div style="font-size:11px;color:#64748b;text-align:center;margin-top:10px;"><i class="bi bi-hourglass-split"></i> Ends ' . $endsTxt . '</div>' : '')
+               . '</div>';
+
+    // Compact slim bar (≈ 44px tall) + popup wrapper.  position:relative
+    // so the popup anchors right of the "View offer" button.
+    $cta = ($code !== '' && $pct > 0)
+        ? '<button type="button" class="vibe-view-offer" data-popup-target="' . $popupId . '" data-testid="vibe-promo-view-offer" '
+        . 'style="background:#fbbf24;color:#0f172a;border:0;border-radius:999px;padding:6px 14px;font-size:11.5px;font-weight:800;letter-spacing:.4px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;text-transform:uppercase;transition:transform .12s ease, box-shadow .12s ease;">'
+        . '<i class="bi bi-gift-fill"></i> View offer'
+        . '</button>'
+        : '';
+
+    return '<div class="vibe-promo-banner" data-testid="vibe-promo-banner" style="position:relative;background:linear-gradient(90deg,#0f172a 0%, #1e293b 100%);color:#f1f5f9;padding:9px 18px;border-radius:12px;margin:0 0 22px;border-left:3px solid #fbbf24;box-shadow:0 4px 14px rgba(15,23,42,.18);display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">'
+         . '<div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;">'
+         .   $logoTagSmall
+         .   '<div style="display:flex;flex-direction:column;line-height:1.2;min-width:0;">'
+         .     '<div style="font-size:13px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' . $label . '</div>'
+         .     $endsBadge
+         .   '</div>'
+         . '</div>'
+         . '<div style="display:flex;align-items:center;gap:10px;">' . $cta . '</div>'
+         . $popupHtml
+         . '<style>'
+         . '@keyframes vibe-popup-in { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:translateY(0); } }'
+         . '.vibe-view-offer:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(251,191,36,.40); }'
+         . '.vibe-popup-copy:hover { background:#1e293b !important; }'
+         . '@media (max-width: 540px) { .vibe-popup { position:fixed !important; top:50% !important; left:50% !important; right:auto !important; transform:translate(-50%,-50%) !important; width:90% !important; max-width:340px !important; } }'
+         . '</style>'
+         . '<script>(function(){var open=null;function close(){if(open){open.setAttribute("hidden","");open=null;}}'
+         . 'document.querySelectorAll("[data-testid=vibe-promo-view-offer]").forEach(function(b){b.addEventListener("click",function(e){e.stopPropagation();var id=b.getAttribute("data-popup-target");var pop=document.getElementById(id);if(!pop)return;if(open===pop){close();return;}close();pop.removeAttribute("hidden");open=pop;});});'
+         . 'document.querySelectorAll(".vibe-popup-close").forEach(function(b){b.addEventListener("click",function(){close();});});'
+         . 'document.addEventListener("click",function(e){if(open && !open.contains(e.target)){close();}});'
+         . 'document.addEventListener("keydown",function(e){if(e.key==="Escape"){close();}});'
+         . 'document.querySelectorAll(".vibe-popup-copy").forEach(function(b){b.addEventListener("click",function(e){e.stopPropagation();var c=b.getAttribute("data-promo-code"),o=b.innerHTML;function done(){b.innerHTML="<i class=\\"bi bi-check2\\"></i> Copied";setTimeout(function(){b.innerHTML=o;},1800);}if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(c).then(done,done);}else{var t=document.createElement("textarea");t.value=c;document.body.appendChild(t);t.select();try{document.execCommand("copy");}catch(_){}t.remove();done();}});});'
+         . '})();</script>'
          . '</div>';
 }
 

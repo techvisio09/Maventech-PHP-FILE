@@ -309,9 +309,9 @@ function _pdf_shell(array $ctx, string $bodyHtml): string
             $code = strtoupper(trim((string)($promo['coupon_code'] ?? '')));
             $pct  = (int)($promo['coupon_percent'] ?? 0);
             if ($code !== '' && $pct > 0) {
-                $promoCoupon = '<span style="display:inline-block;margin-left:12px;font-size:10pt;font-weight:600;letter-spacing:.4px;text-transform:none;">Use <span style="background:#fff;color:#dc2626;padding:1px 6px;border-radius:4px;">' . htmlspecialchars($code, ENT_QUOTES, 'UTF-8') . '</span> for ' . $pct . '% off</span>';
+                $promoCoupon = '<span style="display:inline-block;margin-left:12px;font-size:10pt;font-weight:600;letter-spacing:.4px;text-transform:none;color:#fcd34d;">Use <span style="background:#fbbf24;color:#0f172a;padding:1px 6px;border-radius:4px;">' . htmlspecialchars($code, ENT_QUOTES, 'UTF-8') . '</span> · ' . $pct . '% off</span>';
             }
-            $promoBarHtml = '<div class="promo-bar" style="background:#dc2626;color:#fff;padding:8px 14px;border-radius:8px;text-align:center;font-weight:800;letter-spacing:.6px;font-size:12pt;margin:0 0 14px;text-transform:uppercase;">'
+            $promoBarHtml = '<div class="promo-bar" style="background:#0f172a;color:#fff;padding:8px 14px;border-radius:8px;text-align:center;font-weight:800;letter-spacing:.6px;font-size:11pt;margin:0 0 14px;text-transform:uppercase;border-left:3px solid #fbbf24;">'
                           . $promoLogo . $promoLabel . $promoCoupon . '</div>';
         }
     }

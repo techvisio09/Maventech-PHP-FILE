@@ -770,15 +770,15 @@ function email_promo_banner_html(): string
     $pct  = (int)($p['coupon_percent'] ?? 0);
     $couponTd = '';
     if ($code !== '' && $pct > 0) {
-        $couponTd = '<td valign="middle" style="padding-left:14px;color:#ffffff;font-family:-apple-system,Segoe UI,sans-serif;font-size:12px;font-weight:700;">'
-                  . 'Use <span style="background:#ffffff;color:#dc2626;padding:2px 8px;border-radius:6px;letter-spacing:.5px;">' . esc($code) . '</span> for ' . $pct . '% off'
+        $couponTd = '<td valign="middle" style="padding-left:14px;color:#fcd34d;font-family:-apple-system,Segoe UI,sans-serif;font-size:12px;font-weight:700;">'
+                  . 'Use <span style="background:#fbbf24;color:#0f172a;padding:2px 9px;border-radius:5px;letter-spacing:.6px;">' . esc($code) . '</span> · ' . $pct . '% off'
                   . '</td>';
     }
-    return '<table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" data-testid="email-promo-banner" style="background:#dc2626;border-radius:10px;margin:0 0 18px;">'
-         . '  <tr><td align="center" style="padding:12px 18px;">'
+    return '<table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" data-testid="email-promo-banner" style="background:#0f172a;border-radius:12px;margin:0 0 18px;border-left:4px solid #fbbf24;">'
+         . '  <tr><td align="center" style="padding:11px 18px;">'
          . '    <table cellpadding="0" cellspacing="0" border="0" role="presentation"><tr>'
          . $logoTd
-         . '      <td valign="middle" style="color:#ffffff;font-family:-apple-system,Segoe UI,sans-serif;font-size:14px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;">' . $label . '</td>'
+         . '      <td valign="middle" style="color:#f1f5f9;font-family:-apple-system,Segoe UI,sans-serif;font-size:13px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;">' . $label . '</td>'
          . $couponTd
          . '    </tr></table>'
          . '  </td></tr>'
