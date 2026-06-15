@@ -1538,3 +1538,28 @@ Specifically:
 - Re-tested with `adm_mode=dark` → admin dashboard renders in dark theme with icons at 0.40 opacity, still readable but not distracting.
 
 
+---
+
+## [Feb 2026] Iteration 31 — Clarify what "AI Key (Emergent / OpenAI)" accepts
+
+### What the user asked
+"What you mean by this — only this key will work here or any AI universal key will work?"
+Pointing at the SEO/AI Auto-Blogger settings field labelled `AI Key (Emergent / OpenAI)`.
+
+### What changed (admin.php)
+- Added a **(?) info-popover** next to the label.  Rich HTML content (Bootstrap popover, `trigger="click hover focus"`, `sanitize:false`) explaining in plain English:
+  - **Emergent Universal Key** (starts with `sk-emergent-`) — unlocks OpenAI + Anthropic + Gemini through Emergent's proxy, billed against the universal-key wallet.  Recommended for the AI Auto-Blogger + product image generation.
+  - **Direct OpenAI Key** (starts with `sk-`, `sk-proj-`, `sk-svcacct-`) — billed straight to the user's OpenAI account, only OpenAI models work.
+  - "The key type is auto-detected from the prefix — no manual switching needed."
+- **Auto-detection badge** — when a key is already saved, a coloured pill (`EMERGENT UNIVERSAL KEY` cyan / `DIRECT OPENAI KEY` OpenAI-green / `CUSTOM KEY` grey) is shown next to the green "Key Uploaded" pill so the admin instantly knows which credential is live.
+- Refined placeholder + inline helper line: `Accepts either an Emergent Universal Key (sk-emergent-…) or a direct OpenAI key (sk-…). Type is auto-detected.` (shown when no key is saved yet).
+- Added a deferred-init popover bootstrap (`window.addEventListener('load', …)`) — the previous immediate-init never worked because `bootstrap.bundle.min.js` is loaded by `admin-shell-end.php` AFTER the page content.
+
+### Files touched
+- `/app/php-version/admin.php` — key-kind detector PHP block + label/popover + auto-detect badge + load-deferred Bootstrap popover init.
+
+### Verification
+- `php -l` clean.
+- Playwright: logged in as admin, opened `/admin.php?tab=ai-blogger`, clicked the (?) icon → Bootstrap popover renders "Which keys work here?" with both bullet points and code chips.  The cyan **EMERGENT UNIVERSAL KEY** badge is auto-detected from the stored `sk-emergent-*` value.
+
+

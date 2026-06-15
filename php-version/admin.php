@@ -2911,7 +2911,33 @@ elseif ($tab === 'ai-blogger'):
     $currentLlmKey = defined('OPENAI_API_KEY') && OPENAI_API_KEY !== '' ? OPENAI_API_KEY : '';
     $savedLlmKey   = setting_get('ai_blogger_llm_key', '');
     $hasLlmKey     = ($currentLlmKey !== '' || $savedLlmKey !== '');
-    $maskedKey      = $hasLlmKey ? (substr($currentLlmKey ?: $savedLlmKey, 0, 12) . '••••••••') : '';
+    $effectiveKey  = $currentLlmKey ?: $savedLlmKey;
+    $maskedKey      = $hasLlmKey ? (substr($effectiveKey, 0, 12) . '••••••••') : '';
+    // Auto-detect which kind of key the admin pasted — surfaced in the UI so
+    // there's zero ambiguity about what's actually being used at runtime.
+    //   · sk-emergent-*  → Emergent Universal Key (routes through the proxy,
+    //                     usable for OpenAI, Anthropic, Gemini models, billed
+    //                     against the universal-key wallet).
+    //   · sk-* / sk-proj-* / sk-svcacct-* → direct OpenAI key (billed to your
+    //                     OpenAI account; only OpenAI models work).
+    $llmKeyKind = '';
+    $llmKeyKindLabel = '';
+    $llmKeyKindBg = '';
+    if ($effectiveKey !== '') {
+        if (stripos($effectiveKey, 'sk-emergent') === 0) {
+            $llmKeyKind = 'emergent';
+            $llmKeyKindLabel = 'Emergent Universal Key';
+            $llmKeyKindBg = '#06b6d4';
+        } elseif (stripos($effectiveKey, 'sk-') === 0) {
+            $llmKeyKind = 'openai';
+            $llmKeyKindLabel = 'Direct OpenAI Key';
+            $llmKeyKindBg = '#10a37f'; // OpenAI brand green
+        } else {
+            $llmKeyKind = 'other';
+            $llmKeyKindLabel = 'Custom key';
+            $llmKeyKindBg = '#6b7280';
+        }
+    }
     $gscToken      = setting_get('google_site_verification_token', defined('GOOGLE_SITE_VERIFICATION') ? GOOGLE_SITE_VERIFICATION : '');
     $bingToken     = setting_get('bing_site_verification_token', defined('BING_SITE_VERIFICATION') ? BING_SITE_VERIFICATION : '');
   ?>
@@ -3208,13 +3234,29 @@ elseif ($tab === 'ai-blogger'):
         <div class="row g-3">
           <!-- AI Key -->
           <div class="col-md-4">
-            <label class="form-label small fw-semibold">AI Key (Emergent / OpenAI)</label>
+            <label class="form-label small fw-semibold d-flex align-items-center gap-2">
+              AI Key (Emergent / OpenAI)
+              <button type="button" class="btn btn-link p-0 m-0" data-bs-toggle="popover"
+                      data-bs-trigger="click hover focus" data-bs-placement="top"
+                      data-bs-html="true"
+                      data-bs-title="Which keys work here?"
+                      data-bs-content="<div style='font-size:12.5px;line-height:1.6;'><strong>Either of these will work — paste whichever you have:</strong><ul class='mb-1 ps-3'><li><strong style='color:#06b6d4'>Emergent Universal Key</strong> &mdash; starts with <code>sk-emergent-</code>. One key unlocks OpenAI <em>and</em> Anthropic <em>and</em> Gemini through Emergent's proxy. Billed against your Emergent wallet. <em>Recommended for the AI Auto-Blogger + product image generation.</em></li><li><strong style='color:#10a37f'>Direct OpenAI Key</strong> &mdash; starts with <code>sk-</code>, <code>sk-proj-</code>, or <code>sk-svcacct-</code>. Billed straight to your OpenAI account. Only OpenAI models will work.</li></ul><div class='mt-1 text-muted' style='font-size:11.5px;'>The key type is auto-detected from the prefix &mdash; no manual switching needed.</div></div>"
+                      style="line-height:1;color:#0ea5e9;" data-testid="ai-key-help">
+                <i class="bi bi-info-circle-fill"></i>
+              </button>
+            </label>
             <?php if ($hasLlmKey): ?>
               <div id="ai-key-display" class="ai-key-uploaded" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;">
                 <div class="d-flex align-items-center justify-content-between">
                   <div>
                     <i class="bi bi-check-circle-fill text-success me-1"></i>
                     <span class="fw-semibold" style="font-size:13px;color:#065f46;">Key Uploaded</span>
+                    <?php if ($llmKeyKindLabel !== ''): ?>
+                      <span class="badge ms-1" data-testid="ai-key-kind-badge"
+                            style="background:<?= esc($llmKeyKindBg) ?>;color:#fff;font-size:9.5px;letter-spacing:.6px;padding:2px 7px;vertical-align:middle;">
+                        <?= esc(strtoupper($llmKeyKindLabel)) ?>
+                      </span>
+                    <?php endif; ?>
                     <div style="font-size:11px;font-family:monospace;margin-top:2px;opacity:.7;"><?= esc($maskedKey) ?></div>
                   </div>
                   <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" onclick="document.getElementById('ai-key-display').style.display='none';document.getElementById('ai-key-edit').style.display='block';"><i class="bi bi-pencil me-1"></i>Change</button>
@@ -3222,17 +3264,21 @@ elseif ($tab === 'ai-blogger'):
               </div>
               <div id="ai-key-edit" style="display:none;">
                 <div class="input-group mt-1">
-                  <input type="password" name="llm_api_key" class="form-control" placeholder="Paste new key" style="font-size:13px;">
+                  <input type="password" name="llm_api_key" class="form-control" placeholder="sk-emergent-… or sk-… (OpenAI)" style="font-size:13px;" data-testid="ai-key-input">
                   <button type="button" class="btn btn-outline-secondary btn-sm" onclick="var i=this.previousElementSibling;i.type=i.type==='password'?'text':'password';"><i class="bi bi-eye"></i></button>
                 </div>
                 <button type="button" class="btn btn-sm btn-link text-secondary p-0 mt-1" onclick="document.getElementById('ai-key-edit').style.display='none';document.getElementById('ai-key-display').style.display='block';">Cancel</button>
               </div>
             <?php else: ?>
               <div class="input-group">
-                <input type="password" name="llm_api_key" class="form-control" placeholder="Paste your AI key here" style="font-size:13px;">
+                <input type="password" name="llm_api_key" class="form-control" placeholder="sk-emergent-… or sk-… (OpenAI)" style="font-size:13px;" data-testid="ai-key-input">
                 <button type="button" class="btn btn-outline-secondary btn-sm" onclick="var i=this.previousElementSibling;i.type=i.type==='password'?'text':'password';"><i class="bi bi-eye"></i></button>
               </div>
               <div class="small mt-1 text-danger"><i class="bi bi-exclamation-circle-fill me-1"></i>Required — AI won't work without this</div>
+              <div class="small mt-1 text-secondary" style="font-size:11.5px;line-height:1.45;">
+                <i class="bi bi-info-circle me-1"></i>
+                Accepts <strong>either</strong> an Emergent Universal Key (<code style="font-size:10.5px;">sk-emergent-…</code>) <strong>or</strong> a direct OpenAI key (<code style="font-size:10.5px;">sk-…</code>). Type is auto-detected.
+              </div>
             <?php endif; ?>
           </div>
           <!-- Google Search Console -->
@@ -3311,6 +3357,24 @@ elseif ($tab === 'ai-blogger'):
       </form>
     </div>
   </details>
+
+<script>
+  // Initialise Bootstrap popovers for the AI Auto-Blogger "?" help icons.
+  // Defer to window.load — bootstrap.bundle.min.js is loaded by admin-shell-end.php
+  // AFTER the page content, so we have to wait for full document load before
+  // touching window.bootstrap.  Idempotent (a 2nd run on the same trigger is a no-op).
+  (function () {
+    function initPopovers() {
+      if (!window.bootstrap || !window.bootstrap.Popover) return;
+      document.querySelectorAll('[data-bs-toggle="popover"]').forEach(function (el) {
+        if (bootstrap.Popover.getInstance(el)) return;
+        new bootstrap.Popover(el, { container: 'body', sanitize: false });
+      });
+    }
+    if (document.readyState === 'complete') initPopovers();
+    else window.addEventListener('load', initPopovers);
+  })();
+</script>
 
   <!-- Search Engine Visibility -->
   <details class="ai-section" id="seo-visibility-section">
