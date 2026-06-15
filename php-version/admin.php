@@ -67,15 +67,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // ---------------------------------------------------------------------
         // AJAX endpoint: shell out to /app/scripts/generate_product_images.py
         // for ONE product (by slug).  Returns JSON {ok:true, image:"/uploads/…"}
+        // Works in TWO modes:
+        //   (a) Existing product — look up metadata from the DB by slug.
+        //   (b) New product (no row yet) — JS slugifies the typed Name and
+        //       passes all metadata as POST fields; we use those directly.
         // The script prints the new internal path on stdout when it succeeds.
         // ---------------------------------------------------------------------
         header('Content-Type: application/json');
         $slug = trim($_POST['slug'] ?? '');
         if ($slug === '') { echo json_encode(['ok' => false, 'error' => 'Missing slug']); exit; }
+
+        // Try DB first.
         $p = $pdo->prepare('SELECT slug, name, brand, category, platform, apps FROM products WHERE slug=? LIMIT 1');
         $p->execute([$slug]);
         $prod = $p->fetch();
-        if (!$prod) { echo json_encode(['ok' => false, 'error' => 'Product not found']); exit; }
+
+        if (!$prod) {
+            // New product — pull metadata from POST.  Name is required so the
+            // prompt has something meaningful to feed the AI.
+            $postedName = trim($_POST['name'] ?? '');
+            if ($postedName === '') {
+                echo json_encode(['ok' => false, 'error' => 'Enter a product name first, then click Regenerate.']);
+                exit;
+            }
+            $prod = [
+                'slug'     => $slug,
+                'name'     => $postedName,
+                'brand'    => trim($_POST['brand']    ?? ''),
+                'category' => trim($_POST['category'] ?? ''),
+                'platform' => trim($_POST['platform'] ?? ''),
+                'apps'     => trim($_POST['apps']     ?? ''),
+            ];
+        }
+
         $cmd = sprintf(
             '/root/.venv/bin/python3 /app/scripts/generate_product_images.py --slug=%s --name=%s --brand=%s --category=%s --platform=%s --apps=%s 2>&1',
             escapeshellarg($prod['slug']),
@@ -93,9 +117,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exec($cmd, $output, $code);
         $last = trim((string)end($output));
         if ($code === 0 && strpos($last, '/uploads/products/') === 0) {
-            // Persist the new path on the product row immediately so even
-            // if the admin forgets to click Save, the storefront serves
-            // the fresh image.
+            // Persist the new path on the product row (only when the product
+            // exists — for brand-new products the admin will save the form
+            // and the path in #f_image will get persisted then).
             $pdo->prepare('UPDATE products SET image=? WHERE slug=?')->execute([$last, $slug]);
             echo json_encode(['ok' => true, 'image' => $last]);
         } else {
@@ -5088,7 +5112,7 @@ elseif ($tab === 'products'):
                       <button type="button" class="btn btn-sm btn-soft-purple d-inline-flex align-items-center gap-1"
                               id="aiRegenBtn" data-testid="ai-regen-btn"
                               data-slug="<?= esc($editing['slug'] ?? '') ?>"
-                              <?= empty($editing['slug']) ? 'disabled title="Save the product first, then click to regenerate the image."' : 'title="Generate a fresh product image with AI"' ?>
+                              title="Generate a fresh retail-card image with AI"
                               style="font-size:11px;padding:2px 10px;border-radius:999px;">
                         <i class="bi bi-stars"></i>
                         <span id="aiRegenLabel">Regenerate image with AI</span>
@@ -5262,9 +5286,9 @@ elseif ($tab === 'products'):
   // ============================================================
   // "Regenerate image with AI" — POSTs to admin.php with action=
   // regen_product_image, which shells out to the Python generator.
-  // On success the new /uploads/products/<slug>.webp path is
-  // returned, written into the Image URL input + Save button is
-  // briefly highlighted so the admin remembers to persist it.
+  // Works for BOTH existing products (look up by slug) AND new
+  // products (no slug yet — we slugify the typed Name on the fly
+  // and pass all metadata from the form fields directly).
   // ============================================================
   (function () {
     const btn = document.getElementById('aiRegenBtn');
@@ -5273,9 +5297,33 @@ elseif ($tab === 'products'):
     const hint  = document.getElementById('aiRegenHint');
     const img   = document.getElementById('f_image');
     const save  = document.querySelector('form button[type="submit"]');
+
+    // Inline slugify so the button works BEFORE the product is saved.
+    function slugify(s) {
+      return (s || '').toString().toLowerCase()
+        .replace(/&/g, ' and ')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .substr(0, 80);
+    }
+    function getField(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; }
+    function getFieldByName(name) {
+      const el = document.querySelector('form [name="' + name + '"]');
+      return el ? el.value.trim() : '';
+    }
+
     btn.addEventListener('click', async function () {
-      const slug = btn.dataset.slug;
-      if (!slug) return;
+      let slug = btn.dataset.slug;
+      const nameVal = getField('f_name');
+      // For new products: derive the slug from the typed Name.
+      if (!slug) {
+        if (!nameVal) {
+          label.textContent = 'Enter a name first';
+          setTimeout(() => { label.textContent = 'Regenerate image with AI'; }, 2600);
+          return;
+        }
+        slug = slugify(nameVal);
+      }
       const original = label.textContent;
       btn.disabled = true;
       label.textContent = 'Generating…';
@@ -5284,6 +5332,13 @@ elseif ($tab === 'products'):
         const fd = new FormData();
         fd.append('action', 'regen_product_image');
         fd.append('slug', slug);
+        // Pass form metadata directly so the Python generator gets the
+        // CORRECT values even when the product hasn't been saved yet.
+        fd.append('name',     nameVal || slug);
+        fd.append('brand',    getFieldByName('brand'));
+        fd.append('category', getField('f_cat'));
+        fd.append('platform', getField('f_platform'));
+        fd.append('apps',     getFieldByName('apps'));
         const res = await fetch('admin.php?tab=products', { method: 'POST', body: fd, credentials: 'same-origin' });
         const json = await res.json().catch(() => null);
         if (!res.ok || !json || !json.ok) {
@@ -5291,6 +5346,9 @@ elseif ($tab === 'products'):
         }
         // Append a cache-buster so the browser re-fetches the new file.
         img.value = json.image + '?v=' + Date.now();
+        // Also remember the slug we generated so subsequent clicks reuse it
+        // (until the product is saved and gets its real slug).
+        btn.dataset.slug = slug;
         if (typeof updPrev === 'function') updPrev();
         label.textContent = 'Generated ✓';
         hint.innerHTML = '<i class="bi bi-check2-circle text-success me-1"></i>New image saved to <code>' + json.image + '</code>. Click <strong>Save</strong> to keep it.';
