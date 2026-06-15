@@ -3199,12 +3199,33 @@ elseif ($tab === 'ai-blogger'):
     } catch (Throwable $e) {}
 ?>
   <?php
-    // Determine if LLM key is configured
-    $currentLlmKey = defined('OPENAI_API_KEY') && OPENAI_API_KEY !== '' ? OPENAI_API_KEY : '';
-    $savedLlmKey   = setting_get('ai_blogger_llm_key', '');
-    $hasLlmKey     = ($currentLlmKey !== '' || $savedLlmKey !== '');
-    $effectiveKey  = $currentLlmKey ?: $savedLlmKey;
-    $maskedKey      = $hasLlmKey ? (substr($effectiveKey, 0, 12) . '••••••••') : '';
+    // ---------- AI Key — three-state display ----------
+    // The system has THREE possible states for the AI key:
+    //   1. admin-saved : The admin explicitly pasted a key (DB row populated).
+    //   2. fallback    : DB row is empty, but a pod/.env-level EMERGENT_LLM_KEY
+    //                    or OPENAI_API_KEY is providing the working key.
+    //   3. empty       : No key configured anywhere — AI features OFF.
+    // Previously the UI conflated 1 and 2 into a single "Key Uploaded" pill,
+    // which meant clearing the admin-saved key still showed green because
+    // the fallback env var kicked back in.  Now we tell the truth.
+    $savedLlmKey   = (string)setting_get('ai_blogger_llm_key', '');
+    $envFallback   = (defined('OPENAI_API_KEY') && OPENAI_API_KEY !== '') ? (string)OPENAI_API_KEY : '';
+    if ($savedLlmKey !== '' && trim($savedLlmKey) === trim($envFallback)) {
+        // Admin saved exactly the same key as the env fallback ⇒ treat as admin-saved.
+        $aiKeyState = 'admin-saved';
+        $effectiveKey = $savedLlmKey;
+    } elseif ($savedLlmKey !== '') {
+        $aiKeyState = 'admin-saved';
+        $effectiveKey = $savedLlmKey;
+    } elseif ($envFallback !== '') {
+        $aiKeyState = 'fallback';
+        $effectiveKey = $envFallback;
+    } else {
+        $aiKeyState = 'empty';
+        $effectiveKey = '';
+    }
+    $hasLlmKey     = ($aiKeyState !== 'empty');
+    $maskedKey      = $effectiveKey !== '' ? (substr($effectiveKey, 0, 12) . '••••••••') : '';
     // Lightweight format validators — same rules as the save handler.
     // The card uses these to surface a yellow "Invalid format" warning
     // even when a string is stored (so the green pill doesn't lie).
@@ -3549,14 +3570,14 @@ elseif ($tab === 'ai-blogger'):
                 <i class="bi bi-info-circle-fill"></i>
               </button>
             </label>
-            <?php if ($hasLlmKey):
+            <?php if ($aiKeyState === 'admin-saved'):
               $aiBg     = $isValidAiKey ? '#f0fdf4' : '#fffbeb';
               $aiBorder = $isValidAiKey ? '#bbf7d0' : '#fde68a';
               $aiIcon   = $isValidAiKey ? 'bi-check-circle-fill text-success' : 'bi-exclamation-triangle-fill text-warning';
               $aiTitle  = $isValidAiKey ? 'Key Uploaded' : 'Key Invalid';
               $aiColor  = $isValidAiKey ? '#065f46' : '#92400e';
             ?>
-              <div id="ai-key-display" class="ai-key-uploaded" style="background:<?= $aiBg ?>;border:1px solid <?= $aiBorder ?>;border-radius:8px;padding:10px 12px;">
+              <div id="ai-key-display" class="ai-key-uploaded" style="background:<?= $aiBg ?>;border:1px solid <?= $aiBorder ?>;border-radius:8px;padding:10px 12px;" data-testid="ai-key-state-admin">
                 <div class="d-flex align-items-center justify-content-between">
                   <div>
                     <i class="bi <?= $aiIcon ?> me-1"></i>
@@ -3576,14 +3597,43 @@ elseif ($tab === 'ai-blogger'):
               </div>
               <div id="ai-key-edit" style="display:none;">
                 <div class="input-group mt-1">
-                  <!-- name="*_edit" + disabled = only submits when admin opens the editor.
-                       Lets the save handler distinguish "untouched" from "deliberately cleared". -->
                   <input type="password" name="llm_api_key_edit" class="form-control" placeholder="sk-emergent-… or sk-… (leave blank to clear)" style="font-size:13px;" data-testid="ai-key-input" disabled>
                   <button type="button" class="btn btn-outline-secondary btn-sm" onclick="var i=this.previousElementSibling;i.type=i.type==='password'?'text':'password';"><i class="bi bi-eye"></i></button>
                 </div>
                 <div class="d-flex align-items-center justify-content-between mt-1">
                   <button type="button" class="btn btn-sm btn-link text-secondary p-0" onclick="mvCancelKeyEditor('ai-key')">Cancel</button>
                   <span class="small text-muted" style="font-size:10.5px;"><i class="bi bi-info-circle me-1"></i>Save with the box empty to remove the key.</span>
+                </div>
+              </div>
+            <?php elseif ($aiKeyState === 'fallback'): ?>
+              <!-- Fallback state — there's a pod/.env-level key available BUT
+                   the admin hasn't explicitly saved one.  Show this as INFO
+                   (not "Key Uploaded") so it's clear what's happening. -->
+              <div id="ai-key-display" data-testid="ai-key-state-fallback" style="background:#eff6ff;border:1px dashed #93c5fd;border-radius:8px;padding:10px 12px;">
+                <div class="d-flex align-items-center justify-content-between">
+                  <div>
+                    <i class="bi bi-info-circle-fill me-1" style="color:#2563eb;"></i>
+                    <span class="fw-semibold" style="font-size:13px;color:#1e3a8a;">Using built-in fallback key</span>
+                    <?php if ($llmKeyKindLabel !== ''): ?>
+                      <span class="badge ms-1" data-testid="ai-key-kind-badge"
+                            style="background:<?= esc($llmKeyKindBg) ?>;color:#fff;font-size:9.5px;letter-spacing:.6px;padding:2px 7px;vertical-align:middle;">
+                        <?= esc(strtoupper($llmKeyKindLabel)) ?>
+                      </span>
+                    <?php endif; ?>
+                    <div style="font-size:11px;font-family:monospace;margin-top:2px;opacity:.7;"><?= esc($maskedKey) ?></div>
+                    <div class="small text-secondary mt-1" style="font-size:11px;">Provided by your hosting environment (pod-level <code>EMERGENT_LLM_KEY</code>). Paste your own key below to override it.</div>
+                  </div>
+                  <button type="button" class="btn btn-sm btn-outline-primary rounded-pill" data-testid="ai-key-change-btn" onclick="mvOpenKeyEditor('ai-key')"><i class="bi bi-key me-1"></i>Use my own</button>
+                </div>
+              </div>
+              <div id="ai-key-edit" style="display:none;">
+                <div class="input-group mt-1">
+                  <input type="password" name="llm_api_key_edit" class="form-control" placeholder="sk-emergent-… or sk-… (paste to override)" style="font-size:13px;" data-testid="ai-key-input" disabled>
+                  <button type="button" class="btn btn-outline-secondary btn-sm" onclick="var i=this.previousElementSibling;i.type=i.type==='password'?'text':'password';"><i class="bi bi-eye"></i></button>
+                </div>
+                <div class="d-flex align-items-center justify-content-between mt-1">
+                  <button type="button" class="btn btn-sm btn-link text-secondary p-0" onclick="mvCancelKeyEditor('ai-key')">Cancel</button>
+                  <span class="small text-muted" style="font-size:10.5px;"><i class="bi bi-info-circle me-1"></i>Empty save = keep using the built-in fallback.</span>
                 </div>
               </div>
             <?php else: ?>
@@ -4639,13 +4689,20 @@ https://youtu.be/YYYYY"><?php
         return false;
     };
 
-    // 1. AI Key — green only if BOTH "present" AND "well-formed".
-    $rawAiKey  = (defined('OPENAI_API_KEY') && OPENAI_API_KEY !== '') ? (string)OPENAI_API_KEY : (string)setting_get('ai_blogger_llm_key', '');
+    // 1. AI Key — health-check verdict:
+    //    GREEN  : admin-saved key passes format validation, OR fallback env-var works
+    //    AMBER  : admin-saved key is present but malformed
+    //    RED    : no key anywhere (truly empty)
+    $rawAiKey  = $effectiveKey ?? '';
     $aiKeyOk   = $hcValidAi($rawAiKey);
     $aiKeyHasButBad = ($rawAiKey !== '' && !$aiKeyOk);
+    // If the working key is coming from the env-var fallback (not admin-saved),
+    // include that nuance in the description so the admin understands what's
+    // actually powering the AI features.
+    $aiKeySrc = ($aiKeyState ?? '') === 'fallback' ? ' (fallback)' : '';
     $checks[] = ['name' => 'AI Writing Key', 'ok' => $aiKeyOk, 'icon' => 'bi-robot', 'color' => '#8b5cf6',
                  'desc' => $aiKeyOk
-                    ? 'AI key is configured — blog posts can be generated automatically.'
+                    ? 'AI key is configured' . $aiKeySrc . ' — blog posts can be generated automatically.'
                     : ($aiKeyHasButBad
                         ? 'A key is saved but the format looks invalid. Go to <strong>API Keys & Settings → AI Key → Change</strong> and paste a key starting with <code>sk-emergent-</code> or <code>sk-</code>.'
                         : 'No AI key set. Go to API Keys above and add your key.')];

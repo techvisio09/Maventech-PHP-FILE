@@ -1704,3 +1704,37 @@ Pointing at the SEO/AI Auto-Blogger settings field labelled `AI Key (Emergent / 
 - Playwright: visited `?verify_all=1` → green banner *"Live verify: ✓ Google: matches · ✓ Bing: matches"*; expanded Health Check → both Google Search Console and Bing & AI Search rows now carry a mint `LIVE ✓` pill (with tooltip showing the verdict + timestamp); 100% — 11/11 ready badge unchanged.
 
 
+---
+
+## [Feb 2026] Iteration 35 — AI Key "phantom green after clear" — three-state display
+
+### Bug reproduced from user report
+"When we click on edit and keeping the space empty and click on save then also it's showing in green with the last key that we have updated."
+
+### Root cause
+The save handler was clearing the DB row **correctly**, but `config.php` falls back to the pod-level `EMERGENT_LLM_KEY` env var when the DB row is empty.  The PHP-CGI workers had that env var loaded at startup, so even after the admin's "clear" persisted to DB:
+1. Redirect fires → fresh request.
+2. `config.php` sees `setting_get('ai_blogger_llm_key')` returns `''` (cleared).
+3. Falls through to `getenv('EMERGENT_LLM_KEY')` which still returned the pod default `sk-emergent-…`.
+4. `OPENAI_API_KEY` constant gets set to that fallback.
+5. The admin card's check `defined('OPENAI_API_KEY') && OPENAI_API_KEY !== ''` ⇒ true ⇒ green "Key Uploaded" pill rendered.
+
+Net effect: the clear DID happen in DB, but the visible state still claimed "Key Uploaded" because the fallback env var was satisfying the constant.
+
+### What changed (`admin.php`)
+- The AI Key block now derives ONE of three explicit states:
+  - **`admin-saved`** — DB row is populated.  Renders the existing GREEN "Key Uploaded" card with kind badge and Change button.
+  - **`fallback`** — DB row is empty BUT a pod/.env `EMERGENT_LLM_KEY` / `OPENAI_API_KEY` is present.  Renders a NEW **blue info card** ("Using built-in fallback key" + `EMERGENT UNIVERSAL KEY` chip + helper line "Provided by your hosting environment — paste your own key below to override it.") with a "Use my own" call-to-action button (blue outline pill).
+  - **`empty`** — Both DB and env are empty.  Renders the plain "Paste your AI key here" input with the required-warning helper.
+- Cancel & re-disable of the editor input still works in fallback mode — leaving the field empty in fallback simply keeps the fallback active.
+- SEO Health Check "AI Writing Key" row now appends "(fallback)" to the green-OK description when the working key is env-provided, so admins understand the source without diving into the panel.
+
+### Files touched
+- `/app/php-version/admin.php` (AI key state derivation block; admin-saved / fallback / empty render branches; SEO Health Check AI-row description).
+
+### Verification (Playwright cycle)
+1. **Start with DB empty + env populated** → admin opens panel → BLUE "Using built-in fallback key" card with "Use my own" button.
+2. **Click "Use my own" → paste `sk-emergent-MYCUSTOMKEY12345` → Save** → green "✓ Updated: AI Key" flash → card switches to GREEN "Key Uploaded" with `EMERGENT UNIVERSAL KEY` chip + masked preview.
+3. **Click Change → leave empty → Save** → green "✓ Cleared: AI Key" flash → card returns to BLUE "Using built-in fallback key" (NOT phantom-green anymore).
+
+
