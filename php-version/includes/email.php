@@ -761,16 +761,25 @@ function email_promo_banner_html(): string
     $p = active_vibe_promo();
     if (!$p) return '';
     $label  = esc((string)$p['label']);
-    $logo   = (string)($p['logo_url'] ?? '');
+    $logo   = (string)($p['logo_url_absolute'] ?? '');
     $logoTd = '';
     if ($logo !== '') {
         $logoTd = '<td valign="middle" style="padding-right:10px;"><img src="' . esc($logo) . '" alt="' . $label . '" height="28" style="display:block;height:28px;width:auto;background:#ffffff;border-radius:6px;padding:3px 6px;"></td>';
+    }
+    $code = strtoupper(trim((string)($p['coupon_code'] ?? '')));
+    $pct  = (int)($p['coupon_percent'] ?? 0);
+    $couponTd = '';
+    if ($code !== '' && $pct > 0) {
+        $couponTd = '<td valign="middle" style="padding-left:14px;color:#ffffff;font-family:-apple-system,Segoe UI,sans-serif;font-size:12px;font-weight:700;">'
+                  . 'Use <span style="background:#ffffff;color:#dc2626;padding:2px 8px;border-radius:6px;letter-spacing:.5px;">' . esc($code) . '</span> for ' . $pct . '% off'
+                  . '</td>';
     }
     return '<table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" data-testid="email-promo-banner" style="background:#dc2626;border-radius:10px;margin:0 0 18px;">'
          . '  <tr><td align="center" style="padding:12px 18px;">'
          . '    <table cellpadding="0" cellspacing="0" border="0" role="presentation"><tr>'
          . $logoTd
          . '      <td valign="middle" style="color:#ffffff;font-family:-apple-system,Segoe UI,sans-serif;font-size:14px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;">' . $label . '</td>'
+         . $couponTd
          . '    </tr></table>'
          . '  </td></tr>'
          . '</table>';

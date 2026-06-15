@@ -196,6 +196,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $starts = trim($_POST['starts_at'] ?? '');
         $ends   = trim($_POST['ends_at']   ?? '');
         $label  = trim($_POST['label']     ?? '');
+        $couponCode    = strtoupper(preg_replace('/[^A-Z0-9_\-]/i', '', (string)($_POST['coupon_code'] ?? '')));
+        $couponPercent = max(0, min(95, (int)($_POST['coupon_percent'] ?? 0)));
         $startsTs = $starts !== '' ? strtotime($starts) : false;
         $endsTs   = $ends   !== '' ? strtotime($ends)   : null;
 
@@ -220,13 +222,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($startsTs && (!$endsTs || $endsTs > $startsTs)) {
-            $pdo->prepare('INSERT INTO vibe_schedule (vibe, starts_at, ends_at, label, logo_path) VALUES (?,?,?,?,?)')
+            $pdo->prepare('INSERT INTO vibe_schedule (vibe, starts_at, ends_at, label, logo_path, coupon_code, coupon_percent) VALUES (?,?,?,?,?,?,?)')
                 ->execute([
                     $svibe,
                     date('Y-m-d H:i:s', $startsTs),
                     $endsTs ? date('Y-m-d H:i:s', $endsTs) : null,
                     mb_substr($label, 0, 120),
                     $logoRel,
+                    mb_substr($couponCode, 0, 40),
+                    $couponPercent,
                 ]);
             header('Location: admin.php?tab=company&msg=Schedule+added'); exit;
         }
@@ -4043,7 +4047,7 @@ elseif ($tab === 'company'):
 
   <!-- Brand Vibe schedule -->
   <?php
-    $vsRows = $pdo->query("SELECT id, vibe, starts_at, ends_at, label, logo_path, applied_at FROM vibe_schedule ORDER BY starts_at ASC")->fetchAll();
+    $vsRows = $pdo->query("SELECT id, vibe, starts_at, ends_at, label, logo_path, coupon_code, coupon_percent, applied_at FROM vibe_schedule ORDER BY starts_at ASC")->fetchAll();
     $vsVibes = brand_vibes();
     $vsNow = time();
   ?>
@@ -4073,7 +4077,7 @@ elseif ($tab === 'company'):
         <input type="datetime-local" name="ends_at" class="form-control form-control-sm" data-testid="vsf-ends">
       </div>
       <div class="col-md-3">
-        <label class="form-label small fw-semibold mb-1">Label <small class="text-muted fw-normal">(shown on cart + email + invoice)</small></label>
+        <label class="form-label small fw-semibold mb-1">Label <small class="text-muted fw-normal">(cart + email + invoice)</small></label>
         <input type="text" name="label" class="form-control form-control-sm" placeholder="e.g. Black Friday Sale" maxlength="120" data-testid="vsf-label">
       </div>
       <div class="col-md-2">
@@ -4083,6 +4087,21 @@ elseif ($tab === 'company'):
       </div>
       <div class="col-md-1 d-grid">
         <button class="btn btn-primary btn-sm" data-testid="vsf-add"><i class="bi bi-plus-lg"></i> Add</button>
+      </div>
+      <!-- Optional coupon row — auto-applies the code during the schedule -->
+      <div class="col-md-3 offset-md-2">
+        <label class="form-label small fw-semibold mb-1"><i class="bi bi-ticket-perforated text-primary"></i> Discount code <small class="text-muted fw-normal">(opt., e.g. BF26)</small></label>
+        <input type="text" name="coupon_code" class="form-control form-control-sm" placeholder="BF26" maxlength="40" pattern="[A-Za-z0-9_\-]+" data-testid="vsf-coupon-code" style="text-transform:uppercase;">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small fw-semibold mb-1">% off</label>
+        <input type="number" name="coupon_percent" class="form-control form-control-sm" placeholder="20" min="0" max="95" data-testid="vsf-coupon-percent">
+      </div>
+      <div class="col-md-5">
+        <div class="small text-muted" style="padding-top:24px;font-size:11.5px;line-height:1.45;">
+          <i class="bi bi-info-circle"></i> When set, the banner on cart, email and invoice shows
+          <strong>"Use [CODE] for [%] off"</strong> and the code auto-works at checkout — only during the active window.
+        </div>
       </div>
     </form>
 
@@ -4115,6 +4134,11 @@ elseif ($tab === 'company'):
               <div class="vibe-sched-title">
                 <strong><?= esc($v['label']) ?></strong>
                 <?php if ($row['label']): ?><span class="vibe-sched-label-pill">"<?= esc($row['label']) ?>"</span><?php endif; ?>
+                <?php if (!empty($row['coupon_code']) && (int)$row['coupon_percent'] > 0): ?>
+                  <span class="vibe-sched-coupon-pill" data-testid="vibe-sched-coupon-<?= (int)$row['id'] ?>" style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border:1px dashed rgba(59,130,246,.55);border-radius:999px;background:rgba(59,130,246,.10);color:#1d4ed8;font-weight:700;font-size:11px;letter-spacing:.4px;margin-left:6px;">
+                    <i class="bi bi-ticket-perforated"></i> <?= esc(strtoupper($row['coupon_code'])) ?> · <?= (int)$row['coupon_percent'] ?>% off
+                  </span>
+                <?php endif; ?>
                 <?php if ($isActive):   ?><span class="vibe-sched-state active">● LIVE NOW</span>
                 <?php elseif ($isPast): ?><span class="vibe-sched-state past">Past</span>
                 <?php else:             ?><span class="vibe-sched-state upcoming">Upcoming</span>

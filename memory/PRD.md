@@ -936,3 +936,30 @@ Also surfaced a **"{brand} profile →"** chip on each admin Product card (data-
 - `/app/php-version/cart.php` — promo banner at the top.
 - `/app/backend/tests/test_iteration13_vibe_promo.py` — NEW 6 regression tests.
 
+
+## [Feb 2026] Iteration 14 — Scheduled discount code + auto-revert + dark-mode KPI icons + logo URL fix
+
+### What shipped (347/347 pytest pass ✅)
+- 🐛 **Logo URL fix** — uploaded promo logos showed as a broken-image placeholder because `site_url()` returns the *internal cluster hostname* when the request comes through the preview CDN, which the user's browser can't reach.  `active_vibe_promo()` now exposes `logo_url` (root-relative for in-app pages) AND `logo_url_absolute` (admin's configured `site_domain_url`, or falls back to `site_url()` — only used for HTML emails where root-relative paths don't work).
+- 🎟️ **Scheduled discount code** — each `vibe_schedule` row can carry a `coupon_code` + `coupon_percent` (e.g. `BF26 → 20% off`).  Added via new fields on the admin form (alongside Logo upload).
+  - `coupons()` automatically merges the active schedule's code into the regular coupon list, so checkout accepts it ONLY during the schedule window.
+  - Cart, email, and invoice promo banners now show a dashed "Use BF26 for 20% off" pill right next to the label.
+  - Form, listing, and PDF/email banners all updated.
+- 🔁 **Schedule ends → vibe reverts** — `apply_vibe_schedule()` now snapshots the current vibe into `company_brand_vibe_default` the first time it switches to a scheduled vibe, and reverts to that snapshot once every schedule has expired.  So when "Black Friday" ends, the storefront automatically goes back to whatever was set before (e.g. Classic).
+- 🌙 **Dark-mode KPI icons** — added dark-mode overrides for the green / blue / amber / red KPI icon backgrounds + brightened the value colors (`#34d399`, `#60a5fa`, `#fbbf24`, `#f87171`, `#a78bfa`, `#22d3ee`).  Numbers and icons now pop on dark.
+
+### Files touched
+- `/app/php-version/includes/functions.php` — `coupon_code`/`coupon_percent` schema, `active_vibe_promo()` exposes coupon + `logo_url_absolute`, `coupons()` merges active code, `render_vibe_promo_banner()` renders coupon pill, `apply_vibe_schedule()` snapshots + reverts default vibe.
+- `/app/php-version/includes/email.php` — `email_promo_banner_html()` adds coupon TD, uses `logo_url_absolute` so Gmail/Outlook can load the image.
+- `/app/php-version/includes/pdf.php` — invoice promo bar includes coupon span.
+- `/app/php-version/includes/admin-shell.php` — `kpi-tile` dark-mode overrides for green / blue / amber / red icon backgrounds + brightened value colours.
+- `/app/php-version/admin.php` — Schedule a Brand Vibe form has "Discount code" + "% off" inputs, the row listing shows a coupon pill, SELECT pulls the new columns.
+- `/app/backend/tests/test_iteration14_coupon_and_revert.py` — NEW 10 regression tests covering coupon flow, logo URL, KPI overrides, and revert behavior.
+
+### Verified
+- Cart banner: ★ BLACK FRIDAY SALE + dashed "Use BF26 for 20% off" + Ends Dec 31 ✅
+- Email banner: same label + coupon + absolute logo URL (verified in `email_promo_banner_html()` output) ✅
+- Invoice PDF: red bar with label + coupon span (pdftotext confirms "ITR14" + "25% off") ✅
+- KPI icons in dark mode: green=rgb(6,78,59)/rgb(110,231,183), blue=rgb(30,58,138)/rgb(147,197,253), amber/red/purple/cyan all contrast-safe ✅
+- Revert: vibe switches to scheduled value during window, returns to saved default after window ends ✅
+

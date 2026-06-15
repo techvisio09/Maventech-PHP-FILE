@@ -213,6 +213,11 @@ function ensure_db_schema(): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
         // Idempotent add of `logo_path` for installs that pre-date the column.
         try { $pdo->exec("ALTER TABLE vibe_schedule ADD COLUMN logo_path VARCHAR(255) NOT NULL DEFAULT '' AFTER label"); } catch (Throwable $e) {}
+        // Idempotent add of `coupon_code` + `coupon_percent` so each
+        // schedule can declare its own promo discount that auto-applies
+        // during the active window (e.g. Black Friday → code BF26 → 20% off).
+        try { $pdo->exec("ALTER TABLE vibe_schedule ADD COLUMN coupon_code VARCHAR(40) NOT NULL DEFAULT '' AFTER logo_path"); } catch (Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE vibe_schedule ADD COLUMN coupon_percent INT NOT NULL DEFAULT 0 AFTER coupon_code"); } catch (Throwable $e) {}
 
         // Brand-vibe history — append-only log of every vibe switch (manual
         // or scheduled).  Powers the "Vibe Performance" dashboard widget
@@ -592,15 +597,34 @@ function apply_vibe_schedule(): void
              WHERE starts_at <= NOW() AND (ends_at IS NULL OR ends_at >= NOW())
              ORDER BY starts_at DESC, id DESC LIMIT 1"
         )->fetch();
-        if (!$row) return;
         $vibes = brand_vibes();
-        if (!isset($vibes[$row['vibe']])) return;
-        if (setting_get('company_brand_vibe', 'classic') !== $row['vibe']) {
-            setting_set('company_brand_vibe', $row['vibe']);
-            setting_set('company_logo_motion', $vibes[$row['vibe']]['motion']);
-            log_vibe_change($row['vibe'], 'scheduled');
-            db()->prepare('UPDATE vibe_schedule SET applied_at=NOW() WHERE id=? AND applied_at IS NULL')
-                ->execute([$row['id']]);
+        $current = setting_get('company_brand_vibe', 'classic');
+        if ($row && isset($vibes[$row['vibe']])) {
+            // A schedule is live — switch to its vibe and remember the
+            // user's "default" the first time so we can revert after.
+            if (setting_get('company_brand_vibe_default', '') === '') {
+                setting_set('company_brand_vibe_default', $current);
+            }
+            if ($current !== $row['vibe']) {
+                setting_set('company_brand_vibe', $row['vibe']);
+                setting_set('company_logo_motion', $vibes[$row['vibe']]['motion']);
+                log_vibe_change($row['vibe'], 'scheduled');
+                db()->prepare('UPDATE vibe_schedule SET applied_at=NOW() WHERE id=? AND applied_at IS NULL')
+                    ->execute([$row['id']]);
+            }
+        } else {
+            // No schedule live right now — revert to the saved default vibe
+            // (only if one was saved by a prior schedule run).  This is what
+            // keeps the storefront "normal" outside the schedule window.
+            $default = setting_get('company_brand_vibe_default', '');
+            if ($default !== '' && isset($vibes[$default]) && $current !== $default) {
+                setting_set('company_brand_vibe', $default);
+                setting_set('company_logo_motion', $vibes[$default]['motion']);
+                log_vibe_change($default, 'schedule_ended');
+                // Clear the saved default — the next active schedule will
+                // capture the user's current vibe fresh.
+                setting_set('company_brand_vibe_default', '');
+            }
         }
     } catch (Throwable $e) { /* table missing on a fresh install — ignore */ }
 }
@@ -623,7 +647,7 @@ function active_vibe_promo(): ?array
     $ran = true;
     try {
         $row = db()->query(
-            "SELECT id, vibe, label, logo_path, starts_at, ends_at
+            "SELECT id, vibe, label, logo_path, coupon_code, coupon_percent, starts_at, ends_at
                FROM vibe_schedule
               WHERE starts_at <= NOW() AND (ends_at IS NULL OR ends_at >= NOW())
                 AND label <> ''
@@ -634,12 +658,23 @@ function active_vibe_promo(): ?array
     $row['logo_url'] = '';
     if (!empty($row['logo_path'])) {
         // logo_path is stored as a relative path like "uploads/vibe-promos/X.png".
-        // Build a site-rooted URL for HTML email + cart, and an absolute path
-        // for Dompdf which doesn't follow same-origin URLs reliably.
+        // - `logo_url`           → root-relative URL — works on the cart page
+        //                          regardless of which public hostname proxied
+        //                          the request (site_url() can return an
+        //                          internal cluster URL behind a CDN proxy).
+        // - `logo_url_absolute`  → fully-qualified URL — required for HTML
+        //                          email since Gmail/Outlook can't resolve
+        //                          root-relative paths.  Uses the admin's
+        //                          configured `site_domain_url` if set, then
+        //                          falls back to site_url().
+        // - `logo_file`          → on-disk path for Dompdf invoices.
         $rel = ltrim((string)$row['logo_path'], '/');
-        $row['logo_url']  = rtrim(site_url(), '/') . '/' . $rel;
+        $row['logo_url']  = '/' . $rel;
+        $publicHost = trim((string)setting_get('site_domain_url', '')) ?: site_url();
+        $row['logo_url_absolute'] = rtrim($publicHost, '/') . '/' . $rel;
         $row['logo_file'] = __DIR__ . '/../' . $rel;
     } else {
+        $row['logo_url_absolute'] = '';
         $row['logo_file'] = '';
     }
     $cache = $row;
@@ -663,18 +698,32 @@ function render_vibe_promo_banner(string $variant = 'cart'): string
     $endsLine = $endsAt !== ''
         ? '<span class="vp-ends" style="font-size:11px;opacity:.85;margin-left:10px;letter-spacing:.4px;">Ends ' . htmlspecialchars(date('M j · H:i', strtotime($endsAt)), ENT_QUOTES, 'UTF-8') . '</span>'
         : '';
+    // Coupon-code call-out — admin can attach a discount code to the
+    // schedule (e.g. BF26 → 20% off).  Renders as a dashed pill that
+    // sits next to the label so shoppers see exactly what to type at
+    // checkout.
+    $couponLine = '';
+    $code = strtoupper(trim((string)($p['coupon_code'] ?? '')));
+    $pct  = (int)($p['coupon_percent'] ?? 0);
+    if ($code !== '' && $pct > 0) {
+        $couponLine = '<span class="vp-coupon" data-testid="vibe-promo-coupon" style="display:inline-flex;align-items:center;gap:6px;margin-left:14px;padding:5px 12px;border:1px dashed rgba(255,255,255,.55);border-radius:999px;background:rgba(255,255,255,.10);color:#fff;font-size:12px;font-weight:700;letter-spacing:.5px;">'
+                    . 'Use <strong style="background:#fff;color:#dc2626;padding:1px 8px;border-radius:6px;letter-spacing:.6px;">' . htmlspecialchars($code, ENT_QUOTES, 'UTF-8') . '</strong> for ' . $pct . '% off'
+                    . '</span>';
+    }
     // Variant-specific styling.  `cart` = full bar on top of the cart;
     // `inline` = compact pill for use inside email html / invoice header.
     if ($variant === 'inline') {
         return '<div class="vibe-promo-inline" data-testid="vibe-promo-inline" style="display:inline-flex;align-items:center;gap:10px;background:#dc2626;color:#fff;padding:8px 14px;border-radius:999px;font-weight:700;font-size:13px;letter-spacing:.3px;">'
              . $logoTag
              . '<span>' . $label . '</span>'
+             . $couponLine
              . $endsLine
              . '</div>';
     }
-    return '<div class="vibe-promo-banner" data-testid="vibe-promo-banner" style="display:flex;align-items:center;justify-content:center;gap:14px;background:linear-gradient(120deg,#dc2626,#b91c1c);color:#fff;padding:14px 22px;border-radius:14px;margin:0 0 22px;box-shadow:0 6px 18px rgba(220,38,38,.22);">'
+    return '<div class="vibe-promo-banner" data-testid="vibe-promo-banner" style="display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:14px;background:linear-gradient(120deg,#dc2626,#b91c1c);color:#fff;padding:14px 22px;border-radius:14px;margin:0 0 22px;box-shadow:0 6px 18px rgba(220,38,38,.22);">'
          . $logoTag
          . '<div style="font-weight:800;letter-spacing:.6px;font-size:18px;text-transform:uppercase;">' . $label . '</div>'
+         . $couponLine
          . $endsLine
          . '</div>';
 }
@@ -818,7 +867,19 @@ function site_url(): string
 /* ---------------- Coupons: code => percent off ---------------- */
 function coupons(): array
 {
-    return ['MAVEN20' => 20, 'BIT20' => 20, 'MATRIX20' => 20, 'ZED20' => 20, 'FIVE20' => 20, 'UCODE90' => 20, 'WELCOME10' => 10, 'SAVE15' => 15, 'OFFICE25' => 25];
+    $base = ['MAVEN20' => 20, 'BIT20' => 20, 'MATRIX20' => 20, 'ZED20' => 20, 'FIVE20' => 20, 'UCODE90' => 20, 'WELCOME10' => 10, 'SAVE15' => 15, 'OFFICE25' => 25];
+    // Any active vibe-schedule with a coupon_code + coupon_percent auto-
+    // registers it as a usable coupon during the schedule window.  So a
+    // "Black Friday Sale → BF26 → 20% off" schedule lets checkout accept
+    // BF26 ONLY between starts_at and ends_at.
+    if (function_exists('active_vibe_promo')) {
+        $p = active_vibe_promo();
+        if ($p && !empty($p['coupon_code']) && (int)$p['coupon_percent'] > 0) {
+            $code = strtoupper(trim((string)$p['coupon_code']));
+            if ($code !== '') $base[$code] = max(1, min(95, (int)$p['coupon_percent']));
+        }
+    }
+    return $base;
 }
 
 /* ---------------- Rendering helpers ---------------- */

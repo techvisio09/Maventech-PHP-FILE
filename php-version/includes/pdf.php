@@ -303,11 +303,16 @@ function _pdf_shell(array $ctx, string $bodyHtml): string
             $promoLogo  = '';
             $promoLogoFile = (string)($promo['logo_file'] ?? '');
             if ($promoLogoFile !== '' && is_file($promoLogoFile) && !preg_match('/\.svg$/i', $promoLogoFile)) {
-                // Dompdf accepts local file paths but not SVGs.
                 $promoLogo = '<img src="' . htmlspecialchars($promoLogoFile, ENT_QUOTES, 'UTF-8') . '" alt="" style="height:22px;width:auto;vertical-align:middle;background:#fff;border-radius:4px;padding:2px;margin-right:8px;">';
             }
+            $promoCoupon = '';
+            $code = strtoupper(trim((string)($promo['coupon_code'] ?? '')));
+            $pct  = (int)($promo['coupon_percent'] ?? 0);
+            if ($code !== '' && $pct > 0) {
+                $promoCoupon = '<span style="display:inline-block;margin-left:12px;font-size:10pt;font-weight:600;letter-spacing:.4px;text-transform:none;">Use <span style="background:#fff;color:#dc2626;padding:1px 6px;border-radius:4px;">' . htmlspecialchars($code, ENT_QUOTES, 'UTF-8') . '</span> for ' . $pct . '% off</span>';
+            }
             $promoBarHtml = '<div class="promo-bar" style="background:#dc2626;color:#fff;padding:8px 14px;border-radius:8px;text-align:center;font-weight:800;letter-spacing:.6px;font-size:12pt;margin:0 0 14px;text-transform:uppercase;">'
-                          . $promoLogo . $promoLabel . '</div>';
+                          . $promoLogo . $promoLabel . $promoCoupon . '</div>';
         }
     }
     $secondRow= '';

@@ -840,6 +840,17 @@ body[data-brand-motion="static"] .adm-top .brand-center .m-logo-img {
 .kpi-tile.cyan   .kpi-icon { background:#cffafe; color:#0e7490; }            .kpi-tile.cyan   .kpi-value { color:#06b6d4; }
 [data-bs-theme="dark"] .kpi-tile.purple .kpi-icon { background:#312e81; color:#c4b5fd; }
 [data-bs-theme="dark"] .kpi-tile.cyan   .kpi-icon { background:#155e75; color:#a5f3fc; }
+[data-bs-theme="dark"] .kpi-tile.green  .kpi-icon { background:#064e3b; color:#6ee7b7; }
+[data-bs-theme="dark"] .kpi-tile.blue   .kpi-icon { background:#1e3a8a; color:#93c5fd; }
+[data-bs-theme="dark"] .kpi-tile.amber  .kpi-icon { background:#78350f; color:#fcd34d; }
+[data-bs-theme="dark"] .kpi-tile.red    .kpi-icon { background:#7f1d1d; color:#fca5a5; }
+/* Brighten the KPI numbers themselves so they pop in dark mode. */
+[data-bs-theme="dark"] .kpi-tile.green  .kpi-value { color:#34d399 !important; }
+[data-bs-theme="dark"] .kpi-tile.blue   .kpi-value { color:#60a5fa !important; }
+[data-bs-theme="dark"] .kpi-tile.amber  .kpi-value { color:#fbbf24 !important; }
+[data-bs-theme="dark"] .kpi-tile.red    .kpi-value { color:#f87171 !important; }
+[data-bs-theme="dark"] .kpi-tile.purple .kpi-value { color:#a78bfa !important; }
+[data-bs-theme="dark"] .kpi-tile.cyan   .kpi-value { color:#22d3ee !important; }
 
 /* ---- Flatpickr calendar — dark-mode polish so the popup matches the
    rest of the admin (slate-700 card bg, slate-100 text, blue brand). */
