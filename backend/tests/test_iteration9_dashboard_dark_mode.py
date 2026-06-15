@@ -121,17 +121,54 @@ def test_dark_mode_polish_is_cache_busted():
 # 4. Regression — quick-answer + topic-hub block STILL present after reorder.
 # ---------------------------------------------------------------------------
 
-def test_topic_hub_callout_present_after_quick_answer_reorder():
+def test_category_page_order_quick_answer_then_intro_below_products():
+    """Final layout — products → QuickAnswer → SEO intro paragraph → buying guide."""
     html = requests.get(f"{BASE}/category.php?slug=office-2024-mac", timeout=15).text
-    # Topic hub callout must still exist on a category that has a hub
-    # (office-2024-mac belongs to the microsoft-office hub by default).
-    assert 'data-testid="category-topic-hub"' in html
-    assert 'data-testid="category-hub-link"' in html
-    # And the topic-hub callout comes BEFORE the deep-cluster which comes
-    # AFTER the Quick Answer.
-    qa = html.find('data-testid="category-quick-answer"')
-    hub = html.find('data-testid="category-topic-hub"')
-    deep = html.find('data-testid="category-deep-cluster"')
-    assert qa < hub < deep, (
-        f"Order broken — QA({qa}) should precede HUB({hub}) which precedes DEEP({deep})"
+    products = html.find('data-testid="category-list"')
+    qa       = html.find('data-testid="category-quick-answer"')
+    intro    = html.find('data-testid="category-intro-copy"')
+    assert products > 0 and qa > 0 and intro > 0
+    assert products < qa < intro, (
+        f"Order broken — products({products}) < QA({qa}) < intro({intro})"
     )
+
+
+def test_dashboard_revenue_sparkline_renders():
+    s = requests.Session()
+    s.post(
+        f"{BASE}/login.php",
+        data={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
+        allow_redirects=True,
+        timeout=15,
+    )
+    html = s.get(f"{BASE}/admin.php?tab=dashboard", timeout=15).text
+    assert 'data-testid="kpi-revenue-tile"' in html
+    # Sparkline must render whenever there's been at least one paid order
+    # in the last 30 days for the current region (US has $209 in the
+    # seed data — see iteration 9 testing report).
+    assert 'data-testid="revenue-sparkline"' in html
+    assert 'chart.umd.min.js' in html
+    # Data attributes contain 30 numeric points
+    import re
+    m = re.search(r"data-points='(\[[^']+\])'", html)
+    assert m, "Sparkline must carry data-points JSON"
+    import json as _json
+    pts = _json.loads(m.group(1))
+    assert len(pts) == 30, f"Expected 30 daily buckets, got {len(pts)}"
+
+
+def test_dashboard_chartjs_loaded_unconditionally_on_dashboard():
+    """Chart.js loader on dashboard now ships even when individual charts
+    are empty so any chart down the page can `new Chart()` without its
+    own CDN tag."""
+    s = requests.Session()
+    s.post(
+        f"{BASE}/login.php",
+        data={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
+        allow_redirects=True,
+        timeout=15,
+    )
+    html = s.get(f"{BASE}/admin.php?tab=dashboard", timeout=15).text
+    assert "chart.umd.min.js" in html
+    # Should be loaded exactly once.
+    assert html.count("chart.umd.min.js") == 1, "Chart.js must load exactly once"

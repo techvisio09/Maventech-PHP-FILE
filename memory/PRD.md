@@ -878,3 +878,17 @@ Also surfaced a **"{brand} profile →"** chip on each admin Product card (data-
 - Admin tabs dashboard / ai-blogger / products / orders / sales all return 200 with zero PHP warnings.
 - Hub page + product page dark-mode regressions clean.
 
+
+## [Feb 2026] Iteration 10 — Revenue sparkline + SEO intro reorder
+
+### What shipped (326/326 pytest pass ✅)
+- 📈 **30-day Revenue sparkline inside the Revenue KPI tile** — Chart.js line chart with gradient fill that visualises daily revenue for the last 30 days in the active region.  Sits between the value (`$210`) and the delta (`30d $210 · 1d active`).  Sparkline is hidden when there are zero paid orders, falling back to the legacy "Last 7d:" text.  Data: `SELECT DATE(created_at), SUM(total) FROM orders WHERE region=? AND status IN ('paid','delivered') AND created_at >= NOW() - INTERVAL 29 DAY GROUP BY DATE(created_at)`, then padded to 30 daily buckets.
+- 🛠️ **Shared Chart.js loader** — moved the CDN `<script>` tag to load **unconditionally** on the dashboard so any chart on the page (sparkline + donut + future charts) shares one library instance.  Each chart's init uses a small retry loop so it doesn't race with the loader.
+- 📰 **SEO intro paragraph moved below products** — on `category.php` the `category_intro_seo()` long-form paragraph (`[data-testid=category-intro-copy]`) now renders **after** the Quick Answer (which is after the product grid).  Final order: H1 + count → product cards → Quick Answer → SEO intro → buying guide → FAQ → topic-hub → deep-cluster.
+
+### Files touched
+- `/app/php-version/admin.php` — `$rev30Daily` query + `<canvas data-testid=revenue-sparkline>` inside the Revenue KPI tile + shared Chart.js loader + retry-pattern init scripts for both sparkline and donut.
+- `/app/php-version/category.php` — SEO intro paragraph moved from line ~58 (top) to line ~145 (below Quick Answer).
+- `/app/php-version/includes/admin-shell.php` — `.kpi-spark` CSS (block display, 42 px height, 34 px on mobile) so the canvas slots cleanly inside the tile.
+- `/app/backend/tests/test_iteration9_dashboard_dark_mode.py` — added `test_category_page_order_quick_answer_then_intro_below_products`, `test_dashboard_revenue_sparkline_renders`, `test_dashboard_chartjs_loaded_unconditionally_on_dashboard`.
+

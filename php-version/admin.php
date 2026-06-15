@@ -1386,14 +1386,50 @@ if ($tab === 'dashboard'):
        (Company Info card lives on its own tab — admin.php?tab=company)
        ==================================================================== -->
 
+  <?php
+    // ---- 30-day daily revenue sparkline data -----------------------------
+    // One bucket per day for the active region.  Used by the tiny Chart.js
+    // line in the Revenue KPI tile so admins see WHEN money's coming in
+    // (donut below the KPIs already shows WHERE it's coming from).
+    $rev30Daily = [];
+    try {
+        $sparkRows = $pdo->prepare(
+            "SELECT DATE(created_at) d, COALESCE(SUM(total),0) rev
+               FROM orders
+              WHERE region = ? AND status IN ('paid','delivered')
+                AND created_at >= DATE_SUB(CURDATE(), INTERVAL 29 DAY)
+              GROUP BY DATE(created_at)"
+        );
+        $sparkRows->execute([$rg['code']]);
+        $sparkMap = [];
+        foreach ($sparkRows->fetchAll() as $r) $sparkMap[(string)$r['d']] = (float)$r['rev'];
+        for ($i = 29; $i >= 0; $i--) {
+            $d = date('Y-m-d', strtotime("-$i days"));
+            $rev30Daily[] = ['d' => $d, 'rev' => $sparkMap[$d] ?? 0.0];
+        }
+    } catch (Throwable $e) { $rev30Daily = []; }
+    $rev30Total    = array_sum(array_column($rev30Daily, 'rev'));
+    $rev30NonZero  = count(array_filter($rev30Daily, static fn($x) => $x['rev'] > 0));
+  ?>
 
   <!-- KPI ROW -->
   <div class="row g-3 mb-3" data-testid="admin-kpis">
-    <div class="col-6 col-md-4 col-xl-2"><div class="kpi-tile green">
+    <div class="col-6 col-md-4 col-xl-2"><div class="kpi-tile green has-spark" data-testid="kpi-revenue-tile">
       <div class="kpi-icon"><i class="bi bi-currency-dollar"></i></div>
       <div class="kpi-label">Revenue</div>
       <div class="kpi-value"><?= esc($rg['currency_symbol']) ?><?= number_format($rev,0) ?></div>
-      <div class="kpi-delta text-success"><i class="bi bi-arrow-up-right"></i> Last 7d: <?= esc($rg['currency_symbol']) ?><?= number_format($rev7,0) ?></div>
+      <?php if ($rev30Total > 0): ?>
+        <canvas id="revenueSpark" data-testid="revenue-sparkline" class="kpi-spark"
+                data-points='<?= json_encode(array_column($rev30Daily, "rev")) ?>'
+                data-labels='<?= json_encode(array_map(static fn($x) => date("M j", strtotime($x["d"])), $rev30Daily)) ?>'
+                data-symbol="<?= esc($rg['currency_symbol']) ?>"></canvas>
+        <div class="kpi-delta text-success d-flex align-items-center gap-1" style="font-size:11px;">
+          <i class="bi bi-graph-up-arrow"></i>
+          30d <?= esc($rg['currency_symbol']) ?><?= number_format($rev30Total, 0) ?> · <?= (int)$rev30NonZero ?>d active
+        </div>
+      <?php else: ?>
+        <div class="kpi-delta text-muted" style="font-size:11px;">Last 7d: <?= esc($rg['currency_symbol']) ?><?= number_format($rev7,0) ?></div>
+      <?php endif; ?>
     </div></div>
     <div class="col-6 col-md-4 col-xl-2"><div class="kpi-tile blue">
       <div class="kpi-icon"><i class="bi bi-receipt"></i></div>
@@ -1419,13 +1455,76 @@ if ($tab === 'dashboard'):
       <div class="kpi-value"><?= $openRate ?>%</div>
       <div class="kpi-delta text-muted"><?= $opens ?> of <?= $sent ?> opened</div>
     </div></div>
-    <div class="col-6 col-md-4 col-xl-2"><div class="kpi-tile red">
-      <div class="kpi-icon"><i class="bi bi-person-lines-fill"></i></div>
-      <div class="kpi-label">Leads (all)</div>
-      <div class="kpi-value"><?= number_format($leadsTotal) ?></div>
-      <div class="kpi-delta text-muted"><?= $newLeadCount ?> new in 24h</div>
-    </div></div>
   </div>
+
+  <!-- Chart.js loader — shared by the 30-day revenue sparkline + sales-by-
+       category donut + any future dashboard chart.  Loaded unconditionally
+       on the Dashboard tab so each chart's <script> can just `new Chart()`
+       without needing its own CDN tag. -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <?php if ($rev30Total > 0): ?>
+  <script>
+    (function () {
+      function drawSpark() {
+        const c = document.getElementById('revenueSpark');
+        if (!c || typeof Chart === 'undefined') return;
+        const points = JSON.parse(c.dataset.points || '[]');
+        const labels = JSON.parse(c.dataset.labels || '[]');
+        const sym    = c.dataset.symbol || '$';
+        const dark   = document.documentElement.getAttribute('data-bs-theme') === 'dark';
+        // Soft gradient under the line.
+        const ctx = c.getContext('2d');
+        const grad = ctx.createLinearGradient(0, 0, 0, c.height || 50);
+        grad.addColorStop(0, 'rgba(16,185,129,.45)');
+        grad.addColorStop(1, 'rgba(16,185,129,0)');
+        new Chart(c, {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [{
+              data: points,
+              borderColor: '#10b981',
+              borderWidth: 2,
+              backgroundColor: grad,
+              fill: true,
+              tension: .35,
+              pointRadius: 0,
+              pointHoverRadius: 3,
+              pointHoverBackgroundColor: '#10b981',
+              pointHoverBorderColor: dark ? '#0f1729' : '#fff',
+              pointHoverBorderWidth: 2,
+            }]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                displayColors: false,
+                callbacks: {
+                  title: items => labels[items[0].dataIndex] || '',
+                  label: ctx => sym + Number(ctx.parsed.y).toLocaleString(undefined, {maximumFractionDigits: 0})
+                }
+              }
+            },
+            scales: {
+              x: { display: false },
+              y: { display: false, beginAtZero: true }
+            },
+            interaction: { mode: 'index', intersect: false },
+            animation: { duration: 600 }
+          }
+        });
+      }
+      // Chart.js may load AFTER the script-defer order; retry a few times.
+      let tries = 0;
+      const id = setInterval(() => {
+        if (typeof Chart !== 'undefined' || tries++ > 20) { clearInterval(id); drawSpark(); }
+      }, 60);
+    })();
+  </script>
+  <?php endif; ?>
 
   <div class="row g-3">
     <!-- 30-day Revenue Donut -->
@@ -1816,44 +1915,50 @@ if ($tab === 'dashboard'):
   </div>
 
   <?php if ($catTotalRev > 0): ?>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script>
     (function () {
-      const ctx = document.getElementById('salesByCategoryChart');
-      if (!ctx || typeof Chart === 'undefined') return;
-      const dark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
-      new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-          labels: <?= json_encode($catLabels, JSON_UNESCAPED_UNICODE) ?>,
-          datasets: [{
-            data: <?= json_encode($catValues) ?>,
-            backgroundColor: <?= json_encode(array_slice($catPalette, 0, count($catTop))) ?>,
-            borderColor: dark ? '#0f172a' : '#ffffff',
-            borderWidth: 3,
-            hoverOffset: 14
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          cutout: '62%',
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: function (c) {
-                  const v = c.parsed;
-                  const tot = c.dataset.data.reduce((a, b) => a + b, 0);
-                  const pct = tot > 0 ? ((v / tot) * 100).toFixed(1) : '0.0';
-                  return c.label + ': <?= esc($rg['currency_symbol']) ?>' + v.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:0}) + '  (' + pct + '%)';
+      function drawDonut() {
+        const ctx = document.getElementById('salesByCategoryChart');
+        if (!ctx || typeof Chart === 'undefined') return;
+        const dark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
+        new Chart(ctx, {
+          type: 'doughnut',
+          data: {
+            labels: <?= json_encode($catLabels, JSON_UNESCAPED_UNICODE) ?>,
+            datasets: [{
+              data: <?= json_encode($catValues) ?>,
+              backgroundColor: <?= json_encode(array_slice($catPalette, 0, count($catTop))) ?>,
+              borderColor: dark ? '#0f172a' : '#ffffff',
+              borderWidth: 3,
+              hoverOffset: 14
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '62%',
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: function (c) {
+                    const v = c.parsed;
+                    const tot = c.dataset.data.reduce((a, b) => a + b, 0);
+                    const pct = tot > 0 ? ((v / tot) * 100).toFixed(1) : '0.0';
+                    return c.label + ': <?= esc($rg['currency_symbol']) ?>' + v.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:0}) + '  (' + pct + '%)';
+                  }
                 }
               }
-            }
-          },
-          animation: { animateRotate: true, duration: 700 }
-        }
-      });
+            },
+            animation: { animateRotate: true, duration: 700 }
+          }
+        });
+      }
+      // Wait for Chart.js (loaded at the top of the dashboard) — same retry pattern.
+      let tries = 0;
+      const id = setInterval(() => {
+        if (typeof Chart !== 'undefined' || tries++ > 20) { clearInterval(id); drawDonut(); }
+      }, 60);
     })();
   </script>
   <style>

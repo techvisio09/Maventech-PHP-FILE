@@ -782,6 +782,21 @@ body[data-brand-motion="static"] .adm-top .brand-center .m-logo-img {
 [data-bs-theme="dark"] .kpi-tile.purple .kpi-icon { background:#312e81; color:#c4b5fd; }
 [data-bs-theme="dark"] .kpi-tile.cyan   .kpi-icon { background:#155e75; color:#a5f3fc; }
 
+/* In-tile Chart.js sparkline (Revenue KPI) — slots between the value
+   and the kpi-delta line.  `.has-spark` reserves the canvas height so
+   the tile doesn't jump when Chart.js finishes drawing. */
+.kpi-tile.has-spark { padding-bottom: 14px; }
+.kpi-tile .kpi-spark {
+  display: block;
+  width: 100% !important;
+  height: 42px !important;
+  margin: 6px 0 2px;
+  cursor: crosshair;
+}
+@media (max-width: 575px) {
+  .kpi-tile .kpi-spark { height: 34px !important; }
+}
+
 /* Sparkline / mini chart bars */
 .chart-bars { display:flex; align-items:end; gap:3px; height:140px; padding:6px 0; }
 .chart-bars .b { flex:1; border-radius:5px 5px 0 0; background:linear-gradient(180deg, var(--brand) 0%, var(--brand-dk) 100%); min-width:5px; transition: opacity .15s; cursor:pointer; }

@@ -64,10 +64,9 @@ include __DIR__ . '/includes/header.php';
 <?= render_page_head($title . ' Products', count($products) . ' products — genuine licenses, delivered in minutes', [$title => null], 'category-title') ?>
 <div class="container py-4 py-lg-5">
 
-  <!-- SEO hero intro: indexable copy that primes the page with mid-tail intent. -->
-  <p class="lead text-secondary mb-4" data-testid="category-intro-copy" style="max-width:880px;">
-    <?= category_intro_seo($slug, $title) ?>
-  </p>
+  <!-- (SEO intro paragraph was originally rendered here — moved BELOW the
+       product grid alongside the Quick Answer so shoppers see inventory
+       first.  The H1 + product count above still primes search engines.) -->
 
   <!-- Structured toolbar: title/count | platform | sort -->
   <div class="shop-toolbar row g-3 align-items-center mb-4 mx-0 p-3" data-testid="category-toolbar">
@@ -123,6 +122,13 @@ include __DIR__ . '/includes/header.php';
           'category-quick-answer'
       ) ?>
   </div>
+
+  <!-- SEO mid-tail intro — moved below the product grid (alongside the
+       Quick Answer) so it doesn't push the inventory off the fold.  Still
+       fully indexable + quotable by AI crawlers. -->
+  <p class="lead text-secondary mb-4" data-testid="category-intro-copy" style="max-width:880px;">
+    <?= category_intro_seo($slug, $title) ?>
+  </p>
 
   <!-- ============ Long-form SEO copy: buying guide with H2/H3
        hierarchy that targets mid-tail and long-tail searches. ============ -->
