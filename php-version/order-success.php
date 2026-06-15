@@ -90,11 +90,52 @@ include __DIR__ . '/includes/header.php';
 // license keys, Sign-in-to-activate, Installation Guide, PDF download.
 // This is the exact same data the customer got in their email.
 $qrUrl = '';
+$orderItems = [];
 if ($order && $order['status'] === 'paid') {
     $publicHost = trim((string)setting_get('site_domain_url', '')) ?: site_url();
     $qrUrl = rtrim($publicHost, '/')
            . '/order-history.php?email=' . urlencode((string)$order['email'])
            . '&order=' . urlencode((string)$order['order_number']);
+
+    // Pull this order's products + their already-assigned license keys so we
+    // can render the same "what you bought + here's your license key + Sign
+    // in to activate + View installation guide" card that the email shows.
+    // This is the "show more focus on the product" iteration 20 request.
+    try {
+        $stIt = db()->prepare(
+            'SELECT oi.product_slug, oi.name, oi.qty, oi.price,
+                    p.image, p.brand, p.activation_url, p.install_guide_url
+             FROM order_items oi
+             LEFT JOIN products p ON p.slug = oi.product_slug
+             WHERE oi.order_id = ?'
+        );
+        $stIt->execute([(int)$order['id']]);
+        $orderItems = $stIt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        // Attach assigned license keys per item (in insertion order)
+        $stKeys = db()->prepare(
+            'SELECT product_slug, license_key
+             FROM license_keys
+             WHERE order_id = ? AND status = "sold"
+             ORDER BY id ASC'
+        );
+        $stKeys->execute([(int)$order['id']]);
+        $keysByProduct = [];
+        foreach ($stKeys->fetchAll(PDO::FETCH_ASSOC) as $kr) {
+            $keysByProduct[$kr['product_slug']][] = $kr['license_key'];
+        }
+        foreach ($orderItems as &$it) {
+            $slug = $it['product_slug'];
+            $it['license_keys'] = $keysByProduct[$slug] ?? [];
+            if (function_exists('activation_url_for_product')) {
+                $it['activation_url'] = activation_url_for_product(
+                    (string)$it['name'],
+                    (string)($it['brand'] ?? ''),
+                    (string)($it['activation_url'] ?? '')
+                );
+            }
+        }
+        unset($it);
+    } catch (Throwable $e) { /* non-fatal */ }
 }
 ?>
 <div class="container py-4" style="max-width: 1100px;">
@@ -140,6 +181,53 @@ if ($order && $order['status'] === 'paid') {
       <div class="d-flex justify-content-between"><span class="text-secondary small">Total</span><span class="fw-bold text-primary" style="font-size:.95rem;"><?= format_price((float)$order['total']) ?></span></div>
     </div>
     <p class="small text-secondary mb-3" style="font-size:.78rem;">The charge will appear as <strong><?= SITE_LEGAL ?></strong> on your card statement.</p>
+
+    <!-- ====================================================================
+         PRODUCT SHOWCASE — list every product on this order with its
+         license key + Sign-in-to-activate + View-installation-guide
+         buttons.  Same data as the customer's email, surfaced ON the
+         success page so they can act on it immediately.  Each product
+         renders only when an actual license key is present
+         (ProAssist + accessories are intentionally omitted).
+         ==================================================================== -->
+    <?php if (!empty($orderItems)): ?>
+    <div class="success-product-list text-start" data-testid="success-product-list">
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <span class="badge text-bg-success" style="background:#06b6d4 !important;color:#fff;border-radius:999px;padding:4px 11px;font-size:10.5px;letter-spacing:1px;font-weight:700;">
+          <i class="bi bi-key-fill me-1"></i>YOUR PRODUCTS &amp; LICENSE KEYS
+        </span>
+      </div>
+      <?php foreach ($orderItems as $oi): if (empty($oi['license_keys']) || ($oi['product_slug'] === 'proassist-premium')) continue; ?>
+        <?php foreach ($oi['license_keys'] as $idxKey => $lk): ?>
+        <div class="card co-banner p-3 mb-2" data-testid="success-product-card-<?= esc($oi['product_slug']) ?>-<?= (int)$idxKey ?>" style="border-radius:14px;">
+          <div class="d-flex align-items-start gap-3">
+            <?php if (!empty($oi['image'])): ?>
+              <img src="<?= esc($oi['image']) ?>" alt="<?= esc($oi['name']) ?>" style="width:64px;height:64px;object-fit:contain;border-radius:10px;background:#fff;padding:6px;flex-shrink:0;">
+            <?php endif; ?>
+            <div style="flex:1;min-width:0;">
+              <div class="fw-bold" style="font-size:.92rem;color:var(--bs-body-color);" data-testid="success-product-name"><?= esc($oi['name']) ?></div>
+              <div class="text-secondary" style="font-size:.72rem;letter-spacing:.4px;text-transform:uppercase;font-weight:700;margin-top:6px;">LICENSE KEY</div>
+              <div class="license-key-pill mt-1" data-testid="success-product-license"
+                   style="font-family:ui-monospace,Menlo,monospace;background:linear-gradient(135deg,#ecfeff,#cffafe);color:#0e7490;border:1px dashed #06b6d4;border-radius:8px;padding:6px 10px;font-size:.85rem;font-weight:700;letter-spacing:.6px;display:inline-block;word-break:break-all;">
+                <?= esc($lk) ?>
+              </div>
+              <div class="d-flex flex-wrap gap-2 mt-2">
+                <?php if (!empty($oi['activation_url'])): ?>
+                  <a href="<?= esc($oi['activation_url']) ?>" target="_blank" rel="noopener" class="btn btn-sm btn-primary rounded-pill" data-testid="success-activate-btn" style="font-size:.72rem;padding:4px 12px;background:linear-gradient(135deg,#06b6d4,#0891b2);border:0;">
+                    <i class="bi bi-box-arrow-up-right me-1"></i>Sign in to activate
+                  </a>
+                <?php endif; ?>
+                <a href="<?= !empty($oi['install_guide_url']) ? esc($oi['install_guide_url']) : 'page.php?slug=installation-guide' ?>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary rounded-pill" data-testid="success-installguide-btn" style="font-size:.72rem;padding:4px 12px;">
+                  <i class="bi bi-book me-1"></i>View installation guide
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+        <?php endforeach; ?>
+      <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
 
     <!-- Order History self-service -->
     <div class="card co-banner p-3 mb-4 text-start" style="background:linear-gradient(135deg,#ecfdf5,#f0fdfa);border:1px solid #a7f3d0;border-radius:14px;" data-testid="oh-cta-on-success">

@@ -313,22 +313,34 @@ function toggleChat() {
   if (panel.classList.contains('open')) {
     // Customer opened the chat → clear the unread bell.
     clearChatBell();
-    // First open per session → show a "support is typing…" bubble for
-    // ~1.2 s before revealing the welcome message + quick-reply chips.
-    // Psychological cue: feels like a real person composing a reply,
-    // which lifts first-message reply rates.
-    try {
-      if (!sessionStorage.getItem('uc_chat_intro_played')) {
-        playChatTypingIntro();
-        sessionStorage.setItem('uc_chat_intro_played', '1');
-      }
-    } catch (e) { /* private-mode browsers: skip the intro silently */ }
+    // Iteration 20 — chat opens straight to the 3-field contact form by
+    // default.  The AI welcome bubble + quick chips are kept in the DOM
+    // for the legacy ProAssist auto-chat flow (where uc_lead_done is
+    // already set) but stay hidden on the first-touch human-support flow.
     if (!localStorage.getItem('uc_lead_done')) {
       const form = document.getElementById('chat-lead-form');
       if (form) form.style.display = 'block';
+      // Hard-hide the AI welcome + chips on a fresh open so the customer
+      // sees ONLY the contact form (no AI bubble distracting them).
+      const welcome = document.getElementById('chat-welcome-msg');
+      const chips   = document.getElementById('chat-chips');
+      if (welcome) welcome.style.display = 'none';
+      if (chips)   chips.style.display   = 'none';
+      // Focus the first empty field for keyboard users.
+      setTimeout(() => {
+        const ne = document.getElementById('lead-name');
+        if (ne && !ne.value) ne.focus();
+      }, 60);
     } else {
       // Returning visitor — lead already done; surface the composer.
       revealChatInputRow();
+      // Play the typing intro for ProAssist / returning customers only.
+      try {
+        if (!sessionStorage.getItem('uc_chat_intro_played')) {
+          playChatTypingIntro();
+          sessionStorage.setItem('uc_chat_intro_played', '1');
+        }
+      } catch (e) { /* private-mode browsers: skip the intro silently */ }
     }
   }
 }
@@ -445,10 +457,17 @@ function leadValues() {
 
 async function submitLead(callback) {
   const v = leadValues();
-  if (!v.name || !/\S+@\S+\.\S+/.test(v.email) || v.phone.length < 7) {
-    showToast('Please fill in your name, email and phone.');
-    return;
+  const errBox = document.getElementById('chat-lead-error');
+  const sendBtn = document.querySelector('[data-testid="lead-send-btn"]');
+  if (errBox) errBox.style.display = 'none';
+  function showErr(msg) {
+    if (errBox) { errBox.textContent = msg; errBox.style.display = 'block'; }
+    else { showToast(msg); }
   }
+  if (!v.name) { showErr('Please enter your full name.'); return; }
+  if (!/\S+@\S+\.\S+/.test(v.email)) { showErr('Please enter a valid email address.'); return; }
+  if (v.phone.length < 7) { showErr('Please enter your phone number.'); return; }
+  if (sendBtn) { sendBtn.disabled = true; sendBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>'; }
   let sid = localStorage.getItem('uc_chat_session');
   if (!sid) { sid = 's' + Date.now() + Math.random().toString(36).slice(2, 8); localStorage.setItem('uc_chat_session', sid); }
   try {
@@ -458,30 +477,41 @@ async function submitLead(callback) {
       body: JSON.stringify({ session_id: sid, callback_requested: !!callback, ...v }),
     });
     const j = await r.json().catch(() => ({}));
+    if (r.status >= 400 || (j && j.ok === false)) {
+      const detail = (j && (j.error || j.message)) || 'Something went wrong — please try again.';
+      showErr(detail);
+      if (sendBtn) { sendBtn.disabled = false; sendBtn.innerHTML = '<i class="bi bi-send-fill"></i>'; }
+      return;
+    }
     if (j && j.chat_token) {
       localStorage.setItem('uc_chat_token', j.chat_token);
       localStorage.setItem('uc_lead_id', String(j.lead_id || ''));
       startAdminPolling();
     }
-  } catch (e) { /* best-effort */ }
+  } catch (e) {
+    showErr('Network error — please check your connection and try again.');
+    if (sendBtn) { sendBtn.disabled = false; sendBtn.innerHTML = '<i class="bi bi-send-fill"></i>'; }
+    return;
+  }
   localStorage.setItem('uc_lead_done', '1');
+  // Flag this session as a "human-only" thread — sendChat() will skip the
+  // AI auto-reply and route directly to the admin lead-management chat.
+  localStorage.setItem('uc_chat_human_only', '1');
   document.getElementById('chat-lead-form').style.display = 'none';
-  // Reveal the message input now that the lead form is complete.
+  // Reveal the message composer now that we have the customer's contact info.
   revealChatInputRow();
   const firstName = (v.name.split(' ')[0] || '').trim();
-  // Clean handoff message after the lead form is submitted.  Per product
-  // requirement we no longer show the long "AI offline / phone / hours"
-  // fallback — instead we confirm the connection and let the admin take
-  // over from the admin panel.  The customer's typed messages still get
-  // a short "looping in a live person" reply from ajax/chat.php.
-  const hello = 'Hi' + (firstName ? ' ' + firstName : '')
-              + "! Thanks — hold on a moment, let me connect you with an agent on our admin portal. "
-              + "They've just been notified and will reply right here in this chat shortly."
-              + (callback && callback !== 'chat'
-                  ? " We'll also call you on " + v.phone + " as soon as an agent is free."
-                  : '');
-  chatAppend('user', v.name + ' · ' + v.email + ' · ' + v.phone + (callback==='chat'?'':(callback?'  (requested a callback)':'')));
-  chatAppend('bot', hello);
+  // Per product requirement: NO AI auto-replies.  The post-submit greeting
+  // is a single fixed agent message telling the customer to type their
+  // real question — which goes straight to admin lead-mgmt.  Any subsequent
+  // reply the customer sees is from a real admin agent (polled via
+  // adminPollOnce → /ajax/chat-customer.php).
+  const greeting = 'Thanks for contacting the support team'
+                 + (firstName ? ', ' + firstName : '')
+                 + '! One of our agents will be connected with you shortly. '
+                 + 'Please type your message below — let us know exactly what you\'re looking for.';
+  const bubble = chatAppend('bot', greeting);
+  if (bubble) bubble.classList.add('agent-greeting');
 }
 
 function skipLead() {
@@ -497,8 +527,9 @@ function skipLead() {
 function revealChatInputRow() {
   const row = document.getElementById('chat-input-row');
   if (!row) return;
-  if (row.style.display === '' || row.style.display === 'flex') return;
-  row.style.display = 'flex';
+  if (row.classList.contains('d-flex')) return; // already revealed
+  row.classList.remove('d-none');
+  row.classList.add('d-flex');
   row.classList.add('is-fade-in');
   const inp = document.getElementById('chat-input');
   if (inp) setTimeout(() => inp.focus(), 60);
@@ -861,8 +892,28 @@ async function sendChat(ev) {
   input.value = '';
   pingCustomerTyping(false); // sent — clear the "typing" beacon
   chatAppend('user', msg);
-  // Also forward the customer's message to the admin chat thread (best-effort)
+  // Forward the customer's message to the admin chat thread.  This is the
+  // ONLY downstream route now — no AI auto-reply.  An admin agent reads
+  // the message in lead-mgmt and replies manually; that reply comes back
+  // to the customer via adminPollOnce() polling /ajax/chat-customer.php.
   relayCustomerMessageToAdmin(msg);
+  // Human-only mode (set by submitLead) — do NOT call the AI chat endpoint.
+  // The customer waits for a real agent reply.  We render a small "agent
+  // notified" status line once per session so the customer knows their
+  // message landed.
+  if (localStorage.getItem('uc_chat_human_only') === '1') {
+    if (!window._humanOnlyAckedOnce) {
+      window._humanOnlyAckedOnce = true;
+      const ack = chatAppend('bot',
+        'Got it — your message was sent to our support team. A live agent will reply here as soon as they\'re free.'
+      );
+      if (ack) ack.classList.add('agent-greeting');
+    }
+    return;
+  }
+  // Legacy fall-through (no lead captured yet, e.g. ProAssist auto-chat
+  // bound to a paid order's lead): still ping the AI assistant so the
+  // customer isn't left in silence.
   const typing = chatAppend('bot', '');
   typing.classList.add('typing');
   typing.innerHTML = '<span></span><span></span><span></span>';

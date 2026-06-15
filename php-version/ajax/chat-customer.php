@@ -39,8 +39,7 @@ if ($action === 'send') {
     if ($msg === '') { echo json_encode(['ok'=>false,'error'=>'empty']); exit; }
 
     // Detect whether this is the customer's FIRST message in this lead's
-    // chat thread — used to fire the one-time "Thanks for contacting us"
-    // auto-reply right after we record the message.
+    // chat thread — kept for the admin notification email throttle below.
     $cnt = $pdo->prepare("SELECT COUNT(*) FROM chat_messages WHERE lead_id=? AND sender='customer'");
     $cnt->execute([$leadId]);
     $isFirstCustomerMsg = ((int)$cnt->fetchColumn() === 0);
@@ -65,21 +64,18 @@ if ($action === 'send') {
         );
     } catch (Throwable $e) { /* best-effort */ }
 
-    // First-message auto-reply — set the tone, let the customer know
-    // they've been heard, and prompt them to share more detail so the
-    // admin has context the moment they open the chat.  Inserted as
-    // sender='admin' so the customer-side poller picks it up on the
-    // very next tick and renders it as a green agent bubble.
-    if ($isFirstCustomerMsg) {
-        // Don't double-up if a ProAssist welcome (or any other admin
-        // message) was already seeded for this lead.
-        $hasAdmin = (int)$pdo->query("SELECT COUNT(*) FROM chat_messages WHERE lead_id=" . (int)$leadId . " AND sender='admin'")->fetchColumn();
-        if ($hasAdmin === 0) {
-            $autoReply = "Thanks for contacting us! Please tell us how we can assist you further.";
-            $pdo->prepare('INSERT INTO chat_messages (lead_id, sender, message) VALUES (?,?,?)')
-                ->execute([$leadId, 'admin', $autoReply]);
-        }
-    }
+    /*
+     * NO AUTO-ADMIN REPLY (iteration 20 product requirement).
+     *
+     * Previously this endpoint inserted a one-time "Thanks for contacting us!
+     * Please tell us how we can assist you further." admin bubble the moment
+     * the customer sent their FIRST message.  Per user direction the customer
+     * must ONLY ever see messages typed by a real admin agent — no canned
+     * auto-replies of any kind.  The customer-side JS now shows a small
+     * "Got it — your message was sent to our support team" status note on
+     * the customer's screen ONCE per session, which is purely client-side
+     * and never lands in chat_messages.
+     */
 
     // Admin notification email — fire a "New chat message from {name}"
     // email at most once per lead per 5 minutes so admins don't get

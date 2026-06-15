@@ -2549,3 +2549,57 @@ User: "Chat size is still too big. I want to reduce the size, make it half of it
   - Chat panel docked to the absolute bottom-right corner, ~240×320 — only overlaps right edge of the lower part of the page, leaving the order details readable
   - Page rhythm: left QR → centered thanks block → right-corner chat (3 distinct visual zones)
 
+
+## [Feb 2026 — Iteration 20] Product showcase on order-success + Chat flow overhaul (human-only, no auto-replies)
+
+### Part 1 — "Show more focus on the product" on `/order-success.php`
+- Added a **PRODUCT SHOWCASE** card after the order-meta card on the success page.  Loads `order_items` joined with `products` (image, brand, activation_url, install_guide_url) and the assigned `license_keys` (one row per key).
+- For each delivered key, renders a card with:
+  - Product image (64×64 contained on white)
+  - Product name (bold)
+  - **LICENSE KEY** in a dashed teal-cyan pill (same colour family as the success tick + SCAN pill + QR pulse)
+  - **Sign in to activate** button (teal-cyan filled pill)
+  - **View installation guide** button (outline pill)
+- ProAssist + accessories without keys are correctly skipped via the `product_slug === 'proassist-premium'` and `empty($oi['license_keys'])` guards.
+- The card matches the email layout so the customer's experience on the page mirrors what they get in their inbox.
+
+### Part 2 — Customer chat completely overhauled (human-only, no AI auto-replies)
+
+**Flow before:** chat opened with AI welcome bubble + quick chips + ProAssist UI + AI bot replies.
+
+**Flow now:**
+1. Open chat → ONLY the 3-field form (Full name · Email · Phone) + ONE blue send arrow.  No AI welcome bubble, no quick chips, no "Type message" composer yet.
+2. Customer fills form → submits via single blue paper-plane button.
+3. After submit:
+   - Form is hidden, the customer's contact info is saved as a chat_lead
+   - A teal-cyan "agent-greeting" bubble appears: *"Thanks for contacting the support team, &lt;Name&gt;! One of our agents will be connected with you shortly. Please type your message below — let us know exactly what you're looking for."*
+   - The message composer (`chat-input-row`) is revealed.
+4. Customer types their question → message goes ONLY to admin lead-management (`/ajax/chat-customer.php`).
+   - **NO AI auto-reply** (the legacy `/ajax/chat.php` call is skipped when `localStorage.uc_chat_human_only === '1'`)
+   - **NO auto-admin reply** (the previous "Thanks for contacting us! Please tell us how we can assist you further" canned bubble was removed from `chat-customer.php`)
+   - One client-only status note "Got it — your message was sent to our support team" is shown once per session so the customer knows their message landed — this is purely UI and never written to `chat_messages`
+5. Admin reads the message in the leads panel (the lead's green pulsing online dot already lights up via the existing online-status poller).  When the admin types a reply in lead-management, the customer sees that exact message — and only that message.
+
+### CSS additions
+- `.chat-lead-field-row`, `.chat-lead-row-send`, `.chat-lead-send-btn` — new compact 3-fields + single blue send arrow layout
+- `.chat-lead-error` — inline validation error pill (red, theme-aware)
+- `.chat-msg.agent-greeting` — teal-cyan styled bubble for the post-submit greeting + the "sent to support" status note
+
+### Bug found & fixed during testing
+- `chat-input-row` was Bootstrap `.d-flex !important` which OVERRODE the inline `style="display:none;"` — so the composer was visible even before the lead form was submitted.  Fixed by swapping `d-flex` → `d-none` initially, then `revealChatInputRow()` toggles `d-none` → `d-flex` on submit.
+
+### Files touched
+- `/app/php-version/order-success.php` — loads order_items + license_keys, renders the new product showcase card
+- `/app/php-version/includes/footer.php` — chat header changed (Customer Support · We're here…), AI welcome msg + chips hidden by default, lead form re-laid as 3 stacked field rows + blue send arrow, composer initially `d-none` instead of inline display:none
+- `/app/php-version/assets/css/style.css` — new `.chat-lead-*` field-row + send-btn + error styles, new `.chat-msg.agent-greeting` bubble style
+- `/app/php-version/assets/js/main.js` — `toggleChat()` shows form-only on fresh open; `submitLead()` shows agent-greeting + reveals composer + sets `uc_chat_human_only`; `sendChat()` skips AI auto-reply when human-only flag is set
+- `/app/php-version/ajax/chat-customer.php` — removed the first-message canned admin reply ("Thanks for contacting us! Please tell us how we can assist you further")
+
+### Testing
+- Manual Playwright pass at 1280×800:
+  - Open chat → form-only ✓
+  - Fill (Sarah Johnson / sarah.johnson@example.com / +1-415-555-1234) → submit → greeting bubble + composer reveal ✓
+  - Type "I need help installing Microsoft Office on my Mac" → bubble appears + "Got it — your message was sent" status ✓
+  - No AI auto-reply, no admin auto-reply ✓
+- DB verification: latest chat_leads row created (id=11, Mary Davis), `chat_messages` has ONLY the customer's question — zero auto-admin rows
+
