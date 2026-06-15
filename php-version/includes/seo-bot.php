@@ -1386,13 +1386,14 @@ function seo_bot_autotick(): void
 }
 
 /* =====================================================================
- *  WEEKLY AUTO-RESUBMIT
+ *  DAILY AUTO-RESUBMIT
  *  -----------------------------------------------------------------
- *  When the operator enables "Auto-resubmit weekly" in the admin SEO
+ *  When the operator enables "Auto-resubmit sitemap" in the admin SEO
  *  panel, this function re-pings IndexNow with the fresh sitemap URLs
- *  every 7 days.  Idempotent — gated on:
- *    - setting `auto_sitemap_weekly` == '1'
- *    - last submission timestamp > 7 days old
+ *  every 24 hours.  Idempotent — gated on:
+ *    - setting `auto_sitemap_weekly` == '1'  (kept the key name for
+ *      backwards-compat with stored values; the cadence is now daily.)
+ *    - last submission timestamp > 24 hours old
  *  Runs in the same background shutdown handler as the auto-blogger so
  *  it never blocks a page-load.
  * =================================================================== */
@@ -1403,7 +1404,7 @@ function seo_bot_weekly_sitemap_tick(): void
     $lastAt = setting_get('last_sitemap_submit_at', '');
     if ($lastAt) {
         $age = time() - strtotime($lastAt);
-        if ($age >= 0 && $age < 7 * 86400) return; // submitted less than 7 days ago
+        if ($age >= 0 && $age < 86400) return; // submitted less than 24 hours ago
     }
 
     if (!function_exists('_seo_collect_index_urls') || !function_exists('_seo_indexnow_submit_urls')) return;
@@ -1414,13 +1415,13 @@ function seo_bot_weekly_sitemap_tick(): void
     try {
         [$status, $count] = _seo_indexnow_submit_urls($urls, $rep);
     } catch (Throwable $e) {
-        @error_log('[weekly-sitemap] ' . $e->getMessage());
+        @error_log('[daily-sitemap] ' . $e->getMessage());
         return;
     }
     if ($status === 'ok') {
         setting_set('last_sitemap_submit_at',    date('Y-m-d H:i:s'));
         setting_set('last_sitemap_submit_count', (string)$count);
-        setting_set('last_sitemap_submit_kind',  'auto_weekly');
+        setting_set('last_sitemap_submit_kind',  'auto_daily');
     }
 }
 

@@ -932,7 +932,7 @@ function topic_hubs_for_product(array $p): array
  *  that has >= $minProducts active products and isn't already covered by
  *  an existing hub, then inserts a new auto-source hub for each.
  *  Returns the list of new slugs created. */
-function topic_hubs_auto_generate(int $minProducts = 4): array
+function topic_hubs_auto_generate(int $minProducts = 2): array
 {
     topic_hubs_seed_defaults();
     $pdo  = db();
@@ -951,6 +951,7 @@ function topic_hubs_auto_generate(int $minProducts = 4): array
     )->fetchAll();
 
     $created = [];
+    $skipped = []; // already-covered categories, surfaced in the flash so admins don't think the button did nothing
     $insert = $pdo->prepare("INSERT IGNORE INTO topic_hubs
         (slug, title, headline, audience, categories_json, blog_tags_json, keywords, about_link, color, videos_json, active, source)
         VALUES (?,?,?,?,?,?,?,?,?,?,1,'auto')");
@@ -959,7 +960,11 @@ function topic_hubs_auto_generate(int $minProducts = 4): array
 
     foreach ($rows as $r) {
         $slugCat = (string)$r['cat'];
-        if ($slugCat === '' || isset($covered[$slugCat])) continue;
+        if ($slugCat === '') continue;
+        if (isset($covered[$slugCat])) {
+            $skipped[] = $slugCat;
+            continue;
+        }
         $title    = function_exists('category_title') ? category_title($slugCat) : ucwords(str_replace('-', ' ', $slugCat));
         if ($title === '' || strtolower($title) === strtolower($slugCat)) {
             $title = ucwords(str_replace('-', ' ', $slugCat));
@@ -984,6 +989,10 @@ function topic_hubs_auto_generate(int $minProducts = 4): array
             @error_log('[topic_hubs_auto_generate] ' . $e->getMessage());
         }
     }
+    // Stash the skipped list in a session-like global so the admin caller
+    // can build a meaningful "already covered" message — without breaking
+    // the existing call sites that just want the created list.
+    $GLOBALS['__topic_hubs_skipped'] = $skipped;
     return $created;
 }
 

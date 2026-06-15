@@ -1100,8 +1100,8 @@ if ($tab === 'ai-blogger') {
         $errors  = [];
         if ($autoWeekly !== $prevAutoWeekly) {
             $updated[] = $autoWeekly === '1'
-                ? 'Auto-resubmit weekly enabled'
-                : 'Auto-resubmit weekly disabled';
+                ? 'Auto-resubmit daily enabled'
+                : 'Auto-resubmit daily disabled';
         }
 
         // Per-field validators — pasted garbage shouldn't be storable.
@@ -1288,14 +1288,82 @@ if ($tab === 'ai-blogger') {
         header('Location: admin.php?tab=ai-blogger#topic-hubs-section'); exit;
     }
 
+    // ----- Live verify GSC / Bing tokens by fetching the homepage and
+    // confirming the meta-tag actually rendered with the saved value.
+    // This catches typo'd tokens that LOOK well-formatted but aren't the
+    // ones Google / Bing have on record. -----
+    if (!empty($_GET['verify_token'])) {
+        $which = (string)$_GET['verify_token'];
+        $saved = $which === 'bing'
+            ? (string)setting_get('bing_site_verification_token', '')
+            : (string)setting_get('google_site_verification_token', '');
+        $metaName = $which === 'bing' ? 'msvalidate.01' : 'google-site-verification';
+        $label    = $which === 'bing' ? 'Bing Webmaster' : 'Google Search Console';
+
+        if ($saved === '') {
+            $_SESSION['seo_bot_flash'] = '⚠ No ' . $label . ' token is saved — paste your token and click Save first.';
+            $_SESSION['seo_bot_flash_kind'] = 'warning';
+            header('Location: admin.php?tab=ai-blogger'); exit;
+        }
+
+        $base = trim((string)setting_get('site_domain_url', '')) ?: ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https://' : 'http://') . $_SERVER['HTTP_HOST']);
+        $base = rtrim($base, '/');
+
+        $ch = curl_init($base . '/?_verify=' . urlencode($which) . '&_t=' . time());
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_TIMEOUT        => 12,
+            CURLOPT_USERAGENT      => 'MaventechVerify/1.0',
+        ]);
+        $html = (string)curl_exec($ch);
+        $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErr  = curl_error($ch);
+        curl_close($ch);
+
+        if ($httpCode !== 200 || $html === '') {
+            $_SESSION['seo_bot_flash'] = '⚠ Couldn\'t reach ' . esc($base) . ' to verify (' . ($curlErr ?: 'HTTP ' . $httpCode) . '). Check the Website Domain field above and try again.';
+            $_SESSION['seo_bot_flash_kind'] = 'danger';
+            header('Location: admin.php?tab=ai-blogger'); exit;
+        }
+
+        // Hunt for the meta tag in the served HTML.  Be flexible about
+        // attribute order and quote style — accept both single and double quotes.
+        $foundContent = '';
+        if (preg_match('~<meta\s+[^>]*name\s*=\s*["\']' . preg_quote($metaName, '~') . '["\'][^>]*content\s*=\s*["\']([^"\']+)["\']~i', $html, $m)) {
+            $foundContent = $m[1];
+        } elseif (preg_match('~<meta\s+[^>]*content\s*=\s*["\']([^"\']+)["\'][^>]*name\s*=\s*["\']' . preg_quote($metaName, '~') . '["\']~i', $html, $m)) {
+            $foundContent = $m[1];
+        }
+
+        if ($foundContent === '') {
+            $_SESSION['seo_bot_flash'] = '✗ ' . $label . ' meta tag was NOT found on ' . esc($base) . '. Save the token, then click Verify again. The page must render a <code>&lt;meta name="' . esc($metaName) . '"&gt;</code> tag.';
+            $_SESSION['seo_bot_flash_kind'] = 'danger';
+        } elseif (trim($foundContent) !== trim($saved)) {
+            $_SESSION['seo_bot_flash'] = '✗ ' . $label . ' meta tag is present but its content does not match the saved token. Found "' . esc(substr($foundContent, 0, 12) . '…') . '" expected "' . esc(substr($saved, 0, 12) . '…') . '". Try clearing the cache / hard refresh, then click Verify again.';
+            $_SESSION['seo_bot_flash_kind'] = 'danger';
+        } else {
+            setting_set('verify_status_' . $which, 'ok|' . date('Y-m-d H:i:s'));
+            $_SESSION['seo_bot_flash'] = '✓ ' . $label . ' token verified live — the meta tag matches the saved value on ' . esc($base) . '. Search engines will be able to confirm site ownership.';
+            $_SESSION['seo_bot_flash_kind'] = 'success';
+        }
+        header('Location: admin.php?tab=ai-blogger'); exit;
+    }
+
     if (!empty($_GET['autogen_topic_hubs'])) {
         try {
-            $created = topic_hubs_auto_generate(4);
+            $created = topic_hubs_auto_generate(2);
+            $skipped = (array)($GLOBALS['__topic_hubs_skipped'] ?? []);
             if ($created) {
-                $_SESSION['seo_bot_flash'] = '✓ Auto-generated ' . count($created) . ' new topic hub(s) from top categories: ' . esc(implode(', ', $created));
+                $msg = '✓ Auto-generated ' . count($created) . ' new topic hub(s): ' . esc(implode(', ', $created)) . '.';
+                if ($skipped) $msg .= ' Skipped ' . count($skipped) . ' categor' . (count($skipped) === 1 ? 'y' : 'ies') . ' that already had a hub (' . esc(implode(', ', array_slice($skipped, 0, 6))) . (count($skipped) > 6 ? '…' : '') . ').';
+                $_SESSION['seo_bot_flash'] = $msg;
+                $_SESSION['seo_bot_flash_kind'] = 'success';
+            } elseif ($skipped) {
+                $_SESSION['seo_bot_flash'] = '✓ Already up to date — all ' . count($skipped) . ' busy categor' . (count($skipped) === 1 ? 'y has' : 'ies have') . ' a topic hub: ' . esc(implode(', ', array_slice($skipped, 0, 8))) . (count($skipped) > 8 ? '…' : '') . '.';
                 $_SESSION['seo_bot_flash_kind'] = 'success';
             } else {
-                $_SESSION['seo_bot_flash'] = 'No new hubs needed — every busy category already has a topic hub.';
+                $_SESSION['seo_bot_flash'] = 'No categories with 2 or more active products were found yet. Add more products first, or use the New hub form below to add one manually.';
                 $_SESSION['seo_bot_flash_kind'] = 'info';
             }
         } catch (Throwable $e) {
@@ -1309,18 +1377,66 @@ if ($tab === 'ai-blogger') {
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['upload_gsc_csv'])) {
         ensure_db_schema();
         $csvText = '';
+        $sourceLabel = '';
         if (!empty($_FILES['gsc_csv']['tmp_name']) && is_uploaded_file($_FILES['gsc_csv']['tmp_name'])) {
-            $csvText = (string)file_get_contents($_FILES['gsc_csv']['tmp_name']);
-        } elseif (!empty($_POST['gsc_csv_text'])) {
-            $csvText = (string)$_POST['gsc_csv_text'];
+            $sourceLabel = (string)($_FILES['gsc_csv']['name'] ?? 'upload');
+            $tmp  = (string)$_FILES['gsc_csv']['tmp_name'];
+            $name = strtolower($sourceLabel);
+            // GSC ships a ZIP that bundles per-tab CSVs (Queries.csv, Pages.csv, ...).
+            // Auto-extract the Queries sheet so the admin can upload the file
+            // straight from Search Console without manual unzipping.
+            if (str_ends_with($name, '.zip') && class_exists('ZipArchive')) {
+                $zip = new ZipArchive();
+                if ($zip->open($tmp) === true) {
+                    $picked = '';
+                    // Prefer the Queries sheet, fall back to whatever CSV is inside.
+                    for ($i = 0; $i < $zip->numFiles; $i++) {
+                        $entry = (string)$zip->getNameIndex($i);
+                        if (preg_match('/Queries.*\.csv$/i', $entry)) { $picked = $entry; break; }
+                    }
+                    if ($picked === '') {
+                        for ($i = 0; $i < $zip->numFiles; $i++) {
+                            $entry = (string)$zip->getNameIndex($i);
+                            if (preg_match('/\.csv$/i', $entry)) { $picked = $entry; break; }
+                        }
+                    }
+                    if ($picked !== '') {
+                        $csvText = (string)$zip->getFromName($picked);
+                        $sourceLabel = $sourceLabel . ' → ' . $picked;
+                    }
+                    $zip->close();
+                }
+            } else {
+                $csvText = (string)file_get_contents($tmp);
+            }
         }
+        // Fall back to pasted text when no file was provided or the upload
+        // was empty (admin can still paste into the textarea on the same form).
+        if (trim($csvText) === '' && !empty($_POST['gsc_csv_text'])) {
+            $csvText = (string)$_POST['gsc_csv_text'];
+            $sourceLabel = 'pasted text';
+        }
+
         if (trim($csvText) === '') {
-            $_SESSION['seo_bot_flash'] = 'Upload a Google Search Console CSV or paste the contents to discover topics.';
+            $_SESSION['seo_bot_flash'] = '⚠ No CSV detected. Either upload a .csv / .zip from Search Console OR paste the rows into the box, then click Submit.';
             $_SESSION['seo_bot_flash_kind'] = 'warning';
         } else {
-            $r = gsc_import_csv($csvText);
-            $_SESSION['seo_bot_flash'] = '✓ Imported ' . $r['inserted'] . ' GSC quer(y/ies)' . ($r['skipped'] ? ' (' . $r['skipped'] . ' skipped)' : '') . '. Review clusters below to spin up new topic hubs.';
-            $_SESSION['seo_bot_flash_kind'] = $r['inserted'] > 0 ? 'success' : 'warning';
+            try {
+                $r = gsc_import_csv($csvText);
+                if ($r['inserted'] > 0) {
+                    $_SESSION['seo_bot_flash'] = '✓ Imported ' . $r['inserted'] . ' Search Console quer' . ($r['inserted'] === 1 ? 'y' : 'ies')
+                        . ($r['skipped'] ? ' (' . $r['skipped'] . ' duplicate rows skipped)' : '')
+                        . ($sourceLabel ? ' from ' . $sourceLabel : '')
+                        . '. Top clusters by impressions are ready below — click "Create hub" on any cluster to publish a topic hub.';
+                    $_SESSION['seo_bot_flash_kind'] = 'success';
+                } else {
+                    $_SESSION['seo_bot_flash'] = '⚠ Couldn\'t find any usable rows in that CSV. Expected headers include Query / Top queries, Clicks, Impressions, CTR, Position. The first non-header line we saw had ' . strlen(trim($csvText)) . ' characters.';
+                    $_SESSION['seo_bot_flash_kind'] = 'warning';
+                }
+            } catch (Throwable $e) {
+                $_SESSION['seo_bot_flash'] = '⚠ Import failed: ' . $e->getMessage();
+                $_SESSION['seo_bot_flash_kind'] = 'danger';
+            }
         }
         header('Location: admin.php?tab=ai-blogger#discovery-section'); exit;
     }
@@ -3468,7 +3584,10 @@ elseif ($tab === 'ai-blogger'):
                     <?php endif; ?>
                     <div style="font-size:11px;font-family:monospace;margin-top:2px;opacity:.7;" data-testid="gsc-masked"><?= esc(substr($gscToken, 0, 6) . '••••••' . substr($gscToken, -2)) ?></div>
                   </div>
-                  <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" data-testid="gsc-change-btn" onclick="mvOpenKeyEditor('gsc')"><i class="bi bi-pencil me-1"></i>Change</button>
+                  <div class="d-flex gap-1">
+                    <a href="admin.php?tab=ai-blogger&verify_token=google" class="btn btn-sm btn-outline-primary rounded-pill" data-testid="gsc-verify-btn" title="Fetch the home page and confirm the meta tag matches"><i class="bi bi-shield-check me-1"></i>Verify</a>
+                    <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" data-testid="gsc-change-btn" onclick="mvOpenKeyEditor('gsc')"><i class="bi bi-pencil me-1"></i>Change</button>
+                  </div>
                 </div>
               </div>
               <div id="gsc-edit" style="display:none;">
@@ -3503,7 +3622,10 @@ elseif ($tab === 'ai-blogger'):
                     <?php endif; ?>
                     <div style="font-size:11px;font-family:monospace;margin-top:2px;opacity:.7;" data-testid="bing-masked"><?= esc(substr($bingToken, 0, 6) . '••••••' . substr($bingToken, -2)) ?></div>
                   </div>
-                  <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" data-testid="bing-change-btn" onclick="mvOpenKeyEditor('bing')"><i class="bi bi-pencil me-1"></i>Change</button>
+                  <div class="d-flex gap-1">
+                    <a href="admin.php?tab=ai-blogger&verify_token=bing" class="btn btn-sm btn-outline-primary rounded-pill" data-testid="bing-verify-btn" title="Fetch the home page and confirm the meta tag matches"><i class="bi bi-shield-check me-1"></i>Verify</a>
+                    <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" data-testid="bing-change-btn" onclick="mvOpenKeyEditor('bing')"><i class="bi bi-pencil me-1"></i>Change</button>
+                  </div>
                 </div>
               </div>
               <div id="bing-edit" style="display:none;">
@@ -3658,7 +3780,7 @@ elseif ($tab === 'ai-blogger'):
         <button type="button" class="btn btn-success rounded-pill px-4" disabled data-testid="checklist-sitemap-submitted-btn" style="opacity:.92;cursor:default;">
           <i class="bi bi-check2-circle me-1"></i>Sitemap Submitted
           <span class="badge ms-2" style="background:rgba(255,255,255,.25);color:#fff;font-size:10px;font-weight:600;">
-            <?= $lastSubmitCnt2 ?> URLs &middot; <?= esc(human_time_diff_compact($lastSubmitTs2)) ?> ago<?= $lastSubmitKind === 'auto_weekly' ? ' &middot; auto' : '' ?>
+            <?= $lastSubmitCnt2 ?> URLs &middot; <?= esc(human_time_diff_compact($lastSubmitTs2)) ?> ago<?= ($lastSubmitKind === 'auto_weekly' || $lastSubmitKind === 'auto_daily') ? ' &middot; auto' : '' ?>
           </span>
         </button>
         <a href="admin.php?tab=ai-blogger&submit_sitemaps=1" class="btn btn-outline-secondary rounded-pill px-3" data-testid="checklist-sitemap-resubmit-btn" onclick="return confirm('Resubmit your sitemap now?')"><i class="bi bi-arrow-clockwise me-1"></i>Resubmit</a>
@@ -3669,7 +3791,7 @@ elseif ($tab === 'ai-blogger'):
       <a href="sitemap.xml" target="_blank" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-filetype-xml me-1"></i>View Sitemap</a>
     </div>
 
-    <!-- Auto-resubmit weekly toggle — drives seo_bot_weekly_sitemap_tick() -->
+    <!-- Auto-resubmit daily toggle — drives seo_bot_weekly_sitemap_tick() (24h cadence) -->
     <form method="post" action="admin.php?tab=ai-blogger" class="d-flex align-items-center gap-2 mb-3 pb-3 flex-wrap" style="border-bottom:1px solid #f1f5f9;" data-testid="auto-weekly-form">
       <input type="hidden" name="save_seo_tokens" value="1">
       <input type="hidden" name="site_domain_url" value="<?= esc($seoDomain) ?>">
@@ -3678,14 +3800,14 @@ elseif ($tab === 'ai-blogger'):
                name="auto_sitemap_weekly" value="1" <?= $autoWeeklyEnabled ? 'checked' : '' ?>
                onchange="window.admPreserveState && window.admPreserveState(); this.form.submit();" data-testid="auto-weekly-toggle">
         <label class="form-check-label small fw-semibold" for="autoWeeklyToggle">
-          <i class="bi bi-arrow-clockwise me-1 text-primary"></i>Auto-resubmit sitemap weekly
+          <i class="bi bi-arrow-clockwise me-1 text-primary"></i>Auto-resubmit sitemap daily
         </label>
       </div>
       <div class="text-secondary small" data-testid="auto-weekly-hint">
         <?php if ($autoWeeklyEnabled): ?>
-          <i class="bi bi-check-circle-fill text-success me-1"></i><strong>On</strong> &mdash; IndexNow will be re-pinged every 7 days automatically. No manual clicks needed.
+          <i class="bi bi-check-circle-fill text-success me-1"></i><strong>On</strong> &mdash; IndexNow will be re-pinged every <strong>24 hours</strong> automatically. New blog posts also push to search engines the moment they're published. No manual clicks needed.
         <?php else: ?>
-          Off &mdash; you'll need to click <em>Submit Sitemap</em> manually to keep search engines fresh.
+          Off &mdash; you'll need to click <em>Submit Sitemap</em> manually to keep search engines fresh. (New blog posts still ping IndexNow individually as they're published.)
         <?php endif; ?>
       </div>
     </form>
@@ -4320,26 +4442,43 @@ https://youtu.be/YYYYY"><?php
       <p class="text-secondary small mb-3">Export your <strong>Performance &rarr; Queries</strong> report from <a href="https://search.google.com/search-console" target="_blank" rel="noopener">Google Search Console</a> as a CSV and upload it here.  We cluster queries by shared keywords, rank them by impressions, and let you spin up a new topic hub for any cluster in one click — closing the loop between what Google says people search for, and what you publish.</p>
 
       <div class="row g-3 mb-3" data-testid="gsc-upload-row">
-        <div class="col-md-6">
-          <form method="post" enctype="multipart/form-data" action="admin.php?tab=ai-blogger" data-testid="gsc-upload-form">
-            <input type="hidden" name="upload_gsc_csv" value="1">
-            <label class="form-label small fw-semibold mb-1">Upload Search Console CSV</label>
-            <div class="input-group input-group-sm">
-              <input type="file" name="gsc_csv" accept=".csv,text/csv" class="form-control" data-testid="gsc-csv-file" required>
-              <button type="submit" class="btn btn-primary" data-testid="gsc-upload-btn"><i class="bi bi-upload me-1"></i>Import</button>
+        <form method="post" enctype="multipart/form-data" action="admin.php?tab=ai-blogger#discovery-section" data-testid="gsc-upload-form" class="col-12">
+          <input type="hidden" name="upload_gsc_csv" value="1">
+          <div class="row g-3 mb-2">
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold mb-1">Upload Search Console CSV</label>
+              <input type="file" name="gsc_csv" accept=".csv,.zip,text/csv,application/zip" class="form-control form-control-sm" data-testid="gsc-csv-file">
+              <div class="form-text" style="font-size:11px;">Headers we recognise: <code>Top queries</code> / <code>Query</code>, <code>Clicks</code>, <code>Impressions</code>, <code>CTR</code>, <code>Position</code>.</div>
             </div>
-            <div class="form-text" style="font-size:11px;">Headers we recognise: <code>Top queries</code> / <code>Query</code>, <code>Clicks</code>, <code>Impressions</code>, <code>CTR</code>, <code>Position</code>.</div>
-          </form>
-        </div>
-        <div class="col-md-6">
-          <form method="post" action="admin.php?tab=ai-blogger" data-testid="gsc-paste-form">
-            <input type="hidden" name="upload_gsc_csv" value="1">
-            <label class="form-label small fw-semibold mb-1">…or paste CSV text</label>
-            <textarea name="gsc_csv_text" rows="3" class="form-control form-control-sm" placeholder="Query,Clicks,Impressions,CTR,Position&#10;buy microsoft office,12,540,2.22%,4.7"></textarea>
-            <button type="submit" class="btn btn-sm btn-outline-primary rounded-pill mt-2"><i class="bi bi-clipboard-check me-1"></i>Parse</button>
-          </form>
-        </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold mb-1">…or paste CSV text</label>
+              <textarea name="gsc_csv_text" rows="3" class="form-control form-control-sm" placeholder="Query,Clicks,Impressions,CTR,Position&#10;buy microsoft office,12,540,2.22%,4.7" data-testid="gsc-csv-paste"></textarea>
+              <div class="form-text" style="font-size:11px;">Paste either path works — we pick whichever input you fill in.</div>
+            </div>
+          </div>
+          <div class="d-flex align-items-center gap-2 flex-wrap">
+            <button type="submit" class="btn btn-primary rounded-pill px-4" data-testid="gsc-submit-btn" id="gscSubmitBtn">
+              <i class="bi bi-upload me-1"></i>Submit & Cluster Queries
+            </button>
+            <span class="text-secondary small" style="font-size:11.5px;"><i class="bi bi-info-circle me-1"></i>One submit handles both file <em>and</em> pasted text. We'll de-duplicate by query, store every row, and rebuild clusters below.</span>
+          </div>
+        </form>
       </div>
+      <script>
+        // Tiny UX touch — disable + spinner the Submit button on click so the
+        // user knows the upload is in flight (large CSVs from GSC can take a
+        // couple seconds to parse server-side).
+        (function () {
+          var f = document.querySelector('[data-testid="gsc-upload-form"]');
+          if (!f) return;
+          f.addEventListener('submit', function () {
+            var b = document.getElementById('gscSubmitBtn');
+            if (!b) return;
+            b.disabled = true;
+            b.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Importing…';
+          });
+        })();
+      </script>
 
       <?php if ($gscClusters): ?>
         <div class="d-flex align-items-center mb-2">

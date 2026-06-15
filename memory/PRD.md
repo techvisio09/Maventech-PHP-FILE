@@ -1605,3 +1605,65 @@ Pointing at the SEO/AI Auto-Blogger settings field labelled `AI Key (Emergent / 
 - Test 3 (saved-but-invalid): manually inject `garbage_invalid_short` for `bing_site_verification_token` → reload AI Auto-Blogger page → Bing card shows AMBER `⚠ Token Invalid` + `INVALID FORMAT` chip + SEO Health Check Bing row renders RED with the "saved but format is invalid" copy.
 
 
+---
+
+## [Feb 2026] Iteration 33 — Auto-gen hubs feedback, unified GSC CSV form, DAILY auto-resubmit, live token verify
+
+### What the user reported / asked
+1. **"Auto-generate from top categories" appears non-functional** — clicking it gave no visible result.  Root cause: the threshold was 4 products and the 3 seed hubs already covered every category that hit that threshold, so the function correctly created zero hubs but with no feedback the admin couldn't tell.
+2. **SEO Discovery Lab CSV upload felt glitchy** — two separate forms with `Import` vs `Parse` buttons in different columns was confusing.  Wanted a single Submit button at the bottom.
+3. **Sitemap auto-resubmit should be every 24 hours (daily)** — currently was every 7 days; new blog posts should also still ping IndexNow on publish.
+4. **Add live "Verify with Google / Bing"** — yes, please add it.
+
+### What changed
+
+**Topic Hub auto-generate (`includes/seo-content.php` + `admin.php`)**
+- Lowered the threshold from `>= 4` products → `>= 2` products per category so smaller categories also get hubs.
+- Function now exports the SKIPPED list (`$GLOBALS['__topic_hubs_skipped']`) so the caller can build a meaningful "already covered" message.
+- Admin handler now produces 3 distinct flash messages:
+  - Created N + Skipped M (mixed result)
+  - "✓ Already up to date — all N busy categories have a topic hub: …" (everything was covered)
+  - "No categories with 2 or more active products were found yet…" (genuinely nothing to create)
+- Verified end-to-end: clicking the button on a fully-seeded store now displays *"✓ Already up to date — all 11 busy categories have a topic hub: bitdefender, office-2021-pc, office-2024-pc, …"* — so the admin sees that the button DID run and there's just nothing left to create.
+
+**SEO Discovery Lab — unified upload form (`admin.php`)**
+- Replaced the two side-by-side `<form>` blocks (one for file, one for paste) with a **single multipart form** that accepts EITHER input or both — handler picks whichever has content.
+- Single big primary `Submit & Cluster Queries` button below both inputs, with a helper line explaining what it does.
+- File input now accepts `.csv` AND `.zip` (GSC ships ZIP bundles from the dashboard).  PHP `ZipArchive` auto-extracts the Queries sheet from the ZIP so the admin can drag the file straight from Search Console without unzipping it first.
+- Spinner + disabled state on the Submit button after click so large CSVs don't look frozen.
+- Better flash messages: counts rows imported / duplicates skipped / source label (filename or "pasted text") / friendly "couldn't find usable rows" warning when the CSV headers don't match.
+
+**Daily auto-resubmit cadence (`includes/seo-bot.php`, `admin.php`)**
+- `seo_bot_weekly_sitemap_tick()` cooldown gate changed from `7 * 86400` → `86400` seconds (24 hours).
+- Function comment block + `last_sitemap_submit_kind` value updated to `auto_daily`.
+- Setting key `auto_sitemap_weekly` is retained for backwards-compat with existing rows but the new contract is daily.
+- UI label updated: "Auto-resubmit sitemap **daily**" + helper line: *"IndexNow will be re-pinged every 24 hours automatically. New blog posts also push to search engines the moment they're published. No manual clicks needed."*
+- Save-handler flash text now says "Auto-resubmit daily enabled/disabled".
+- Status-pill label widens to recognise both legacy `auto_weekly` and new `auto_daily` last-submit kinds.
+
+**Live "Verify with Google / Bing" buttons (`admin.php`)**
+- New handler on `?verify_token=google|bing`:
+  1. Looks up the saved token.
+  2. cURL-fetches the home page from the configured `site_domain_url` (or current host).
+  3. Greps the HTML for `<meta name="google-site-verification"|"msvalidate.01" content="…">` (flexible about attribute order + quote style).
+  4. Compares the served content with the saved token.
+- Three outcomes:
+  - **Green ✓** "token verified live — the meta tag matches the saved value on https://…"
+  - **Red ✗** "meta tag was NOT found on …" (tag wasn't rendered)
+  - **Red ✗** "meta tag is present but content does not match — found 'abc…' expected 'xyz…'" (typo'd token)
+- Verify button is rendered as a cyan outline pill next to Change on both the GSC and Bing display cards.
+
+### Files touched
+- `/app/php-version/admin.php` (auto-gen handler, GSC CSV handler, unified upload form, daily-resubmit labels, live-verify handler + buttons)
+- `/app/php-version/includes/seo-bot.php` (`seo_bot_weekly_sitemap_tick` cadence + naming)
+- `/app/php-version/includes/seo-content.php` (`topic_hubs_auto_generate` threshold + skipped export)
+
+### Verification
+- `php -l` clean on all 3 edited files.
+- Playwright end-to-end:
+  - **Verify GSC**: clicked the new Verify pill on the GSC card → green banner *"✓ Google Search Console token verified live — the meta tag matches the saved value on https://indexnow-checker.preview.emergentagent.com."*
+  - **Auto-gen hubs**: hit `?autogen_topic_hubs=1` → green banner *"✓ Already up to date — all 11 busy categories have a topic hub: bitdefender, office-2021-pc, office-2024-pc, …"*
+  - **CSV import**: pasted an 8-row GSC sample into the unified textarea → clicked Submit → green banner *"✓ Imported 8 Search Console queries from pasted text. Top clusters by impressions are ready below — click 'Create hub' …"* → 8 cluster cards appeared with impressions / clicks / sample queries / "+ Create hub" buttons.
+  - **Daily tick**: CLI ran `seo_bot_weekly_sitemap_tick()` → submitted 45 URLs to IndexNow, `last_sitemap_submit_kind=auto_daily`.
+
+
