@@ -3,17 +3,69 @@
 // With STRIPE_SECRET_KEY empty the store runs in DEMO MODE (order marked paid instantly).
 require_once __DIR__ . '/functions.php';
 
+/**
+ * Returns the active gateway mode for the current request — 'test' or 'live'.
+ * Driven by the admin Test↔Live toggle on /admin.php?tab=api&gw=toggles.
+ */
+function stripe_active_mode(): string
+{
+    return setting_get('gw_mode', 'test') === 'live' ? 'live' : 'test';
+}
+
+/**
+ * Returns the Stripe secret key the checkout flow should use for the
+ * CURRENT mode. Lookup order:
+ *   1. Mode-specific admin override (gw_card_secret_key_test / _live).
+ *   2. Legacy single-field admin override (gw_card_secret_key).
+ *   3. Env-var STRIPE_API_KEY (which is the default sk_test_emergent proxy).
+ * Empty string ⇒ no key configured for this mode ⇒ DEMO fallback.
+ */
+function stripe_active_secret(): string
+{
+    $mode = stripe_active_mode();
+    $modeKey = trim((string)setting_get('gw_card_secret_key_' . $mode, ''));
+    if ($modeKey !== '') return $modeKey;
+    $legacy  = trim((string)setting_get('gw_card_secret_key', ''));
+    if ($legacy !== '') return $legacy;
+    return (string)(defined('STRIPE_SECRET_KEY') ? STRIPE_SECRET_KEY : '');
+}
+
+/**
+ * Publishable counterpart of stripe_active_secret() — kept for the
+ * client-side Elements bundle (currently unused, but exposed for parity).
+ */
+function stripe_active_publishable(): string
+{
+    $mode = stripe_active_mode();
+    $modeKey = trim((string)setting_get('gw_card_public_key_' . $mode, ''));
+    if ($modeKey !== '') return $modeKey;
+    return trim((string)setting_get('gw_card_public_key', ''));
+}
+
 function stripe_enabled(): bool
 {
-    return STRIPE_SECRET_KEY !== '';
+    return stripe_active_secret() !== '';
 }
 
 function stripe_request(string $method, string $path, array $params = []): array
 {
-    $ch = curl_init(rtrim(STRIPE_API_BASE, '/') . '/v1/' . $path);
+    $secret = stripe_active_secret();
+    if ($secret === '') {
+        throw new RuntimeException('Stripe is not configured for the active gateway mode.');
+    }
+    // Pick the right API host. The Emergent proxy is only valid for the
+    // bundled sk_test_emergent test key — real sk_test_* / sk_live_* keys
+    // must go straight to api.stripe.com.
+    $base = defined('STRIPE_API_BASE') ? STRIPE_API_BASE : 'https://api.stripe.com';
+    if (str_contains($secret, 'emergent')) {
+        $base = 'https://integrations.emergentagent.com/stripe';
+    } elseif (str_starts_with($secret, 'sk_test_') || str_starts_with($secret, 'sk_live_')) {
+        $base = 'https://api.stripe.com';
+    }
+    $ch = curl_init(rtrim($base, '/') . '/v1/' . $path);
     $opts = [
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_USERPWD => STRIPE_SECRET_KEY . ':',
+        CURLOPT_USERPWD => $secret . ':',
         CURLOPT_TIMEOUT => 25,
     ];
     if ($method === 'POST') {
@@ -34,14 +86,18 @@ function stripe_request(string $method, string $path, array $params = []): array
 function stripe_create_session(array $order, string $baseUrl): array
 {
     $cents = (int)round((float)$order['total'] * 100);
+    $mode  = stripe_active_mode();
+    $label = ($mode === 'test' ? '[TEST] ' : '')
+           . 'Order #' . $order['order_number'] . ' — ' . SITE_LEGAL;
     return stripe_request('POST', 'checkout/sessions', [
         'mode' => 'payment',
         'line_items[0][price_data][currency]' => 'usd',
-        'line_items[0][price_data][product_data][name]' => 'Order #' . $order['order_number'] . ' — ' . SITE_LEGAL,
+        'line_items[0][price_data][product_data][name]' => $label,
         'line_items[0][price_data][unit_amount]' => $cents,
         'line_items[0][quantity]' => 1,
         'customer_email' => $order['email'],
         'metadata[order_number]' => $order['order_number'],
+        'metadata[gw_mode]' => $mode,
         'success_url' => $baseUrl . 'order-success.php?order=' . urlencode($order['order_number']) . '&session_id={CHECKOUT_SESSION_ID}',
         'cancel_url' => $baseUrl . 'checkout.php',
     ]);

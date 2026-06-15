@@ -1296,14 +1296,17 @@ hr { border-color: var(--border); opacity:.5; }
         <?php endforeach; ?>
       </div>
     </div>
-    <!-- PWA install button — visible when the browser/OS supports installing.
-         Hidden by default; the SW-registration script (below) toggles it
-         once `beforeinstallprompt` fires (Android Chrome, desktop Chrome,
-         desktop Edge) OR an iOS Safari banner is shown manually. -->
-    <button class="adm-iconbtn adm-install-btn d-none" id="admInstallBtn"
-            title="Install Maventech Admin as an app" data-testid="adm-install-btn">
+    <!-- PWA install button — ALWAYS visible.  Clicking it triggers the
+         browser's native install prompt when available, or shows a clear
+         per-platform "Add to Home Screen" instruction modal otherwise.
+         Hidden ONLY when the admin is already running INSIDE the PWA
+         (standalone display-mode), because installing the installed app
+         a second time makes no sense. -->
+    <button class="adm-iconbtn adm-install-btn" id="admInstallBtn"
+            title="Install Maventech Admin as an app on this device"
+            data-testid="adm-install-btn">
       <i class="bi bi-download"></i>
-      <span class="adm-install-label">Install</span>
+      <span class="adm-install-label">Install App</span>
     </button>
 
     <!-- Activity bell — pushes notifications for new orders, leads,
@@ -1650,10 +1653,39 @@ document.addEventListener('click', function(e){
      30-second polling loop for new admin events.
      ============================================================ -->
 <style>
-.adm-install-btn { background: linear-gradient(135deg, #06b6d4, #0ea5e9); color: #fff; border: 0;
-  padding: 6px 12px; font-weight: 600; gap: 6px; }
-.adm-install-btn .adm-install-label { display: inline-block; font-size: 12px; }
-.adm-install-btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
+.adm-install-btn {
+  /* Override the .adm-iconbtn round 36×36 default so the label has room
+     to sit next to the icon as a proper pill. */
+  width: auto !important;
+  height: auto !important;
+  border-radius: 999px !important;
+  padding: 8px 14px !important;
+  background: linear-gradient(135deg, #06b6d4, #0ea5e9) !important;
+  color: #fff !important;
+  border: 0 !important;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: .3px;
+  gap: 6px;
+  box-shadow: 0 4px 10px rgba(14,165,233,.30);
+  position: relative;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.adm-install-btn .adm-install-label { display: inline-block; font-size: 12px; line-height: 1; }
+.adm-install-btn:hover { filter: brightness(1.08); transform: translateY(-1px); color:#fff !important; }
+.adm-install-btn::before {
+  /* Soft inner glow on hover — sells the "tap to install" affordance. */
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,.20), rgba(255,255,255,0));
+  opacity: 0; transition: opacity .25s;
+}
+.adm-install-btn:hover::before { opacity: 1; }
+/* Phones — collapse the label so the icon stays visible without crowding. */
+@media (max-width: 575px) {
+  .adm-install-btn .adm-install-label { display: none; }
+  .adm-install-btn { padding: 8px 10px !important; }
+}
 .adm-bell-activity { position: relative; }
 .adm-bell-activity .adm-bell-badge { background: #ef4444; color: #fff; right: 0; top: 0;
   font-weight: 700; font-size: 10px; padding: 0 5px; border-radius: 999px; min-width: 16px;
@@ -1705,10 +1737,20 @@ document.addEventListener('click', function(e){
   // ---- 2) "Install" button — wired to beforeinstallprompt ----
   let deferredPrompt = null;
   const installBtn = document.getElementById('admInstallBtn');
+  // Hide the button outright if the admin is ALREADY running the PWA
+  // standalone — installing the already-installed app makes no sense.
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+                       || window.matchMedia('(display-mode: minimal-ui)').matches
+                       || window.navigator.standalone === true;
+  if (installBtn && isStandalone) {
+    installBtn.style.display = 'none';
+  }
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredPrompt = e;
-    if (installBtn) installBtn.classList.remove('d-none');
+    // Always-visible pill — the button is already in the DOM; this
+    // listener just stores the prompt for the click handler below.
+    if (installBtn && !isStandalone) installBtn.style.display = '';
   });
   if (installBtn) {
     installBtn.addEventListener('click', async () => {
@@ -1719,17 +1761,12 @@ document.addEventListener('click', function(e){
       }
       deferredPrompt.prompt();
       const choice = await deferredPrompt.userChoice;
-      if (choice.outcome === 'accepted') installBtn.classList.add('d-none');
+      if (choice.outcome === 'accepted') installBtn.style.display = 'none';
       deferredPrompt = null;
     });
-    // Show the button on iOS Safari (no beforeinstallprompt) — when running
-    // OUTSIDE the home-screen PWA so the user knows the option exists.
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-    const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-    if (isiOS && !isStandalone) installBtn.classList.remove('d-none');
   }
   window.addEventListener('appinstalled', () => {
-    if (installBtn) installBtn.classList.add('d-none');
+    if (installBtn) installBtn.style.display = 'none';
   });
 
   // ---- 3) Notification permission — silently request once after install ----

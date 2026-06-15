@@ -864,20 +864,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             setting_set('gw_card_status',         $_POST['status']);
             setting_set('gw_card_provider',       trim($_POST['provider']));
             setting_set('gw_card_merchant_name',  trim($_POST['merchant_name']));
-            if (!empty($_POST['public_key']))     setting_set('gw_card_public_key', trim($_POST['public_key']));
-            if (!empty($_POST['secret_key']))     setting_set('gw_card_secret_key', trim($_POST['secret_key']));
-            if (!empty($_POST['webhook_secret'])) setting_set('gw_card_webhook_secret', trim($_POST['webhook_secret']));
+            // Mode-aware key fields. Empty input leaves the stored value untouched
+            // so the admin can update just the mode they're configuring.
+            if (!empty($_POST['public_key_test']))    setting_set('gw_card_public_key_test',    trim($_POST['public_key_test']));
+            if (!empty($_POST['secret_key_test']))    setting_set('gw_card_secret_key_test',    trim($_POST['secret_key_test']));
+            if (!empty($_POST['public_key_live']))    setting_set('gw_card_public_key_live',    trim($_POST['public_key_live']));
+            if (!empty($_POST['secret_key_live']))    setting_set('gw_card_secret_key_live',    trim($_POST['secret_key_live']));
+            // Legacy single-field inputs (kept for backwards compat — they
+            // populate the legacy non-prefixed setting which acts as a
+            // catch-all fallback for both modes).
+            if (!empty($_POST['public_key']))         setting_set('gw_card_public_key',         trim($_POST['public_key']));
+            if (!empty($_POST['secret_key']))         setting_set('gw_card_secret_key',         trim($_POST['secret_key']));
+            if (!empty($_POST['webhook_secret']))     setting_set('gw_card_webhook_secret',     trim($_POST['webhook_secret']));
             // Mirror status to the legacy `card_enabled` flag used by some helpers
             setting_set('card_enabled', $_POST['status']==='active' ? '1' : '0');
         } else {
             setting_set('gw_paypal_status',       $_POST['status']);
             setting_set('gw_paypal_account_name', trim($_POST['account_name']));
-            if (!empty($_POST['client_id']))      setting_set('gw_paypal_client_id', trim($_POST['client_id']));
-            if (!empty($_POST['secret']))         setting_set('gw_paypal_secret', trim($_POST['secret']));
-            if (!empty($_POST['webhook_id']))     setting_set('gw_paypal_webhook_id', trim($_POST['webhook_id']));
+            if (!empty($_POST['client_id_test']))     setting_set('gw_paypal_client_id_test',   trim($_POST['client_id_test']));
+            if (!empty($_POST['secret_test']))        setting_set('gw_paypal_secret_test',      trim($_POST['secret_test']));
+            if (!empty($_POST['client_id_live']))     setting_set('gw_paypal_client_id_live',   trim($_POST['client_id_live']));
+            if (!empty($_POST['secret_live']))        setting_set('gw_paypal_secret_live',      trim($_POST['secret_live']));
+            if (!empty($_POST['client_id']))          setting_set('gw_paypal_client_id',        trim($_POST['client_id']));
+            if (!empty($_POST['secret']))             setting_set('gw_paypal_secret',           trim($_POST['secret']));
+            if (!empty($_POST['webhook_id']))         setting_set('gw_paypal_webhook_id',       trim($_POST['webhook_id']));
             setting_set('paypal_enabled', $_POST['status']==='active' ? '1' : '0');
         }
-        header('Location: admin.php?tab=api&msg=API+settings+saved'); exit;
+        $editTab = $_POST['gateway']==='paypal' ? 'paypal' : 'card';
+        header('Location: admin.php?tab=api&gw='.$editTab.'&msg=API+settings+saved'); exit;
 
     } elseif ($action === 'update_lead') {
         $lid = (int)$_POST['lead_id'];
@@ -5994,6 +6008,9 @@ elseif ($tab === 'orders'): ?>
             <td>
               <strong>#<?= esc($o['order_number']) ?></strong>
               <span class="s-badge <?= esc($o['status']) ?> text-capitalize ms-1" style="font-size:10px;"><?= esc($o['status']) ?></span>
+              <?php if (($o['gw_mode'] ?? 'live') === 'test'): ?>
+                <span class="badge ms-1" data-testid="order-mode-pill-<?= (int)$o['id'] ?>" style="background:linear-gradient(135deg,#f59e0b,#ea580c);color:#fff;font-size:9px;letter-spacing:1px;padding:2px 6px;"><i class="bi bi-flask me-1"></i>TEST</span>
+              <?php endif; ?>
               <br><small class="text-muted"><?= esc(date('M j, Y · H:i', strtotime($o['created_at']))) ?></small>
             </td>
             <td><?= esc($o['first_name'].' '.$o['last_name']) ?><br><small class="text-muted"><?= esc($o['email']) ?></small></td>
@@ -8592,6 +8609,10 @@ elseif ($tab === 'api'):
   $cardMerch  = setting_get('gw_card_merchant_name','Maventech Software');
   $cardPub    = setting_get('gw_card_public_key','');
   $cardSec    = setting_get('gw_card_secret_key','');
+  $cardPubT   = setting_get('gw_card_public_key_test','');
+  $cardSecT   = setting_get('gw_card_secret_key_test','');
+  $cardPubL   = setting_get('gw_card_public_key_live','');
+  $cardSecL   = setting_get('gw_card_secret_key_live','');
   $cardWh     = setting_get('gw_card_webhook_secret','');
   $cardWhUrl  = setting_get('gw_card_webhook_url','/stripe-webhook.php');
 
@@ -8599,6 +8620,10 @@ elseif ($tab === 'api'):
   $ppAcc      = setting_get('gw_paypal_account_name','Maventech Software LLC');
   $ppCid      = setting_get('gw_paypal_client_id','');
   $ppSec      = setting_get('gw_paypal_secret','');
+  $ppCidT     = setting_get('gw_paypal_client_id_test','');
+  $ppSecT     = setting_get('gw_paypal_secret_test','');
+  $ppCidL     = setting_get('gw_paypal_client_id_live','');
+  $ppSecL     = setting_get('gw_paypal_secret_live','');
   $ppWh       = setting_get('gw_paypal_webhook_id','');
   $ppWhUrl    = setting_get('gw_paypal_webhook_url','/paypal-webhook.php');
 
@@ -8878,13 +8903,54 @@ elseif ($tab === 'api'):
               </select>
             </div>
             <div class="col-6"><label class="form-label small mb-0">Gateway Provider</label><input class="form-control form-control-sm" name="provider" value="<?= esc($cardProv) ?>"></div>
-            <div class="col-12">
-              <label class="form-label small mb-0">Merchant / Company Name <span class="badge bg-success ms-1" style="font-size:9px;">used in Billing notes</span></label>
+            <div class="col-12"><label class="form-label small mb-0">Merchant / Company Name <span class="badge bg-success ms-1" style="font-size:9px;">used in Billing notes</span></label>
               <input class="form-control form-control-sm" name="merchant_name" value="<?= esc($cardMerch) ?>" data-testid="api-card-merchant">
               <small class="text-muted">Shown on bank/card statements <em>and</em> in the order-confirmation email billing note.</small>
             </div>
-            <div class="col-12"><label class="form-label small mb-0">Publishable Key <small class="text-muted"><?= esc(mask($cardPub)) ?></small></label><input class="form-control form-control-sm" name="public_key" type="password" placeholder="leave blank to keep current"></div>
-            <div class="col-12"><label class="form-label small mb-0">Secret Key <small class="text-muted"><?= esc(mask($cardSec)) ?></small></label><input class="form-control form-control-sm" name="secret_key" type="password" placeholder="leave blank to keep current"></div>
+          </div>
+
+          <!-- ============ Mode-aware key pairs ============
+               Two columns so the admin can paste sandbox + live credentials side
+               by side.  The active set is chosen at checkout time by the global
+               Test↔Live toggle on the API / Payment Gateway overview. -->
+          <?php
+            $gwModeNow = setting_get('gw_mode', 'test');
+            $isLiveNow = $gwModeNow === 'live';
+          ?>
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <div class="card-e p-3 h-100" style="border:2px solid <?= $isLiveNow ? '#e5e7eb' : '#f59e0b' ?>;background:<?= $isLiveNow ? 'transparent' : 'rgba(245,158,11,.04)' ?>;">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <h6 class="fw-bold mb-0" style="font-size:13.5px;"><i class="bi bi-flask me-1" style="color:#f59e0b;"></i> Test / Sandbox keys</h6>
+                  <?php if (!$isLiveNow): ?>
+                    <span class="badge" style="background:#f59e0b;color:#fff;font-size:9.5px;letter-spacing:1px;">ACTIVE</span>
+                  <?php endif; ?>
+                </div>
+                <small class="text-muted d-block mb-2" style="font-size:11px;">Paste your Stripe <code>sk_test_*</code> keys here.  These are used while the global toggle is on <strong>Test mode</strong>.</small>
+                <label class="form-label small mb-0">Publishable Key (test) <small class="text-muted"><?= esc(mask($cardPubT)) ?></small></label>
+                <input class="form-control form-control-sm mb-2" name="public_key_test" type="password" placeholder="pk_test_… (leave blank to keep current)" data-testid="api-card-public-test">
+                <label class="form-label small mb-0">Secret Key (test) <small class="text-muted"><?= esc(mask($cardSecT)) ?></small></label>
+                <input class="form-control form-control-sm" name="secret_key_test" type="password" placeholder="sk_test_… (leave blank to keep current)" data-testid="api-card-secret-test">
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="card-e p-3 h-100" style="border:2px solid <?= $isLiveNow ? '#10b981' : '#e5e7eb' ?>;background:<?= $isLiveNow ? 'rgba(16,185,129,.04)' : 'transparent' ?>;">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <h6 class="fw-bold mb-0" style="font-size:13.5px;"><i class="bi bi-broadcast me-1" style="color:#10b981;"></i> Live / Production keys</h6>
+                  <?php if ($isLiveNow): ?>
+                    <span class="badge" style="background:#10b981;color:#fff;font-size:9.5px;letter-spacing:1px;">ACTIVE</span>
+                  <?php endif; ?>
+                </div>
+                <small class="text-muted d-block mb-2" style="font-size:11px;">Paste your Stripe <code>sk_live_*</code> keys here.  These charge real customers when the toggle is on <strong>Live</strong>.</small>
+                <label class="form-label small mb-0">Publishable Key (live) <small class="text-muted"><?= esc(mask($cardPubL)) ?></small></label>
+                <input class="form-control form-control-sm mb-2" name="public_key_live" type="password" placeholder="pk_live_… (leave blank to keep current)" data-testid="api-card-public-live">
+                <label class="form-label small mb-0">Secret Key (live) <small class="text-muted"><?= esc(mask($cardSecL)) ?></small></label>
+                <input class="form-control form-control-sm" name="secret_key_live" type="password" placeholder="sk_live_… (leave blank to keep current)" data-testid="api-card-secret-live">
+              </div>
+            </div>
+          </div>
+
+          <div class="row g-2 small mb-3">
             <div class="col-12"><label class="form-label small mb-0">Webhook Secret <small class="text-muted"><?= esc(mask($cardWh)) ?></small></label><input class="form-control form-control-sm" name="webhook_secret" type="password" placeholder="leave blank to keep current"></div>
             <div class="col-12"><label class="form-label small mb-0">Webhook URL</label><input class="form-control form-control-sm" readonly value="<?= esc(site_url().$cardWhUrl) ?>"></div>
           </div>
@@ -8926,8 +8992,47 @@ elseif ($tab === 'api'):
               <input class="form-control form-control-sm" name="account_name" value="<?= esc($ppAcc) ?>" data-testid="api-paypal-account">
               <small class="text-muted">Shown in the order email billing note when PayPal is used as payment method.</small>
             </div>
-            <div class="col-12"><label class="form-label small mb-0">Client ID <small class="text-muted"><?= esc(mask($ppCid)) ?></small></label><input class="form-control form-control-sm" name="client_id" type="password" placeholder="leave blank to keep current"></div>
-            <div class="col-12"><label class="form-label small mb-0">Client Secret <small class="text-muted"><?= esc(mask($ppSec)) ?></small></label><input class="form-control form-control-sm" name="secret" type="password" placeholder="leave blank to keep current"></div>
+          </div>
+
+          <!-- Sandbox + Live PayPal credentials, side by side -->
+          <?php
+            $gwModeNow = setting_get('gw_mode', 'test');
+            $isLiveNow = $gwModeNow === 'live';
+          ?>
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <div class="card-e p-3 h-100" style="border:2px solid <?= $isLiveNow ? '#e5e7eb' : '#f59e0b' ?>;background:<?= $isLiveNow ? 'transparent' : 'rgba(245,158,11,.04)' ?>;">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <h6 class="fw-bold mb-0" style="font-size:13.5px;"><i class="bi bi-flask me-1" style="color:#f59e0b;"></i> Sandbox credentials</h6>
+                  <?php if (!$isLiveNow): ?>
+                    <span class="badge" style="background:#f59e0b;color:#fff;font-size:9.5px;letter-spacing:1px;">ACTIVE</span>
+                  <?php endif; ?>
+                </div>
+                <small class="text-muted d-block mb-2" style="font-size:11px;">From <a href="https://developer.paypal.com/" target="_blank" rel="noopener">developer.paypal.com → Sandbox app</a>.</small>
+                <label class="form-label small mb-0">Client ID (sandbox) <small class="text-muted"><?= esc(mask($ppCidT)) ?></small></label>
+                <input class="form-control form-control-sm mb-2" name="client_id_test" type="password" placeholder="leave blank to keep current" data-testid="api-paypal-client-test">
+                <label class="form-label small mb-0">Client Secret (sandbox) <small class="text-muted"><?= esc(mask($ppSecT)) ?></small></label>
+                <input class="form-control form-control-sm" name="secret_test" type="password" placeholder="leave blank to keep current" data-testid="api-paypal-secret-test">
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="card-e p-3 h-100" style="border:2px solid <?= $isLiveNow ? '#10b981' : '#e5e7eb' ?>;background:<?= $isLiveNow ? 'rgba(16,185,129,.04)' : 'transparent' ?>;">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <h6 class="fw-bold mb-0" style="font-size:13.5px;"><i class="bi bi-broadcast me-1" style="color:#10b981;"></i> Live credentials</h6>
+                  <?php if ($isLiveNow): ?>
+                    <span class="badge" style="background:#10b981;color:#fff;font-size:9.5px;letter-spacing:1px;">ACTIVE</span>
+                  <?php endif; ?>
+                </div>
+                <small class="text-muted d-block mb-2" style="font-size:11px;">From your PayPal Business <strong>Live</strong> REST app.  Real funds are debited from buyers.</small>
+                <label class="form-label small mb-0">Client ID (live) <small class="text-muted"><?= esc(mask($ppCidL)) ?></small></label>
+                <input class="form-control form-control-sm mb-2" name="client_id_live" type="password" placeholder="leave blank to keep current" data-testid="api-paypal-client-live">
+                <label class="form-label small mb-0">Client Secret (live) <small class="text-muted"><?= esc(mask($ppSecL)) ?></small></label>
+                <input class="form-control form-control-sm" name="secret_live" type="password" placeholder="leave blank to keep current" data-testid="api-paypal-secret-live">
+              </div>
+            </div>
+          </div>
+
+          <div class="row g-2 small mb-3">
             <div class="col-12"><label class="form-label small mb-0">Webhook ID <small class="text-muted"><?= esc(mask($ppWh)) ?></small></label><input class="form-control form-control-sm" name="webhook_id" type="password" placeholder="leave blank to keep current"></div>
             <div class="col-12"><label class="form-label small mb-0">Webhook URL</label><input class="form-control form-control-sm" readonly value="<?= esc(site_url().$ppWhUrl) ?>"></div>
           </div>

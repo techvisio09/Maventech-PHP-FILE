@@ -96,12 +96,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $orderNumber = generate_order_number();
         $user = current_user();
         $phoneFull = trim(($_POST['phone_code'] ?? '+1') . ' ' . trim($_POST['phone']));
-        $stmt = $pdo->prepare('INSERT INTO orders (order_number, email, first_name, last_name, phone, company_name, address, address2, country, city, state, zip, payment_method, currency, subtotal, total, pro_assist, user_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+        $activeMode = stripe_active_mode(); // 'test' or 'live' — captured at order creation
+        $stmt = $pdo->prepare('INSERT INTO orders (order_number, email, first_name, last_name, phone, company_name, address, address2, country, city, state, zip, payment_method, currency, subtotal, total, pro_assist, user_id, gw_mode) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
         $stmt->execute([
             $orderNumber, trim($_POST['email']), trim($_POST['first_name']), trim($_POST['last_name']),
             $phoneFull, trim($_POST['company_name'] ?? ''), trim($_POST['address']), trim($_POST['address2'] ?? ''),
             substr(trim($_POST['country'] ?? 'US'), 0, 5), trim($_POST['city']), trim($_POST['state']), trim($_POST['zip']),
-            $method, current_currency()['code'], $subtotal, $total, $proAssist ? 1 : 0, $user['id'] ?? null,
+            $method, current_currency()['code'], $subtotal, $total, $proAssist ? 1 : 0, $user['id'] ?? null, $activeMode,
         ]);
         $orderId = (int)$pdo->lastInsertId();
         // Capture session metadata for the Sales Detail view (IP, user-agent → device)
@@ -185,23 +186,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         unset($_SESSION['coupon']);
 
         if (stripe_enabled()) {
-            // Real payment: redirect to Stripe hosted checkout
-            $proto = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-            $baseUrl = $proto . '://' . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['SCRIPT_NAME']), '/') . '/';
-            try {
-                $orderStmt = $pdo->prepare('SELECT * FROM orders WHERE id = ?');
-                $orderStmt->execute([$orderId]);
-                $orderRow = $orderStmt->fetch();
-                $session = stripe_create_session($orderRow, $baseUrl);
-                $pdo->prepare('UPDATE orders SET stripe_session_id = ? WHERE id = ?')->execute([$session['id'], $orderId]);
-                header('Location: ' . $session['url']);
-                exit;
-            } catch (RuntimeException $e) {
-                $errors[] = 'Payment error: ' . $e->getMessage();
+            // Real payment path. The key in use is mode-aware:
+            //  · gw_mode='test'  ⇒ sk_test_*  ⇒ Stripe test/sandbox (no real charge)
+            //  · gw_mode='live'  ⇒ sk_live_*  ⇒ real funds move
+            // We additionally guard against the misconfiguration where the
+            // admin flipped to LIVE but only test keys are configured — that
+            // would silently send real customers to a sandbox checkout.
+            $secretInUse = stripe_active_secret();
+            if ($activeMode === 'live' && (str_starts_with($secretInUse, 'sk_test_') || str_contains($secretInUse, 'emergent'))) {
+                $errors[] = 'Payment gateway is set to LIVE mode but no live API key is configured. An admin must paste a Stripe sk_live_* key under Admin → API / Payment Gateway → Card → Live keys before real payments can be processed.';
+            } else {
+                $proto = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+                $baseUrl = $proto . '://' . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['SCRIPT_NAME']), '/') . '/';
+                try {
+                    $orderStmt = $pdo->prepare('SELECT * FROM orders WHERE id = ?');
+                    $orderStmt->execute([$orderId]);
+                    $orderRow = $orderStmt->fetch();
+                    $session = stripe_create_session($orderRow, $baseUrl);
+                    $pdo->prepare('UPDATE orders SET stripe_session_id = ? WHERE id = ?')->execute([$session['id'], $orderId]);
+                    header('Location: ' . $session['url']);
+                    exit;
+                } catch (RuntimeException $e) {
+                    $errors[] = 'Payment error: ' . $e->getMessage();
+                }
             }
-        } else {
-            // DEMO MODE (no Stripe key): mark paid + fulfill immediately
+        }
+        if ($errors === [] && !stripe_enabled()) {
+            // DEMO MODE (no Stripe key for the active gateway mode): mark paid + fulfill immediately
             $pdo->prepare('UPDATE orders SET status = "paid" WHERE id = ?')->execute([$orderId]);
+            // Log a "test charge" row in transaction_logs so the admin's
+            // Recent Transaction Logs table reflects the dry-run.
+            try {
+                $pdo->prepare('INSERT INTO transaction_logs (order_id, gateway, transaction_id, amount, currency, status) VALUES (?,?,?,?,?,?)')
+                    ->execute([
+                        $orderId,
+                        $method === 'paypal' ? 'paypal' : 'card',
+                        'TEST_' . strtoupper(bin2hex(random_bytes(6))),
+                        $total,
+                        current_currency()['code'],
+                        $activeMode === 'test' ? 'test' : 'paid',
+                    ]);
+            } catch (Throwable $e) { /* logging is best-effort */ }
             fulfill_order($orderId);
             header('Location: order-success.php?order=' . urlencode($orderNumber));
             exit;

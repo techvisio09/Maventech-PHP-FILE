@@ -1388,3 +1388,61 @@ Specifically:
 - Playwright screenshot: topbar shows orange "TEST MODE" pill, API tab shows orange-bordered Payment processing card with toggle + helper alert + open-test-checkout link, activity bell shows the unread badge with the previous notifications.
 - Lint clean across all 4 edited PHP files.
 
+
+---
+
+## [Feb 2026] Iteration 28 — Wire Test/Live mode into actual payment processing + PWA Install pill polish
+
+### What the user asked (handoff carry-over)
+1. **Test/Live mode toggle was UI-only** — the admin could flip it but `checkout.php` was still routing 100 % of charges through the same Stripe key irrespective of the toggle. User picked option (c): "Hit gateway's sandbox/test API if available (Stripe test keys, etc.)".
+2. **PWA "Install App" button** was invisible/broken on web + mobile — the admin couldn't actually install the panel. User picked option (a): persistent visible button in the admin top bar.
+
+### What changed
+
+**Stripe key resolution is now mode-aware (`includes/stripe.php`)**
+- `stripe_active_mode()` — returns `'test'` or `'live'` from the `gw_mode` setting.
+- `stripe_active_secret()` — lookup chain: `gw_card_secret_key_<mode>` → legacy `gw_card_secret_key` → env-var `STRIPE_API_KEY`.  Empty ⇒ DEMO path.
+- `stripe_active_publishable()` — same lookup chain for the publishable key.
+- `stripe_request()` refactored to use the active secret + auto-pick API host (Emergent proxy for `sk_test_emergent`, `api.stripe.com` for real keys).
+- `stripe_create_session()` now stamps `[TEST]` on the line-item label + sends `metadata[gw_mode]` so the Stripe dashboard reflects the run mode.
+
+**Checkout.php now branches on mode**
+- New `gw_mode` column on `orders` (`VARCHAR(10)`) — captured at order creation so the admin can always see which mode the order was placed in.
+- `checkout.php` selects the active mode via `stripe_active_mode()` and writes it into the order row.
+- **LIVE-mode safety guard**: if `gw_mode='live'` but only a `sk_test_*` / Emergent proxy key is configured, the checkout aborts with a friendly error pointing the admin to the Live key field instead of silently sending real customers to a sandbox checkout.
+- **DEMO fallback** (no key configured for the active mode): order is marked paid + license keys assigned + a `TEST_*` transaction-log row is inserted with `status='test'` so the Recent Transaction Logs table reflects the dry-run.
+
+**Admin API page — dual-key UI**
+- Card credentials form now shows TWO side-by-side cards: "Test / Sandbox keys" (orange when test mode is active) and "Live / Production keys" (green when live mode is active).  Each has its own publishable + secret input with separate masked indicators.
+- PayPal credentials form gets the same treatment with "Sandbox credentials" + "Live credentials" sections — Client ID + Secret per mode.
+- `save_api` POST handler now persists `gw_card_secret_key_test/_live`, `gw_card_public_key_test/_live`, `gw_paypal_client_id_test/_live`, `gw_paypal_secret_test/_live` while keeping the legacy single-field fallbacks for backwards compatibility.
+- After save it redirects back to the same tab (`?gw=card` / `?gw=paypal`) so admins stay in context.
+
+**Order detail + Orders list show the mode**
+- `order-view.php` puts a coloured pill next to the order number: orange "TEST" or green "LIVE".
+- Admin Orders list (`admin.php?tab=orders`) shows an inline TEST chip next to each order's status (LIVE orders show nothing to keep the table compact).
+
+**PWA Install button (`includes/admin-shell.php`)**
+- Override the `.adm-iconbtn` round 36×36 default so the install button renders as a proper pill (auto-width, 999 px radius, padded label).  Teal/cyan gradient, soft inner hover glow, drop shadow.
+- Label collapses to icon-only on phones (`<=575 px`).
+- JS hides the pill outright when the page is already running in standalone (display-mode: standalone / minimal-ui / `navigator.standalone`) so the installed app never shows "install the installed app".
+- `beforeinstallprompt` is captured for the click handler; if no prompt is available (iOS Safari, etc.) the click shows a per-platform "Add to Home Screen" instruction modal.
+
+### Files touched
+- `/app/php-version/includes/stripe.php`
+- `/app/php-version/checkout.php`
+- `/app/php-version/admin.php` (`save_api` handler + Card/PayPal credentials forms + Orders list)
+- `/app/php-version/order-view.php`
+- `/app/php-version/includes/admin-shell.php` (Install button CSS + JS standalone-detect)
+- DB migration: `ALTER TABLE orders ADD COLUMN gw_mode VARCHAR(10) NOT NULL DEFAULT 'test' AFTER status`
+
+### Verification
+- `php -l` clean on all 5 edited files.
+- Playwright end-to-end: placed an order in TEST mode → arrived at `order-success.php` (no Stripe redirect because no key configured) → DB row shows `gw_mode='test'` + transaction log status='test'.
+- Switched `gw_mode='live'` → placed another order → `gw_mode='live'` recorded in DB, transaction log status='paid'.
+- Switched back to test mode → Admin Orders list shows TEST pill on test orders only, LIVE order has no pill.
+- Admin top bar shows the new Install App pill (111×34 px, border-radius 999 px) clearly.
+- API → Card page shows both Test + Live key sections with the active mode highlighted in orange/green.
+- Order detail view shows "TEST" badge next to the order number on test orders.
+
+
