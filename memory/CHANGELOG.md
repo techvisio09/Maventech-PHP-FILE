@@ -1,4 +1,27 @@
 # Changelog
+## 2026-02-15 — PayPal-style typography (heavy headings + clean body) — v3
+
+### Big swing: bold display headings + light body
+User shared PayPal "Check out your way" reference. Applied that exact pattern:
+- **Headings now HEAVY BOLD** (Manrope 800, negative letter-spacing -.028 to -.035em, tight 1.06-1.15 line-height) — h1, h2, .display-4/5
+- **Body text fully CLEAN/REGULAR** (400 weight, no chunky bold paragraphs)
+- **Contrast pair** — `--bs-emphasis-color: #0f172a` for headings, `--bs-body-color: #1e293b` for body
+- **Section h2** scales `clamp(1.75rem, 2.6vw, 2.35rem)` — impactful on desktop, balanced on mobile
+- **Buttons** — pill-shaped globally, hero CTA bumped to 700 for emphasis
+
+### What changed in CSS
+- `body { font-family: "Manrope", "Lato", ... !important; font-weight: 400 }`
+- h1/.display-* / .h1: Manrope 800, letter-spacing -.035em, line-height 1.08
+- h2: 800 / -.028em / 1.15; h3: 750 / -.022em; h4-h6: 700
+- `.fw-bold` 600, `.fw-semibold` 500, navbar links 600
+- Hero h1: 800, letter-spacing -.035em, color #0a0f1c
+- `.btn { border-radius: 999px }` for global pill aesthetic
+
+### Result
+"Boost Productivity with Microsoft Office 2024", "Picked for you", "What Our Customers Say", "How It Works" all have PayPal-like impact. Body paragraphs read clean & light. Mega-menus retain v2 compactness with refined typography.
+
+---
+
 ## 2026-02-15 — Homepage typography elegance pass + v2 site-wide polish
 
 ### v2 elegance polish (Feb 15 evening) — site-wide

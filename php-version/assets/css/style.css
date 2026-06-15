@@ -2088,18 +2088,39 @@ body:not([data-brand-motion="bounce"]) .navbar .logo-3d::before {
 }
 body { color: var(--bs-body-color); }
 
-/* --- 2. Soften boldness globally (less aggressive than v1) --- */
-.fw-bold       { font-weight: 600 !important; }
-.fw-semibold   { font-weight: 500 !important; }
-strong, b      { font-weight: 600; }
-.btn           { font-weight: 500; }
+/* --- 2. PayPal-style contrast: HEAVY headings + light body --- */
+/* Body & paragraphs stay clean (NOT bold) for readable, elegant reading. */
+body { font-family: "Manrope", "Lato", "Segoe UI", system-ui, -apple-system, sans-serif !important; font-weight: 400; }
+p, li, small, .small, .text-secondary, .text-body, .form-label, .form-text, .form-control, .form-select, td, th { font-weight: 400; }
+strong, b      { font-weight: 700; }
+.btn           { font-weight: 600; }
+.fw-bold       { font-weight: 600 !important; }    /* small UI emphasis, not bold-bold */
+.fw-semibold   { font-weight: 500 !important; }    /* very light emphasis */
 .navbar-nav .nav-link,
 .navbar-nav .nav-link.fw-semibold,
-.navbar-nav .dropdown-toggle.fw-semibold { font-weight: 500 !important; }
-h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6 { font-weight: 600; }
-.display-4, .display-5 { font-weight: 650; }
-.hero h1 { font-weight: 650; }
-.hero .hero-stats .fs-3 { font-weight: 650; }
+.navbar-nav .dropdown-toggle.fw-semibold { font-weight: 600 !important; }
+
+/* HEAVY display headings (PayPal-style impact) */
+h1, .h1, .display-3, .display-4, .display-5 {
+  font-family: "Manrope", "Lato", "Segoe UI", system-ui, sans-serif !important;
+  font-weight: 800 !important;
+  letter-spacing: -.035em;
+  line-height: 1.08;
+  color: var(--bs-emphasis-color);
+}
+h2, .h2 { font-weight: 800; letter-spacing: -.028em; line-height: 1.15; color: var(--bs-emphasis-color); }
+h3, .h3 { font-weight: 750; letter-spacing: -.022em; line-height: 1.2;  color: var(--bs-emphasis-color); }
+h4, .h4 { font-weight: 700; letter-spacing: -.018em; color: var(--bs-emphasis-color); }
+h5, .h5, h6, .h6 { font-weight: 700; letter-spacing: -.01em; color: var(--bs-emphasis-color); }
+
+/* Hero — the show-stopper, max impact */
+.hero h1 {
+  font-weight: 800 !important;
+  letter-spacing: -.035em;
+  line-height: 1.06;
+  color: #0a0f1c;
+}
+.hero .hero-stats .fs-3 { font-weight: 800; letter-spacing: -.02em; }
 
 /* --- 3. Shrink the Microsoft Products mega menu --- */
 .navbar .dropdown-menu.mega {
@@ -2180,18 +2201,24 @@ h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6 { font-weight: 600; }
 /* --- 8. Eyebrow chips smaller --- */
 .eyebrow { font-size: .65rem; font-weight: 600; letter-spacing: .18em; }
 
-/* --- 9. Section headings smaller for elegance --- */
-section h2.fw-bold, section .h2.fw-bold { font-size: 1.55rem; }
-section h3.fw-bold, section .h3.fw-bold { font-size: 1.15rem; }
-section h6.fw-bold { font-size: .95rem; }
+/* --- 9. Section headings: PayPal-style impact for clear hierarchy --- */
+section h2.fw-bold, section .h2.fw-bold,
+section h2, section .h2 { font-size: clamp(1.75rem, 2.6vw, 2.35rem); font-weight: 800; letter-spacing: -.028em; line-height: 1.12; }
+section h3.fw-bold, section .h3.fw-bold,
+section h3, section .h3 { font-size: clamp(1.15rem, 1.6vw, 1.4rem); font-weight: 750; letter-spacing: -.02em; }
+section h6.fw-bold,
+section h6 { font-size: 1rem; font-weight: 700; letter-spacing: -.012em; }
+section p, section li, .accordion-body { font-weight: 400; }
 
 /* --- 10. Trust-strip & badges slim --- */
 .trust-strip { padding: .65rem 0 !important; }
 
-/* --- 11. Buttons: pill, lighter weight, less chunky --- */
-.btn-lg { padding: .55rem 1.5rem; font-size: .95rem; }
-.btn-hero-cta { padding: .6rem 1.6rem; font-size: .95rem; }
-.btn-hero-ghost { padding: .55rem 1.5rem; font-size: .92rem; font-weight: 500; }
+/* --- 11. Buttons: pill, refined weight --- */
+.btn { border-radius: 999px; }
+.btn-lg { padding: .55rem 1.5rem; font-size: .95rem; font-weight: 600; }
+.btn-hero-cta { padding: .65rem 1.7rem; font-size: .98rem; font-weight: 700; letter-spacing: -.005em; }
+.btn-hero-ghost { padding: .6rem 1.55rem; font-size: .94rem; font-weight: 600; }
+.btn-outline-primary, .btn-outline-secondary, .btn-outline-light, .btn-outline-dark { font-weight: 600; }
 
 /* --- 12. Subtle, refined dark mode tweaks --- */
 [data-bs-theme="dark"] {
