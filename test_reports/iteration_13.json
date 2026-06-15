@@ -1,0 +1,44 @@
+{
+  "summary": "Iteration 13 — header alignment regression fix + new Go-Live checklist banner feature. 16/16 pytest cases PASS and full Playwright UI verification PASS at 1366x800. Header now renders all 5 action items on a single row (phone CTA height = 31.5px, all y-coords aligned within 1.2px). Go-Live banner renders, AJAX endpoint returns the documented JSON shape with exactly 8 checks, anonymous callers are correctly 403'd, the score is persisted across reloads, and tone updates from neutral→red after probe (2 red on preview: SMTP + Stripe TEST key unconfigured — which is the CORRECT real-probe behaviour on a preview env).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration13_header_and_golive.py",
+    "/app/test_reports/pytest/iteration13.xml"
+  ],
+  "verified_fixes_and_features": [
+    "Header — viewport 1366x800: navbar-actions container has gap-1 flex-nowrap, white-space:nowrap. Phone CTA (.phone-cta) is the slim 31.5px-tall pill (well under the 40px ceiling). All 5 children (navbar-phone-cta, ask-ai-btn, currency-selector, theme-toggle, cart-button) sit on the SAME row with y-coord delta ≤ 1.2px. No 'CALL TOLL-FREE' visible label inside the anchor body (string only remains in the title='' tooltip attribute, which is correct).",
+    "Phone CTA visible at >=1200px (d-none d-xl-inline-flex) — confirmed visible at 1366px width.",
+    "Go-Live banner present on /admin.php?tab=dashboard ABOVE the Dashboard h1 (banner.y=87, h1.y=225). Title 'Go-Live checklist' rendered. Button text is 'Run checklist now' on first load and switches to 'Re-run checklist' after first probe.",
+    "Go-Live AJAX anon → HTTP 403 + {ok:false, error:'admin auth required'} (require_admin_json() gate).",
+    "Go-Live AJAX admin → HTTP 200 with documented JSON shape: ok, score{green,amber,red,total}, ts, site, checks[]. checks has EXACTLY 8 entries with ids {ai_key, smtp, stripe, paypal, gsc, bing, seo_endpoints, indexnow}. Each row has status (green|amber|red), name, detail, action.",
+    "After clicking Run, the goLiveResults div becomes visible and renders 8 .go-live-row entries with data-testid='go-live-row-<id>'. Each red/amber row shows a Fix → link.",
+    "Persisted state: setting 'go_live_check_last_run' is written; reload of /admin.php?tab=dashboard shows go-live-last-run = 'Last run just now' and go-live-score-pill = '2 FAILING'. Tone correctly switches to RED (red>0).",
+    "On this preview env the real-probe result is: 3 green (AI Writing Key sk-emergent-…, SEO public endpoints 5/5, IndexNow key file) · 3 amber (PayPal TEST, GSC token, Bing token) · 2 red (SMTP unconfigured, Stripe TEST secret missing). This matches the design intent — real probes against api.stripe.com and api-m.sandbox.paypal.com are correctly detecting missing creds.",
+    "Regression — /admin.php?tab=dashboard, ?tab=ai-blogger, ?tab=schedule, ?tab=api&gw=card all return HTTP 200 with no 'Fatal error' / 'Parse error' / 'Uncaught' / stack-trace text.",
+    "Regression — 5 SEO public endpoints (sitemap.xml, robots.txt, ai.txt, llms.txt, merchant-feed.xml) return HTTP 200 with body bytes > 20. IndexNow probe check exists in go-live response."
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "ajax/go-live-check.php: Stripe and PayPal probes run sequentially with CURLOPT_TIMEOUT=6s each, so worst-case latency is ~12s (plus AI key + 5 SEO endpoint pings inside seo_health_probe). The PRD copy says 'Pinging Stripe, PayPal and 5 SEO endpoints in parallel — usually 3-6 seconds' but the implementation uses sequential curl_exec, not curl_multi_exec. For a true parallel probe (and to honour the user-facing copy), consider curl_multi_init for the 3 outbound API calls (Stripe balance, PayPal OAuth, IndexNow key fetch).",
+    "ajax/go-live-check.php line 181 iterates ['sitemap','robots','ai_txt','llms_txt','merchant'] but the banner copy says '9 production dependencies' on line 2181 of admin.php — the visible scorecard returns exactly 8 (5 SEO endpoints are bundled into a single seo_endpoints row). Either bump the copy to '8 production dependencies' or split SEO into per-endpoint rows. Not a bug, just a copy/count drift.",
+    "admin.php Go-Live banner block (lines 2161-2245): the entire 80-line block uses inline style='' attributes and an inline <style> + <script> tag. Consider moving CSS into /assets/css/style.css and the JS into /assets/js/admin.js for caching + CSP friendliness."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration13_header_and_golive.py (new, 16 tests)"
+  ],
+  "success_rate": {"backend": "100% (16/16)", "frontend": "100% — all Playwright assertions pass"},
+  "test_credentials": "admin@maventechsoftware.com / Admin@123 (from /app/memory/test_credentials.md). Cookie-jar login via /login.php and Playwright login both succeed.",
+  "seed_data_creation": "None. Test reads existing settings; running the probe writes to setting 'go_live_check_last_run' which is the intended behaviour (persisted across reloads).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "The pytest file /app/backend/tests/test_iteration13_header_and_golive.py is the authoritative regression suite for header alignment + go-live checklist endpoint + admin tab smoke + SEO endpoints. It covers anon-403, admin-200 with 8-check shape contract, persisted-state HTML markers and the 5 public SEO endpoints. Run alongside test_iteration11_email_validation_and_gateway.py for full backend regression. Note: the Go-Live banner intentionally surfaces red/amber on the preview env because Stripe TEST key and SMTP are unconfigured — this is correct behaviour, NOT a bug.",
+  "rca of the issue": "N/A — both deliverables (header fix + new go-live banner) verified working end-to-end. Original header bug RCA was: the legacy .phone-cta was a 2-line block element ('CALL TOLL-FREE' + number) inside navbar-actions without flex-shrink-0 / nowrap, so at 1366px the wide pill pushed the Cart button to a second row. Fix: simplified anchor to single <icon><number>, added flex-nowrap on the container, white-space:nowrap and flex-shrink-0 on each child. Confirmed: phone height 31.5px, all 5 children share y-coord."
+}

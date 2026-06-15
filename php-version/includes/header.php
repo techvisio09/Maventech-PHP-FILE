@@ -421,14 +421,14 @@ else:
         <li class="nav-item"><a class="nav-link fw-semibold" href="affiliate.php" data-testid="nav-affiliates">Affiliates</a></li>
         <li class="nav-item"><a class="nav-link fw-semibold" href="track-order.php" data-testid="nav-track-order"><i class="bi bi-truck me-1"></i>Track Order</a></li>
       </ul>
-      <div class="d-flex align-items-center gap-2 flex-wrap">
-        <a href="tel:<?= esc($brandPhone) ?>" class="phone-cta d-none d-xl-inline-flex" data-testid="navbar-phone-cta">
+      <div class="d-flex align-items-center gap-1 flex-nowrap" data-testid="navbar-actions" style="white-space:nowrap;">
+        <a href="tel:<?= esc($brandPhone) ?>" class="phone-cta d-none d-xl-inline-flex flex-shrink-0" data-testid="navbar-phone-cta" title="Call toll-free — Mon–Fri 9 AM–6 PM EST">
           <span class="phone-cta-icon"><i class="bi bi-telephone-fill"></i></span>
-          <span class="lh-1 text-start"><small class="phone-cta-label">CALL TOLL-FREE</small><?= esc($brandPhone) ?></span>
+          <span class="fw-bold"><?= esc($brandPhone) ?></span>
         </a>
-        <button class="btn btn-sm btn-outline-primary rounded-pill" onclick="toggleChat()" data-testid="ask-ai-btn"><i class="bi bi-stars me-1"></i>Ask AI</button>
-        <div class="dropdown">
-          <button class="btn btn-sm btn-outline-secondary dropdown-toggle rounded-pill" data-bs-toggle="dropdown" data-testid="currency-selector">
+        <button class="btn btn-sm btn-outline-primary rounded-pill flex-shrink-0" onclick="toggleChat()" data-testid="ask-ai-btn" style="white-space:nowrap;"><i class="bi bi-stars me-1"></i>Ask AI</button>
+        <div class="dropdown flex-shrink-0">
+          <button class="btn btn-sm btn-outline-secondary dropdown-toggle rounded-pill" data-bs-toggle="dropdown" data-testid="currency-selector" style="white-space:nowrap;">
             <i class="bi bi-globe2 me-1"></i><?= esc($cur['code']) ?>
           </button>
           <ul class="dropdown-menu dropdown-menu-end">
@@ -449,8 +449,8 @@ else:
             <?php endforeach; ?>
           </ul>
         </div>
-        <button class="btn btn-sm btn-outline-secondary rounded-circle" onclick="toggleTheme()" title="Toggle dark mode" data-testid="theme-toggle"><i id="theme-icon" class="bi bi-moon"></i></button>
-        <a href="cart.php" class="btn btn-sm btn-primary rounded-pill position-relative" data-testid="cart-button">
+        <button class="btn btn-sm btn-outline-secondary rounded-circle flex-shrink-0" onclick="toggleTheme()" title="Toggle dark mode" data-testid="theme-toggle"><i id="theme-icon" class="bi bi-moon"></i></button>
+        <a href="cart.php" class="btn btn-sm btn-primary rounded-pill position-relative flex-shrink-0" data-testid="cart-button" style="white-space:nowrap;">
           <i class="bi bi-cart3 me-1"></i>Cart
           <span class="cart-count-badge position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger <?= cart_count() === 0 ? 'd-none' : '' ?>" data-testid="cart-count"><?= cart_count() ?></span>
         </a>

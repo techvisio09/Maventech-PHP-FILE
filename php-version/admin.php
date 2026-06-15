@@ -2132,6 +2132,118 @@ if ($tab === 'dashboard'):
     }
     $vTrendMax = max(array_column($vTrend,'c')) ?: 1;
 ?>
+  <!-- ====================================================================
+       Go-Live checklist banner — one-click pre-flight probe.  Runs every
+       external dependency (AI key · SMTP · Stripe · PayPal · GSC · Bing
+       · 6 public SEO endpoints · IndexNow) and renders an inline
+       green/amber/red scorecard so the admin can confirm the site is
+       production-ready in a single 10-second pass before flipping the
+       domain.  Powered by /ajax/go-live-check.php.
+       ==================================================================== -->
+  <?php
+    $lastRun = json_decode((string)setting_get('go_live_check_last_run', ''), true);
+    $lrTs    = (string)($lastRun['ts']    ?? '');
+    $lrScore = (array) ($lastRun['score'] ?? []);
+    $lrGreen = (int)   ($lrScore['green'] ?? 0);
+    $lrAmber = (int)   ($lrScore['amber'] ?? 0);
+    $lrRed   = (int)   ($lrScore['red']   ?? 0);
+    $lrTotal = (int)   ($lrScore['total'] ?? 0);
+    $lrAgeMin= $lrTs ? max(0, (int)floor((time() - strtotime($lrTs)) / 60)) : -1;
+    $tone    = ($lrRed > 0) ? 'red' : (($lrAmber > 0) ? 'amber' : ($lrTotal > 0 ? 'green' : 'neutral'));
+    $toneColors = [
+      'neutral'=> ['bg'=>'linear-gradient(135deg,#eff6ff 0%,#dbeafe 100%)','border'=>'#bfdbfe','accent'=>'#1d4ed8','badge'=>'#1d4ed8'],
+      'green'  => ['bg'=>'linear-gradient(135deg,#ecfdf5 0%,#d1fae5 100%)','border'=>'#86efac','accent'=>'#047857','badge'=>'#047857'],
+      'amber'  => ['bg'=>'linear-gradient(135deg,#fffbeb 0%,#fef3c7 100%)','border'=>'#fcd34d','accent'=>'#92400e','badge'=>'#b45309'],
+      'red'    => ['bg'=>'linear-gradient(135deg,#fef2f2 0%,#fee2e2 100%)','border'=>'#fca5a5','accent'=>'#991b1b','badge'=>'#b91c1c'],
+    ];
+    $tc = $toneColors[$tone];
+  ?>
+  <div class="go-live-banner mb-3" data-testid="go-live-banner"
+       style="border-radius:18px;border:1px solid <?= $tc['border'] ?>;background:<?= $tc['bg'] ?>;padding:18px 22px;display:flex;align-items:center;gap:18px;flex-wrap:wrap;box-shadow:0 4px 14px rgba(15,23,42,.06);">
+    <div style="flex-shrink:0;width:54px;height:54px;border-radius:50%;background:<?= $tc['accent'] ?>;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 0 0 0 <?= $tc['accent'] ?>40;animation:go-live-pulse 2.4s ease-in-out infinite;">
+      <i class="bi bi-rocket-takeoff-fill"></i>
+    </div>
+    <div style="flex:1;min-width:240px;">
+      <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+        <strong style="font-size:16px;color:#0f172a;" data-testid="go-live-title">Go-Live checklist</strong>
+        <?php if ($lrTotal > 0): ?>
+          <span class="badge" data-testid="go-live-score-pill" style="background:<?= $tc['badge'] ?>;color:#fff;font-size:10.5px;letter-spacing:.5px;font-weight:700;">
+            <?php if ($tone === 'green'): ?>ALL <?= $lrGreen ?>/<?= $lrTotal ?> ✓ READY FOR LIVE<?php
+                  elseif ($tone === 'amber'): ?><?= $lrAmber ?> WARNING<?= $lrAmber === 1 ? '' : 'S' ?><?php
+                  else: ?><?= $lrRed ?> FAILING<?php endif; ?>
+          </span>
+        <?php endif; ?>
+        <?php if ($lrAgeMin >= 0): ?>
+          <span class="text-secondary" data-testid="go-live-last-run" style="font-size:11px;font-weight:500;letter-spacing:.3px;">Last run <?= $lrAgeMin === 0 ? 'just now' : ($lrAgeMin . 'm ago') ?></span>
+        <?php endif; ?>
+      </div>
+      <div class="text-secondary" style="font-size:13px;line-height:1.45;">
+        One-click probe of all <strong>9 production dependencies</strong> (AI key · SMTP · Stripe · PayPal · GSC · Bing · sitemap/robots/ai.txt/llms.txt/merchant-feed · IndexNow). Run this before flipping your real domain — green means ready, amber/red means do this first.
+      </div>
+    </div>
+    <button type="button" class="btn fw-bold flex-shrink-0" data-testid="go-live-run-btn" id="goLiveRunBtn"
+            style="background:<?= $tc['accent'] ?>;color:#fff;border:0;border-radius:999px;padding:10px 22px;letter-spacing:.3px;font-size:13.5px;">
+      <i class="bi bi-rocket-takeoff me-1"></i><?= $lrTotal > 0 ? 'Re-run checklist' : 'Run checklist now' ?>
+    </button>
+  </div>
+  <div id="goLiveResults" class="mb-3" data-testid="go-live-results" style="display:none;"></div>
+  <style>
+    @keyframes go-live-pulse { 0%,100% { box-shadow:0 0 0 0 <?= $tc['accent'] ?>40; } 70% { box-shadow:0 0 0 14px transparent; } }
+    .go-live-row { display:flex; align-items:flex-start; gap:14px; padding:12px 16px; border-radius:12px; border:1px solid #e5e7eb; background:#fff; margin-bottom:8px; }
+    .go-live-row .dot { flex-shrink:0; width:10px; height:10px; border-radius:50%; margin-top:6px; }
+    .go-live-row.green .dot { background:#10b981; box-shadow:0 0 0 4px rgba(16,185,129,.14); }
+    .go-live-row.amber .dot { background:#f59e0b; box-shadow:0 0 0 4px rgba(245,158,11,.14); }
+    .go-live-row.red   .dot { background:#ef4444; box-shadow:0 0 0 4px rgba(239,68,68,.14); }
+    .go-live-row .row-name   { font-weight:700; color:#0f172a; font-size:13.5px; }
+    .go-live-row .row-detail { color:#475569; font-size:12.5px; margin-top:2px; }
+    .go-live-row .row-fix    { font-size:11.5px; font-weight:600; text-decoration:none; }
+  </style>
+  <script>
+    (function () {
+      const btn = document.getElementById('goLiveRunBtn');
+      const out = document.getElementById('goLiveResults');
+      if (!btn || !out) return;
+      btn.addEventListener('click', async function () {
+        const orig = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Probing…';
+        out.style.display = '';
+        out.innerHTML = '<div class="text-muted small py-2"><i class="bi bi-hourglass-split me-1"></i>Pinging Stripe, PayPal and 5 SEO endpoints in parallel — usually 3-6 seconds…</div>';
+        try {
+          const r = await fetch((window.MAVEN_BASE||'/') + 'ajax/go-live-check.php', {credentials:'same-origin'});
+          const j = await r.json();
+          if (!j.checks) { out.innerHTML = '<div class="alert alert-danger">' + (j.error || 'No checks returned') + '</div>'; return; }
+          let html = '<div class="d-flex align-items-center gap-2 mb-2" data-testid="go-live-summary">'
+                   + '<strong style="font-size:13.5px;">Result —</strong>'
+                   + '<span class="badge" style="background:#10b981;color:#fff;">' + j.score.green + ' green</span>'
+                   + (j.score.amber ? '<span class="badge" style="background:#f59e0b;color:#fff;">' + j.score.amber + ' amber</span>' : '')
+                   + (j.score.red   ? '<span class="badge" style="background:#ef4444;color:#fff;">' + j.score.red   + ' red</span>' : '')
+                   + '<span class="text-muted small ms-2">probed against ' + j.site + '</span></div>';
+          j.checks.forEach(function (c) {
+            const icon = c.status === 'green' ? 'bi-check-circle-fill'
+                      : c.status === 'amber' ? 'bi-exclamation-triangle-fill'
+                      : 'bi-x-circle-fill';
+            const color = c.status === 'green' ? '#047857' : (c.status === 'amber' ? '#b45309' : '#b91c1c');
+            html += '<div class="go-live-row ' + c.status + '" data-testid="go-live-row-' + c.id + '">'
+                  + '<span class="dot"></span>'
+                  + '<div style="flex:1;">'
+                  +   '<div class="row-name"><i class="bi ' + icon + ' me-1" style="color:' + color + ';"></i>' + c.name + '</div>'
+                  +   '<div class="row-detail">' + c.detail + '</div>'
+                  + '</div>'
+                  + (c.action ? '<a href="' + c.action + '" class="row-fix" style="color:' + color + ';">Fix <i class="bi bi-arrow-right"></i></a>' : '')
+                  + '</div>';
+          });
+          out.innerHTML = html;
+        } catch (e) {
+          out.innerHTML = '<div class="alert alert-danger">Probe failed: ' + (e.message || e) + '</div>';
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = orig;
+        }
+      });
+    })();
+  </script>
+
   <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
     <div>
       <h1 class="h4 fw-bold mb-1">Dashboard <span class="text-muted fs-6">· <?= esc($rg['name']) ?> region</span></h1>
