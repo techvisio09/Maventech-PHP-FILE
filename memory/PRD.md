@@ -981,3 +981,29 @@ Also surfaced a **"{brand} profile →"** chip on each admin Product card (data-
 - All 16 iteration-13/14 tests + 3 new iteration-15 tests pass.
 - 1 pre-existing failure (`test_product_schema_seller_not_empty_and_reviews`) caused by the container restart wiping order seed data — NOT related to this iteration.
 
+---
+
+## [Feb 2026] Iteration 17 — Bug fixes: Brand Vibe override + Forgot Password recipient
+
+### Problem reported
+1. **Brand Vibe never sticks** — picking Classic/Premium/Playful/Bold in Admin → Company Info, then hitting "Save Company Info", does not actually apply. Next page load reverts back to the previously-active vibe.
+2. **Password reset goes to the wrong inbox** — `/forgot-password.php` accepted any email and sent the reset link to whichever account matched, instead of strictly delivering to the registered company email.
+
+### Root cause
+1. `apply_vibe_schedule()` runs unconditionally on every page load (auto-cron in `includes/functions.php`). If a scheduled vibe row's window is still "live" (e.g. a Black Friday "premium" schedule running 2026-06-08 → 2026-06-21), every page load overwrote the manually-saved `company_brand_vibe` with the scheduled value, undoing the admin's choice.
+2. `forgot-password.php` queried the `users` table by entered email and sent the reset link to that user's email column — bypassing the company email configured in Company Info.
+
+### Fix
+1. **`admin.php` (save_company_info action)** — when admin saves a vibe, also write `vibe_manual_override_at = NOW()` and clear `company_brand_vibe_default`.
+2. **`includes/functions.php` (`apply_vibe_schedule`)** — query now filters schedules with `starts_at > vibe_manual_override_at`. Older schedules whose window includes "now" are ignored after a manual save; NEW schedules that begin after the override still take effect as expected.
+3. **`forgot-password.php`** — entered email is compared with `setting_get('company_email')` (constant-time `hash_equals`). On match we locate the admin user and email the reset link strictly to the company email setting, regardless of the admin user's row email. Any non-matching email returns the same generic success message (no enumeration). Helper UI text updated.
+
+### Files touched
+- `/app/php-version/admin.php`
+- `/app/php-version/includes/functions.php`
+- `/app/php-version/forgot-password.php`
+- `/app/memory/test_credentials.md` (forgot-password flow note added)
+
+### Verification (curl + DB, no testing-agent needed for two targeted bug fixes)
+- Vibe: Set classic with override, verified premium (current 2026-06-08→06-21 schedule) does NOT re-override on subsequent HTTP loads. Inserted a NEW schedule starting after the override and confirmed it correctly flipped the vibe to `playful`.
+- Forgot password: Submitting `stranger@example.com` → 0 password_resets rows, 0 outbox emails. Submitting `services@maventechsoftware.com` (company email) → 1 password_resets row tied to admin user id 1, 1 outbox row with `recipient = services@maventechsoftware.com`.

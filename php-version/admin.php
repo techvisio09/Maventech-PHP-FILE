@@ -254,6 +254,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $vibes = brand_vibes();
         if (!isset($vibes[$vibe])) $vibe = 'classic';
         setting_set('company_brand_vibe', $vibe);
+        // Mark this as a manual override so `apply_vibe_schedule()` does not
+        // immediately revert this choice on the next page load while an
+        // older schedule is still inside its active window.  Any FUTURE
+        // schedule that starts AFTER this timestamp will still take effect.
+        setting_set('vibe_manual_override_at', date('Y-m-d H:i:s'));
+        // Forget any previously-captured "pre-schedule" default — the admin
+        // has explicitly chosen this vibe now, so this IS the new baseline.
+        setting_set('company_brand_vibe_default', '');
         // Append to vibe_history so the dashboard performance widget can
         // attribute conversion to the time-windows each vibe was live.
         log_vibe_change($vibe, 'manual');

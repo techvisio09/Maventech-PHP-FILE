@@ -607,11 +607,20 @@ function apply_vibe_schedule(): void
     static $ran = false;
     if ($ran) return; $ran = true;
     try {
-        $row = db()->query(
+        // If the admin manually picked a vibe via Company Info, that choice
+        // wins over any schedule whose window started BEFORE the override.
+        // Only schedules that start AFTER the override timestamp should be
+        // allowed to flip the vibe — so a brand-new Black-Friday schedule
+        // still works, but stale running schedules don't undo manual edits.
+        $override = (string)setting_get('vibe_manual_override_at', '');
+        $stmt = db()->prepare(
             "SELECT id, vibe FROM vibe_schedule
              WHERE starts_at <= NOW() AND (ends_at IS NULL OR ends_at >= NOW())
+                   AND (? = '' OR starts_at > ?)
              ORDER BY starts_at DESC, id DESC LIMIT 1"
-        )->fetch();
+        );
+        $stmt->execute([$override, $override]);
+        $row = $stmt->fetch();
         $vibes = brand_vibes();
         $current = setting_get('company_brand_vibe', 'classic');
         if ($row && isset($vibes[$row['vibe']])) {
