@@ -1292,18 +1292,21 @@ function render_stock_pill(string $slug, string $size = 'sm'): string {
 }
 
 // Elegant page-header band with breadcrumb (shop / category / blog / cart)
-// $crumbs: [label => href|null]; null = active crumb
+// $crumbs: [label => href|null]; null = active crumb. Pass [] to suppress
+// the breadcrumb entirely (used when the caller already rendered one).
 function render_page_head(string $title, string $subtitle = '', array $crumbs = [], string $testId = 'page-head-title'): string
 {
     $h = '<div class="page-head"><div class="container py-4 py-lg-5">';
-    $h .= '<nav aria-label="breadcrumb"><ol class="breadcrumb small mb-2">';
-    $h .= '<li class="breadcrumb-item"><a href="index.php">Home</a></li>';
-    foreach ($crumbs as $label => $href) {
-        $h .= $href
-            ? '<li class="breadcrumb-item"><a href="' . esc($href) . '">' . esc($label) . '</a></li>'
-            : '<li class="breadcrumb-item active">' . esc($label) . '</li>';
+    if ($crumbs) {
+        $h .= '<nav aria-label="breadcrumb" data-testid="' . esc($testId) . '-breadcrumb"><ol class="breadcrumb small mb-2">';
+        $h .= '<li class="breadcrumb-item"><a href="index.php">Home</a></li>';
+        foreach ($crumbs as $label => $href) {
+            $h .= $href
+                ? '<li class="breadcrumb-item"><a href="' . esc($href) . '">' . esc($label) . '</a></li>'
+                : '<li class="breadcrumb-item active" aria-current="page">' . esc($label) . '</li>';
+        }
+        $h .= '</ol></nav>';
     }
-    $h .= '</ol></nav>';
     $h .= '<h1 class="fw-bold h2 mb-1" data-testid="' . esc($testId) . '">' . esc($title) . '</h1>';
     if ($subtitle) $h .= '<p class="text-secondary mb-0">' . esc($subtitle) . '</p>';
     return $h . '</div></div>';

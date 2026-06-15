@@ -1384,6 +1384,25 @@ if ($tab === 'ai-blogger') {
         return $verdict('ok', $label . ' meta tag matches the saved value.');
     };
 
+    if (!empty($_GET['seo_health_recheck'])) {
+        try {
+            $hp = seo_health_probe(true);
+            $okCount = 0;
+            $tot     = 0;
+            foreach (['sitemap','robots','ai_txt','llms_txt','merchant','indexnow','schema'] as $k) {
+                if (!isset($hp[$k])) continue;
+                $tot++;
+                if (!empty($hp[$k]['ok'])) $okCount++;
+            }
+            $_SESSION['seo_bot_flash']      = '✓ SEO health probes re-run — ' . $okCount . '/' . $tot . ' endpoints OK on ' . esc((string)($hp['_site'] ?? '')) . '.';
+            $_SESSION['seo_bot_flash_kind'] = ($okCount === $tot) ? 'success' : 'warning';
+        } catch (Throwable $e) {
+            $_SESSION['seo_bot_flash']      = 'Health probe error: ' . $e->getMessage();
+            $_SESSION['seo_bot_flash_kind'] = 'danger';
+        }
+        header('Location: admin.php?tab=ai-blogger#health-check-section'); exit;
+    }
+
     // Single-target verify (button on the card).
     if (!empty($_GET['verify_token'])) {
         $which = (string)$_GET['verify_token'];
@@ -4594,16 +4613,32 @@ https://youtu.be/YYYYY"><?php
       <p class="text-secondary small mb-3">Export your <strong>Performance &rarr; Queries</strong> report from <a href="https://search.google.com/search-console" target="_blank" rel="noopener">Google Search Console</a> as a CSV and upload it here.  We cluster queries by shared keywords, rank them by impressions, and let you spin up a new topic hub for any cluster in one click — closing the loop between what Google says people search for, and what you publish.</p>
 
       <div class="row g-3 mb-3" data-testid="gsc-upload-row">
-        <form method="post" enctype="multipart/form-data" action="admin.php?tab=ai-blogger#discovery-section" data-testid="gsc-upload-form" class="col-12">
+        <form method="post" enctype="multipart/form-data" action="admin.php?tab=ai-blogger#discovery-section" data-testid="gsc-upload-form" class="col-12" id="gscUploadForm">
           <input type="hidden" name="upload_gsc_csv" value="1">
+
+          <!-- Drag-and-drop landing zone — auto-submits the moment a file is dropped or chosen. -->
+          <div id="gscDropZone"
+               class="mb-2"
+               data-testid="gsc-drop-zone"
+               style="border:2px dashed #cbd5e1;border-radius:14px;padding:18px 16px;background:#f8fafc;display:flex;align-items:center;gap:14px;cursor:pointer;transition:all .15s ease;">
+            <div style="flex-shrink:0;width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#dbeafe,#e0f2fe);color:#1d4ed8;">
+              <i class="bi bi-cloud-arrow-up" style="font-size:24px;"></i>
+            </div>
+            <div style="flex:1;min-width:0;">
+              <div class="fw-semibold" style="font-size:13.5px;color:#0f172a;">Drop your Search Console export here</div>
+              <div class="text-secondary" style="font-size:11.5px;">Auto-imports on drop. Accepts <code>.csv</code> or the <code>.zip</code> bundle straight from Google Search Console &rarr; Performance &rarr; Export.</div>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-primary rounded-pill" id="gscBrowseBtn" data-testid="gsc-browse-btn"><i class="bi bi-folder2-open me-1"></i>Browse&hellip;</button>
+          </div>
+
           <div class="row g-3 mb-2">
             <div class="col-md-6">
               <label class="form-label small fw-semibold mb-1">Upload Search Console CSV</label>
-              <input type="file" name="gsc_csv" accept=".csv,.zip,text/csv,application/zip" class="form-control form-control-sm" data-testid="gsc-csv-file">
+              <input type="file" name="gsc_csv" accept=".csv,.zip,text/csv,application/zip" class="form-control form-control-sm" data-testid="gsc-csv-file" id="gscCsvFile">
               <div class="form-text" style="font-size:11px;">Headers we recognise: <code>Top queries</code> / <code>Query</code>, <code>Clicks</code>, <code>Impressions</code>, <code>CTR</code>, <code>Position</code>.</div>
             </div>
             <div class="col-md-6">
-              <label class="form-label small fw-semibold mb-1">…or paste CSV text</label>
+              <label class="form-label small fw-semibold mb-1">&hellip;or paste CSV text</label>
               <textarea name="gsc_csv_text" rows="3" class="form-control form-control-sm" placeholder="Query,Clicks,Impressions,CTR,Position&#10;buy microsoft office,12,540,2.22%,4.7" data-testid="gsc-csv-paste"></textarea>
               <div class="form-text" style="font-size:11px;">Paste either path works — we pick whichever input you fill in.</div>
             </div>
@@ -4612,23 +4647,78 @@ https://youtu.be/YYYYY"><?php
             <button type="submit" class="btn btn-primary rounded-pill px-4" data-testid="gsc-submit-btn" id="gscSubmitBtn">
               <i class="bi bi-upload me-1"></i>Submit & Cluster Queries
             </button>
-            <span class="text-secondary small" style="font-size:11.5px;"><i class="bi bi-info-circle me-1"></i>One submit handles both file <em>and</em> pasted text. We'll de-duplicate by query, store every row, and rebuild clusters below.</span>
+            <span class="text-secondary small" style="font-size:11.5px;"><i class="bi bi-info-circle me-1"></i>Drop a file above OR paste rows here — first match wins. We dedupe by query and rebuild clusters automatically.</span>
           </div>
         </form>
       </div>
       <script>
-        // Tiny UX touch — disable + spinner the Submit button on click so the
-        // user knows the upload is in flight (large CSVs from GSC can take a
-        // couple seconds to parse server-side).
         (function () {
-          var f = document.querySelector('[data-testid="gsc-upload-form"]');
-          if (!f) return;
-          f.addEventListener('submit', function () {
-            var b = document.getElementById('gscSubmitBtn');
-            if (!b) return;
-            b.disabled = true;
-            b.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Importing…';
+          var form = document.getElementById('gscUploadForm');
+          var fileInput = document.getElementById('gscCsvFile');
+          var zone = document.getElementById('gscDropZone');
+          var browseBtn = document.getElementById('gscBrowseBtn');
+          var submitBtn = document.getElementById('gscSubmitBtn');
+          if (!form || !fileInput || !zone) return;
+
+          var setLoading = function () {
+            if (!submitBtn) return;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Importing…';
+          };
+
+          // Disable + spinner the Submit button on click so the user knows
+          // the upload is in flight (large CSVs from GSC can take a couple
+          // seconds to parse server-side).
+          form.addEventListener('submit', setLoading);
+
+          // Auto-submit when a file is picked via the browser dialog.
+          fileInput.addEventListener('change', function () {
+            if (fileInput.files && fileInput.files.length > 0) {
+              setLoading();
+              form.submit();
+            }
           });
+
+          // Click the drop-zone (or the "Browse…" button inside it) to open the file picker.
+          if (browseBtn) {
+            browseBtn.addEventListener('click', function (e) { e.preventDefault(); fileInput.click(); });
+          }
+          zone.addEventListener('click', function (e) {
+            if (e.target.closest('#gscBrowseBtn')) return;
+            fileInput.click();
+          });
+
+          var prevent = function (e) { e.preventDefault(); e.stopPropagation(); };
+          ['dragenter','dragover','dragleave','drop'].forEach(function (ev) {
+            zone.addEventListener(ev, prevent, false);
+          });
+          ['dragenter','dragover'].forEach(function (ev) {
+            zone.addEventListener(ev, function () {
+              zone.style.borderColor = '#2563eb';
+              zone.style.background = '#eff6ff';
+            }, false);
+          });
+          ['dragleave','drop'].forEach(function (ev) {
+            zone.addEventListener(ev, function () {
+              zone.style.borderColor = '#cbd5e1';
+              zone.style.background = '#f8fafc';
+            }, false);
+          });
+          zone.addEventListener('drop', function (e) {
+            if (!e.dataTransfer || !e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
+            try {
+              var dt = new DataTransfer();
+              dt.items.add(e.dataTransfer.files[0]);
+              fileInput.files = dt.files;
+            } catch (_) {
+              // Older browsers without DataTransfer constructor — fall back
+              // to copying the single file via direct assignment (works in
+              // Firefox/Safari). On failure the operator can still use Browse.
+              try { fileInput.files = e.dataTransfer.files; } catch (__) { return; }
+            }
+            setLoading();
+            form.submit();
+          }, false);
         })();
       </script>
 
@@ -4733,6 +4823,11 @@ https://youtu.be/YYYYY"><?php
   <!-- Go-Live SEO/AEO/GEO Health Check -->
   <?php
     $siteBase = rtrim(site_url(), '/');
+    // Real-time health probes (cached 10 min, force-rerun via ?seo_health_recheck=1)
+    $healthForce = !empty($_GET['seo_health_recheck']);
+    $hp = seo_health_probe($healthForce);
+    $hpTs = (string)($hp['_ts'] ?? '');
+    $hpAgeMin = $hpTs ? max(0, (int)floor((time() - strtotime($hpTs)) / 60)) : 0;
     // Check all SEO components
     $checks = [];
 
@@ -4810,40 +4905,50 @@ https://youtu.be/YYYYY"><?php
                         ? 'A token is saved but its format looks invalid (expected 16-64 chars of letters/digits, or 32 hex chars). Use <strong>Change</strong> above to re-paste the Authentication Code from Bing Webmaster Tools.'
                         : 'Not connected. Add token to appear in Bing, Microsoft Copilot & ChatGPT.')];
 
-    // 4. XML Sitemap
-    $sitemapOk = true; // Always generated dynamically
+    // 4. XML Sitemap (REAL probe — HTTP 200 + has <urlset>)
+    $sitemapOk = !empty($hp['sitemap']['ok']);
     $checks[] = ['name' => 'XML Sitemap', 'ok' => $sitemapOk, 'icon' => 'bi-filetype-xml', 'color' => '#059669',
-                 'desc' => 'Auto-generated at <a href="' . esc($siteBase) . '/sitemap.xml" target="_blank">/sitemap.xml</a> — includes all products, blog posts & pages.'];
+                 'desc' => '<a href="' . esc($siteBase) . '/sitemap.xml" target="_blank">/sitemap.xml</a> — '
+                    . ($sitemapOk ? '✓ live (' . esc((string)($hp['sitemap']['detail'] ?? '')) . ')' : '✗ ' . esc((string)($hp['sitemap']['detail'] ?? 'unreachable')))];
 
-    // 5. robots.txt
-    $robotsOk = true;
+    // 5. robots.txt (REAL probe — HTTP 200 + has "User-agent")
+    $robotsOk = !empty($hp['robots']['ok']);
     $checks[] = ['name' => 'robots.txt', 'ok' => $robotsOk, 'icon' => 'bi-file-text', 'color' => '#6366f1',
-                 'desc' => 'Dynamic <a href="' . esc($siteBase) . '/robots.txt" target="_blank">robots.txt</a> allows all search engines and AI crawlers.'];
+                 'desc' => '<a href="' . esc($siteBase) . '/robots.txt" target="_blank">/robots.txt</a> — '
+                    . ($robotsOk ? '✓ live (' . esc((string)($hp['robots']['detail'] ?? '')) . ')' : '✗ ' . esc((string)($hp['robots']['detail'] ?? 'unreachable')))];
 
-    // 6. AI Discoverability (ai.txt)
-    $aiTxtOk = true;
+    // 6. AI Discoverability (ai.txt) — REAL probe
+    $aiTxtOk = !empty($hp['ai_txt']['ok']);
     $checks[] = ['name' => 'AI Discoverability (ai.txt)', 'ok' => $aiTxtOk, 'icon' => 'bi-cpu', 'color' => '#f59e0b',
-                 'desc' => '<a href="' . esc($siteBase) . '/ai.txt" target="_blank">ai.txt</a> allows 22+ AI crawlers (ChatGPT, Gemini, Claude, Copilot, Perplexity, etc).'];
+                 'desc' => '<a href="' . esc($siteBase) . '/ai.txt" target="_blank">/ai.txt</a> — '
+                    . ($aiTxtOk ? '✓ live (' . esc((string)($hp['ai_txt']['detail'] ?? '')) . ') · allows 22+ AI crawlers' : '✗ ' . esc((string)($hp['ai_txt']['detail'] ?? 'unreachable')))];
 
-    // 7. LLM Product Catalog
-    $llmsTxtOk = true;
+    // 7. LLM Product Catalog (llms.txt) — REAL probe
+    $llmsTxtOk = !empty($hp['llms_txt']['ok']);
     $checks[] = ['name' => 'LLM Product Catalog (llms.txt)', 'ok' => $llmsTxtOk, 'icon' => 'bi-list-check', 'color' => '#0ea5e9',
-                 'desc' => '<a href="' . esc($siteBase) . '/llms.txt" target="_blank">llms.txt</a> exposes your full product catalog to AI engines for direct citation.'];
+                 'desc' => '<a href="' . esc($siteBase) . '/llms.txt" target="_blank">/llms.txt</a> — '
+                    . ($llmsTxtOk ? '✓ live (' . esc((string)($hp['llms_txt']['detail'] ?? '')) . ')' : '✗ ' . esc((string)($hp['llms_txt']['detail'] ?? 'unreachable')))];
 
-    // 8. Shopping Feed
-    $merchantOk = true;
+    // 8. Shopping Feed — REAL probe (HTTP 200 + has <channel>)
+    $merchantOk = !empty($hp['merchant']['ok']);
     $checks[] = ['name' => 'Google Shopping Feed', 'ok' => $merchantOk, 'icon' => 'bi-bag-check', 'color' => '#4285f4',
-                 'desc' => '<a href="' . esc($siteBase) . '/merchant-feed.xml" target="_blank">merchant-feed.xml</a> feeds product data to Google Shopping.'];
+                 'desc' => '<a href="' . esc($siteBase) . '/merchant-feed.xml" target="_blank">/merchant-feed.xml</a> — '
+                    . ($merchantOk ? '✓ live (' . esc((string)($hp['merchant']['detail'] ?? '')) . ')' : '✗ ' . esc((string)($hp['merchant']['detail'] ?? 'unreachable')))];
 
-    // 9. IndexNow
-    $indexNowOk = true;
+    // 9. IndexNow — REAL probe (verification key file reachable)
+    $indexNowOk = !empty($hp['indexnow']['ok']);
     $checks[] = ['name' => 'IndexNow (Instant Indexing)', 'ok' => $indexNowOk, 'icon' => 'bi-lightning-charge', 'color' => '#dc2626',
-                 'desc' => 'Every new blog post is instantly pushed to Bing, Yandex, Naver & Seznam via IndexNow.'];
+                 'desc' => $indexNowOk
+                    ? 'Key file <a href="' . esc((string)($hp['indexnow']['url'] ?? $siteBase)) . '" target="_blank">live</a> (' . esc((string)($hp['indexnow']['detail'] ?? '')) . ') · pushes new posts to Bing, Yandex, Naver & Seznam.'
+                    : '✗ ' . esc((string)($hp['indexnow']['detail'] ?? 'IndexNow key file unreachable — Bing/Yandex can\'t verify domain ownership.'))];
 
-    // 10. Schema Markup
-    $schemaOk = true;
+    // 10. Schema Markup — REAL probe (counts JSON-LD blocks on home page)
+    $schemaOk = !empty($hp['schema']['ok']);
+    $schemaBlocks = (int)($hp['schema']['blocks'] ?? 0);
     $checks[] = ['name' => 'Structured Data (Schema.org)', 'ok' => $schemaOk, 'icon' => 'bi-code-slash', 'color' => '#7c3aed',
-                 'desc' => 'Product, Article, FAQ, Organization & BreadcrumbList schemas on all pages — helps Google show rich results.'];
+                 'desc' => $schemaOk
+                    ? '✓ ' . $schemaBlocks . ' JSON-LD block' . ($schemaBlocks === 1 ? '' : 's') . ' on home page (Product · FAQ · Organization · Breadcrumb) — helps Google show rich results.'
+                    : '✗ ' . esc((string)($hp['schema']['detail'] ?? 'No JSON-LD blocks detected on home page.'))];
 
     // 11. Blog Posts
     $blogCountOk = $totalAiAll > 0;
@@ -4868,6 +4973,19 @@ https://youtu.be/YYYYY"><?php
          style="font-size:11px;padding:3px 12px;">
         <i class="bi bi-shield-check me-1"></i>Verify all
       </a>
+      <a href="admin.php?tab=ai-blogger&seo_health_recheck=1#health-check-section"
+         class="btn btn-sm btn-outline-secondary rounded-pill ms-1"
+         data-testid="seo-health-recheck-btn"
+         title="Re-fetch sitemap.xml / robots.txt / ai.txt / llms.txt / merchant-feed.xml / IndexNow key / JSON-LD live (cached 10 min)"
+         onclick="event.stopPropagation();"
+         style="font-size:11px;padding:3px 12px;">
+        <i class="bi bi-arrow-clockwise me-1"></i>Re-run probes
+      </a>
+      <?php if ($hpTs): ?>
+        <span class="text-secondary ms-2" data-testid="seo-health-probe-age" style="font-size:10.5px;font-weight:500;letter-spacing:.3px;">
+          Last probed <?= $hpAgeMin === 0 ? 'just now' : ($hpAgeMin . 'm ago') ?>
+        </span>
+      <?php endif; ?>
     </summary>
     <div class="ai-body">
     <p class="text-secondary small mb-3">Covers <strong>SEO</strong> (Google/Bing), <strong>AEO</strong> (ChatGPT, Perplexity, Claude), and <strong>GEO</strong> (AI-powered search). All green = maximum reach.</p>
@@ -4939,7 +5057,14 @@ https://youtu.be/YYYYY"><?php
         <div class="col-12">
           <label class="form-label small fw-semibold">Automation Scheduler URL</label>
           <p class="text-secondary small mb-2">If your hosting doesn't support automatic scheduling, point an external cron service at this URL:</p>
-          <?php $cronToken = seo_bot_cron_token(); $cronUrl = rtrim(site_url(), '/') . '/cron/seo-daily.php?token=' . rawurlencode($cronToken); ?>
+          <?php
+            $cronToken = seo_bot_cron_token();
+            // Always use the operator-configured production domain when set,
+            // so the URL the admin copies into cPanel/Plesk targets the
+            // REAL site — not the preview/dev host the admin happens to be on.
+            $cronBase  = function_exists('_seo_public_site_url') ? _seo_public_site_url() : rtrim(site_url(), '/');
+            $cronUrl   = $cronBase . '/cron/seo-daily.php?token=' . rawurlencode($cronToken);
+          ?>
           <div class="input-group input-group-sm">
             <input type="text" class="form-control" id="ai-blogger-cron-url-input" value="<?= esc($cronUrl) ?>" readonly style="font-family:monospace;font-size:11px;background:#f8fafc;">
             <button class="btn btn-outline-primary" type="button" data-testid="ai-blogger-copy-cron-url" onclick="(function(){var i=document.getElementById('ai-blogger-cron-url-input');i.select();document.execCommand('copy');this.innerHTML='<i class=\'bi bi-check-lg me-1\'></i>Copied';setTimeout(()=>{this.innerHTML='<i class=\'bi bi-clipboard me-1\'></i>Copy';},1500);}).call(this);"><i class="bi bi-clipboard me-1"></i>Copy</button>
@@ -9418,9 +9543,15 @@ elseif ($tab === 'smtp'):
       <div class="card-e p-3 mb-3" data-testid="smtp-cron-card">
         <h6 class="fw-bold mb-2"><i class="bi bi-clock me-1 text-primary"></i> Background queue worker</h6>
         <p class="small text-muted mb-2">For bulk sending, add this cron job in cPanel / Plesk so the queue processes every minute:</p>
+        <?php
+          // Prefer the admin-configured production domain so the URL stays
+          // valid when the admin moves the project to its real domain.
+          $smtpCronBase = function_exists('_seo_public_site_url') ? _seo_public_site_url() : rtrim(SITE_URL, '/');
+          $smtpCronUrl  = $smtpCronBase . '/cron.php?token=' . rawurlencode($cronToken);
+        ?>
         <div class="copy-row mb-2">
-          <code data-testid="smtp-cron-url"><?= esc(rtrim(SITE_URL,'/')) ?>/cron.php?token=<?= esc($cronToken) ?></code>
-          <button type="button" class="btn btn-sm btn-soft-gray" onclick="copyToClipboard(this, '<?= esc(rtrim(SITE_URL,'/')) ?>/cron.php?token=<?= esc($cronToken) ?>')"><i class="bi bi-clipboard"></i></button>
+          <code data-testid="smtp-cron-url"><?= esc($smtpCronUrl) ?></code>
+          <button type="button" class="btn btn-sm btn-soft-gray" onclick="copyToClipboard(this, '<?= esc($smtpCronUrl) ?>')"><i class="bi bi-clipboard"></i></button>
         </div>
         <p class="small text-muted mb-0">Without cron, the queue still drains incrementally on each admin page load.</p>
       </div>

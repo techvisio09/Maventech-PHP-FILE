@@ -490,6 +490,113 @@ function _seo_quick_get(string $url): string
 }
 
 /* ===================================================================
+ *  REAL SEO HEALTH CHECK PROBES
+ *  --------------------------------------------------------------------
+ *  Replaces the previous hardcoded `ok = true` tiles on the admin
+ *  Health Check panel.  Fetches each public SEO endpoint with a short
+ *  timeout, validates: (a) HTTP 200, (b) byte-length > minimum,
+ *  (c) expected content marker (e.g. <urlset> for sitemap.xml).
+ *
+ *  The verdict is cached in the `settings` table under
+ *  `seo_health_probe_cache` for 10 minutes so the admin dashboard stays
+ *  snappy — full re-probe only fires once every 10 min OR when the
+ *  operator clicks the "Re-run probes" button (?seo_health_recheck=1).
+ *
+ *  Returns:
+ *    [
+ *      'sitemap'  => ['ok'=>bool,'detail'=>'…','code'=>200,'size'=>87172],
+ *      'robots'   => [...],
+ *      'ai_txt'   => [...],
+ *      'llms_txt' => [...],
+ *      'merchant' => [...],
+ *      'indexnow' => [...],
+ *      'schema'   => [...],
+ *      '_ts'      => '2026-06-15 21:30:00',
+ *      '_site'    => 'https://yourdomain.com',
+ *    ]
+ * =================================================================== */
+function seo_health_probe(bool $force = false): array
+{
+    $siteBase = _seo_public_site_url();
+
+    if (!$force) {
+        $cached = (string)setting_get('seo_health_probe_cache', '');
+        if ($cached !== '') {
+            $data = json_decode($cached, true);
+            if (is_array($data) && !empty($data['_ts']) && !empty($data['_site']) && $data['_site'] === $siteBase) {
+                $age = time() - strtotime((string)$data['_ts']);
+                if ($age >= 0 && $age < 600) return $data; // 10-min cache
+            }
+        }
+    }
+
+    $probe = static function (string $url, int $minBytes, string $needle = '', int $timeout = 6): array {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER  => true,
+            CURLOPT_FOLLOWLOCATION  => true,
+            CURLOPT_TIMEOUT         => $timeout,
+            CURLOPT_CONNECTTIMEOUT  => 4,
+            CURLOPT_USERAGENT       => 'MaventechHealthCheck/1.0',
+            CURLOPT_SSL_VERIFYPEER  => false, // hosted preview cert auto-fails on some installs
+        ]);
+        $body = (string)@curl_exec($ch);
+        $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        $ctype= (string)curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+        $err  = (string)curl_error($ch);
+        curl_close($ch);
+        $size = strlen($body);
+        $ok   = ($code === 200) && ($size >= $minBytes) && ($needle === '' || stripos($body, $needle) !== false);
+        $detail = $ok
+            ? sprintf('HTTP %d · %s · %s bytes', $code, $ctype ?: 'no content-type', number_format($size))
+            : ($code === 0
+                ? ('Unreachable (' . ($err ?: 'no response') . ')')
+                : (($code !== 200) ? ('HTTP ' . $code) : (($size < $minBytes) ? ('only ' . $size . ' bytes received') : ('content marker "' . $needle . '" not found'))));
+        return ['ok' => $ok, 'detail' => $detail, 'code' => $code, 'size' => $size, 'url' => $url];
+    };
+
+    // IndexNow key is stored on disk under webroot — locate the .txt filename.
+    $indexNowKey = '';
+    try { $indexNowKey = _seo_indexnow_key(); } catch (Throwable $e) {}
+
+    $results = [
+        'sitemap'  => $probe($siteBase . '/sitemap.xml',       500, '<urlset'),
+        'robots'   => $probe($siteBase . '/robots.txt',         50, 'User-agent'),
+        'ai_txt'   => $probe($siteBase . '/ai.txt',             50, ''),
+        'llms_txt' => $probe($siteBase . '/llms.txt',           50, ''),
+        'merchant' => $probe($siteBase . '/merchant-feed.xml', 500, '<channel'),
+        'indexnow' => $indexNowKey
+            ? $probe($siteBase . '/' . $indexNowKey . '.txt',   16, $indexNowKey)
+            : ['ok' => false, 'detail' => 'IndexNow key has not been generated yet — click Submit Sitemap to bootstrap.', 'code' => 0, 'size' => 0, 'url' => $siteBase],
+        'schema'   => (function() use ($probe, $siteBase) {
+            $r = $probe($siteBase . '/', 1024, 'application/ld+json');
+            if (!$r['ok']) return $r;
+            // Count how many JSON-LD blocks the homepage emits — we want >= 1
+            $ch = curl_init($siteBase . '/');
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_TIMEOUT => 6, CURLOPT_SSL_VERIFYPEER => false,
+            ]);
+            $html = (string)@curl_exec($ch);
+            curl_close($ch);
+            $count = preg_match_all('~<script[^>]+type\s*=\s*["\']application/ld\+json["\']~i', $html);
+            $r['ok'] = ($count >= 1);
+            $r['detail'] = $count >= 1 ? ($count . ' JSON-LD block' . ($count === 1 ? '' : 's') . ' on home page') : 'No application/ld+json scripts found on home page';
+            $r['blocks'] = $count;
+            return $r;
+        })(),
+    ];
+
+    $results['_ts']   = date('Y-m-d H:i:s');
+    $results['_site'] = $siteBase;
+
+    try { setting_set('seo_health_probe_cache', json_encode($results, JSON_UNESCAPED_SLASHES)); }
+    catch (Throwable $e) {}
+
+    return $results;
+}
+
+/* ===================================================================
  *  LLM content refresh — Claude Haiku via the Emergent gateway.
  *  Generates a fresh 140-160 char SEO meta description for products
  *  whose `meta_description` is empty or older than SEOBOT_REFRESH_DAYS.

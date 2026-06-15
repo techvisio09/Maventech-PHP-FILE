@@ -56,12 +56,17 @@ $jsonLd = [
 
 include __DIR__ . '/includes/header.php';
 ?>
-<?= render_breadcrumb_nav([
-        ['name' => 'Home',  'url' => 'index.php'],
-        ['name' => 'Shop',  'url' => 'shop.php'],
-        ['name' => $title],
-    ], 'category-breadcrumb') ?>
-<?= render_page_head($title . ' Products', count($products) . ' products — genuine licenses, delivered in minutes', [$title => null], 'category-title') ?>
+<?php
+/* Emit the BreadcrumbList JSON-LD for SEO; the visible breadcrumb is
+ * rendered ONCE inside render_page_head() below so the page never
+ * shows two stacked trails (Feb 2026 alignment fix). */
+?>
+<?= render_page_head(
+        $title . ' Products',
+        count($products) . ' products — genuine licenses, delivered in minutes',
+        ['Shop' => 'shop.php', $title => null],
+        'category-title'
+    ) ?>
 <div class="container py-4 py-lg-5">
 
   <!-- (SEO intro paragraph was originally rendered here — moved BELOW the
