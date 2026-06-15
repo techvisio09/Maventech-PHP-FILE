@@ -1069,3 +1069,48 @@ Specifically:
 - Loaded `/index.php` via Playwright on the preview URL → captured two frames of the navbar logo mid-bounce: the deeper perspective is visible (logo rotates edge-on through depth, not a flat sweep), the cyan halo + tagline pickup the active vibe.
 - No regression on the admin (admin uses `.brand-center.logo-3d` which our new rules do not target).
 
+
+---
+
+## [Feb 2026] Iteration 20 — Replace all external (gosoftwarebuy.com) product images with locally-hosted AI mock-ups
+
+### Problem reported (with screenshots)
+- Admin → Product Key Inventory → Edit product showed an `Image URL` field still containing `https://gosoftwarebuy.com/objects/uploads/...`.
+- The XML sitemap `<image:loc>` tags exposed the same external host to Google.
+- The user wants ZERO `gosoftwarebuy.com` URLs anywhere on the website or in the sitemap.
+
+### Scope audit
+- **37 product rows** referenced 36 unique `gosoftwarebuy.com` image URLs.
+- **142 blog-post rows** used the same URLs as their hero images.
+- **2 historical `email_outbox` rows** had `gosoftwarebuy.com` in already-sent HTML.
+- The `database.sql` seed file held **39 references** — a container restart would have re-introduced them.
+- 5 inline app-icon URLs in `app_icons()` (Word/Excel/PowerPoint/Outlook/Access) also pointed at `gosoftwarebuy.com/assets/...`.
+
+### Fix
+1. **AI generation** (Gemini Nano Banana — `gemini-3.1-flash-image-preview` via the Emergent universal key):
+   - Wrote `/app/scripts/generate_product_images.py` — reads `/tmp/img_remap.json` (the URL→`{slug,name,brand,category,platform}` map), generates one clean 1024×1024 product-box mock-up per unique URL and saves it to `/app/php-version/uploads/products/<slug>.png`.
+   - Category-aware accent colours (Office → orange, Windows → blue, Project → green, Visio → indigo, Bitdefender → red, McAfee → red, etc.) so the storefront grid stays visually coherent.
+   - All 36 generations completed (100% success).
+2. **Database rewrite** (`/app/scripts/rewrite_image_urls.php`):
+   - `products.image` — 37 rows rewritten to `/uploads/products/<slug>.png`.
+   - `blog_posts.image` — 142 rows rewritten via direct equality.
+   - `email_outbox.html` — 2 rows rewritten via `REPLACE()` (so archive views stop hitting the external host).
+   - `email_templates.html` — 0 rows (templates already use placeholders).
+3. **Seed-file rewrite** (`/app/scripts/rewrite_seed_sql.py`): replaced 39 occurrences inside `/app/php-version/database.sql` so future re-seeds keep the storefront 100% on-domain.
+4. **`app_icons()` repointed** (`/app/php-version/includes/functions.php`) — the 5 Office suite app icons now load from `/assets/images/brand-watermarks/microsoft-suite/{word,excel,powerpoint,outlook,access}.png` (already in the repo).
+
+### Verification
+- `grep -rn gosoftwarebuy /app/php-version` → **0 hits** across PHP, HTML, CSS, JS, SQL.
+- `curl /sitemap.xml | grep gosoftwarebuy` → **0** (all `<image:loc>` tags now point at `…/uploads/products/<slug>.png`).
+- Product page `microsoft-office-home-business-2024-pc` renders the new AI box with the new internal `src="/uploads/products/microsoft-office-home-business-2024-pc.png"` (HTTP 200).
+- Local app-icon URL returns 200, confirming the swap.
+
+### Files touched / added
+- `/app/scripts/generate_product_images.py` (new)
+- `/app/scripts/rewrite_image_urls.php` (new)
+- `/app/scripts/rewrite_seed_sql.py` (new)
+- `/app/php-version/uploads/products/*.png` (new — 36 AI-generated mock-ups)
+- `/app/php-version/database.sql` — 39 URL replacements
+- `/app/php-version/includes/functions.php` — `app_icons()` repointed to local assets
+- `/app/backend/.env` — added `EMERGENT_LLM_KEY`
+

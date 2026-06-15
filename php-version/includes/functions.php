@@ -497,12 +497,15 @@ function slugify(string $s): string
 /* ---------------- App icons ---------------- */
 function app_icons(): array
 {
+    // Local files under /assets/images/brand-watermarks/microsoft-suite/
+    // (no external CDN — keeps the sitemap + product pages 100% on our own
+    //  domain).
     return [
-        'word'       => 'https://gosoftwarebuy.com/assets/Microsoft_Office_Word_1765865381845-Cby-XFtN.png',
-        'excel'      => 'https://gosoftwarebuy.com/assets/excel_1765865381846-Ch1DG1gu.jpeg',
-        'powerpoint' => 'https://gosoftwarebuy.com/assets/Microsoft_Office_PowerPoint_1765865381846-CB2GUPqO.png',
-        'outlook'    => 'https://gosoftwarebuy.com/assets/Microsoft_Outlook_Icon_1765865381846-DMb4j-mZ.png',
-        'access'     => 'https://gosoftwarebuy.com/assets/Microsoft_Office_Access_1765865381846-C4OFiOlK.png',
+        'word'       => '/assets/images/brand-watermarks/microsoft-suite/word.png',
+        'excel'      => '/assets/images/brand-watermarks/microsoft-suite/excel.png',
+        'powerpoint' => '/assets/images/brand-watermarks/microsoft-suite/powerpoint.png',
+        'outlook'    => '/assets/images/brand-watermarks/microsoft-suite/outlook.png',
+        'access'     => '/assets/images/brand-watermarks/microsoft-suite/access.png',
     ];
 }
 
