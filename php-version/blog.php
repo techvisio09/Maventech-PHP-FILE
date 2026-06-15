@@ -1,7 +1,9 @@
 <?php
 require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/includes/seo-content.php';
 $pageTitle = 'Blog | ' . SITE_BRAND;
 $pageDescription = 'Guides, tips and comparisons for Microsoft Office, Windows and security software — installation help, feature breakdowns and buying advice from the ' . SITE_BRAND . ' team.';
+$pageKeywords    = marquee_page_keywords('blog');
 
 $perPage = 10;
 $page    = max(1, (int)($_GET['p'] ?? 1));
@@ -61,6 +63,43 @@ function blog_page_url(int $p, string $q, string $region): string
 }
 
 $hasFilter = ($q !== '' || $region !== '');
+
+/* Blog JSON-LD — flags the blog index as a publishing hub, lets AI
+ * search engines and Google News understand the listing.  Mirrors the
+ * post cards shown to the user so AI Overviews can quote individual
+ * posts directly. */
+$_blogPosts = [];
+foreach ($posts as $bp) {
+    $_blogPosts[] = [
+        '@type'         => 'BlogPosting',
+        'headline'      => (string)$bp['title'],
+        'url'           => site_url() . '/blog-post.php?id=' . rawurlencode((string)$bp['id']),
+        'image'         => !empty($bp['image']) ? (string)$bp['image'] : null,
+        'datePublished' => !empty($bp['created_at']) ? date('c', strtotime((string)$bp['created_at'])) : null,
+    ];
+}
+$_blogPosts = array_map(fn($p) => array_filter($p, fn($v) => $v !== null), $_blogPosts);
+
+$jsonLd = [
+    '@context'    => 'https://schema.org',
+    '@type'       => 'Blog',
+    '@id'         => site_url() . '/blog.php#blog',
+    'name'        => SITE_BRAND . ' Blog',
+    'description' => $pageDescription,
+    'url'         => site_url() . '/blog.php',
+    'inLanguage'  => 'en',
+    'publisher'   => ['@id' => site_url() . '/#organization'],
+    'isPartOf'    => ['@id' => site_url() . '/#website'],
+    'blogPost'    => $_blogPosts,
+];
+$jsonLdBreadcrumb = [
+    '@context'        => 'https://schema.org',
+    '@type'           => 'BreadcrumbList',
+    'itemListElement' => [
+        ['@type' => 'ListItem', 'position' => 1, 'name' => 'Home', 'item' => site_url() . '/'],
+        ['@type' => 'ListItem', 'position' => 2, 'name' => 'Blog', 'item' => site_url() . '/blog.php'],
+    ],
+];
 
 include __DIR__ . '/includes/header.php';
 ?>

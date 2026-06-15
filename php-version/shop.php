@@ -1,7 +1,9 @@
 <?php
 require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/includes/seo-content.php';
 $pageTitle = 'Shop All Products | ' . SITE_BRAND;
 $pageDescription = 'Browse our full catalog of genuine Microsoft Office, Windows, Project, Visio, Server and antivirus licenses. Filter by year, platform and price — instant digital delivery on every order.';
+$pageKeywords    = marquee_page_keywords('shop');
 
 $selCats = array_values((array)($_GET['cat'] ?? []));
 $selVers = array_values((array)($_GET['ver'] ?? []));
@@ -47,6 +49,35 @@ $products = array_values(array_filter($all, function ($p) use ($selCats, $selVer
 }));
 
 $activeCount = count($selCats) + count($selVers) + count($selOs);
+
+/* CollectionPage + BreadcrumbList JSON-LD for the shop index — tells
+ * Google + AI search engines this is a curated commercial list page,
+ * not a generic results page.  Also lifts the SEO audit score for
+ * `/shop.php` from "Needs work" to "Good". */
+$jsonLd = [
+    '@context'    => 'https://schema.org',
+    '@type'       => 'CollectionPage',
+    'name'        => $pageTitle,
+    'description' => $pageDescription,
+    'url'         => site_url() . '/shop.php',
+    'inLanguage'  => 'en',
+    'isPartOf'    => ['@id' => site_url() . '/#website'],
+    'about'       => ['@type' => 'Thing', 'name' => 'Genuine Microsoft software licenses'],
+    'mainEntity'  => [
+        '@type'           => 'ItemList',
+        'name'            => 'All Products',
+        'numberOfItems'   => count($all),
+        'itemListOrder'   => 'https://schema.org/ItemListOrderDescending',
+    ],
+];
+$jsonLdBreadcrumb = [
+    '@context'        => 'https://schema.org',
+    '@type'           => 'BreadcrumbList',
+    'itemListElement' => [
+        ['@type' => 'ListItem', 'position' => 1, 'name' => 'Home', 'item' => site_url() . '/'],
+        ['@type' => 'ListItem', 'position' => 2, 'name' => 'Shop', 'item' => site_url() . '/shop.php'],
+    ],
+];
 
 include __DIR__ . '/includes/header.php';
 ?>

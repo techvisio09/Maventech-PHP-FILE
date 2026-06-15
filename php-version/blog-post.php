@@ -126,6 +126,17 @@ if ($post) {
             }
         }
     }
+
+    // Long-tail meta keywords — auto-derived from the post title, the
+    // linked product (when present, via the category-aware intent
+    // dispatcher) and the H2/H3 hierarchy of the post body.  Header.php
+    // emits `<meta name="keywords">` when $pageKeywords is set, so this
+    // lifts the SEO audit's keyword score for blog posts from 0 to 20+.
+    $pageKeywords = blog_post_long_tail_keywords($post);
+
+    // BreadcrumbList JSON-LD — mirrors the visible breadcrumb so search
+    // engines and AI engines parse the same hierarchy that users see.
+    $jsonLdBreadcrumb = blog_post_breadcrumb_jsonld($post);
 } else {
     http_response_code(404);
     $noIndex = true;

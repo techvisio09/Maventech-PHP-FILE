@@ -133,12 +133,26 @@ function score_jsonld(string $html, string $type): array
     $blocks = $m[1] ?? [];
     $valid = 0;
     $found = [];
+    // Recursive @type extractor — walks @graph arrays + nested objects so
+    // pages that bundle Organization + LocalBusiness + WebSite inside a
+    // single @graph (the homepage) are scored correctly.
+    $collect = function ($node) use (&$collect, &$found) {
+        if (is_array($node)) {
+            if (isset($node['@type'])) {
+                $t = $node['@type'];
+                if (is_array($t)) foreach ($t as $tt) $found[] = (string)$tt;
+                else $found[] = (string)$t;
+            }
+            foreach ($node as $v) {
+                if (is_array($v)) $collect($v);
+            }
+        }
+    };
     foreach ($blocks as $b) {
         $j = json_decode(trim($b), true);
         if (!is_array($j)) continue;
         $valid++;
-        $t = $j['@type'] ?? null;
-        if ($t) $found[] = is_array($t) ? implode('+', $t) : (string)$t;
+        $collect($j);
     }
     // Expected types per URL family.
     $expected = match ($type) {
@@ -152,7 +166,12 @@ function score_jsonld(string $html, string $type): array
     $hit = 0;
     foreach ($expected as $exp) {
         foreach ($found as $f) {
-            if (stripos($f, $exp) !== false) { $hit++; break; }
+            // BlogPosting is a sub-type of Article in schema.org so
+            // treat them as interchangeable when scoring blog posts.
+            if (stripos($f, $exp) !== false
+                || ($exp === 'Article' && stripos($f, 'BlogPosting') !== false)) {
+                $hit++; break;
+            }
         }
     }
     $coverage = count($expected) ? $hit / count($expected) : 0;

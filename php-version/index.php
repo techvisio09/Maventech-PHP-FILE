@@ -1,7 +1,9 @@
 <?php
 require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/includes/seo-content.php';
 $pageTitle = SITE_BRAND . ' | Genuine Microsoft Software Licenses — Instant Delivery';
 $pageDescription = 'Genuine Microsoft Office 2024/2021/2019, Windows 11 and antivirus license keys at up to 81% off. Instant digital delivery in 15-30 minutes, lifetime activation, 30-day money-back guarantee.';
+$pageKeywords    = marquee_page_keywords('home');
 
 /* ================== SEO + GEO: WebSite + SearchAction schema =====
    Adds the Google "sitelinks search box" to the SERP — also signals

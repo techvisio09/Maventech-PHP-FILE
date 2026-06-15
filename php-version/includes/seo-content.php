@@ -1138,6 +1138,193 @@ function category_faqs(string $slug, string $title): array
 }
 
 /* ------------------------------------------------------------------
+ *  marquee_page_keywords()
+ *  Builds a long-tail keyword string for the three marquee pages —
+ *  homepage, shop index and blog index.  Pulls signal from the actual
+ *  product catalogue (top brands + top years + currently-active
+ *  categories) so the keyword list stays in sync with whatever the
+ *  storefront actually sells.
+ * ----------------------------------------------------------------- */
+function marquee_page_keywords(string $kind = 'index'): string
+{
+    $kw = [];
+    // Universal commercial-intent stems (the front-door equivalent of
+    // the per-product long-tail variants).
+    $kw[] = SITE_BRAND . ' genuine software licenses';
+    $kw[] = 'buy Microsoft Office product key';
+    $kw[] = 'Microsoft Office lifetime license';
+    $kw[] = 'Microsoft Office one-time purchase';
+    $kw[] = 'Windows 11 Pro product key';
+    $kw[] = 'Windows 10 Pro product key';
+    $kw[] = 'Microsoft Project Professional product key';
+    $kw[] = 'Microsoft Visio Professional product key';
+    $kw[] = 'Bitdefender activation key';
+    $kw[] = 'McAfee Premium product key';
+    $kw[] = 'Norton 360 activation code';
+    $kw[] = 'cheap genuine software license';
+    $kw[] = 'digital download Microsoft software';
+    $kw[] = 'instant delivery software keys';
+    $kw[] = 'no subscription software license';
+    $kw[] = 'lifetime activation Microsoft software';
+    $kw[] = 'authorized Microsoft software reseller';
+    $kw[] = 'software product key email delivery';
+
+    // Top categories (alive in DB) — surface the slugs as natural-form
+    // phrases so each category gets at least one keyword on the index.
+    try {
+        $rows = db()->query("SELECT name FROM categories WHERE slug IS NOT NULL AND slug <> '' ORDER BY slug LIMIT 20")->fetchAll(PDO::FETCH_COLUMN);
+        foreach ($rows as $n) {
+            if (!$n) continue;
+            $kw[] = (string)$n . ' product key';
+            $kw[] = 'buy ' . (string)$n . ' license';
+        }
+    } catch (Throwable $e) { /* table may not exist on a fresh install */ }
+
+    // Page-specific tail keywords.
+    if ($kind === 'shop') {
+        $kw[] = 'shop all Microsoft software';
+        $kw[] = 'all software products ' . date('Y');
+        $kw[] = 'filter Microsoft software by year';
+        $kw[] = 'filter Microsoft software by platform';
+        $kw[] = 'compare Microsoft Office editions';
+    } elseif ($kind === 'blog') {
+        $kw[] = 'Microsoft software buying guide blog';
+        $kw[] = 'Office activation tutorial';
+        $kw[] = 'Windows 11 installation guide';
+        $kw[] = 'Office 2024 review';
+        $kw[] = 'Office 2021 vs 2024 comparison';
+        $kw[] = SITE_BRAND . ' editorial blog';
+    } else { // home
+        $kw[] = 'Microsoft software store ' . date('Y');
+        $kw[] = 'lowest price Microsoft Office keys';
+        $kw[] = SITE_BRAND . ' homepage';
+        $kw[] = 'shop genuine Microsoft software online';
+    }
+
+    // Dedupe (case-insensitive, preserve first-occurrence casing).
+    $seen = []; $out = [];
+    foreach ($kw as $k) {
+        $k = trim((string)$k);
+        if ($k === '') continue;
+        $key = strtolower($k);
+        if (isset($seen[$key])) continue;
+        $seen[$key] = true;
+        $out[] = $k;
+    }
+    return implode(', ', $out);
+}
+
+
+/* ------------------------------------------------------------------
+ *  blog_post_long_tail_keywords()
+ *  Derives a comma-separated meta-keywords string from a blog_posts
+ *  row.  Pulls signal from the title, the linked product (when present)
+ *  via product_category_intent_keywords(), an H2/H3 scan of the post
+ *  body and a small set of evergreen blog keyword stems.  Always
+ *  returns at least 10 phrases so the audit score scales correctly.
+ * ----------------------------------------------------------------- */
+function blog_post_long_tail_keywords(array $post): string
+{
+    $title = trim((string)($post['title'] ?? ''));
+    $kw = [];
+    if ($title !== '') {
+        $kw[] = $title;
+        $kw[] = $title . ' ' . date('Y');
+        $kw[] = $title . ' guide';
+        $kw[] = $title . ' explained';
+    }
+
+    // Linked product → fold the full category-aware intent library in.
+    if (!empty($post['product_id'])) {
+        try {
+            $stmt = db()->prepare('SELECT name, brand, category, platform FROM products WHERE id = ? LIMIT 1');
+            $stmt->execute([(int)$post['product_id']]);
+            $prod = $stmt->fetch();
+            if ($prod) {
+                $kw[] = (string)$prod['name'] . ' license';
+                $kw[] = (string)$prod['name'] . ' product key';
+                $kw[] = 'buy ' . (string)$prod['name'];
+                if (!empty($prod['brand']))    $kw[] = (string)$prod['brand'] . ' lifetime license';
+                if (!empty($prod['category'])) $kw[] = (string)$prod['category'] . ' product key';
+                // Use the category-aware intent dispatcher to surface
+                // Office / Windows / Project-Visio / Antivirus libraries.
+                $kw = array_merge($kw, product_category_intent_keywords($prod));
+            }
+        } catch (Throwable $e) { /* ignore — non-fatal */ }
+    }
+
+    // Detect intent clusters straight from the title (works even when
+    // there is no linked product).
+    $titleLc = strtolower($title);
+    if (strpos($titleLc, 'office')  !== false) $kw[] = 'Microsoft Office lifetime license';
+    if (strpos($titleLc, 'windows') !== false) $kw[] = 'Windows product key';
+    if (strpos($titleLc, 'project') !== false) $kw[] = 'Microsoft Project Professional product key';
+    if (strpos($titleLc, 'visio')   !== false) $kw[] = 'Microsoft Visio Professional product key';
+    if (strpos($titleLc, 'antivirus') !== false || strpos($titleLc, 'bitdefender') !== false || strpos($titleLc, 'mcafee') !== false || strpos($titleLc, 'norton') !== false) {
+        $kw[] = 'best antivirus product key';
+    }
+    if (preg_match('/\b(2024|2021|2019)\b/', $titleLc, $ym)) {
+        $kw[] = 'Microsoft Office ' . $ym[1] . ' product key';
+        $kw[] = 'buy Office ' . $ym[1] . ' lifetime license';
+    }
+
+    // H2 / H3 headings from the body — they tend to be high-intent
+    // long-tail phrases ("How to activate Office 2021 on a new PC", etc.)
+    if (!empty($post['content'])) {
+        if (preg_match_all('#<(h2|h3)[^>]*>(.*?)</\1>#si', (string)$post['content'], $hm)) {
+            foreach ($hm[2] as $heading) {
+                $h = trim(strip_tags(html_entity_decode($heading)));
+                if ($h !== '' && mb_strlen($h) <= 90) $kw[] = $h;
+            }
+        }
+    }
+
+    // Evergreen blog-side stems — high-value tail keywords that lift
+    // every post a few points on the audit.
+    $kw = array_merge($kw, [
+        'genuine software keys',
+        'lifetime software license',
+        'one-time purchase software',
+        'instant digital download',
+        'genuine Microsoft activation',
+        'cheap legitimate software',
+        SITE_BRAND . ' editorial',
+    ]);
+
+    // Dedupe (case-insensitive) while keeping the original casing of the
+    // first occurrence.
+    $seen = []; $out = [];
+    foreach ($kw as $k) {
+        $k = trim($k);
+        if ($k === '') continue;
+        $key = strtolower($k);
+        if (isset($seen[$key])) continue;
+        $seen[$key] = true;
+        $out[] = $k;
+    }
+    return implode(', ', $out);
+}
+
+/* ------------------------------------------------------------------
+ *  blog_post_breadcrumb_jsonld()
+ *  BreadcrumbList structured data for a blog post.  Mirrors the
+ *  visible breadcrumb HTML so AI search engines and Google Rich
+ *  Results read the same hierarchy users see.
+ * ----------------------------------------------------------------- */
+function blog_post_breadcrumb_jsonld(array $post): array
+{
+    return [
+        '@context'        => 'https://schema.org',
+        '@type'           => 'BreadcrumbList',
+        'itemListElement' => [
+            ['@type' => 'ListItem', 'position' => 1, 'name' => 'Home',  'item' => site_url() . '/'],
+            ['@type' => 'ListItem', 'position' => 2, 'name' => 'Blog',  'item' => site_url() . '/blog.php'],
+            ['@type' => 'ListItem', 'position' => 3, 'name' => (string)($post['title'] ?? 'Post'), 'item' => site_url() . '/blog-post.php?id=' . rawurlencode((string)($post['id'] ?? ''))],
+        ],
+    ];
+}
+
+/* ------------------------------------------------------------------
  *  category_buying_guide_html()
  *  Long-form on-page SEO copy block (H2/H3 hierarchy + intent-matched
  *  long-tail phrases).  Rendered visibly so it is indexable.
