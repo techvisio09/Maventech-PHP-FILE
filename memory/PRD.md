@@ -2439,3 +2439,35 @@ On the receipt page (`/order-history.php`), the "Resend link" button (which re-s
 - No stale "Please enter the email" / "Order number is required" errors on any of the above
 - Visual screenshot confirms single clean error banner with the typo hint
 
+
+## [Feb 2026 — Iteration 16] Order-success QR section — boxless redesign + pulsing teal glow + dark-mode
+
+### User feedback addressed
+- "It's completely look weird, things are not aligned properly" — removed the boxy card wrapper, content now flows natively alongside the success tick + thank-you content
+- "Remove the box, just the QR and above title and below message" — done. No more `card-e` wrapper, gradient bg, blue border, or shadow — content is now boxless and theme-native
+- "Highlight 'Or copy the link' button" — was a plain outline button, now a solid teal-cyan gradient pill matching the SCAN tag and success-tick color. Hover lifts it with a deeper glow. Click confirms with a green "✓ Link copied to clipboard" state.
+- "Make sure this thing entirely looks good in dark mode and light mode both" — every color is now driven by Bootstrap theme tokens (`var(--bs-body-color)`, `var(--bs-secondary-color)`) or by explicit `[data-bs-theme="dark"]` overrides
+
+### Approved enhancement: pulsing teal-blue glow on the QR
+- New `@keyframes receipt-qr-pulse` — the QR plate radiates a 14px cyan box-shadow that fades out every 2.4s, drawing the customer's eye to it on first load
+- Uses `#06b6d4` (cyan-500) to match the success-tick gradient — same color family, intentional visual rhyme
+- `@media (prefers-reduced-motion: reduce)` disables the animation respectfully
+
+### CSS additions (`assets/css/style.css`)
+- `.receipt-qr-block`            — boxless container, no padding/bg/border
+- `.receipt-qr-tag`              — solid teal pill above the QR ("SCAN WITH YOUR PHONE")
+- `.receipt-qr-wrap`             — 220×220 white plate around the matrix (white required for scan contrast), with the pulsing teal glow
+- `.receipt-qr-title`            — themed headline (uses `var(--bs-body-color)`)
+- `.receipt-qr-help`             — themed body copy (uses `var(--bs-secondary-color)` + dark-mode override)
+- `.receipt-qr-copy-btn`         — HIGHLIGHTED teal-cyan filled pill (was a plain outline-primary button)
+- `.receipt-qr-copy-btn.is-copied` — emerald-green confirmation state after click
+
+### Files touched
+- `/app/php-version/order-success.php` — QR section markup simplified, inline styles removed in favor of theme-aware CSS classes
+- `/app/php-version/assets/css/style.css` — new `.receipt-qr-*` ruleset, ~50 lines
+
+### Verification
+- Light mode at 1280×900: QR boxless, teal pulse visible, "Or copy the link" CTA prominent, aligns left of the success tick + thanks-for-purchasing card on the right
+- Dark mode at 1280×900: QR plate stays white (correctly — required for scan contrast), gradient tag + CTA glow elegantly against dark navy bg, all text readable
+- "Or copy the link" click confirmed → green "✓ Link copied to clipboard" state, reverts after 1.8s
+

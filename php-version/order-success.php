@@ -102,25 +102,26 @@ if ($order && $order['status'] === 'paid') {
   <div class="row g-4 align-items-start" data-testid="order-success-grid">
     <!-- ===== QR code rail (left on ≥md, top on mobile) ===== -->
     <div class="col-12 col-md-4">
-      <div class="card co-banner p-4 text-center sticky-top" data-testid="receipt-qr-card"
-           style="border-radius:18px;border:1px solid #bfdbfe;background:linear-gradient(180deg,#eff6ff,#dbeafe);top:24px;">
-        <div style="display:inline-flex;align-items:center;gap:6px;background:#1d4ed8;color:#fff;padding:4px 12px;border-radius:999px;font-size:10.5px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:12px;">
-          <i class="bi bi-qr-code"></i> Scan with your phone
+      <div class="receipt-qr-block sticky-top text-center" data-testid="receipt-qr-card" style="top:24px;">
+        <div class="receipt-qr-tag" data-testid="receipt-qr-tag">
+          <i class="bi bi-qr-code-scan me-1"></i>SCAN WITH YOUR PHONE
         </div>
-        <div id="receipt-qr"
-             data-testid="receipt-qr"
-             data-url="<?= esc($qrUrl) ?>"
-             style="width:200px;height:200px;background:#ffffff;border-radius:14px;padding:14px;margin:0 auto;box-shadow:0 8px 22px rgba(15,23,42,.08);display:flex;align-items:center;justify-content:center;"></div>
-        <div class="mt-3" style="font-size:13.5px;font-weight:700;color:#1e3a8a;line-height:1.35;">
+        <div class="receipt-qr-wrap" data-testid="receipt-qr-wrap">
+          <div id="receipt-qr"
+               data-testid="receipt-qr"
+               data-url="<?= esc($qrUrl) ?>"></div>
+        </div>
+        <div class="receipt-qr-title" data-testid="receipt-qr-title">
           View your license keys &amp; installation guide on any phone
         </div>
-        <div class="small mt-1" style="color:#475569;font-size:11.5px;line-height:1.5;">
+        <div class="receipt-qr-help" data-testid="receipt-qr-help">
           Scanning opens a secure receipt page showing this order, the product name, license key,
-          <strong>Sign in to activate</strong> and <strong>View installation guide</strong> buttons — same details as the email.
+          <strong>Sign in to activate</strong> and <strong>View installation guide</strong> buttons &mdash; same details as the email.
         </div>
-        <button type="button" class="btn btn-sm btn-outline-primary rounded-pill mt-3 w-100"
-                onclick="(function(){var t=document.getElementById('receipt-qr').dataset.url;if(navigator.clipboard){navigator.clipboard.writeText(t).then(function(){var b=event.target.closest('button');var o=b.innerHTML;b.innerHTML='<i class=\'bi bi-check2 me-1\'></i>Link copied';setTimeout(function(){b.innerHTML=o;},1600);});}})()"
-                data-testid="receipt-qr-copy-link">
+        <button type="button"
+                class="receipt-qr-copy-btn"
+                data-testid="receipt-qr-copy-link"
+                onclick="(function(b){var t=document.getElementById('receipt-qr').dataset.url;if(!t)return;function done(){var o=b.dataset.orig||b.innerHTML;b.dataset.orig=b.dataset.orig||b.innerHTML;b.innerHTML='<i class=\'bi bi-check2 me-1\'></i>Link copied to clipboard';b.classList.add('is-copied');setTimeout(function(){b.innerHTML=o;b.classList.remove('is-copied');},1800);}if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(done,done);}else{var ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');}catch(_){}ta.remove();done();}})(this)">
           <i class="bi bi-link-45deg me-1"></i>Or copy the link
         </button>
       </div>
@@ -223,8 +224,8 @@ if ($order && $order['status'] === 'paid') {
       try {
         new QRCode(el, {
           text: url,
-          width: 172,
-          height: 172,
+          width: 192,
+          height: 192,
           colorDark: '#0f172a',
           colorLight: '#ffffff',
           correctLevel: QRCode.CorrectLevel.M,
