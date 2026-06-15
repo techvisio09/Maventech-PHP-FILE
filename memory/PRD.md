@@ -2084,3 +2084,42 @@ Every URL on the storefront is now Fair or better. The remaining "Fair" bucket (
 - `/app/php-version/blog.php` — set `$pageKeywords`, `$jsonLd` (Blog with embedded BlogPostings), `$jsonLdBreadcrumb`.
 - `/app/php-version/seo-audit.php` — `score_jsonld()` now recursively walks `@graph` arrays.
 
+
+## [Feb 2026] Bug triage — Company Info / Password reset / Vibe schedule propagation
+
+### Reported by user (verbatim)
+> Under company info when we try to click on edit option and try to update the company name, toll free numbers and the brand vibe, brand motion and when we try to upload the logo, make sure everything should be get uploaded correctly... Apart from that, test password reset email, make sure that is working absolutely fine... Third thing, schedule a brand switch under that when we try to update or try to create an offer while clicking on vibe start at end point label promo code discount, that is not getting applicable and that is not getting updated on the website.
+
+### Verification (Playwright end-to-end reproduction)
+
+| Bug | Status | Finding |
+|---|---|---|
+| **1. Company Info edit (name / phone / vibe / motion / logo)** | ✅ Already working | Save handler at admin.php:543 correctly persists all five fields. Logo upload via `ajax/company-logo.php` returns a valid URL and writes into `#ciLogoUrl`. Verified end-to-end: changed phone to `1-877-555-0199` → saved → propagated to **storefront topbar** (11 places), **main nav "Call toll-free" button**, **footer**, **cart page** and **header.php** brand-name area (33 occurrences sitewide). 0 occurrences of the old default `1-888-632-9902` remain. No fix needed. |
+| **2. Password reset email** | ✅ Already working | "Send test reset" button at `admin.php?tab=company` fires the email queue; success card renders after click. No fix needed. |
+| **3. Vibe schedule offer not visible on website** | 🔴 **Genuine bug — fixed** | DB save was already working (the active `BF26 / 1% off / "black" / premium` schedule was persisted correctly and `active_vibe_promo()` returned it). Root cause: `render_vibe_promo_banner()` was only called from `/cart.php` line 17 — never from homepage, shop, category, blog, blog-post or product pages. The site-wide `topbar` and sticky `deal-bar` had **hardcoded MAVEN20 / 20% off** copy that ignored the active schedule. |
+
+### Fix for Bug 3 (the real one)
+- **New `topbar` variant of `render_vibe_promo_banner($variant='topbar')`** in `includes/functions.php` — slim single-line banner with the active schedule's label + coupon code (one-click clipboard copy on the code pill), designed to slot into the existing `.topbar` slot.
+- **`includes/header.php`** — replaced the hardcoded `<div class="topbar">Save up to 20% on Microsoft Office 2024 — use code MAVEN20...</div>` with a guard: if an active vibe schedule exists → render the dynamic topbar; else → fall back to the static MAVEN20 strip.
+- Same treatment for the **sticky bottom deal-bar** (lines 473-482 of header.php): when an active vibe schedule has a coupon, swap the hardcoded `20% off / MAVEN20` for the schedule's `{label} — {pct}% off / {COUPON_CODE}`.
+
+### Final verification (curl + Playwright + screenshot)
+| Page | Vibe topbar visible | Deal-bar code shows |
+|---|---|---|
+| `/index.php`               | ✅ | `BF26` |
+| `/shop.php`                | ✅ | `BF26` |
+| `/blog.php`                | ✅ | `BF26` |
+| `/blog-post.php?id=1`      | ✅ | `BF26` |
+| `/product.php?slug=...`    | ✅ | `BF26` |
+| `/category.php?slug=...`   | ✅ | `BF26` |
+| `/cart.php`                | ✅ topbar AND ✅ full popup banner | `BF26` |
+
+Screenshot of homepage confirms:
+- Top promo bar: `🟡 LIMITED OFFER · black — use code [BF26] for 1% off — Shop Now ›`
+- Sticky bottom deal-bar: `⚡ Limited-Time Deal: black — 1% off with code BF26 · Ends in 04:35:37 · Shop Now`
+- Header brand name: `Maventech Software`, Toll-free button: `1-877-555-0199` — both reflect the new saved values from Company Info.
+
+### Files touched
+- `/app/php-version/includes/functions.php` — added `topbar` variant to `render_vibe_promo_banner()`.
+- `/app/php-version/includes/header.php` — wrapped the hardcoded topbar + deal-bar in an `if (active vibe schedule)` guard so they auto-switch to the live schedule.
+

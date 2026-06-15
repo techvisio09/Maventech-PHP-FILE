@@ -316,10 +316,19 @@ $ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.sv
 </nav>
 <?php else: ?>
 
-<!-- Promo bar -->
+<!-- Promo bar — dynamic when an admin-scheduled Brand Vibe is live
+     (replaces the static MAVEN20 strip with the scheduled label + coupon
+     code so the offer surfaces sitewide, not just on /cart.php). -->
+<?php
+$_vibeTopbar = function_exists('render_vibe_promo_banner') ? render_vibe_promo_banner('topbar') : '';
+if ($_vibeTopbar !== ''):
+  echo $_vibeTopbar;
+else:
+?>
 <div class="topbar text-center py-2 px-3">
   Save up to 20% on Microsoft Office 2024 — use code <strong>MAVEN20</strong> at checkout — <a href="shop.php" class="text-white fw-bold">Shop Now ›</a>
 </div>
+<?php endif; ?>
 
 <!-- Trust bar -->
 <div class="trustbar py-1 px-3 d-none d-md-block">
@@ -461,11 +470,26 @@ $ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.sv
     </div>
   </div>
 </nav>
-<!-- Sticky limited-time deal bar — live countdown resets daily at local midnight -->
+<!-- Sticky limited-time deal bar — live countdown resets daily at local midnight.
+     When an admin-scheduled Brand Vibe with a coupon is live, swap the
+     default "MAVEN20 20% off" copy for the scheduled label + code so the
+     deal-bar tracks whatever promo is currently running. -->
+<?php
+$_vibePromo  = function_exists('active_vibe_promo') ? active_vibe_promo() : null;
+$_dealLabel  = '20% off sitewide';
+$_dealCode   = 'MAVEN20';
+if ($_vibePromo && !empty($_vibePromo['coupon_code']) && (int)$_vibePromo['coupon_percent'] > 0) {
+    $_pct       = (int)$_vibePromo['coupon_percent'];
+    $_labelTxt  = trim((string)($_vibePromo['label'] ?? ''));
+    // Plain-text label so the rendered span doesn't show raw `&mdash;`.
+    $_dealLabel = $_labelTxt !== '' ? esc($_labelTxt . ' — ' . $_pct . '% off') : ($_pct . '% off');
+    $_dealCode  = strtoupper((string)$_vibePromo['coupon_code']);
+}
+?>
 <div class="deal-bar" id="deal-bar" data-testid="deal-bar">
   <div class="container d-flex align-items-center justify-content-center gap-2 gap-sm-3 flex-wrap py-2 pe-5">
     <span class="deal-bar-flash"><i class="bi bi-lightning-charge-fill"></i></span>
-    <span class="fw-bold small">Limited-Time Deal: 20% off sitewide with code <span class="deal-code">MAVEN20</span></span>
+    <span class="fw-bold small">Limited-Time Deal: <?= $_dealLabel ?> with code <span class="deal-code" data-testid="deal-bar-code"><?= esc($_dealCode) ?></span></span>
     <span class="small">Ends in <strong class="deal-countdown" id="deal-countdown" data-testid="deal-bar-countdown">--:--:--</strong></span>
     <a href="shop.php" class="btn btn-sm btn-light rounded-pill fw-bold px-3 deal-cta" data-testid="deal-bar-cta">Shop Now</a>
     <button type="button" class="btn-close btn-close-white deal-close" aria-label="Dismiss deal bar" data-testid="deal-bar-close"></button>

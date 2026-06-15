@@ -739,6 +739,26 @@ function render_vibe_promo_banner(string $variant = 'cart'): string
              . $logoTag . '<span style="text-transform:uppercase;font-weight:800;letter-spacing:.6px;font-size:11.5px;">' . $label . '</span>' . $couponLine . '</div>';
     }
 
+    // Topbar variant — single-line slim banner designed to replace the
+    // site-wide hardcoded `.topbar` promo strip in header.php whenever an
+    // active vibe schedule exists.  Surfaces the label + coupon code with
+    // a one-click copy button so the offer travels with every storefront
+    // page (homepage, shop, category, product, blog).
+    if ($variant === 'topbar') {
+        $couponHtml = '';
+        if ($code !== '' && $pct > 0) {
+            $couponHtml = ' &mdash; use code <button type="button" class="vibe-topbar-copy" data-promo-code="' . $codeEsc . '" data-testid="vibe-topbar-copy" style="background:#fbbf24;color:#0f172a;border:0;border-radius:6px;padding:1px 9px;margin:0 4px;font-family:ui-monospace,Menlo,monospace;font-weight:800;font-size:13px;letter-spacing:.6px;cursor:pointer;vertical-align:baseline;">' . $codeEsc . ' <i class="bi bi-clipboard" style="font-size:11px;opacity:.85;"></i></button> for ' . $pct . '% off';
+        }
+        $shopCta = ' &mdash; <a href="shop.php" class="text-white fw-bold text-decoration-underline" data-testid="vibe-topbar-shop">Shop Now &rsaquo;</a>';
+        return '<div class="topbar text-center py-2 px-3" data-testid="vibe-topbar-banner" style="background:linear-gradient(90deg,#0f172a 0%, #1e293b 100%);color:#f1f5f9;border-bottom:1px solid rgba(251,191,36,.30);">'
+             . '<span style="display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center;">'
+             . '<span style="font-size:11px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:#fbbf24;padding:2px 8px;border:1px solid #fbbf24;border-radius:999px;">LIMITED OFFER</span>'
+             . '<span style="font-weight:600;">' . $label . $couponHtml . $shopCta . '</span>'
+             . '</span>'
+             . '<script>(function(){document.querySelectorAll("[data-testid=vibe-topbar-copy]").forEach(function(b){b.addEventListener("click",function(e){e.preventDefault();var c=b.getAttribute("data-promo-code");function done(){var o=b.innerHTML;b.innerHTML="<i class=\\"bi bi-check2\\"></i> Copied";setTimeout(function(){b.innerHTML=o;},1600);}if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(c).then(done,done);}else{var t=document.createElement("textarea");t.value=c;document.body.appendChild(t);t.select();try{document.execCommand("copy");}catch(_){}t.remove();done();}});});})();</script>'
+             . '</div>';
+    }
+
     // CART variant — compact slim bar that opens a floating popup with the
     // code + Copy button.  Slate-900 with an amber accent for an elegant
     // premium feel (replaces the previous loud red gradient).
