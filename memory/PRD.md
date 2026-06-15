@@ -2411,3 +2411,31 @@ When admin creates a new category via the inline "+ Add Category" flow on the Ad
 - Verified `/order-history.php?email=...&order=...` returns HTTP 200 with "License Key" section visible (auto-lookup works)
 - Visually verified at 1280×900 viewport — QR renders crisp, layout aligned, sticky-top works during scroll
 
+
+## [Feb 2026 — Iteration 15] Resend-link bullet-proofing on the order-history page
+
+### The user-reported bug
+On the receipt page (`/order-history.php`), the "Resend link" button (which re-sends license keys + PDFs to a different inbox) was falsely showing "We've resent your license keys + PDFs to ..." even when the customer typed an undeliverable address like `foo@gmail.con`. The customer would wait for the email that never arrived.
+
+### Root cause
+- `send_email()` already calls `email_address_deliverable()` internally and correctly inserts a `status='failed'` row in `email_outbox` for typo domains — but the order-history resend handler set `$success` immediately after `send_email()` returned, regardless of the actual delivery status.
+- Secondary bug: the form-POST lookup handler at the top of the file was ALSO firing on Resend POSTs (which carry only `action` + `to_email`, no `email`/`order_number`), causing stale "Please enter the email" + "Order number is required" errors to stack on top of any resend error.
+
+### Fixes
+- **Pre-check deliverability**: before calling `send_email()`, the resend handler now runs `email_address_deliverable($toEmail)` and short-circuits with a friendly "Likely typo: gmail.con. Did the customer mean gmail.com?" message when `no_mx` or `invalid_syntax`. Customer sees the typo hint and can correct it.
+- **Post-send verification**: after `send_email()`, the handler re-reads the latest `email_outbox` row for that recipient + order and shows `$success` only when the row landed as `'queued'` / `'sent'`. If it landed as `'failed'`, the customer sees `"We couldn't deliver the email to ... (note)"` instead of a false success.
+- **Skip lookup handler on resend POST**: the top form-POST gate now checks `$isResendPost` and skips the lookup branch, so stale "missing email/order_number" validation errors no longer stack on top of resend errors.
+
+### Files touched
+- `/app/php-version/order-history.php`:
+  - Lines 65-76 — top POST handler now skips when `$isResendPost === true`
+  - Lines 162-180 — new `email_address_deliverable()` pre-check + `resend_finished:` label
+  - Lines 218-238 — post-send status verification reads back `email_outbox.status`
+
+### Testing — end-to-end via curl
+- `foo@gmail.con` → ✓ rejected with "Likely typo: gmail.con. Did the customer mean gmail.com?"
+- `foo@no-such-domain-xyzz123.con` → ✓ rejected with "has no MX or A records"
+- `techvisio0909@gmail.com` (good) → ✓ "We've resent your license keys + PDFs to ..."
+- No stale "Please enter the email" / "Order number is required" errors on any of the above
+- Visual screenshot confirms single clean error banner with the typo hint
+

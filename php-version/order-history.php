@@ -62,8 +62,15 @@ $_qrEmail = trim($_GET['email'] ?? '');
 $_qrOrder = trim($_GET['order'] ?? '');
 $_isQrLookup = ($_qrEmail !== '' && $_qrOrder !== '' && empty($_GET['action']) && $_SERVER['REQUEST_METHOD'] !== 'POST');
 
-/* ---------- POST: form submission  /  QR auto-lookup ---------- */
-if (($_SERVER['REQUEST_METHOD'] === 'POST' && empty($_GET['action'])) || $_isQrLookup) {
+/* ---------- POST: form submission  /  QR auto-lookup ----------
+ *  Skip this block when the POST is a resend (handled separately below),
+ *  otherwise the resend payload (which has no email/order_number fields)
+ *  would re-run the lookup handler and stack false "Please enter the
+ *  email" / "Order number is required" validation errors on top of the
+ *  resend response.
+ * --------------------------------------------------------------- */
+$isResendPost = ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'resend');
+if (((($_SERVER['REQUEST_METHOD'] === 'POST' && empty($_GET['action'])) && !$isResendPost)) || $_isQrLookup) {
     if (_oh_throttle_remaining() <= 0) {
         $errors[] = 'Too many lookup attempts. Please wait 10 minutes and try again.';
     } else {
@@ -160,6 +167,21 @@ if (in_array($action, ['download', 'resend'], true)) {
         if ($toEmail === '' || !filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
             $toEmail = (string)$order['email'];
         }
+
+        // Catch typo domains (gmail.con / yaho.com etc.) BEFORE we
+        // build PDFs + fire send_email().  Without this guard
+        // send_email() silently inserts a status='failed' row but the
+        // customer sees a "We've resent" toast and waits in vain.
+        require_once __DIR__ . '/includes/mailer.php';
+        if (function_exists('email_address_deliverable')) {
+            $deliv = email_address_deliverable($toEmail);
+            if (!$deliv['ok'] && in_array($deliv['reason'] ?? '', ['no_mx','invalid_syntax'], true)) {
+                $errors[] = $deliv['detail']
+                    ?: 'That email address looks undeliverable — please double-check the spelling and try again.';
+                // Fall through to render below; do NOT call send_email().
+                goto resend_finished;
+            }
+        }
         try {
             require_once __DIR__ . '/includes/pdf.php';
             $pdo = db();
@@ -214,11 +236,33 @@ if (in_array($action, ['download', 'resend'], true)) {
             }
             $pdfPaths = generate_order_pdfs($order, $pdfItems);
             send_email($toEmail, $subject, $html, (int)$order['id'], 'order_delivery', 0, $pdfPaths);
-            $success = 'We\'ve resent your license keys + PDFs to ' . esc($toEmail) . '. Check that inbox in a few minutes.';
+            // Confirm the row actually landed as 'queued' or 'sent', not
+            // 'failed' — the deliverability pre-check above catches typos
+            // but transient SMTP failures can still flip the row to
+            // 'failed'.  Read back the latest row and gate the success
+            // message on its status.
+            $latestStatus = '';
+            try {
+                $stRow = $pdo->prepare("SELECT status, note FROM email_outbox
+                                        WHERE recipient=? AND order_id=?
+                                        ORDER BY id DESC LIMIT 1");
+                $stRow->execute([$toEmail, (int)$order['id']]);
+                $latestRow = $stRow->fetch();
+                $latestStatus = (string)($latestRow['status'] ?? '');
+                $latestNote   = (string)($latestRow['note']   ?? '');
+            } catch (Throwable $e) { /* non-fatal */ }
+            if ($latestStatus === 'failed') {
+                $errors[] = 'We couldn\'t deliver the email to ' . esc($toEmail) . '. '
+                          . ($latestNote ? '(' . esc($latestNote) . ')' : '')
+                          . ' Try a different inbox or contact support.';
+            } else {
+                $success = 'We\'ve resent your license keys + PDFs to ' . esc($toEmail) . '. Check that inbox in a few minutes.';
+            }
         } catch (Throwable $e) {
             error_log('[order-history resend] ' . $e->getMessage());
             $errors[] = 'Something went wrong while resending the email. Please contact support.';
         }
+        resend_finished:
     }
 }
 
