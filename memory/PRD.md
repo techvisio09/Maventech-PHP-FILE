@@ -1968,3 +1968,39 @@ Playwright smoke test on `/category.php?slug=antivirus` confirmed the visible FA
 - `category.php`, `header.php` JSON-LD injection, `faq_to_jsonld()`, and `render_aeo_answer()` all untouched.
 - Pages outside the 4 categories (generic-fallback branch) continue to render the original 5 base FAQs + generic "How to pick the right X" guidance.
 
+
+## [Feb 2026] One-click SEO / GEO / AEO Audit Dashboard (`/seo-audit.php`)
+
+### What shipped
+A standalone admin-only page that crawls **every** product, category and blog URL on the live storefront, scores each on four signals (25 pts each, 100 pts total), and presents the results as a sorted dashboard + downloadable HTML report.
+
+### Scoring rubric (100 pts total)
+| Dimension | Weight | What it measures |
+|---|---|---|
+| **Meta keywords** | 25 | Count of comma-separated phrases in `<meta name="keywords">`, log-scaled (20+ = full marks) |
+| **JSON-LD coverage** | 25 | Expected structured-data schemas present and parsing cleanly — Product/FAQPage/Breadcrumb for product pages, CollectionPage/ItemList/FAQPage for categories, Article for blog posts |
+| **Visible SEO copy** | 25 | Word count of body text after stripping `<script>`, `<style>`, `<nav>`, `<header>`, `<footer>` (1200+ words = 22 pts; 2000+ = full marks) |
+| **Image alt richness** | 25 | % of `<img>` tags with descriptive (≥12 char) alt text |
+
+### Implementation highlights
+- **Parallel cURL fetch** (`curl_multi_init` + 8 concurrent handles) — crawls 144 URLs in **5.6 seconds**.
+- **Local-only network** — hits `http://127.0.0.1:3000` so no public proxy round-trips and no exposure of admin pages to external traffic.
+- **Auto URL discovery** — pulls products, categories and blog posts straight from MariaDB, so new content is automatically picked up on the next run.
+- **Score bands** — Excellent (≥ 90, green), Good (75–89, blue), Fair (60–74, amber), Needs work (< 60, red).
+- **Downloadable HTML report** — `?action=download` serves a fully self-contained HTML file with embedded CSS, KPI summary cards and the full results table.  Filename includes ISO timestamp.
+- **Dark-mode aware** — KPI cards, results table and badges all carry `[data-theme="dark"]` overrides to match the rest of the admin shell.
+- **No DB writes** — the audit is purely read-only; safe to run as often as you like.
+
+### Surfacing
+- New button `[data-testid="open-seo-audit-btn"]` (`<i class="bi bi-radar">Run SEO Audit`) added next to the "View Sitemap" button in `admin.php?tab=ai-blogger`.
+- Standalone page accepts `?action=run` (render dashboard) and `?action=download` (force-download HTML report).
+
+### Verification (Playwright end-to-end)
+- Login as admin → open `/seo-audit.php` → click "Run audit now" → **144 result rows rendered** in a sortable table, lowest-scoring URLs first.
+- Click "Download HTML report" → server returns `200 text/html` with `Content-Disposition: attachment; filename="seo-audit-YYYYMMDD-HHMMSS.html"`, 91 KB body containing KPI cards + full results table + Maventech branding.
+- First audit immediately surfaced a real actionable issue: **blog posts (85 URLs) currently score 32 / 100 because they're missing `<meta name="keywords">` AND missing `Article + BreadcrumbList` JSON-LD**.  Exactly the kind of actionable signal an SEO audit should reveal.
+
+### Files touched
+- `/app/php-version/seo-audit.php` (new file, ~280 lines)
+- `/app/php-version/admin.php` (added the "Run SEO Audit" button next to "View Sitemap")
+

@@ -3895,6 +3895,7 @@ elseif ($tab === 'ai-blogger'):
       <?php endif; ?>
       <a href="blog.php" target="_blank" class="btn btn-outline-secondary rounded-pill px-3"><i class="bi bi-journal-text me-1"></i>View Blog</a>
       <a href="<?= esc(rtrim(site_url(), '/')) ?>/sitemap.xml" target="_blank" rel="noopener" class="btn btn-outline-secondary rounded-pill px-3" data-testid="view-sitemap-btn"><i class="bi bi-filetype-xml me-1"></i>View Sitemap</a>
+      <a href="seo-audit.php" class="btn btn-outline-primary rounded-pill px-3" data-testid="open-seo-audit-btn"><i class="bi bi-radar me-1"></i>Run SEO Audit</a>
     </div>
 
     <!-- Auto-resubmit daily toggle — drives seo_bot_weekly_sitemap_tick() (24h cadence) -->
