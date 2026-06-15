@@ -33,46 +33,57 @@ assert API_KEY, "EMERGENT_LLM_KEY missing in /app/backend/.env"
 
 
 def build_prompt(meta: dict) -> str:
-    """Construct a clean, non-infringing product-box prompt for Nano Banana."""
+    """Construct a clean, non-infringing product-box prompt for Nano Banana.
+
+    Palette tuned to match the storefront's dark-navy + cyan/teal theme —
+    no bright/bold colours, no neon yellow, no harsh primary red.  Boxes
+    feel like premium minimalist software packaging on a graphite studio
+    backdrop, with subtle accent gradients pulled from the brand.
+    """
     name     = meta.get("name", "Software")
     brand    = meta.get("brand", "")
     platform = (meta.get("platform") or "").lower()
     category = (meta.get("category") or "").lower()
 
-    # Choose a box accent colour by category — keeps the storefront grid
-    # visually coherent.
+    # Sophisticated, dark-theme-friendly accent per category.  Each one
+    # pairs a deep base tone with a muted secondary — no fluorescent or
+    # high-saturation hues — so the storefront grid stays cohesive.
     if "office" in category or "office" in name.lower():
-        accent = "orange and white"
+        accent = "deep slate navy base with a muted burnt-amber accent strip"
     elif "windows" in category or "windows" in name.lower():
-        accent = "deep blue and white"
+        accent = "midnight indigo base with a soft sky-blue accent ribbon"
     elif "project" in category or "project" in name.lower():
-        accent = "emerald green and white"
+        accent = "graphite black base with a muted sage-emerald accent strip"
     elif "visio" in category or "visio" in name.lower():
-        accent = "indigo violet and white"
+        accent = "deep slate base with a dusty violet accent ribbon"
     elif "bitdefender" in name.lower():
-        accent = "crimson red and graphite"
+        accent = "graphite charcoal base with a muted crimson accent strip"
     elif "mcafee" in name.lower():
-        accent = "vibrant red and graphite"
+        accent = "near-black graphite base with a muted brick-red accent ribbon"
     elif "antivirus" in category or "antivirus" in name.lower():
-        accent = "navy blue and white"
+        accent = "deep navy base with a muted teal accent strip"
     else:
-        accent = "modern blue and white"
+        accent = "deep slate navy base with a muted cyan accent strip"
 
     plat_text = ""
     if platform:
         plat_text = f" The platform '{platform.title()}' is subtly indicated on a side ribbon."
 
     return (
-        f"Create a clean, modern software product box rendered as a 3D mock-up "
-        f"on a soft neutral light-gray studio background with a subtle drop "
-        f"shadow.  The box uses an {accent} colour scheme with a glossy "
-        f"premium finish.  Use the generic, non-trademarked title "
-        f"\"{name}\" in bold modern sans-serif on the box front.  "
-        f"Include simple abstract geometric icons that suggest productivity "
-        f"software (no real-brand logos, no Microsoft Windows flag, no Office "
-        f"swirl) — just clean modern shapes.{plat_text}  Square 1:1 aspect, "
-        f"centred composition, photographic lighting, no human figures, "
-        f"no text other than the product name."
+        f"Create a clean, modern software product-box rendered as a 3D mock-up "
+        f"on a soft dark-graphite studio backdrop with a subtle teal-tinted "
+        f"rim light and a gentle floor reflection.  The box uses a {accent} "
+        f"and has a premium matte finish (NOT glossy, NOT bright, NOT yellow, "
+        f"NOT neon).  The colour palette must feel sophisticated and muted — "
+        f"avoid saturated primary colours; use deep, slightly desaturated "
+        f"tones that would pair well with a navy + cyan dark-mode website. "
+        f"Use the generic, non-trademarked title \"{name}\" in bold modern "
+        f"sans-serif on the box front in soft warm white.  Include simple "
+        f"abstract geometric icons that suggest productivity software (no "
+        f"real-brand logos, no Microsoft Windows flag, no Office swirl) — "
+        f"just clean modern shapes in white at 70-percent opacity.{plat_text}  "
+        f"Square 1:1 aspect, centred composition, cinematic studio lighting, "
+        f"no human figures, no text other than the product name."
     )
 
 

@@ -4722,6 +4722,67 @@ elseif ($tab === 'products'):
 .advanced-toggle:hover { color:#3b82f6; }
 .advanced-panel { animation: slideDown .25s ease-out; }
 @keyframes slideDown { from { opacity:0; transform:translateY(-4px);} to { opacity:1; transform:translateY(0);} }
+
+/* ============================================================
+   Sticky modal header — keeps the "X" close button anchored at
+   the top of every admin modal, even when the user scrolls inside
+   a long form (Edit Product, Inventory, etc.).  Also enlarges the
+   X target so it's easier to hit on small screens.
+   ============================================================ */
+.modal.d-block .modal-dialog .modal-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--card-bg, #fff);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, .04);
+}
+.modal.d-block .modal-dialog .modal-header .btn-close {
+  /* Bigger touch target + always-visible focus ring. */
+  width: 34px; height: 34px;
+  background-size: 14px 14px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background-color: var(--bg, #f1f5f9);
+  opacity: .85;
+  transition: opacity .15s, background-color .15s, transform .15s;
+  position: relative;
+}
+.modal.d-block .modal-dialog .modal-header .btn-close::after {
+  /* Tiny "Close" label under the X — only on hover, keeps the UX
+     discoverable without cluttering the header. */
+  content: "Close";
+  position: absolute;
+  top: 100%; right: 0;
+  margin-top: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--text-muted, #64748b);
+  opacity: 0;
+  transition: opacity .15s;
+  pointer-events: none;
+  background: var(--card-bg, #fff);
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.modal.d-block .modal-dialog .modal-header .btn-close:hover {
+  opacity: 1;
+  background-color: #fee2e2;
+  transform: scale(1.08);
+}
+.modal.d-block .modal-dialog .modal-header .btn-close:hover::after { opacity: 1; }
+[data-bs-theme="dark"] .modal.d-block .modal-dialog .modal-header .btn-close {
+  background-color: rgba(255,255,255,.06);
+  border-color: rgba(255,255,255,.10);
+  filter: invert(.92) hue-rotate(180deg);
+}
+[data-bs-theme="dark"] .modal.d-block .modal-dialog .modal-header .btn-close:hover {
+  background-color: rgba(239,68,68,.18);
+}
 </style>
 
   <!-- HEADER: title + count + add -->
