@@ -33,67 +33,184 @@ assert API_KEY, "EMERGENT_LLM_KEY missing in /app/backend/.env"
 
 
 def build_prompt(meta: dict) -> str:
-    """Construct a clean, non-infringing product-box prompt for Nano Banana.
+    """Construct a "real-retail-card" product image prompt for Nano Banana.
 
-    Palette tuned to match the storefront's dark-navy + cyan/teal theme —
-    no bright/bold colours, no neon yellow, no harsh primary red.  Boxes
-    feel like premium minimalist software packaging on a graphite studio
-    backdrop, with subtle accent gradients pulled from the brand.
+    Matches the official Microsoft retail card style (e.g. Microsoft Office
+    Home 2024): pure white background, the four-coloured Microsoft square
+    logo in the upper-left, the product name in deep blue, three to four
+    large rounded-square application tiles below in their official colours,
+    and a slim specs strip at the bottom ("X User · Single/Multi Device").
+    No 3D box mock-up — a FLAT, modern, photoshop-style product card.
     """
-    name     = meta.get("name", "Software")
-    brand    = meta.get("brand", "")
-    platform = (meta.get("platform") or "").lower()
-    category = (meta.get("category") or "").lower()
+    name     = (meta.get("name") or "Software").strip()
+    brand    = (meta.get("brand") or "").strip()
+    platform = (meta.get("platform") or "").strip().lower()
+    category = (meta.get("category") or "").strip().lower()
+    apps_raw = (meta.get("apps") or "").strip().lower()
 
-    # Sophisticated, dark-theme-friendly accent per category.  Each one
-    # pairs a deep base tone with a muted secondary — no fluorescent or
-    # high-saturation hues — so the storefront grid stays cohesive.
-    if "office" in category or "office" in name.lower():
-        accent = "deep slate navy base with a muted burnt-amber accent strip"
-    elif "windows" in category or "windows" in name.lower():
-        accent = "midnight indigo base with a soft sky-blue accent ribbon"
-    elif "project" in category or "project" in name.lower():
-        accent = "graphite black base with a muted sage-emerald accent strip"
-    elif "visio" in category or "visio" in name.lower():
-        accent = "deep slate base with a dusty violet accent ribbon"
-    elif "bitdefender" in name.lower():
-        accent = "graphite charcoal base with a muted crimson accent strip"
-    elif "mcafee" in name.lower():
-        accent = "near-black graphite base with a muted brick-red accent ribbon"
-    elif "antivirus" in category or "antivirus" in name.lower():
-        accent = "deep navy base with a muted teal accent strip"
+    name_lower = name.lower()
+
+    # --- Determine the brand block ---
+    if "office" in name_lower or "office" in category or "word" in name_lower or "excel" in name_lower or "powerpoint" in name_lower or "outlook" in name_lower or "access" in name_lower:
+        brand_block = (
+            "In the upper-left corner show the official Microsoft logo (four "
+            "solid coloured squares — top-left red, top-right green, "
+            "bottom-left blue, bottom-right yellow — arranged in a 2x2 grid) "
+            "next to the dark-grey word \"Microsoft Office\" in a clean "
+            "Segoe UI style font."
+        )
+    elif "windows" in name_lower or "windows" in category:
+        brand_block = (
+            "In the upper-left corner show the official four-pane Microsoft "
+            "Windows logo (four blue squares arranged in a slightly-tilted "
+            "perspective) next to the dark-grey word \"Microsoft\" in a "
+            "clean Segoe UI style font."
+        )
+    elif "project" in name_lower or "project" in category:
+        brand_block = (
+            "In the upper-left corner show the official Microsoft logo "
+            "(four coloured squares) next to the dark-grey word "
+            "\"Microsoft Project\" in a clean Segoe UI style font."
+        )
+    elif "visio" in name_lower or "visio" in category:
+        brand_block = (
+            "In the upper-left corner show the official Microsoft logo "
+            "(four coloured squares) next to the dark-grey word "
+            "\"Microsoft Visio\" in a clean Segoe UI style font."
+        )
+    elif "bitdefender" in name_lower:
+        brand_block = (
+            "In the upper-left corner show a stylised crimson-red shield "
+            "icon with a small white wolf silhouette inside, next to the "
+            "dark-grey word \"Bitdefender\" in a modern sans-serif font."
+        )
+    elif "mcafee" in name_lower:
+        brand_block = (
+            "In the upper-left corner show a bold crimson-red rounded "
+            "shield with a small white check-mark inside, next to the "
+            "dark-grey word \"McAfee\" in a modern sans-serif font."
+        )
     else:
-        accent = "deep slate navy base with a muted cyan accent strip"
+        brand_block = (
+            "In the upper-left corner show a clean modern brand monogram in "
+            "deep navy next to the product brand name in a clean sans-serif "
+            "font."
+        )
 
-    plat_text = ""
-    if platform:
-        plat_text = f" The platform '{platform.title()}' is subtly indicated on a side ribbon."
+    # --- Determine the title (the BIG centre text — strip brand prefix so
+    #     the card emphasises the edition + year, like the real packaging) ---
+    title = name
+    for prefix in ("Microsoft Office ", "Microsoft "):
+        if title.startswith(prefix):
+            title = title[len(prefix):]
+            break
+    # Drop trailing "(Windows)" / "(Mac)" — the platform is shown elsewhere.
+    title = title.replace(" (Windows)", "").replace(" (PC)", "").replace(" (Mac)", "").strip()
+    # Keep it short for legibility — max ~26 chars.
+    if len(title) > 30:
+        title = title[:30].rstrip() + "…"
+
+    # --- Determine the app tiles (only Office/suite products show them) ---
+    tile_block = ""
+    if "office" in name_lower and any(a in apps_raw for a in ("word", "excel", "powerpoint", "outlook", "access")):
+        tiles = []
+        if "word" in apps_raw:
+            tiles.append('a large rounded-square tile with a soft blue gradient and a bold white "W" letter inside (Microsoft Word)')
+        if "excel" in apps_raw:
+            tiles.append('a large rounded-square tile with a soft green gradient and a bold white "X" letter inside (Microsoft Excel)')
+        if "powerpoint" in apps_raw:
+            tiles.append('a large rounded-square tile with a soft red/coral gradient and a bold white "P" letter inside (Microsoft PowerPoint)')
+        if "outlook" in apps_raw:
+            tiles.append('a large rounded-square tile with a soft blue gradient and a bold white "O" letter inside (Microsoft Outlook)')
+        if "access" in apps_raw:
+            tiles.append('a large rounded-square tile with a soft red gradient and a bold white "A" letter inside (Microsoft Access)')
+        if tiles:
+            tile_block = (
+                "Below the title, arrange the following rounded-square app "
+                "tiles in a single horizontal row, evenly spaced, with subtle "
+                "soft drop-shadows: " + "; ".join(tiles) + ". Each tile is "
+                "approximately 1/5 of the card width."
+            )
+    elif "word" in name_lower:
+        tile_block = ('Below the title, a single large rounded-square tile with a soft blue gradient and a bold white "W" letter inside (Microsoft Word), centred.')
+    elif "excel" in name_lower:
+        tile_block = ('Below the title, a single large rounded-square tile with a soft green gradient and a bold white "X" letter inside (Microsoft Excel), centred.')
+    elif "project" in name_lower:
+        tile_block = ('Below the title, a single large rounded-square tile with a soft emerald gradient and a bold white "P" letter inside (Microsoft Project), centred.')
+    elif "visio" in name_lower:
+        tile_block = ('Below the title, a single large rounded-square tile with a soft indigo gradient and a bold white "V" letter inside (Microsoft Visio), centred.')
+    elif "windows" in name_lower:
+        tile_block = ("Below the title, a single large rendered Microsoft Windows logo (the modern flat four-pane blue logo) centred in the card.")
+    elif "bitdefender" in name_lower:
+        tile_block = ("Below the title, a single large flat crimson-red shield with a small white wolf inside, centred in the card.")
+    elif "mcafee" in name_lower:
+        tile_block = ("Below the title, a single large crimson-red rounded shield with a small white check-mark inside, centred in the card.")
+
+    # --- Specs strip (bottom) ---
+    if "office" in name_lower:
+        if "professional plus" in name_lower or "home & business" in name_lower or "home and business" in name_lower:
+            users, devices = "1 User", "PC + Mobile"
+        elif "home & student" in name_lower or "home and student" in name_lower or "home 2024" in name_lower or "home 2021" in name_lower or "home 2019" in name_lower:
+            users, devices = "1 User", "Single Device"
+        else:
+            users, devices = "1 User", "Single Device"
+        specs_block = (
+            f"At the bottom of the card add a slim light-grey horizontal strip showing two small icons: "
+            f"first a tiny person-silhouette icon with the label \"{users}\" beneath it, "
+            f"then a tiny laptop-with-arrow icon with the label \"{devices}\" beside it."
+        )
+    elif "windows" in name_lower:
+        specs_block = (
+            'At the bottom of the card add a slim light-grey horizontal strip showing a tiny laptop icon with the label "1 PC" beside it and a tiny lock icon with the label "Lifetime" beside it.'
+        )
+    elif "bitdefender" in name_lower or "mcafee" in name_lower or "antivirus" in category:
+        # Try to extract devices from name e.g. "3 Mac"
+        devices = "1 Device"
+        m_dev = None
+        import re as _re
+        for pattern in (r'(\d+)\s*Mac', r'(\d+)\s*Device', r'(\d+)\s*PC'):
+            m_dev = _re.search(pattern, name, _re.IGNORECASE)
+            if m_dev:
+                devices = m_dev.group(0)
+                break
+        years = "1 Year"
+        m_yr = _re.search(r'(\d+)\s*Year', name, _re.IGNORECASE)
+        if m_yr:
+            years = m_yr.group(0)
+        specs_block = (
+            f'At the bottom of the card add a slim light-grey horizontal strip showing a tiny shield icon with the label "{devices}" beside it and a tiny calendar icon with the label "{years}" beside it.'
+        )
+    else:
+        specs_block = "At the bottom of the card add a slim light-grey horizontal strip with a small product-tag icon."
 
     return (
-        f"Create a clean, modern software product-box rendered as a 3D mock-up "
-        f"on a soft dark-graphite studio backdrop with a subtle teal-tinted "
-        f"rim light and a gentle floor reflection.  The box uses a {accent} "
-        f"and has a premium matte finish (NOT glossy, NOT bright, NOT yellow, "
-        f"NOT neon).  The colour palette must feel sophisticated and muted — "
-        f"avoid saturated primary colours; use deep, slightly desaturated "
-        f"tones that would pair well with a navy + cyan dark-mode website. "
-        f"Use the generic, non-trademarked title \"{name}\" in bold modern "
-        f"sans-serif on the box front in soft warm white.  Include simple "
-        f"abstract geometric icons that suggest productivity software (no "
-        f"real-brand logos, no Microsoft Windows flag, no Office swirl) — "
-        f"just clean modern shapes in white at 70-percent opacity.{plat_text}  "
-        f"Square 1:1 aspect, centred composition, cinematic studio lighting, "
-        f"no human figures, no text other than the product name."
+        "Create a clean, modern, FLAT product-marketing card on a pure white "
+        "background (NOT a 3D box, NOT a glossy mock-up — a flat 2D card "
+        "exactly like an official software-publisher's product tile on a "
+        "retail website).  Add a thin soft drop-shadow around the card edge.  "
+        f"{brand_block}  In the centre, in large bold deep-blue "
+        f"(#2B6CB0 / Microsoft-blue) text using a clean modern sans-serif "
+        f"font, write the product title: \"{title}\".  "
+        f"{tile_block}  {specs_block}  "
+        "The whole card MUST be square (1:1), perfectly centred, photographic "
+        "quality, sharp text rendering, NO neon colours, NO bright yellow "
+        "background, NO 3D box, NO hand-drawn elements, NO human figures, "
+        "NO additional decorative text other than what is described above. "
+        "The card should look like an official Microsoft/Bitdefender/McAfee "
+        "retail listing image."
     )
 
 
 async def generate_one(source_url: str, meta: dict, retries: int = 2) -> str | None:
-    """Generate ONE image, save to disk, return the internal URL."""
+    """Generate ONE image, save BOTH the raw PNG and a compressed WebP
+    (the WebP is what the storefront actually serves — keeps page loads
+    fast).  Returns the internal URL of the WebP."""
     slug = meta["slug"]
-    out_path = OUT_DIR / f"{slug}.png"
-    if out_path.exists() and out_path.stat().st_size > 5000:
+    out_png  = OUT_DIR / f"{slug}.png"
+    out_webp = OUT_DIR / f"{slug}.webp"
+    if out_webp.exists() and out_webp.stat().st_size > 5000:
         # Idempotent — skip already-generated files.
-        return f"{INTERNAL_PREFIX}/{slug}.png"
+        return f"{INTERNAL_PREFIX}/{slug}.webp"
 
     prompt = build_prompt(meta)
     for attempt in range(retries + 1):
@@ -102,7 +219,7 @@ async def generate_one(source_url: str, meta: dict, retries: int = 2) -> str | N
                 LlmChat(
                     api_key=API_KEY,
                     session_id=f"product-img-{slug}-{int(time.time())}",
-                    system_message="You generate clean product mock-up images.",
+                    system_message="You generate clean retail product card images.",
                 )
                 .with_model("gemini", "gemini-3.1-flash-image-preview")
                 .with_params(modalities=["image", "text"])
@@ -115,8 +232,21 @@ async def generate_one(source_url: str, meta: dict, retries: int = 2) -> str | N
                 await asyncio.sleep(1.0)
                 continue
             data = base64.b64decode(images[0]["data"])
-            out_path.write_bytes(data)
-            return f"{INTERNAL_PREFIX}/{slug}.png"
+            out_png.write_bytes(data)
+            # Convert PNG → resized WebP via ImageMagick + cwebp for fast serving.
+            import subprocess
+            tmp_png = OUT_DIR / f"{slug}.tmp.png"
+            subprocess.run(
+                ["convert", str(out_png), "-resize", "720x720>", "-strip", str(tmp_png)],
+                check=True, capture_output=True,
+            )
+            subprocess.run(
+                ["cwebp", "-q", "82", "-mt", "-metadata", "none",
+                 str(tmp_png), "-o", str(out_webp), "-quiet"],
+                check=True, capture_output=True,
+            )
+            tmp_png.unlink(missing_ok=True)
+            return f"{INTERNAL_PREFIX}/{slug}.webp"
         except Exception as e:
             print(f"  [{slug}] error attempt {attempt+1}: {e}")
             await asyncio.sleep(1.5)

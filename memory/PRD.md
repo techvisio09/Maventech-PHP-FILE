@@ -1114,3 +1114,51 @@ Specifically:
 - `/app/php-version/includes/functions.php` — `app_icons()` repointed to local assets
 - `/app/backend/.env` — added `EMERGENT_LLM_KEY`
 
+
+---
+
+## [Feb 2026] Iteration 21 — Real-retail-card product images, no auto-rotation, fast WebP delivery
+
+### What the user wanted (three parts)
+1. **Stop the product image auto-rotating** on the product page (drag-to-spin still OK).
+2. **Make every product image look like the real Microsoft / Bitdefender / McAfee retail card** — white background, official 4-square Microsoft logo, blue product name, official W/X/P/O/A app tiles, "1 User · Single Device" specs strip (matching the user's reference screenshot).
+3. **Load images fast** — current images take too long.
+
+### What changed
+
+**1) No auto-rotation**
+- `/app/php-version/assets/css/style.css`: removed `animation: pd-sway 9s ease-in-out infinite;` from `.pd-360-img` (the keyframes are kept but no longer applied by default).
+- `.pd-360-frame.tilting` and `.pd-360-frame.dragging` rules are untouched, so hover-tilt + drag-to-spin still respond manually.
+- Playwright check: `getComputedStyle(.pd-360-img).transform === 'none'` and is identical after a 1.5 s gap — confirms the box stays still until the user interacts.
+
+**2) Real-retail-card style (all 37 products regenerated)**
+- New prompt in `/app/scripts/generate_product_images.py` (`build_prompt()`):
+  - Pure white background, NOT a 3D box, NOT a glossy mock-up — a flat 2D retail-card image.
+  - Upper-left: official Microsoft 4-square logo (red / green / blue / yellow) + "Microsoft Office" word-mark for Office products. Custom brand blocks for Windows, Project, Visio, Bitdefender, McAfee.
+  - Centre: short bold product title in Microsoft-blue (`#2B6CB0`) — brand prefix stripped so the card reads "Home 2024" / "Professional Plus" / "Home & Business 2024" exactly like the retail packaging.
+  - Beneath: rounded-square app tiles built from each product's `apps` column (W blue, X green, P red, O blue, A red).
+  - Bottom: slim grey strip with the user/device specs ("1 User · Single Device", "1 User · PC + Mobile", "3 Mac · 2 Years", etc.) parsed from the product name.
+- Output saved as PNG **and** an optimised WebP at 720×720 (cwebp `-q 82`) — the storefront serves the WebP.
+- Ran the bulk regen — **37 / 37 succeeded**.
+
+**3) Fast image delivery**
+- Storefront image references (products / blog posts / past order emails / `database.sql`) switched from `.png` → `.webp`.
+- Per-image size: **~15.6 KB WebP** average (vs ~440 KB PNG = **96 % smaller**).  Total payload for all 37 images is now **660 KB**.
+- Product page `<img>` carries `fetchpriority="high"` + `decoding="async"` + `loading="eager"` (above-the-fold) — the box paints essentially instantly.
+- Grid thumbnails (`render_product_card()`) carry `loading="lazy"` + `decoding="async"` + explicit `width="320" height="320"` to avoid layout shift.
+
+### Files touched / added
+- `/app/php-version/product.php` — img attributes only; the 360 frame structure is preserved.
+- `/app/php-version/assets/css/style.css` — auto-sway removed, comment added.
+- `/app/php-version/includes/functions.php` — `render_product_card()` img tag hardened with `decoding="async"` + dimensions.
+- `/app/php-version/uploads/products/*.webp` (37 new) + `.png` raw + `.jpg` fallback retained for `_backup_original/`.
+- `/app/scripts/generate_product_images.py` — new prompt builder, WebP conversion baked into the generator.
+- `/app/php-version/database.sql` — 39 `.png` → `.webp` replacements (so reseeds keep WebP).
+- Database — 37 `products`, 142 `blog_posts`, 2 `email_outbox` rows pointed at `.webp`.
+
+### Verification
+- Preview product page (`microsoft-office-home-2024-pc`) renders the new style: Microsoft logo, "Home 2024" in blue, W/X/P tiles, "1 User · Single Device" strip — confirmed by AI image analysis ("closely resembles the visual branding of official Microsoft retail product cards").
+- Storefront shop grid shows the same consistent style across every card.
+- `curl -I /uploads/products/microsoft-office-home-2024-pc.webp` → 200, 15 028 bytes.
+- `grep -rn gosoftwarebuy /app/php-version` → still 0 (last iteration's fix unaffected).
+
