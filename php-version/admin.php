@@ -321,6 +321,89 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         echo json_encode(['ok'=>true, 'activation_url'=>$au, 'install_guide_url'=>$gu]); exit;
 
+    } elseif ($action === 'ai_description_one') {
+        // ---------------------------------------------------------------------
+        // Single-product AI description writer — POST {name, brand, category,
+        // apps, platform, year, license_type} returns a polished marketing
+        // description ready to drop into the textarea.  Uses gpt-4o; the
+        // copy is brand-neutral, conversion-focused, customer-friendly and
+        // formatted as 1 short hook line + a tight bullet list of benefits.
+        // ---------------------------------------------------------------------
+        header('Content-Type: application/json');
+        $name     = trim((string)($_POST['name']     ?? ''));
+        $brand    = trim((string)($_POST['brand']    ?? ''));
+        $category = trim((string)($_POST['category'] ?? ''));
+        $apps     = trim((string)($_POST['apps']     ?? ''));
+        $platform = trim((string)($_POST['platform'] ?? ''));
+        $year     = trim((string)($_POST['year']     ?? ''));
+        $license  = trim((string)($_POST['license_type'] ?? ''));
+        if ($name === '') { echo json_encode(['ok'=>false, 'error'=>'Enter a product name first.']); exit; }
+        if (!OPENAI_API_KEY) { echo json_encode(['ok'=>false, 'error'=>'AI key missing — configure EMERGENT_LLM_KEY']); exit; }
+
+        $facts = [];
+        if ($brand    !== '') $facts[] = "Brand: $brand";
+        if ($category !== '') $facts[] = "Category: $category";
+        if ($apps     !== '') $facts[] = "Includes apps: $apps";
+        if ($platform !== '') $facts[] = "Platform: $platform";
+        if ($year     !== '') $facts[] = "Year/Edition: $year";
+        if ($license  !== '') $facts[] = "Licence type: $license";
+
+        $prompt = "Write an elegant, conversion-focused storefront description for the following software product.\n\n"
+                . "Product: \"$name\"\n"
+                . ($facts ? implode("\n", $facts) . "\n" : '')
+                . "\nFormat (STRICT):\n"
+                . "Line 1: ONE short hook sentence (max 18 words) that explains WHO this is for + the headline benefit. No hype words like 'revolutionary'.\n"
+                . "Then a BLANK line.\n"
+                . "Then 4 bullet points (each starting with the character '•' followed by a space) describing the key apps, the licence model (one-time lifetime / annual), the activation experience (instant key, no subscription, etc.), and the support promise.\n"
+                . "Then a BLANK line.\n"
+                . "Then ONE closing reassurance sentence about delivery time + refund (max 18 words).\n\n"
+                . "STYLE RULES:\n"
+                . "- Premium, calm, trustworthy tone — like a sophisticated e-commerce listing.\n"
+                . "- Plain text only (no markdown, no HTML, no emoji, no asterisks).\n"
+                . "- Never invent features that aren't supported by the Product/Apps facts above.\n"
+                . "- Never mention prices or specific discounts.\n"
+                . "- 70-110 words total.\n\n"
+                . "Return STRICT JSON only.  Schema: {\"description\":\"…\"}";
+
+        $resp = '';
+        $httpCode = 0;
+        for ($attempt = 0; $attempt < 2; $attempt++) {
+            $ch = curl_init(rtrim(OPENAI_BASE_URL, '/') . '/chat/completions');
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST => true,
+                CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Authorization: Bearer ' . OPENAI_API_KEY],
+                CURLOPT_POSTFIELDS => json_encode([
+                    'model' => 'gpt-4o',
+                    'messages' => [
+                        ['role'=>'system','content'=>'You return strict JSON only. Never use markdown. Never wrap output in code fences.'],
+                        ['role'=>'user','content'=>$prompt],
+                    ],
+                    'temperature' => 0.6,
+                    'max_tokens' => 500,
+                    'response_format' => ['type' => 'json_object'],
+                ]),
+                CURLOPT_TIMEOUT => 45,
+            ]);
+            $resp = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            if ($resp && $httpCode >= 200 && $httpCode < 300) break;
+            usleep(800000);
+        }
+        if (!$resp || $httpCode < 200 || $httpCode >= 300) {
+            echo json_encode(['ok'=>false, 'error'=>'AI HTTP '.$httpCode.' — please retry in a few seconds.']); exit;
+        }
+        $d = json_decode($resp, true);
+        $text = $d['choices'][0]['message']['content'] ?? '';
+        $text = trim(preg_replace('/^```(?:json)?|```$/m', '', $text));
+        $parsed = json_decode($text, true);
+        $description = trim((string)($parsed['description'] ?? ''));
+        if ($description === '') {
+            echo json_encode(['ok'=>false, 'error'=>'AI returned an empty description — please retry.']); exit;
+        }
+        echo json_encode(['ok'=>true, 'description'=>$description]); exit;
+
     } elseif ($action === 'old_update_product') {
 
     } elseif ($action === 'update_order') {
@@ -5245,7 +5328,19 @@ elseif ($tab === 'products'):
                       Click <em>Regenerate image with AI</em> to produce a fresh retail-card image based on the product name, brand and apps — saved to <code>/uploads/products/&lt;slug&gt;.webp</code>.
                     </small>
                   </div>
-                  <div class="col-12"><label class="form-label small mb-0">Description</label><textarea class="form-control form-control-sm" id="f_desc" name="description" rows="3"><?= esc($editing['description'] ?? '') ?></textarea></div>
+                  <div class="col-12">
+                    <label class="form-label small mb-0 d-flex align-items-center justify-content-between">
+                      <span>Description</span>
+                      <button type="button" class="btn btn-sm btn-soft-purple d-inline-flex align-items-center gap-1"
+                              id="aiDescBtn" data-testid="ai-desc-btn"
+                              title="Generate an elegant marketing description with AI"
+                              style="font-size:11px;padding:2px 10px;border-radius:999px;">
+                        <i class="bi bi-stars"></i>
+                        <span id="aiDescLabel">Generate with AI</span>
+                      </button>
+                    </label>
+                    <textarea class="form-control form-control-sm" id="f_desc" name="description" rows="5" placeholder="Click ✦ Generate with AI to write an elegant description automatically based on the product name, brand, apps and licence type."><?= esc($editing['description'] ?? '') ?></textarea>
+                  </div>
                 </div>
 
                 <h6 class="fw-bold mb-2"><i class="bi bi-tag me-1"></i>Pricing &amp; Discount</h6>
@@ -5550,7 +5645,60 @@ elseif ($tab === 'products'):
   })();
 
   // ============================================================
-  // Category chip-picker: click a chip to select; click "Add
+  // "Generate with AI" — description writer.
+  // Uses the typed product metadata to ask gpt-4o for an elegant
+  // 70-110-word marketing description, then drops it into the
+  // <textarea name="description">.  Confirms before overwriting.
+  // ============================================================
+  (function () {
+    const btn = document.getElementById('aiDescBtn');
+    if (!btn) return;
+    const label = document.getElementById('aiDescLabel');
+    const ta    = document.getElementById('f_desc');
+    function gN(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; }
+    function gQ(name) {
+      const el = document.querySelector('form [name="' + name + '"]');
+      return el ? el.value.trim() : '';
+    }
+    btn.addEventListener('click', async function () {
+      const nameVal = gN('f_name');
+      if (!nameVal) {
+        label.textContent = 'Enter a name first';
+        setTimeout(() => { label.textContent = 'Generate with AI'; }, 2400);
+        return;
+      }
+      // Confirm if the textarea already has content — don't silently nuke it.
+      if (ta && ta.value.trim() !== '' && !confirm('Replace the existing description with the AI-generated version?')) {
+        return;
+      }
+      const original = label.textContent;
+      btn.disabled = true;
+      label.textContent = 'Writing…';
+      try {
+        const fd = new FormData();
+        fd.append('action',       'ai_description_one');
+        fd.append('name',         nameVal);
+        fd.append('brand',        gQ('brand'));
+        fd.append('category',     gN('f_cat'));
+        fd.append('apps',         gQ('apps'));
+        fd.append('platform',     gN('f_platform'));
+        fd.append('year',         gN('f_year'));
+        fd.append('license_type', gN('f_license_type'));
+        const res = await fetch('admin.php?tab=products', { method: 'POST', body: fd, credentials: 'same-origin' });
+        const json = await res.json().catch(() => null);
+        if (!res.ok || !json || !json.ok) {
+          throw new Error((json && json.error) || ('HTTP ' + res.status));
+        }
+        if (ta) ta.value = json.description;
+        label.textContent = 'Written ✓';
+        setTimeout(() => { label.textContent = original; btn.disabled = false; }, 2400);
+      } catch (e) {
+        label.textContent = 'Failed — retry';
+        btn.disabled = false;
+        setTimeout(() => { label.textContent = original; }, 3000);
+      }
+    });
+  })();
   // Category" to reveal a small input where typing + Enter
   // creates and selects a brand-new category instantly.  The
   // hidden #f_cat is what actually gets POSTed on save.

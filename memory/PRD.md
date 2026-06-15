@@ -1262,3 +1262,28 @@ Specifically:
 - All three live-server cURL tests above passed (URLs returned point to vendor-official domains).
 - Live Admin screenshot confirms the chip-picker renders all 11 existing categories with `office-2024-pc` highlighted as the active one for the Microsoft Office Home 2024 (PC) product.
 
+
+---
+
+## [Feb 2026] Iteration 25 — AI-generated product Description
+
+### What the user asked
+"Make the description of product automatically according to product, that should look elegant — by using AI."
+
+### What changed
+- New POST action `ai_description_one` in `admin.php` — uses `gpt-4o` via the Emergent universal key to compose a polished 70–110-word marketing description in the strict format:
+  - **Line 1**: a short ≤18-word hook line (who it's for + headline benefit).
+  - **Bullet list**: 4 bullets covering apps, licence model, activation experience, support promise.
+  - **Closing line**: ≤18 words on delivery + refund peace-of-mind.
+  - Plain text only — no markdown / no emoji / no asterisks / no invented features / no prices.  Single transient-error retry.
+- New "✦ **Generate with AI**" pill button next to the Description label in the Edit Product modal (matching the existing AI image + AI URL buttons).  Reads the typed Name / Brand / Category / Apps / Platform / Year / Licence-type, POSTs to `ai_description_one`, drops the returned text into the textarea.  Asks for confirmation before overwriting an existing description.
+- Description textarea bumped from `rows="3"` to `rows="5"` so the multi-line generated copy is fully visible, plus a helpful placeholder explaining the AI workflow.
+
+### Files touched
+- `/app/php-version/admin.php` — `ai_description_one` POST action (~70 lines), button HTML on the Description row, JS IIFE for the click handler (~55 lines).
+
+### Verification
+- Live cURL: `POST action=ai_description_one name="Microsoft Office Home 2024 (PC)" brand=Microsoft …` returned `{"ok":true,"description":"Ideal for home users seeking powerful tools for productivity and creativity.\n\n• Includes Word, Excel, and PowerPoint…\n• One-time lifetime license…\n• Instant activation with a key…\n• Backed by Microsoft's comprehensive support…\n\nFast delivery with a straightforward refund process for peace of mind."}` — clean, on-brand copy that matches the requested format.
+- Playwright clicked the button on the live Admin page: label transitioned `Generate with AI → Writing… → Written ✓`, textarea populated with the AI copy.
+- Confirms overwrite-protection: if the textarea already has content, a browser `confirm()` dialog asks before replacing.
+
