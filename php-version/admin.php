@@ -950,38 +950,141 @@ if ($tab === 'ai-blogger') {
 
     // ----- Save API keys from the simplified admin panel -----
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['save_ai_keys'])) {
-        $newLlmKey = trim($_POST['llm_api_key'] ?? '');
-        $newGscKey = trim($_POST['google_search_console'] ?? '');
-        $newBingKey = trim($_POST['bing_webmaster'] ?? '');
-        $updated = [];
-        if ($newLlmKey !== '') {
-            // Write to the .env file so it persists across restarts
-            $envPath = __DIR__ . '/.env';
-            $envContent = '';
-            if (is_file($envPath)) {
-                $envContent = file_get_contents($envPath);
-                // Remove old EMERGENT_LLM_KEY line
-                $envContent = preg_replace('/^EMERGENT_LLM_KEY=.*$/m', '', $envContent);
-                $envContent = trim($envContent);
+        // ============================================================
+        // FORMAT VALIDATORS
+        // ------------------------------------------------------------
+        // We accept a TINY normalisation step (strip obvious paste-noise
+        // like `google-site-verification: …` prefixes or surrounding quotes)
+        // and then enforce a minimum format so garbage strings can't slip
+        // through and end up displayed as "✓ green" on the SEO Health Check.
+        // ============================================================
+        $normGsc = function (string $s): string {
+            $s = trim($s);
+            // Strip a leading meta-tag-style prefix the user might copy in
+            // wholesale (e.g. `google-site-verification: ABC…` or
+            // `<meta name="…" content="ABC…">`).
+            $s = preg_replace('/^google-site-verification\s*:\s*/i', '', $s) ?? $s;
+            $s = preg_replace('/^content\s*=\s*["\']?/i', '', $s) ?? $s;
+            $s = trim($s, " \t\n\r\0\x0B\"'<>");
+            return $s;
+        };
+        $normBing = function (string $s): string {
+            $s = trim($s);
+            $s = preg_replace('/^msvalidate\.01\s*:\s*/i', '', $s) ?? $s;
+            $s = preg_replace('/^content\s*=\s*["\']?/i', '', $s) ?? $s;
+            $s = trim($s, " \t\n\r\0\x0B\"'<>");
+            return $s;
+        };
+        $validateAi  = function (string $s): bool {
+            // Emergent Universal Key OR an OpenAI key (incl. project / service-account).
+            // Length floor of 24 chars knocks out "abc" / "test123" style typos
+            // while leaving room for short legacy test keys.
+            if ($s === '') return false;
+            if (preg_match('/^sk-emergent-[a-zA-Z0-9_\-]{8,}$/', $s)) return true;
+            if (preg_match('/^sk-(?:proj-|svcacct-)?[a-zA-Z0-9_\-]{20,}$/', $s)) return true;
+            return false;
+        };
+        $validateGsc = function (string $s): bool {
+            // Google's verification tokens are 43 chars of base64url. We
+            // accept 30–96 chars of the same alphabet for forward-compat.
+            return (bool)preg_match('/^[A-Za-z0-9_\-]{30,96}$/', $s);
+        };
+        $validateBing = function (string $s): bool {
+            // Bing/MSValidate tokens are 32 hex chars (Webmaster Tools) but
+            // newer accounts emit 16–48-char alnum tokens too. Accept either.
+            if (preg_match('/^[A-Fa-f0-9]{16,64}$/', $s)) return true;
+            if (preg_match('/^[A-Za-z0-9]{16,64}$/', $s)) return true;
+            return false;
+        };
+
+        // The Edit panels for each field use a separate `_edit` field name
+        // that's only present in the POST when the admin actively opened
+        // the editor (the JS removes the `disabled` attribute on Edit click).
+        // This lets us distinguish "didn't touch it" from "deliberately
+        // cleared it to blank".  See JS in the form section below.
+        $aiEdit    = isset($_POST['llm_api_key_edit'])           ? trim((string)$_POST['llm_api_key_edit'])           : null;
+        $gscEdit   = isset($_POST['google_search_console_edit']) ? trim((string)$_POST['google_search_console_edit']) : null;
+        $bingEdit  = isset($_POST['bing_webmaster_edit'])        ? trim((string)$_POST['bing_webmaster_edit'])        : null;
+        // First-time inputs (when no key was saved yet) use the un-suffixed
+        // name and are always present in the POST.
+        $aiNew    = trim((string)($_POST['llm_api_key']           ?? ''));
+        $gscNew   = trim((string)($_POST['google_search_console'] ?? ''));
+        $bingNew  = trim((string)($_POST['bing_webmaster']        ?? ''));
+
+        $updated   = [];
+        $errors    = [];
+        $cleared   = [];
+
+        // ------------- AI Key -------------
+        $aiTarget = ($aiEdit !== null) ? $aiEdit : $aiNew;
+        $aiActedOn = ($aiEdit !== null) || ($aiNew !== '');
+        if ($aiActedOn) {
+            if ($aiTarget === '') {
+                // Deliberate clear via the Edit panel
+                $envPath = __DIR__ . '/.env';
+                if (is_file($envPath)) {
+                    $envContent = preg_replace('/^EMERGENT_LLM_KEY=.*$/m', '', (string)file_get_contents($envPath));
+                    file_put_contents($envPath, trim((string)$envContent) . "\n");
+                }
+                putenv('EMERGENT_LLM_KEY=');
+                setting_set('ai_blogger_llm_key', '');
+                $cleared[] = 'AI Key';
+            } elseif (!$validateAi($aiTarget)) {
+                $errors[] = 'AI Key looks invalid — paste a key that starts with "sk-emergent-" (Emergent Universal) or "sk-" / "sk-proj-" / "sk-svcacct-" (OpenAI).';
+            } else {
+                $envPath = __DIR__ . '/.env';
+                $envContent = '';
+                if (is_file($envPath)) {
+                    $envContent = (string)file_get_contents($envPath);
+                    $envContent = preg_replace('/^EMERGENT_LLM_KEY=.*$/m', '', $envContent);
+                    $envContent = trim((string)$envContent);
+                }
+                $envContent .= "\nEMERGENT_LLM_KEY=" . $aiTarget . "\n";
+                file_put_contents($envPath, $envContent);
+                putenv('EMERGENT_LLM_KEY=' . $aiTarget);
+                setting_set('ai_blogger_llm_key', $aiTarget);
+                $updated[] = 'AI Key';
             }
-            $envContent .= "\nEMERGENT_LLM_KEY=" . $newLlmKey . "\n";
-            file_put_contents($envPath, $envContent);
-            putenv('EMERGENT_LLM_KEY=' . $newLlmKey);
-            // Also save in settings for display
-            setting_set('ai_blogger_llm_key', $newLlmKey);
-            $updated[] = 'AI Key';
         }
-        if ($newGscKey !== '') {
-            setting_set('google_site_verification_token', $newGscKey);
-            $updated[] = 'Google Search Console';
+
+        // ------------- Google Search Console -------------
+        $gscTarget = ($gscEdit !== null) ? $normGsc($gscEdit) : $normGsc($gscNew);
+        $gscActedOn = ($gscEdit !== null) || ($gscNew !== '');
+        if ($gscActedOn) {
+            if ($gscTarget === '') {
+                setting_set('google_site_verification_token', '');
+                $cleared[] = 'Google Search Console';
+            } elseif (!$validateGsc($gscTarget)) {
+                $errors[] = 'Google Search Console token looks invalid — it should be a 30-96 character string of letters, digits, hyphens and underscores.';
+            } else {
+                setting_set('google_site_verification_token', $gscTarget);
+                $updated[] = 'Google Search Console';
+            }
         }
-        if ($newBingKey !== '') {
-            setting_set('bing_site_verification_token', $newBingKey);
-            $updated[] = 'Bing Webmaster';
+
+        // ------------- Bing Webmaster -------------
+        $bingTarget = ($bingEdit !== null) ? $normBing($bingEdit) : $normBing($bingNew);
+        $bingActedOn = ($bingEdit !== null) || ($bingNew !== '');
+        if ($bingActedOn) {
+            if ($bingTarget === '') {
+                setting_set('bing_site_verification_token', '');
+                $cleared[] = 'Bing Webmaster';
+            } elseif (!$validateBing($bingTarget)) {
+                $errors[] = 'Bing Webmaster token looks invalid — it should be a 16-64 character string of letters/digits (or 32 hex chars from Webmaster Tools → Site → Authentication Code).';
+            } else {
+                setting_set('bing_site_verification_token', $bingTarget);
+                $updated[] = 'Bing Webmaster';
+            }
         }
-        $_SESSION['seo_bot_flash'] = $updated
-            ? 'Updated: ' . implode(', ', $updated) . '. Changes take effect immediately.'
-            : 'No changes made.';
+
+        // ------------- Build the flash message -------------
+        $msgParts = [];
+        if ($updated) $msgParts[] = '✓ Updated: ' . implode(', ', $updated);
+        if ($cleared) $msgParts[] = '✓ Cleared: ' . implode(', ', $cleared);
+        if ($errors)  $msgParts[] = '⚠ ' . implode(' ', $errors);
+        if (!$updated && !$cleared && !$errors) $msgParts[] = 'No changes made.';
+        $_SESSION['seo_bot_flash']      = implode(' · ', $msgParts);
+        $_SESSION['seo_bot_flash_kind'] = $errors ? 'danger' : 'success';
         header('Location: admin.php?tab=ai-blogger');
         exit;
     }
@@ -994,11 +1097,27 @@ if ($tab === 'ai-blogger') {
         $prevAutoWeekly = (string)setting_get('auto_sitemap_weekly', '0');
         setting_set('auto_sitemap_weekly', $autoWeekly);
         $updated = [];
+        $errors  = [];
         if ($autoWeekly !== $prevAutoWeekly) {
             $updated[] = $autoWeekly === '1'
                 ? 'Auto-resubmit weekly enabled'
                 : 'Auto-resubmit weekly disabled';
         }
+
+        // Per-field validators — pasted garbage shouldn't be storable.
+        // (Pinterest + Yandex tokens follow Google-style base64-ish format;
+        // Google Merchant ID is purely numeric.)
+        $vMap = [
+            'google_site_verification_token' => function ($s) { return (bool)preg_match('/^[A-Za-z0-9_\-]{30,96}$/', $s); },
+            'bing_site_verification_token'   => function ($s) {
+                return (bool)preg_match('/^[A-Fa-f0-9]{16,64}$/', $s)
+                    || (bool)preg_match('/^[A-Za-z0-9]{16,64}$/', $s);
+            },
+            'yandex_site_verification_token'    => function ($s) { return (bool)preg_match('/^[A-Fa-f0-9]{12,64}$/', $s) || (bool)preg_match('/^[A-Za-z0-9_\-]{12,96}$/', $s); },
+            'pinterest_site_verification_token' => function ($s) { return (bool)preg_match('/^[A-Za-z0-9_\-]{12,96}$/', $s); },
+            'google_merchant_id'                => function ($s) { return (bool)preg_match('/^[0-9]{6,20}$/', $s); },
+            'site_domain_url'                   => function ($s) { return (bool)preg_match('~^https?://[A-Za-z0-9.\-]+(?::\d+)?(?:/.*)?$~i', $s); },
+        ];
         $fields = [
             'google_site_verification_token'    => 'Google Search Console',
             'bing_site_verification_token'      => 'Bing Webmaster',
@@ -1010,18 +1129,35 @@ if ($tab === 'ai-blogger') {
         $domainChanged = false;
         $oldDomain     = setting_get('site_domain_url', '');
         foreach ($fields as $key => $label) {
-            $val = trim($_POST[$key] ?? '');
-            if ($val !== '') {
+            // We treat the un-suffixed field name as the canonical payload —
+            // this form historically renders just one input per field, so
+            // missing-vs-empty isn't ambiguous here.  An explicit empty save
+            // clears the value (mirrors the new behaviour above).
+            if (!array_key_exists($key, $_POST)) continue;
+            $val = trim((string)$_POST[$key]);
+
+            if ($val === '') {
+                // Deliberate clear.
+                setting_set($key, '');
+                $updated[] = $label . ' (cleared)';
+                continue;
+            }
+
+            if ($key === 'site_domain_url') {
                 // Normalise the domain URL: ensure it starts with https://
                 // and has no trailing slash so IndexNow keyLocation is clean.
-                if ($key === 'site_domain_url') {
-                    if (!preg_match('~^https?://~i', $val)) $val = 'https://' . ltrim($val, '/');
-                    $val = rtrim($val, '/');
-                    if ($val !== rtrim($oldDomain, '/')) $domainChanged = true;
-                }
-                setting_set($key, $val);
-                $updated[] = $label;
+                if (!preg_match('~^https?://~i', $val)) $val = 'https://' . ltrim($val, '/');
+                $val = rtrim($val, '/');
+                if ($val !== rtrim($oldDomain, '/')) $domainChanged = true;
             }
+
+            // Validate before persisting.  Reject obvious garbage.
+            if (isset($vMap[$key]) && !$vMap[$key]($val)) {
+                $errors[] = $label . ' value looks invalid — not saved.';
+                continue;
+            }
+            setting_set($key, $val);
+            $updated[] = $label;
         }
 
         // When the user uploads / updates their production domain, automatically
@@ -1061,8 +1197,11 @@ if ($tab === 'ai-blogger') {
 
         $_SESSION['seo_bot_flash'] = $updated
             ? '✓ Saved: ' . implode(', ', $updated) . '. Your website is now more visible to search engines.' . $autoSubmitMsg
-            : 'No changes — fill in at least one field and try again.';
-        $_SESSION['seo_bot_flash_kind'] = $updated ? 'success' : 'info';
+              . ($errors ? ' · ⚠ ' . implode(' ', $errors) : '')
+            : ($errors
+                ? '⚠ ' . implode(' ', $errors)
+                : 'No changes — fill in at least one field and try again.');
+        $_SESSION['seo_bot_flash_kind'] = $errors ? 'danger' : ($updated ? 'success' : 'info');
         header('Location: admin.php?tab=ai-blogger');
         exit;
     }
@@ -2913,6 +3052,13 @@ elseif ($tab === 'ai-blogger'):
     $hasLlmKey     = ($currentLlmKey !== '' || $savedLlmKey !== '');
     $effectiveKey  = $currentLlmKey ?: $savedLlmKey;
     $maskedKey      = $hasLlmKey ? (substr($effectiveKey, 0, 12) . '••••••••') : '';
+    // Lightweight format validators — same rules as the save handler.
+    // The card uses these to surface a yellow "Invalid format" warning
+    // even when a string is stored (so the green pill doesn't lie).
+    $isValidAiKey  = (bool)(
+        preg_match('/^sk-emergent-[a-zA-Z0-9_\-]{8,}$/', $effectiveKey)
+     || preg_match('/^sk-(?:proj-|svcacct-)?[a-zA-Z0-9_\-]{20,}$/', $effectiveKey)
+    );
     // Auto-detect which kind of key the admin pasted — surfaced in the UI so
     // there's zero ambiguity about what's actually being used at runtime.
     //   · sk-emergent-*  → Emergent Universal Key (routes through the proxy,
@@ -2940,6 +3086,11 @@ elseif ($tab === 'ai-blogger'):
     }
     $gscToken      = setting_get('google_site_verification_token', defined('GOOGLE_SITE_VERIFICATION') ? GOOGLE_SITE_VERIFICATION : '');
     $bingToken     = setting_get('bing_site_verification_token', defined('BING_SITE_VERIFICATION') ? BING_SITE_VERIFICATION : '');
+    $isValidGsc    = (bool)preg_match('/^[A-Za-z0-9_\-]{30,96}$/', (string)$gscToken);
+    $isValidBing   = (bool)(
+        preg_match('/^[A-Fa-f0-9]{16,64}$/', (string)$bingToken)
+     || preg_match('/^[A-Za-z0-9]{16,64}$/', (string)$bingToken)
+    );
   ?>
   <!-- ====== SIMPLIFIED AI AUTO-BLOGGER PANEL ====== -->
   <div class="mb-3">
@@ -3245,13 +3396,21 @@ elseif ($tab === 'ai-blogger'):
                 <i class="bi bi-info-circle-fill"></i>
               </button>
             </label>
-            <?php if ($hasLlmKey): ?>
-              <div id="ai-key-display" class="ai-key-uploaded" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;">
+            <?php if ($hasLlmKey):
+              $aiBg     = $isValidAiKey ? '#f0fdf4' : '#fffbeb';
+              $aiBorder = $isValidAiKey ? '#bbf7d0' : '#fde68a';
+              $aiIcon   = $isValidAiKey ? 'bi-check-circle-fill text-success' : 'bi-exclamation-triangle-fill text-warning';
+              $aiTitle  = $isValidAiKey ? 'Key Uploaded' : 'Key Invalid';
+              $aiColor  = $isValidAiKey ? '#065f46' : '#92400e';
+            ?>
+              <div id="ai-key-display" class="ai-key-uploaded" style="background:<?= $aiBg ?>;border:1px solid <?= $aiBorder ?>;border-radius:8px;padding:10px 12px;">
                 <div class="d-flex align-items-center justify-content-between">
                   <div>
-                    <i class="bi bi-check-circle-fill text-success me-1"></i>
-                    <span class="fw-semibold" style="font-size:13px;color:#065f46;">Key Uploaded</span>
-                    <?php if ($llmKeyKindLabel !== ''): ?>
+                    <i class="bi <?= $aiIcon ?> me-1"></i>
+                    <span class="fw-semibold" style="font-size:13px;color:<?= $aiColor ?>;"><?= $aiTitle ?></span>
+                    <?php if (!$isValidAiKey): ?>
+                      <span class="badge ms-1" style="background:#f59e0b;color:#fff;font-size:9px;letter-spacing:.5px;padding:2px 7px;">INVALID FORMAT</span>
+                    <?php elseif ($llmKeyKindLabel !== ''): ?>
                       <span class="badge ms-1" data-testid="ai-key-kind-badge"
                             style="background:<?= esc($llmKeyKindBg) ?>;color:#fff;font-size:9.5px;letter-spacing:.6px;padding:2px 7px;vertical-align:middle;">
                         <?= esc(strtoupper($llmKeyKindLabel)) ?>
@@ -3259,15 +3418,20 @@ elseif ($tab === 'ai-blogger'):
                     <?php endif; ?>
                     <div style="font-size:11px;font-family:monospace;margin-top:2px;opacity:.7;"><?= esc($maskedKey) ?></div>
                   </div>
-                  <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" onclick="document.getElementById('ai-key-display').style.display='none';document.getElementById('ai-key-edit').style.display='block';"><i class="bi bi-pencil me-1"></i>Change</button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" data-testid="ai-key-change-btn" onclick="mvOpenKeyEditor('ai-key')"><i class="bi bi-pencil me-1"></i>Change</button>
                 </div>
               </div>
               <div id="ai-key-edit" style="display:none;">
                 <div class="input-group mt-1">
-                  <input type="password" name="llm_api_key" class="form-control" placeholder="sk-emergent-… or sk-… (OpenAI)" style="font-size:13px;" data-testid="ai-key-input">
+                  <!-- name="*_edit" + disabled = only submits when admin opens the editor.
+                       Lets the save handler distinguish "untouched" from "deliberately cleared". -->
+                  <input type="password" name="llm_api_key_edit" class="form-control" placeholder="sk-emergent-… or sk-… (leave blank to clear)" style="font-size:13px;" data-testid="ai-key-input" disabled>
                   <button type="button" class="btn btn-outline-secondary btn-sm" onclick="var i=this.previousElementSibling;i.type=i.type==='password'?'text':'password';"><i class="bi bi-eye"></i></button>
                 </div>
-                <button type="button" class="btn btn-sm btn-link text-secondary p-0 mt-1" onclick="document.getElementById('ai-key-edit').style.display='none';document.getElementById('ai-key-display').style.display='block';">Cancel</button>
+                <div class="d-flex align-items-center justify-content-between mt-1">
+                  <button type="button" class="btn btn-sm btn-link text-secondary p-0" onclick="mvCancelKeyEditor('ai-key')">Cancel</button>
+                  <span class="small text-muted" style="font-size:10.5px;"><i class="bi bi-info-circle me-1"></i>Save with the box empty to remove the key.</span>
+                </div>
               </div>
             <?php else: ?>
               <div class="input-group">
@@ -3284,20 +3448,35 @@ elseif ($tab === 'ai-blogger'):
           <!-- Google Search Console -->
           <div class="col-md-4">
             <label class="form-label small fw-semibold">Google Search Console</label>
-            <?php if (($gscToken ?? '') !== ''): ?>
-              <div id="gsc-display" class="ai-key-uploaded" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;" data-testid="gsc-uploaded-card">
+            <?php if (($gscToken ?? '') !== ''):
+              // Switch the card to amber+warning copy when the stored value
+              // doesn't pass the format validator.  Same panel, different
+              // signal — admin sees the issue without leaving the screen.
+              $gscBg     = $isValidGsc ? '#f0fdf4' : '#fffbeb';
+              $gscBorder = $isValidGsc ? '#bbf7d0' : '#fde68a';
+              $gscIcon   = $isValidGsc ? 'bi-check-circle-fill text-success' : 'bi-exclamation-triangle-fill text-warning';
+              $gscTitle  = $isValidGsc ? 'Token Uploaded' : 'Token Invalid';
+              $gscColor  = $isValidGsc ? '#065f46' : '#92400e';
+            ?>
+              <div id="gsc-display" class="ai-key-uploaded" style="background:<?= $gscBg ?>;border:1px solid <?= $gscBorder ?>;border-radius:8px;padding:10px 12px;" data-testid="gsc-uploaded-card">
                 <div class="d-flex align-items-center justify-content-between">
                   <div>
-                    <i class="bi bi-check-circle-fill text-success me-1"></i>
-                    <span class="fw-semibold" style="font-size:13px;color:#065f46;">Token Uploaded</span>
+                    <i class="bi <?= $gscIcon ?> me-1"></i>
+                    <span class="fw-semibold" style="font-size:13px;color:<?= $gscColor ?>;"><?= $gscTitle ?></span>
+                    <?php if (!$isValidGsc): ?>
+                      <span class="badge ms-1" style="background:#f59e0b;color:#fff;font-size:9px;letter-spacing:.5px;padding:2px 7px;">INVALID FORMAT</span>
+                    <?php endif; ?>
                     <div style="font-size:11px;font-family:monospace;margin-top:2px;opacity:.7;" data-testid="gsc-masked"><?= esc(substr($gscToken, 0, 6) . '••••••' . substr($gscToken, -2)) ?></div>
                   </div>
-                  <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" data-testid="gsc-change-btn" onclick="document.getElementById('gsc-display').style.display='none';document.getElementById('gsc-edit').style.display='block';"><i class="bi bi-pencil me-1"></i>Change</button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" data-testid="gsc-change-btn" onclick="mvOpenKeyEditor('gsc')"><i class="bi bi-pencil me-1"></i>Change</button>
                 </div>
               </div>
               <div id="gsc-edit" style="display:none;">
-                <input type="text" name="google_search_console" class="form-control mt-1" placeholder="Paste new token" style="font-size:13px;" data-testid="gsc-edit-input">
-                <button type="button" class="btn btn-sm btn-link text-secondary p-0 mt-1" onclick="document.getElementById('gsc-edit').style.display='none';document.getElementById('gsc-display').style.display='block';">Cancel</button>
+                <input type="text" name="google_search_console_edit" class="form-control mt-1" placeholder="Paste new token (or leave blank to clear)" style="font-size:13px;" data-testid="gsc-edit-input" disabled>
+                <div class="d-flex align-items-center justify-content-between mt-1">
+                  <button type="button" class="btn btn-sm btn-link text-secondary p-0" onclick="mvCancelKeyEditor('gsc')">Cancel</button>
+                  <span class="small text-muted" style="font-size:10.5px;"><i class="bi bi-info-circle me-1"></i>Empty = remove the token.</span>
+                </div>
               </div>
             <?php else: ?>
               <input type="text" name="google_search_console" class="form-control" placeholder="Paste verification token" style="font-size:13px;" data-testid="gsc-input">
@@ -3307,20 +3486,32 @@ elseif ($tab === 'ai-blogger'):
           <!-- Bing Webmaster -->
           <div class="col-md-4">
             <label class="form-label small fw-semibold">Bing Webmaster</label>
-            <?php if (($bingToken ?? '') !== ''): ?>
-              <div id="bing-display" class="ai-key-uploaded" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;" data-testid="bing-uploaded-card">
+            <?php if (($bingToken ?? '') !== ''):
+              $bingBg     = $isValidBing ? '#f0fdf4' : '#fffbeb';
+              $bingBorder = $isValidBing ? '#bbf7d0' : '#fde68a';
+              $bingIcon   = $isValidBing ? 'bi-check-circle-fill text-success' : 'bi-exclamation-triangle-fill text-warning';
+              $bingTitle  = $isValidBing ? 'Token Uploaded' : 'Token Invalid';
+              $bingColor  = $isValidBing ? '#065f46' : '#92400e';
+            ?>
+              <div id="bing-display" class="ai-key-uploaded" style="background:<?= $bingBg ?>;border:1px solid <?= $bingBorder ?>;border-radius:8px;padding:10px 12px;" data-testid="bing-uploaded-card">
                 <div class="d-flex align-items-center justify-content-between">
                   <div>
-                    <i class="bi bi-check-circle-fill text-success me-1"></i>
-                    <span class="fw-semibold" style="font-size:13px;color:#065f46;">Token Uploaded</span>
+                    <i class="bi <?= $bingIcon ?> me-1"></i>
+                    <span class="fw-semibold" style="font-size:13px;color:<?= $bingColor ?>;"><?= $bingTitle ?></span>
+                    <?php if (!$isValidBing): ?>
+                      <span class="badge ms-1" style="background:#f59e0b;color:#fff;font-size:9px;letter-spacing:.5px;padding:2px 7px;">INVALID FORMAT</span>
+                    <?php endif; ?>
                     <div style="font-size:11px;font-family:monospace;margin-top:2px;opacity:.7;" data-testid="bing-masked"><?= esc(substr($bingToken, 0, 6) . '••••••' . substr($bingToken, -2)) ?></div>
                   </div>
-                  <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" data-testid="bing-change-btn" onclick="document.getElementById('bing-display').style.display='none';document.getElementById('bing-edit').style.display='block';"><i class="bi bi-pencil me-1"></i>Change</button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" data-testid="bing-change-btn" onclick="mvOpenKeyEditor('bing')"><i class="bi bi-pencil me-1"></i>Change</button>
                 </div>
               </div>
               <div id="bing-edit" style="display:none;">
-                <input type="text" name="bing_webmaster" class="form-control mt-1" placeholder="Paste new token" style="font-size:13px;" data-testid="bing-edit-input">
-                <button type="button" class="btn btn-sm btn-link text-secondary p-0 mt-1" onclick="document.getElementById('bing-edit').style.display='none';document.getElementById('bing-display').style.display='block';">Cancel</button>
+                <input type="text" name="bing_webmaster_edit" class="form-control mt-1" placeholder="Paste new token (or leave blank to clear)" style="font-size:13px;" data-testid="bing-edit-input" disabled>
+                <div class="d-flex align-items-center justify-content-between mt-1">
+                  <button type="button" class="btn btn-sm btn-link text-secondary p-0" onclick="mvCancelKeyEditor('bing')">Cancel</button>
+                  <span class="small text-muted" style="font-size:10.5px;"><i class="bi bi-info-circle me-1"></i>Empty = remove the token.</span>
+                </div>
               </div>
             <?php else: ?>
               <input type="text" name="bing_webmaster" class="form-control" placeholder="Paste verification token" style="font-size:13px;" data-testid="bing-input">
@@ -3357,6 +3548,46 @@ elseif ($tab === 'ai-blogger'):
       </form>
     </div>
   </details>
+
+<script>
+  // ============================================================
+  // Key/Token editor helpers (AI Key, Google Search Console, Bing)
+  // ------------------------------------------------------------
+  // The display→edit transition has TWO effects:
+  //   1) Hide the green "Token Uploaded" card and show the input row.
+  //   2) Un-disable the `name="*_edit"` input so it's actually submitted.
+  // (2) is what lets the save handler distinguish "didn't touch" from
+  // "cleared on purpose" — see admin.php save_ai_keys block.
+  // Cancel reverses both steps so a half-typed value never reaches the
+  // server when the admin backs out.
+  // ============================================================
+  function mvOpenKeyEditor(prefix) {
+    var disp = document.getElementById(prefix + '-display');
+    var edit = document.getElementById(prefix + '-edit');
+    if (!disp || !edit) return;
+    disp.style.display = 'none';
+    edit.style.display = 'block';
+    // Find the (single) text/password input inside the editor and enable it.
+    var inp = edit.querySelector('input[type="text"], input[type="password"]');
+    if (inp) {
+      inp.disabled = false;
+      inp.value = '';      // start clean — the saved value isn't echoed back
+      setTimeout(function () { inp.focus(); }, 50);
+    }
+  }
+  function mvCancelKeyEditor(prefix) {
+    var disp = document.getElementById(prefix + '-display');
+    var edit = document.getElementById(prefix + '-edit');
+    if (!disp || !edit) return;
+    edit.style.display = 'none';
+    disp.style.display = 'block';
+    var inp = edit.querySelector('input[type="text"], input[type="password"]');
+    if (inp) {
+      inp.value = '';
+      inp.disabled = true; // disabled-input is not submitted
+    }
+  }
+</script>
 
 <script>
   // Initialise Bootstrap popovers for the AI Auto-Blogger "?" help icons.
@@ -4214,20 +4445,54 @@ https://youtu.be/YYYYY"><?php
     // Check all SEO components
     $checks = [];
 
-    // 1. AI Key
-    $aiKeyOk = (defined('OPENAI_API_KEY') && OPENAI_API_KEY !== '') || setting_get('ai_blogger_llm_key', '') !== '';
+    // Local validators — same rules as the save handler so the green/red
+    // verdict here matches what we actually accepted.
+    $hcValidAi = function (string $s): bool {
+        if ($s === '') return false;
+        if (preg_match('/^sk-emergent-[a-zA-Z0-9_\-]{8,}$/', $s)) return true;
+        if (preg_match('/^sk-(?:proj-|svcacct-)?[a-zA-Z0-9_\-]{20,}$/', $s)) return true;
+        return false;
+    };
+    $hcValidGsc = function (string $s): bool {
+        return $s !== '' && (bool)preg_match('/^[A-Za-z0-9_\-]{30,96}$/', $s);
+    };
+    $hcValidBing = function (string $s): bool {
+        if ($s === '') return false;
+        if (preg_match('/^[A-Fa-f0-9]{16,64}$/', $s)) return true;
+        if (preg_match('/^[A-Za-z0-9]{16,64}$/', $s)) return true;
+        return false;
+    };
+
+    // 1. AI Key — green only if BOTH "present" AND "well-formed".
+    $rawAiKey  = (defined('OPENAI_API_KEY') && OPENAI_API_KEY !== '') ? (string)OPENAI_API_KEY : (string)setting_get('ai_blogger_llm_key', '');
+    $aiKeyOk   = $hcValidAi($rawAiKey);
+    $aiKeyHasButBad = ($rawAiKey !== '' && !$aiKeyOk);
     $checks[] = ['name' => 'AI Writing Key', 'ok' => $aiKeyOk, 'icon' => 'bi-robot', 'color' => '#8b5cf6',
-                 'desc' => $aiKeyOk ? 'AI key is configured — blog posts can be generated automatically.' : 'No AI key set. Go to API Keys above and add your key.'];
+                 'desc' => $aiKeyOk
+                    ? 'AI key is configured — blog posts can be generated automatically.'
+                    : ($aiKeyHasButBad
+                        ? 'A key is saved but the format looks invalid. Go to <strong>API Keys & Settings → AI Key → Change</strong> and paste a key starting with <code>sk-emergent-</code> or <code>sk-</code>.'
+                        : 'No AI key set. Go to API Keys above and add your key.')];
 
-    // 2. Google Search Console
-    $gscOk = ($seoGsc ?? '') !== '';
+    // 2. Google Search Console — validate token format too.
+    $gscOk = $hcValidGsc((string)($seoGsc ?? ''));
+    $gscHasButBad = (($seoGsc ?? '') !== '' && !$gscOk);
     $checks[] = ['name' => 'Google Search Console', 'ok' => $gscOk, 'icon' => 'bi-google', 'color' => '#ea4335',
-                 'desc' => $gscOk ? 'Verification token is set. Google can index your pages.' : 'Not connected. Add your token above to appear in Google search.'];
+                 'desc' => $gscOk
+                    ? 'Verification token is set. Google can index your pages.'
+                    : ($gscHasButBad
+                        ? 'A token is saved but its format looks invalid (expected 30-96 chars of letters/digits/<code>-</code>/<code>_</code>). Use <strong>Change</strong> above to re-paste the verification token from Google Search Console.'
+                        : 'Not connected. Add your token above to appear in Google search.')];
 
-    // 3. Bing Webmaster
-    $bingOk = ($seoBing ?? '') !== '';
+    // 3. Bing Webmaster — validate too.
+    $bingOk = $hcValidBing((string)($seoBing ?? ''));
+    $bingHasButBad = (($seoBing ?? '') !== '' && !$bingOk);
     $checks[] = ['name' => 'Bing & AI Search', 'ok' => $bingOk, 'icon' => 'bi-microsoft', 'color' => '#00a4ef',
-                 'desc' => $bingOk ? 'Bing token set. Your site will appear in Bing, Copilot & ChatGPT search.' : 'Not connected. Add token to appear in Bing, Microsoft Copilot & ChatGPT.'];
+                 'desc' => $bingOk
+                    ? 'Bing token set. Your site will appear in Bing, Copilot & ChatGPT search.'
+                    : ($bingHasButBad
+                        ? 'A token is saved but its format looks invalid (expected 16-64 chars of letters/digits, or 32 hex chars). Use <strong>Change</strong> above to re-paste the Authentication Code from Bing Webmaster Tools.'
+                        : 'Not connected. Add token to appear in Bing, Microsoft Copilot & ChatGPT.')];
 
     // 4. XML Sitemap
     $sitemapOk = true; // Always generated dynamically

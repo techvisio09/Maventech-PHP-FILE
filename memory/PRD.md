@@ -1563,3 +1563,45 @@ Pointing at the SEO/AI Auto-Blogger settings field labelled `AI Key (Emergent / 
 - Playwright: logged in as admin, opened `/admin.php?tab=ai-blogger`, clicked the (?) icon → Bootstrap popover renders "Which keys work here?" with both bullet points and code chips.  The cyan **EMERGENT UNIVERSAL KEY** badge is auto-detected from the stored `sk-emergent-*` value.
 
 
+---
+
+## [Feb 2026] Iteration 32 — Clearable + validated GSC/Bing/AI tokens
+
+### What the user reported
+1. **Edit → clear → save bug** — after clicking Change on a stored GSC / Bing token, blanking the field and saving did NOT remove the value; the system silently kept the previous token.
+2. **No format validation** — a token of "garbage123" or any random short string was happily stored AND showed up as ✅ green on the Go-Live SEO Health Check, falsely advertising a "connected" state.
+
+### What changed (`admin.php`)
+
+**Clear-via-Edit pattern (3 fields: AI Key, GSC, Bing)**
+- The Edit-mode `<input>` is now `disabled` by default and uses a `_edit`-suffixed `name` (e.g. `google_search_console_edit`).  Disabled inputs aren't submitted, so an unopened editor never reaches the server.
+- New JS helpers `mvOpenKeyEditor(prefix)` and `mvCancelKeyEditor(prefix)` show/hide the editor, focus the input AND toggle the `disabled` attribute.  Result: the server can finally distinguish "didn't touch this field" (no `_edit` key in POST) from "deliberately cleared it" (`_edit` key present, value empty).
+- New per-field hint under the editor: *"Empty = remove the token."* + the placeholder reflects it: *"Paste new token (or leave blank to clear)"*.
+
+**Format validators on save (`save_ai_keys` + `save_seo_tokens`)**
+- AI Key: must match `^sk-emergent-[a-zA-Z0-9_-]{8,}$` OR `^sk-(?:proj-|svcacct-)?[a-zA-Z0-9_-]{20,}$`.
+- GSC: 30–96 chars of base64url alphabet (`[A-Za-z0-9_-]`).
+- Bing: 32 hex chars OR 16–64-char alnum.
+- Pinterest / Yandex / Google Merchant ID / domain URL all get matching regex guards.
+- Pasted "noise" prefixes (`google-site-verification:`, `msvalidate.01:`, `content="…"`, surrounding `<>`/quotes) are stripped before validation so the admin can copy-paste meta-tag fragments without manual cleanup.
+- Invalid input → no DB write, red flash banner with a specific reason ("expected 30–96 chars …").
+- Empty input via Edit panel → clears the setting + green flash ("✓ Cleared: …").
+
+**Visible "Invalid Format" state on the API Keys & Settings cards**
+- When a value IS stored but FAILS validation, the green "Token Uploaded" card flips to AMBER with `⚠ Token Invalid` and an orange `INVALID FORMAT` chip — visible right at the form level, not just inside the collapsed Health Check.
+- Same treatment on the AI Key card.
+
+**SEO Health Check now matches reality**
+- Each row's `ok` flag is the validator result, not just `!== ''`.
+- Three states per token row: GREEN (valid + present), RED-empty ("Not connected. Add your token above."), RED-saved-but-invalid ("A token is saved but its format looks invalid — use Change above to re-paste…").
+- Same logic applied to the AI Writing Key row.
+
+### Files touched
+- `/app/php-version/admin.php` (`save_ai_keys` handler, `save_seo_tokens` handler, API Keys form, JS helpers, SEO Health Check checks block, AI/GSC/Bing card render blocks).
+
+### Verification (Playwright)
+- Test 1 (clear): with GSC token saved → click Change → leave input empty → Save = green banner "✓ Cleared: Google Search Console", DB row reads `''`, card switches back to empty input state.
+- Test 2 (garbage): paste `garbage123` in GSC empty input → Save = red banner "Google Search Console token looks invalid — it should be a 30-96 character string…", DB stays empty.
+- Test 3 (saved-but-invalid): manually inject `garbage_invalid_short` for `bing_site_verification_token` → reload AI Auto-Blogger page → Bing card shows AMBER `⚠ Token Invalid` + `INVALID FORMAT` chip + SEO Health Check Bing row renders RED with the "saved but format is invalid" copy.
+
+
