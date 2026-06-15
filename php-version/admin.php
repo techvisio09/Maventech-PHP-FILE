@@ -256,6 +256,71 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             : ($err ?: 'No+products+updated');
         header('Location: admin.php?tab=products&msg='.$msg); exit;
 
+    } elseif ($action === 'ai_urls_one') {
+        // ---------------------------------------------------------------------
+        // Single-product AI URL fetcher — POST {name, brand} returns
+        // {ok:true, activation_url, install_guide_url} so the JS can drop the
+        // URLs straight into the open Edit Product modal.  Uses gpt-4o via
+        // the Emergent universal key.
+        // ---------------------------------------------------------------------
+        header('Content-Type: application/json');
+        $name  = trim((string)($_POST['name']  ?? ''));
+        $brand = trim((string)($_POST['brand'] ?? ''));
+        if ($name === '') { echo json_encode(['ok'=>false, 'error'=>'Enter a product name first.']); exit; }
+        if (!OPENAI_API_KEY) { echo json_encode(['ok'=>false, 'error'=>'AI key missing — configure EMERGENT_LLM_KEY']); exit; }
+
+        $prompt = "Return the two OFFICIAL vendor URLs for the following software product:\n"
+                . "Product: \"$name\"\n"
+                . ($brand !== '' ? "Brand: \"$brand\"\n" : '')
+                . "\n1. \"activation_url\" — the vendor's sign-in / activation page where the customer enters their license key (examples: https://setup.office.com for Microsoft Office, https://central.bitdefender.com for Bitdefender, https://home.mcafee.com for McAfee, https://my.norton.com for Norton, https://account.adobe.com for Adobe).\n"
+                . "2. \"install_guide_url\" — the official installation help / KB article URL from the vendor support site.\n\n"
+                . "RULES:\n"
+                . "- Only use real, current, vendor-OFFICIAL domains (microsoft.com, bitdefender.com, mcafee.com, norton.com, adobe.com, etc.). NO third-party blogs / resellers.\n"
+                . "- If unsure, fall back to the most authoritative vendor support landing page.\n"
+                . "- Return STRICT JSON only. Schema: {\"activation_url\":\"https://...\",\"install_guide_url\":\"https://...\"}";
+
+        // Send the request — retry ONCE on transient HTTP errors (5xx, 429,
+        // and the occasional 400 we've seen from the upstream proxy).
+        $resp = '';
+        $httpCode = 0;
+        for ($attempt = 0; $attempt < 2; $attempt++) {
+            $ch = curl_init(rtrim(OPENAI_BASE_URL, '/') . '/chat/completions');
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST => true,
+                CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Authorization: Bearer ' . OPENAI_API_KEY],
+                CURLOPT_POSTFIELDS => json_encode([
+                    'model' => 'gpt-4o',
+                    'messages' => [
+                        ['role'=>'system','content'=>'You return strict JSON only. Never use markdown. Never wrap output in code fences.'],
+                        ['role'=>'user','content'=>$prompt],
+                    ],
+                    'temperature' => 0.1,
+                    'max_tokens' => 256,
+                    'response_format' => ['type' => 'json_object'],
+                ]),
+                CURLOPT_TIMEOUT => 45,
+            ]);
+            $resp = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            if ($resp && $httpCode >= 200 && $httpCode < 300) break;
+            usleep(800000); // 0.8s backoff before the single retry
+        }
+        if (!$resp || $httpCode < 200 || $httpCode >= 300) {
+            echo json_encode(['ok'=>false, 'error'=>'AI HTTP '.$httpCode.' — please retry in a few seconds.']); exit;
+        }
+        $d = json_decode($resp, true);
+        $text = $d['choices'][0]['message']['content'] ?? '';
+        $text = trim(preg_replace('/^```(?:json)?|```$/m', '', $text));
+        $parsed = json_decode($text, true);
+        $au = filter_var($parsed['activation_url']    ?? '', FILTER_VALIDATE_URL) ? $parsed['activation_url']    : '';
+        $gu = filter_var($parsed['install_guide_url'] ?? '', FILTER_VALIDATE_URL) ? $parsed['install_guide_url'] : '';
+        if ($au === '' && $gu === '') {
+            echo json_encode(['ok'=>false, 'error'=>'Could not find vendor URLs — please fill them manually.']); exit;
+        }
+        echo json_encode(['ok'=>true, 'activation_url'=>$au, 'install_guide_url'=>$gu]); exit;
+
     } elseif ($action === 'old_update_product') {
 
     } elseif ($action === 'update_order') {
@@ -5128,19 +5193,39 @@ elseif ($tab === 'products'):
                       <?php foreach (['lifetime','subscription','single_use','multi_use'] as $o): ?><option value="<?= $o ?>" <?= ($editing['license_type'] ?? '')===$o?'selected':'' ?>><?= ucfirst(str_replace('_',' ',$o)) ?></option><?php endforeach; ?>
                     </select>
                   </div>
-                  <div class="col-8"><label class="form-label small mb-0 d-flex justify-content-between align-items-center">
+                  <div class="col-8">
+                    <label class="form-label small mb-0 d-flex justify-content-between align-items-center">
                       <span>Category</span>
-                      <small class="text-muted" style="font-size:10.5px;"><i class="bi bi-info-circle me-1"></i>Pick an existing one — or type a new category, it'll be created on save</small>
+                      <small class="text-muted" style="font-size:10.5px;"><i class="bi bi-info-circle me-1"></i>Click a chip to pick, or use <strong>Add Category +</strong> to create a new one</small>
                     </label>
-                    <input type="text" class="form-control form-control-sm" id="f_cat" name="category"
-                           list="category-suggestions"
-                           value="<?= esc($editing['category'] ?? '') ?>"
-                           placeholder="e.g. office-2024-pc, bitdefender, windows-11, my-new-category"
-                           autocomplete="off"
-                           data-testid="f-category">
-                    <datalist id="category-suggestions">
-                      <?php foreach ($cats as $c): ?><option value="<?= esc($c) ?>"><?php endforeach; ?>
-                    </datalist>
+                    <input type="hidden" id="f_cat" name="category" value="<?= esc($editing['category'] ?? '') ?>" data-testid="f-category">
+                    <div class="cat-chip-picker d-flex flex-wrap align-items-center gap-1 p-2"
+                         data-testid="category-chip-picker"
+                         style="border:1px solid var(--border,#cbd5e1);border-radius:.5rem;background:var(--bg,#0f172a);min-height:42px;">
+                      <?php
+                        $currentCat = (string)($editing['category'] ?? '');
+                        $allCats = $cats; // already sorted DISTINCT list
+                        if ($currentCat !== '' && !in_array($currentCat, $allCats, true)) $allCats[] = $currentCat;
+                      ?>
+                      <?php foreach ($allCats as $c): $isActive = ($c === $currentCat); ?>
+                        <button type="button"
+                                class="cat-chip <?= $isActive ? 'active' : '' ?>"
+                                data-cat="<?= esc($c) ?>"
+                                data-testid="cat-chip-<?= esc($c) ?>"
+                                style="font-size:11.5px;font-weight:600;padding:4px 12px;border-radius:999px;border:1px solid <?= $isActive ? '#3b82f6' : 'var(--border,#cbd5e1)' ?>;background:<?= $isActive ? '#3b82f6' : 'transparent' ?>;color:<?= $isActive ? '#ffffff' : 'var(--text,#cbd5e1)' ?>;cursor:pointer;transition:all .12s ease;">
+                          <?= esc($c) ?>
+                        </button>
+                      <?php endforeach; ?>
+                      <button type="button" class="cat-chip-add"
+                              data-testid="cat-chip-add-btn"
+                              style="font-size:11.5px;font-weight:700;padding:4px 12px;border-radius:999px;border:1px dashed #10b981;background:rgba(16,185,129,.08);color:#10b981;cursor:pointer;">
+                        <i class="bi bi-plus-lg"></i> Add Category
+                      </button>
+                      <input type="text" class="cat-chip-new form-control form-control-sm d-none"
+                             data-testid="cat-chip-new-input"
+                             placeholder="Type new category name & press Enter"
+                             style="width:240px;display:inline-block!important;font-size:12px;">
+                    </div>
                   </div>
                   <div class="col-4 d-flex align-items-end"><div class="form-check form-switch mt-2"><input type="checkbox" class="form-check-input" name="is_active" id="f_act" <?= ($editing['is_active'] ?? 1)?'checked':'' ?>><label class="form-check-label small" for="f_act">Active</label></div></div>
                   <div class="col-12">
@@ -5185,7 +5270,16 @@ elseif ($tab === 'products'):
                   </div>
                 </div>
 
-                <h6 class="fw-bold mb-2"><i class="bi bi-link-45deg me-1"></i>Activation / Sign-in URL</h6>
+                <h6 class="fw-bold mb-2 d-flex align-items-center justify-content-between">
+                  <span><i class="bi bi-link-45deg me-1"></i>Activation / Sign-in URL</span>
+                  <button type="button" class="btn btn-sm btn-soft-purple d-inline-flex align-items-center gap-1"
+                          id="aiUrlBtn" data-testid="ai-url-btn"
+                          title="Use AI to find the right Activation + Installation URLs for this product"
+                          style="font-size:11px;padding:2px 10px;border-radius:999px;">
+                    <i class="bi bi-stars"></i>
+                    <span id="aiUrlLabel">Auto-fill with AI</span>
+                  </button>
+                </h6>
                 <div class="row g-2 mb-3">
                   <div class="col-12">
                     <label class="form-label small mb-0">Where should the customer go to activate? <span class="badge bg-success ms-1" style="font-size:9px;">used in order email</span></label>
@@ -5403,6 +5497,135 @@ elseif ($tab === 'products'):
         btn.disabled = false;
         setTimeout(() => { label.textContent = original; }, 6000);
       }
+    });
+  })();
+
+  // ============================================================
+  // "Auto-fill with AI" — fetches the official Activation and
+  // Installation URLs from gpt-4o based on the typed product
+  // name + brand and drops them into the two URL inputs.
+  // ============================================================
+  (function () {
+    const btn = document.getElementById('aiUrlBtn');
+    if (!btn) return;
+    const label = document.getElementById('aiUrlLabel');
+    const actInput = document.querySelector('[name="activation_url"]');
+    const insInput = document.querySelector('[name="install_guide_url"]');
+    function gN(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; }
+    function gQ(name) {
+      const el = document.querySelector('form [name="' + name + '"]');
+      return el ? el.value.trim() : '';
+    }
+    btn.addEventListener('click', async function () {
+      const nameVal  = gN('f_name');
+      const brandVal = gQ('brand');
+      if (!nameVal) {
+        label.textContent = 'Enter a name first';
+        setTimeout(() => { label.textContent = 'Auto-fill with AI'; }, 2400);
+        return;
+      }
+      const original = label.textContent;
+      btn.disabled = true;
+      label.textContent = 'Asking AI…';
+      try {
+        const fd = new FormData();
+        fd.append('action', 'ai_urls_one');
+        fd.append('name',  nameVal);
+        fd.append('brand', brandVal);
+        const res = await fetch('admin.php?tab=products', { method: 'POST', body: fd, credentials: 'same-origin' });
+        const json = await res.json().catch(() => null);
+        if (!res.ok || !json || !json.ok) {
+          throw new Error((json && json.error) || ('HTTP ' + res.status));
+        }
+        if (json.activation_url    && actInput) { actInput.value = json.activation_url;    }
+        if (json.install_guide_url && insInput) { insInput.value = json.install_guide_url; }
+        label.textContent = 'Filled ✓';
+        setTimeout(() => { label.textContent = original; btn.disabled = false; }, 2200);
+      } catch (e) {
+        label.textContent = 'Failed — retry';
+        btn.disabled = false;
+        setTimeout(() => { label.textContent = original; }, 3000);
+      }
+    });
+  })();
+
+  // ============================================================
+  // Category chip-picker: click a chip to select; click "Add
+  // Category" to reveal a small input where typing + Enter
+  // creates and selects a brand-new category instantly.  The
+  // hidden #f_cat is what actually gets POSTed on save.
+  // ============================================================
+  (function () {
+    const picker = document.querySelector('[data-testid="category-chip-picker"]');
+    if (!picker) return;
+    const hidden = document.getElementById('f_cat');
+    const addBtn = picker.querySelector('.cat-chip-add');
+    const newInp = picker.querySelector('.cat-chip-new');
+
+    function slugify(s) {
+      return (s || '').toString().toLowerCase()
+        .replace(/&/g, ' and ')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .substr(0, 80);
+    }
+    function selectChip(slug) {
+      hidden.value = slug;
+      picker.querySelectorAll('.cat-chip').forEach(c => {
+        const isMe = c.dataset.cat === slug;
+        c.classList.toggle('active', isMe);
+        c.style.background = isMe ? '#3b82f6' : 'transparent';
+        c.style.color      = isMe ? '#ffffff' : 'var(--text,#cbd5e1)';
+        c.style.borderColor= isMe ? '#3b82f6' : 'var(--border,#cbd5e1)';
+      });
+    }
+
+    // Existing chip click → select
+    picker.addEventListener('click', function (e) {
+      const chip = e.target.closest('.cat-chip');
+      if (chip) { selectChip(chip.dataset.cat); return; }
+    });
+
+    // "+ Add Category" button → reveal inline input.
+    addBtn.addEventListener('click', function () {
+      newInp.classList.remove('d-none');
+      newInp.focus();
+    });
+
+    // Enter inside new-category input → create chip and select it.
+    newInp.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const slug = slugify(newInp.value);
+      if (!slug) { newInp.classList.add('d-none'); return; }
+
+      // Re-use existing chip if it already exists (in case admin re-typed
+      // an existing category by hand).
+      let existing = picker.querySelector('.cat-chip[data-cat="' + slug + '"]');
+      if (!existing) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'cat-chip';
+        btn.dataset.cat = slug;
+        btn.dataset.testid = 'cat-chip-' + slug;
+        btn.textContent = slug;
+        btn.setAttribute('style',
+          'font-size:11.5px;font-weight:600;padding:4px 12px;border-radius:999px;'
+          + 'border:1px solid var(--border,#cbd5e1);background:transparent;'
+          + 'color:var(--text,#cbd5e1);cursor:pointer;transition:all .12s ease;'
+        );
+        // Insert before the "+ Add Category" button so the new chip stays
+        // in the left/grouped section.
+        picker.insertBefore(btn, addBtn);
+      }
+      selectChip(slug);
+      newInp.value = '';
+      newInp.classList.add('d-none');
+    });
+
+    // Escape closes the new-category input without saving.
+    newInp.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { newInp.value = ''; newInp.classList.add('d-none'); }
     });
   })();
   </script>

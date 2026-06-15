@@ -1224,3 +1224,41 @@ Specifically:
 - Move action with `category=Cybersecurity Suite` → product moved + new `cybersecurity-suite` row in the categories table ✓
 - Pre-existing categories continue to work unchanged (autocomplete suggestions preserved).
 
+
+---
+
+## [Feb 2026] Iteration 24 — AI URL auto-fill + Category chip-picker UI
+
+### What the user asked
+1. **Activation + Installation URLs**: when adding/editing a product, AI should automatically fetch the official vendor URLs (so the admin doesn't have to look them up manually).
+2. **Category**: instead of a single text input, show **all existing categories as visible chips**, plus an **"Add Category +"** button to create a new one inline.
+
+### What changed
+
+**1) "Auto-fill with AI" button (Activation / Installation URLs)**
+- New POST action `ai_urls_one` in `admin.php` — single-product variant of the existing bulk `ai_autofill_urls` action.  Posts `{name, brand}`, returns `{ok:true, activation_url, install_guide_url}` as JSON.  Uses `gpt-4o` via Emergent's OpenAI-compatible endpoint with `response_format: json_object`; one transient-error retry; URLs validated with `FILTER_VALIDATE_URL`.
+- UI button placed in the section header `<h6>` alongside the existing preset-link chips. Clicking it:
+  - Reads the typed Product Name + Brand from the form,
+  - Asks AI for the two official vendor URLs,
+  - Drops them into the `activation_url` and `install_guide_url` inputs.
+- **Verified via cURL** against the live server:
+  - `Microsoft Office Home 2024` → `https://setup.office.com` + `https://support.microsoft.com/.../install-office-...` ✓
+  - `Bitdefender Total Security 2026` → `https://central.bitdefender.com` + `https://www.bitdefender.com/consumer/support/answer/13427/` ✓
+  - `McAfee Antivirus Plus 2026` → `https://home.mcafee.com` + `https://service.mcafee.com` ✓
+  - Empty name → friendly error `"Enter a product name first."`
+
+**2) Category chip-picker**
+- Replaced the single text input with a pill-style picker:
+  - One clickable chip per existing category (active chip highlighted blue).
+  - "**+ Add Category**" dashed-green chip at the end opens an inline text input.
+  - Typing a new name + Enter creates a chip, selects it, and stamps the hidden `name="category"` input that gets POSTed on save.
+  - Escape closes the new-category input without saving.
+- All chip data flows through the existing `ensure_category()` helper on the server side, so any new category is auto-INSERTed into the `categories` table and instantly appears on the storefront (shop / category page / sitemap).
+
+### Files touched
+- `/app/php-version/admin.php` — `ai_urls_one` POST action (~50 lines), "Auto-fill with AI" header button + JS handler, Category chip-picker HTML + JS (~80 lines).
+
+### Verification
+- All three live-server cURL tests above passed (URLs returned point to vendor-official domains).
+- Live Admin screenshot confirms the chip-picker renders all 11 existing categories with `office-2024-pc` highlighted as the active one for the Microsoft Office Home 2024 (PC) product.
+
