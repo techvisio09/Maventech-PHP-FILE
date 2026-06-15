@@ -196,10 +196,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare('UPDATE products SET image=? WHERE slug=?')->execute([$last, $slug]);
             echo json_encode(['ok' => true, 'image' => $last]);
         } else {
+            $combined = implode("\n", $output);
             $err = $last !== '' ? $last : ('exit ' . $code);
-            // Surface the Emergent-budget message in human English when present
-            if (stripos(implode("\n", $output), 'budget') !== false) {
+            // Translate the most common low-level errors into actionable
+            // English so the admin knows whether to top up the Universal Key
+            // OR ask the operator to install a missing dependency.
+            if (stripos($combined, 'budget') !== false || stripos($combined, 'insufficient_quota') !== false) {
                 $err = 'Universal Key budget exceeded — top up in Profile → Universal Key → Add Balance.';
+            } elseif (stripos($combined, "No such file or directory: 'convert'") !== false
+                   || stripos($combined, "No such file or directory: 'cwebp'") !== false
+                   || stripos($combined, "Pillow not installed") !== false) {
+                $err = 'Image-conversion tool missing on this server — ask the operator to install Pillow (the script now uses pure-Python image resize).';
+            } elseif (stripos($combined, 'ModuleNotFoundError') !== false) {
+                $err = 'Python image-generation module missing — ask the operator to run `pip install emergentintegrations Pillow` on the server.';
             }
             echo json_encode(['ok' => false, 'error' => $err]);
         }
@@ -5668,7 +5677,12 @@ elseif ($tab === 'products'):
   if ($editSlug && !$isAdd) {
     $e = $pdo->prepare('SELECT * FROM products WHERE slug=?'); $e->execute([$editSlug]); $editing = $e->fetch();
   } elseif ($isAdd) {
-    $editing = ['slug'=>'','name'=>'','sku'=>'','brand'=>'Microsoft','year'=>date('Y'),'platform'=>'Windows','category'=>($cats[0]??''),'license_type'=>'lifetime','price'=>'','original_price'=>'','badge'=>'','description'=>'','image'=>'','is_active'=>1,'rating'=>4.5,'reviews'=>0];
+    // New product — leave `category` EMPTY by default so the admin
+    // consciously picks (or creates) the right category.  Previously this
+    // defaulted to `$cats[0]` (the alphabetically-first category — usually
+    // "antivirus" or "bitdefender"), causing every new product to silently
+    // get filed under Bitdefender unless the admin remembered to change it.
+    $editing = ['slug'=>'','name'=>'','sku'=>'','brand'=>'Microsoft','year'=>date('Y'),'platform'=>'Windows','category'=>'','license_type'=>'lifetime','price'=>'','original_price'=>'','badge'=>'','description'=>'','image'=>'','is_active'=>1,'rating'=>4.5,'reviews'=>0];
   }
 
   // Helper to build pill URLs preserving other query params

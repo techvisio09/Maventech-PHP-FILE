@@ -2123,3 +2123,55 @@ Screenshot of homepage confirms:
 - `/app/php-version/includes/functions.php` — added `topbar` variant to `render_vibe_promo_banner()`.
 - `/app/php-version/includes/header.php` — wrapped the hardcoded topbar + deal-bar in an `if (active vibe schedule)` guard so they auto-switch to the live schedule.
 
+
+## [Feb 2026] Bug bash — Sitemap 403, vibe-logo broken, new-product mis-categorisation, AI image regen
+
+### Reported by user (verbatim)
+> Under AI auto blogger... view sitemap, we are getting an error of four zero three. Same goes to under cluster hub... Under company info, when we try to update the schedule brand vibe switch below, when it says live mode, but I can't see the image on the admin portal... when we click on product key inventory and try to click on add a product by clicking on plus sign at the top, when we create a category, it should not go under the Bitdefender. It should create a new category... on the image URL, when we try to click on regenerate image with AI, that particular option is not working.
+
+### Root-cause analysis
+
+| Bug | Root cause | Where |
+|---|---|---|
+| **1. View Sitemap → 403 Forbidden** | Emergent's preview ingress rewrites `HTTP_HOST` to the **cluster-internal** hostname `*.cluster-N.preview.emergentcf.cloud`, which 403s for all external traffic. `site_url()` was returning whatever was in `$_SERVER['HTTP_HOST']` → every "View Sitemap" link, every absolute `<img src>`, every canonical URL pointed at the broken cluster-internal domain. | `includes/functions.php > site_url()` |
+| **2. Vibe schedule logo image broken** | Same root cause as Bug 1 — the `<img src>` was built with `site_url() . '/' . $row['logo_path']`, which produced an absolute URL on the broken cluster-internal host. The image file was actually saved correctly on disk and served 200 OK from the public preview host. | `admin.php` line 5204 (no code change needed once site_url is fixed) |
+| **3. Every new product files under "Bitdefender"** | The "Add Product" form pre-filled `category` with `($cats[0] ?? '')` — the **alphabetically first** category, which is `bitdefender`. Admin had to remember to change it on every add. | `admin.php` line 5671 (now 5685) |
+| **4. Regenerate image with AI → fails with `[Errno 2] No such file or directory: 'convert'`** | Python script `/app/scripts/generate_product_images.py` shelled out to `convert` (ImageMagick) and `cwebp` (libwebp-tools).  **Neither binary is installed in the Emergent container** — only Pillow is. The PHP error handler then misleadingly told the admin to "top up the Universal Key" because every non-zero exit was treated as a budget error. | `scripts/generate_product_images.py` lines 237-248 + `admin.php` action `regen_product_image` |
+
+### Fixes applied
+
+1. **`site_url()` cluster-internal guard** (`includes/functions.php`)
+   - When the incoming `HTTP_HOST` matches `*.cluster-N.preview.emergentcf.cloud`, fall through to the configured `main_url` setting (or the `SITE_URL` constant in `config.php`).
+   - Public hosts (preview / staging / production) continue to use the request host so deployments to `maventechsoftware.com` still resolve automatically.
+
+2. **Vibe schedule logo** — no code change needed; the `<img>` rendering picks up the fixed `site_url()` and now points to the public preview host (verified `naturalWidth=52, loaded=true`).
+
+3. **New product default category** (`admin.php` line 5685)
+   - Changed `'category' => ($cats[0] ?? '')` → `'category' => ''`.
+   - Admin must now consciously pick (or use the "+ Add Category" inline create) — no more silent mis-categorisation.
+
+4. **Regenerate image with AI — Pillow rewrite** (`scripts/generate_product_images.py`)
+   - Removed the `subprocess.run(["convert", ...])` and `subprocess.run(["cwebp", ...])` shell-outs.
+   - Replaced with pure-Python Pillow: `Image.open(out_png).thumbnail((720, 720), LANCZOS); im.save(out_webp, format="WEBP", quality=82, method=6)`.
+   - Preserves the original `convert -resize 720x720>` semantics (only downscale, never enlarge, preserve aspect ratio).
+   - Produces a smaller, sharper WebP than ImageMagick — 10.7 KB for Windows 11 Pro vs ~14 KB previously.
+
+5. **Honest error messaging** (`admin.php` action `regen_product_image`)
+   - Detect three distinct failure modes and surface the actionable cause:
+     - `budget` / `insufficient_quota` → "Universal Key budget exceeded — top up..."
+     - `No such file or directory: 'convert'` / `'cwebp'` / `Pillow not installed` → "Image-conversion tool missing on this server — ask the operator to install Pillow"
+     - `ModuleNotFoundError` → "Python image-generation module missing"
+
+### Verification (Playwright end-to-end after fixes)
+| Fix | Verification |
+|---|---|
+| 1. View Sitemap | `[data-testid="view-sitemap-btn"]` href = `https://indexnow-checker.preview.emergentagent.com/sitemap.xml`, direct fetch returns **HTTP 200** |
+| 2. Vibe logo  | `<img data-testid="vibe-sched-logo-*">` src = public preview URL, `naturalWidth=52, loaded=true` |
+| 3. New product category | Hidden `#f_cat` value on `/admin.php?tab=products&add=1` = **empty string `''`** (was `'bitdefender'`) |
+| 4. Regenerate image | Click `#aiRegenBtn` on `/admin.php?tab=products&edit=windows-11-pro` → POST returns `{ok:true, image:"/uploads/products/windows-11-pro.webp"}`, label updates to `'Generated ✓'`, hint updates to `'New image saved...'`. File on disk = 10.7 KB WebP. |
+
+### Files touched
+- `/app/php-version/includes/functions.php` — `site_url()` cluster-internal guard.
+- `/app/php-version/admin.php` — new-product default category fix + improved error messaging in `regen_product_image`.
+- `/app/scripts/generate_product_images.py` — replaced ImageMagick `convert` + `cwebp` shell-outs with Pillow.
+

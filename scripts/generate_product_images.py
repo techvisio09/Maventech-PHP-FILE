@@ -233,19 +233,25 @@ async def generate_one(source_url: str, meta: dict, retries: int = 2) -> str | N
                 continue
             data = base64.b64decode(images[0]["data"])
             out_png.write_bytes(data)
-            # Convert PNG → resized WebP via ImageMagick + cwebp for fast serving.
-            import subprocess
-            tmp_png = OUT_DIR / f"{slug}.tmp.png"
-            subprocess.run(
-                ["convert", str(out_png), "-resize", "720x720>", "-strip", str(tmp_png)],
-                check=True, capture_output=True,
-            )
-            subprocess.run(
-                ["cwebp", "-q", "82", "-mt", "-metadata", "none",
-                 str(tmp_png), "-o", str(out_webp), "-quiet"],
-                check=True, capture_output=True,
-            )
-            tmp_png.unlink(missing_ok=True)
+            # ----------------------------------------------------------------
+            # Resize the AI-generated PNG and re-encode as WebP using Pillow.
+            # Previously this shelled out to `convert` (ImageMagick) and
+            # `cwebp`, but neither binary is guaranteed to be installed in
+            # the Emergent container.  Pillow ships with the venv and
+            # produces a smaller, sharper result in pure Python.
+            # ----------------------------------------------------------------
+            try:
+                from PIL import Image as _PILImage
+            except ImportError as _imp_e:
+                print(f"  [{slug}] Pillow not installed: {_imp_e}")
+                return None
+            with _PILImage.open(out_png) as im:
+                im = im.convert("RGBA") if im.mode in ("P", "LA", "RGBA") else im.convert("RGB")
+                # Match the original `convert -resize 720x720>` semantics:
+                # only downscale (never enlarge), preserve aspect ratio.
+                im.thumbnail((720, 720), _PILImage.LANCZOS)
+                # WebP, quality 82, drop metadata for fast serving.
+                im.save(out_webp, format="WEBP", quality=82, method=6)
             return f"{INTERNAL_PREFIX}/{slug}.webp"
         except Exception as e:
             print(f"  [{slug}] error attempt {attempt+1}: {e}")

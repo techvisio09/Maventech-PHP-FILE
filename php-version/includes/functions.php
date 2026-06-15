@@ -957,19 +957,36 @@ function product_keywords(array $p): string
 
 function site_url(): string
 {
-    // 1) When serving an HTTP request, ALWAYS prefer the real Host header.
-    //    This makes the same codebase work on preview, staging and production
-    //    without any config tweaks — when you deploy to maventechsoftware.com,
-    //    every sitemap / canonical / og:url / Article schema URL just resolves
-    //    to that hostname automatically.  Trust X-Forwarded-Proto from the
-    //    ingress so we never emit http:// behind an HTTPS proxy.
+    // 1) When serving an HTTP request, prefer the real Host header so the
+    //    same codebase works on preview, staging and production without any
+    //    config tweaks — when deployed to maventechsoftware.com, every
+    //    sitemap / canonical / og:url / Article schema URL resolves to that
+    //    hostname automatically.
+    //
+    //    Exception: requests hitting the cluster-internal Emergent preview
+    //    hostnames (*.cluster-N.preview.emergentcf.cloud) are admin-only
+    //    routes that return 403 for end-users.  Generating links against
+    //    those hostnames breaks "View Sitemap", `<img src>` and every
+    //    other absolute URL the admin clicks through to.  When we detect
+    //    such a host, fall through to the admin-configured `main_url`
+    //    setting (or the public preview hostname) so the admin gets a
+    //    real, browsable URL.
     if (PHP_SAPI !== 'cli' && !empty($_SERVER['HTTP_HOST'])) {
+        $host  = (string)$_SERVER['HTTP_HOST'];
         $proto = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
         if (!empty($_SERVER['HTTP_X_FORWARDED_PROTO'])) $proto = $_SERVER['HTTP_X_FORWARDED_PROTO'];
-        return $proto . '://' . $_SERVER['HTTP_HOST'];
+        $isClusterInternal = (bool)preg_match('/\.cluster-\d+\.preview\.emergentcf\.cloud$/i', $host);
+        if (!$isClusterInternal) {
+            return $proto . '://' . $host;
+        }
+        // Cluster-internal host detected — fall through to settings / constant.
+        try {
+            $configured = trim((string)setting_get('main_url', ''));
+            if ($configured !== '') return rtrim($configured, '/');
+        } catch (Throwable $e) { /* DB may not be ready yet */ }
     }
     // 2) Fall back to the configured SITE_URL constant for CLI / cron contexts
-    //    where there's no Host header.
+    //    AND for cluster-internal hosts where no `main_url` is set.
     if (defined('SITE_URL') && SITE_URL !== '') return rtrim(SITE_URL, '/');
     return 'http://localhost';
 }
