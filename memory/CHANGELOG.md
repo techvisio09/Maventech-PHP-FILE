@@ -1,4 +1,29 @@
 # Changelog
+## 2026-02-15 — Homepage typography elegance pass
+
+### Less-bold, more-elegant content (assets/css/style.css)
+- Reduced `.fw-bold` weight from `800!important` → `600!important` (now semibold instead of black-bold)
+- Reduced `.fw-semibold` from `650` → `550`, `.btn` from `650` → `550`
+- Reduced `.display-4 / .display-5` from `800` → `700`
+- Added global `h1-h6` base weight of `650`
+- Hero h1 (`.hero h1`) from `800` → `700`; hero-badge from `700` → `600`; hero CTA from `700` → `600`
+- Hero stats (`.hero .hero-stats .fs-3`) from `800` → `700`
+- Brand text (`.brand-text`) from `800` → `700`; brand-tag from `700` → `600`
+- Eyebrow / mega-heading / filter-group-title from `800` → `700`
+- Mega-menu year links (`.mega-year`) from `700` → `550`
+- Product-title from `700` → `600`; accordion-button from `700` → `600`
+- `.page-content h2/h3` softened
+- Added font-smoothing (`-webkit-font-smoothing: antialiased`, `text-rendering: optimizeLegibility`) on `body` for cleaner rendering
+
+### Why
+User feedback: "The content on the homepage, especially homepage, the content look too much bold. Reduce the boldness, make it less bold, more elegant, suit with the theme."
+
+### Tested
+Visual diff on light + dark themes — hero, mega-menu, best-sellers, FAQ, CTA, footer all render with refined typographic hierarchy. No layout regressions observed.
+
+---
+
+
 
 ## 2026-02-14 (iteration 7) — Admin post quick-actions + Topic Cluster Hubs
 
