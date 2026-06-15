@@ -83,9 +83,51 @@ if ($order && $sessionId && stripe_enabled() && $order['status'] !== 'paid') {
 }
 
 include __DIR__ . '/includes/header.php';
+
+// Build the QR-code URL.  When the customer scans the QR on their phone,
+// the receipt page (order-history.php) auto-looks up the order via the
+// ?email=X&order=Y query string and renders the full delivery view —
+// license keys, Sign-in-to-activate, Installation Guide, PDF download.
+// This is the exact same data the customer got in their email.
+$qrUrl = '';
+if ($order && $order['status'] === 'paid') {
+    $publicHost = trim((string)setting_get('site_domain_url', '')) ?: site_url();
+    $qrUrl = rtrim($publicHost, '/')
+           . '/order-history.php?email=' . urlencode((string)$order['email'])
+           . '&order=' . urlencode((string)$order['order_number']);
+}
 ?>
-<div class="container py-5 text-center" style="max-width: 640px;">
+<div class="container py-5" style="max-width: 1000px;">
   <?php if ($order && $order['status'] === 'paid'): ?>
+  <div class="row g-4 align-items-start" data-testid="order-success-grid">
+    <!-- ===== QR code rail (left on ≥md, top on mobile) ===== -->
+    <div class="col-12 col-md-4">
+      <div class="card co-banner p-4 text-center sticky-top" data-testid="receipt-qr-card"
+           style="border-radius:18px;border:1px solid #bfdbfe;background:linear-gradient(180deg,#eff6ff,#dbeafe);top:24px;">
+        <div style="display:inline-flex;align-items:center;gap:6px;background:#1d4ed8;color:#fff;padding:4px 12px;border-radius:999px;font-size:10.5px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:12px;">
+          <i class="bi bi-qr-code"></i> Scan with your phone
+        </div>
+        <div id="receipt-qr"
+             data-testid="receipt-qr"
+             data-url="<?= esc($qrUrl) ?>"
+             style="width:200px;height:200px;background:#ffffff;border-radius:14px;padding:14px;margin:0 auto;box-shadow:0 8px 22px rgba(15,23,42,.08);display:flex;align-items:center;justify-content:center;"></div>
+        <div class="mt-3" style="font-size:13.5px;font-weight:700;color:#1e3a8a;line-height:1.35;">
+          View your license keys &amp; installation guide on any phone
+        </div>
+        <div class="small mt-1" style="color:#475569;font-size:11.5px;line-height:1.5;">
+          Scanning opens a secure receipt page showing this order, the product name, license key,
+          <strong>Sign in to activate</strong> and <strong>View installation guide</strong> buttons — same details as the email.
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-primary rounded-pill mt-3 w-100"
+                onclick="(function(){var t=document.getElementById('receipt-qr').dataset.url;if(navigator.clipboard){navigator.clipboard.writeText(t).then(function(){var b=event.target.closest('button');var o=b.innerHTML;b.innerHTML='<i class=\'bi bi-check2 me-1\'></i>Link copied';setTimeout(function(){b.innerHTML=o;},1600);});}})()"
+                data-testid="receipt-qr-copy-link">
+          <i class="bi bi-link-45deg me-1"></i>Or copy the link
+        </button>
+      </div>
+    </div>
+
+    <!-- ===== Existing thank-you content (right column) ===== -->
+    <div class="col-12 col-md-8 text-center">
     <div class="success-tick mb-4" data-testid="success-tick"><i class="bi bi-check-lg"></i></div>
     <h1 class="fw-bold mt-3 h3" data-testid="order-success-title">Thanks for purchasing with us<?= $order['first_name'] ? ', ' . esc($order['first_name']) : '' ?>!</h1>
     <p class="text-secondary" data-testid="order-success-msg">For your <strong>product key</strong>, please check your email <strong>inbox or spam folder</strong> — we've sent it to <strong><?= esc($order['email']) ?></strong>.</p>
@@ -164,15 +206,50 @@ include __DIR__ . '/includes/header.php';
       </div>
     </div>
 
+    </div><!-- /.col-md-8 -->
+  </div><!-- /.row -->
+
+  <!-- QR generator — pure client-side from the URL above.  Uses qrcodejs
+       (~10 KB, MIT) loaded from a CDN.  No external API call, no privacy
+       leak: the QR matrix is computed locally in the customer's browser. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script>
+    (function () {
+      var el = document.getElementById('receipt-qr');
+      if (!el || !window.QRCode) return;
+      var url = el.dataset.url || '';
+      if (!url) return;
+      el.innerHTML = '';
+      try {
+        new QRCode(el, {
+          text: url,
+          width: 172,
+          height: 172,
+          colorDark: '#0f172a',
+          colorLight: '#ffffff',
+          correctLevel: QRCode.CorrectLevel.M,
+        });
+      } catch (e) {
+        // Graceful fallback: render the URL as plain text so the customer
+        // can at least copy/paste even if the QR library failed to load.
+        el.innerHTML = '<div style="font-size:11px;word-break:break-all;color:#475569;padding:8px;">' + url + '</div>';
+      }
+    })();
+  </script>
+
   <?php elseif ($order): ?>
+  <div class="text-center">
     <i class="bi bi-hourglass-split text-warning display-1"></i>
     <h1 class="fw-bold mt-3 h3">Payment pending</h1>
     <p class="text-secondary">Order <strong>#<?= esc($order['order_number']) ?></strong> was created but the payment hasn't been confirmed yet. If you completed payment, refresh this page in a moment.</p>
     <a href="checkout.php" class="btn btn-primary rounded-pill px-4 mt-2">Back to Checkout</a>
+  </div>
   <?php else: ?>
+  <div class="text-center">
     <i class="bi bi-question-circle text-secondary display-1"></i>
     <h1 class="fw-bold mt-3 h3">Order not found</h1>
     <a href="index.php" class="btn btn-primary rounded-pill px-4 mt-2">Back to Home</a>
+  </div>
   <?php endif; ?>
 </div>
 <?php include __DIR__ . '/includes/footer.php'; ?>

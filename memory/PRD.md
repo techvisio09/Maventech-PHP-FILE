@@ -2382,3 +2382,32 @@ When admin creates a new category via the inline "+ Add Category" flow on the Ad
   - Tone correctly switches red/amber/green based on score
   - On preview env: real probes correctly detect missing Stripe TEST key + SMTP config → 2 red (expected behaviour, not a bug)
 
+
+## [Feb 2026 — Iteration 14] Deployment readiness check + QR-code receipt on order-success page
+
+### Completed
+- **Deployment readiness scan** — ran `deployment_agent` against `/app/php-version`. PHP project is clean: no hardcoded preview URLs, secrets or DB strings anywhere. All URLs route through `site_url()` / `_seo_public_site_url()` / `setting_get('site_domain_url')`. The only `localhost` references are (a) PHPMailer SMTP default, (b) DB_HOST env-var fallback (correct for cPanel), (c) `seo-audit.php` internal probe — all expected.
+- **QR-code receipt on `/order-success.php`** — added a sticky left-rail QR code so customers can instantly view their full license-key + activation receipt on their phone after checkout:
+  - 2-column responsive grid: QR rail (col-md-4) + thank-you content (col-md-8). On mobile (col-12) the QR stacks above naturally.
+  - QR encodes the public URL: `{site_domain_url}/order-history.php?email={customer_email}&order={order_number}` — auto-looks-up the order on landing (QR-auto-lookup logic was already in place in `order-history.php` lines 58-66).
+  - Sticky top so the QR stays visible while the customer scrolls through receipt content.
+  - "Or copy the link" fallback button writes the URL to clipboard for desktops where scanning isn't practical.
+  - Uses `qrcodejs` (10 KB, MIT) loaded from cdnjs with SRI integrity hash — generates the QR matrix purely client-side from the URL string. No external API call, no privacy leak, no API-key dependency. Graceful fallback to rendering the URL as plain text if the JS lib fails to load.
+  - All accessible with new `data-testid` attrs: `receipt-qr-card`, `receipt-qr`, `receipt-qr-copy-link`.
+
+### What the customer experiences
+- After Stripe/PayPal redirect → lands on `/order-success.php?order=XXX`
+- Sees a 200×200 QR code on the left labeled "SCAN WITH YOUR PHONE"
+- Scanning with phone camera → opens `/order-history.php?email=...&order=...` on mobile browser
+- Lands on the SAME page rendered in the order-delivery email: brand header · "Thank you for your purchase" · Order # · Amount Paid · Delivered-to email · product card with image + license key · "Sign in to activate" + "View installation guide" buttons
+
+### Files touched
+- `/app/php-version/order-success.php` — new 2-column layout with QR rail; `$qrUrl` built from `site_domain_url` or `site_url()` fallback; CDN-loaded `qrcodejs` library with SRI integrity hash; render call in inline script
+- No new files needed — `/order-history.php` already supported QR auto-lookup via `?email=X&order=Y`
+
+### Testing
+- Verified `php -l` clean on `order-success.php`
+- Verified `data-url="..."` HTML attribute renders the correct URL
+- Verified `/order-history.php?email=...&order=...` returns HTTP 200 with "License Key" section visible (auto-lookup works)
+- Visually verified at 1280×900 viewport — QR renders crisp, layout aligned, sticky-top works during scroll
+
