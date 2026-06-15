@@ -8951,8 +8951,18 @@ elseif ($tab === 'api'):
           </div>
 
           <div class="row g-2 small mb-3">
-            <div class="col-12"><label class="form-label small mb-0">Webhook Secret <small class="text-muted"><?= esc(mask($cardWh)) ?></small></label><input class="form-control form-control-sm" name="webhook_secret" type="password" placeholder="leave blank to keep current"></div>
-            <div class="col-12"><label class="form-label small mb-0">Webhook URL</label><input class="form-control form-control-sm" readonly value="<?= esc(site_url().$cardWhUrl) ?>"></div>
+            <div class="col-12"><label class="form-label small mb-0">Webhook Secret <small class="text-muted"><?= esc(mask($cardWh)) ?></small></label><input class="form-control form-control-sm" name="webhook_secret" type="password" placeholder="whsec_… (leave blank to keep current)" data-testid="api-card-webhook-secret"></div>
+            <div class="col-12"><label class="form-label small mb-0">Webhook URL <span class="badge bg-info ms-1" style="font-size:9px;">paste into Stripe Dashboard</span></label><input class="form-control form-control-sm" readonly value="<?= esc(site_url().$cardWhUrl) ?>" data-testid="api-card-webhook-url"></div>
+            <div class="col-12">
+              <div class="alert alert-secondary py-2 mb-0 small" style="font-size:11.5px;border-radius:8px;background:#f1f5f9;border:1px solid #e2e8f0;color:#475569;">
+                <strong><i class="bi bi-info-circle me-1"></i> Recommended Stripe events</strong> to subscribe this webhook to:
+                <code style="background:#fff;padding:1px 5px;border-radius:4px;">checkout.session.completed</code>,
+                <code style="background:#fff;padding:1px 5px;border-radius:4px;">payment_intent.succeeded</code>,
+                <code style="background:#fff;padding:1px 5px;border-radius:4px;">payment_intent.payment_failed</code>,
+                <code style="background:#fff;padding:1px 5px;border-radius:4px;">charge.refunded</code>.
+                The handler is idempotent — duplicate deliveries are safely ignored.
+              </div>
+            </div>
           </div>
           <button class="btn btn-soft-blue btn-sm w-100"><i class="bi bi-check2 me-1"></i> Save Card API Settings</button>
         </form>

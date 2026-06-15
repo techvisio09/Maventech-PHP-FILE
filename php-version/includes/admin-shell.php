@@ -1449,6 +1449,91 @@ document.addEventListener('click', function(e){
 });
 
 // ============================================================================
+// SCROLL-POSITION PRESERVATION (sidebar nav + same-page link clicks)
+// Saves window.scrollY in sessionStorage keyed by the destination URL just
+// before the navigation fires, then restores it on the next page load.
+// Result: clicking "Orders → Sales Detail → Orders" returns the admin to
+// where they were inside the Orders tab instead of bouncing back to the top.
+// Skips anchor links (#hash), AJAX/JS-handled links (data-no-scroll-save),
+// and external destinations.
+// ============================================================================
+(function(){
+  // Tell the browser we'll manage scroll restoration ourselves so back/forward
+  // navigation doesn't fight with our sessionStorage restore.
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+
+  const KEY = 'mv_admin_scroll:';
+  const TTL_MS = 30 * 60 * 1000; // forget positions older than 30 minutes
+
+  function keyFor(url){
+    try {
+      // Normalise relative URLs against the current location so the same tab
+      // produces the same key regardless of how the href was written.
+      const u = new URL(url, window.location.href);
+      return KEY + u.pathname + u.search;
+    } catch (_) { return KEY + url; }
+  }
+
+  function save(url){
+    try {
+      sessionStorage.setItem(keyFor(url), JSON.stringify({ y: window.scrollY, t: Date.now() }));
+    } catch (_) {}
+  }
+
+  function restore(){
+    try {
+      const raw = sessionStorage.getItem(keyFor(window.location.href));
+      if (!raw) return;
+      const rec = JSON.parse(raw);
+      if (!rec || typeof rec.y !== 'number') return;
+      if (Date.now() - (rec.t || 0) > TTL_MS) {
+        sessionStorage.removeItem(keyFor(window.location.href));
+        return;
+      }
+      // Defer to next frame so the layout has settled before scrolling.
+      requestAnimationFrame(function(){
+        window.scrollTo({ top: rec.y, left: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
+      });
+    } catch (_) {}
+  }
+
+  // Save scroll position for any sidebar / in-shell link click that triggers
+  // a same-window full-page navigation.
+  document.addEventListener('click', function(e){
+    const a = e.target.closest && e.target.closest('a[href]');
+    if (!a) return;
+    // Skip new-tab, mod-click, download, hash-only, mailto, tel, javascript:.
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    if (a.target && a.target !== '' && a.target !== '_self') return;
+    if (a.hasAttribute('download') || a.hasAttribute('data-no-scroll-save')) return;
+    const href = a.getAttribute('href') || '';
+    if (!href || href.startsWith('#') || href.startsWith('javascript:')
+        || href.startsWith('mailto:') || href.startsWith('tel:')) return;
+    // Skip cross-origin destinations — sessionStorage is origin-scoped anyway,
+    // but no point saving for a URL we'll never restore.
+    try {
+      const u = new URL(href, window.location.href);
+      if (u.origin !== window.location.origin) return;
+    } catch (_) { return; }
+    // Persist the CURRENT scroll under the CURRENT URL — so when we come
+    // back to this tab later, we land where the admin left off.
+    save(window.location.href);
+  }, true);
+
+  // Also persist on form submit + before unload so the position is captured
+  // even when the navigation is triggered by something other than a link.
+  window.addEventListener('beforeunload', function(){ save(window.location.href); });
+
+  // Restore as soon as the DOM is ready.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', restore);
+  } else {
+    restore();
+  }
+})();
+
+
+// ============================================================================
 // LIVE CHAT GLOBAL POLLER
 // Polls /ajax/chat-admin.php?action=unread every 8s.  Updates the sidebar
 // "Lead Management" badge and pops a toast when a new customer message arrives.

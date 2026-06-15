@@ -1446,3 +1446,62 @@ Specifically:
 - Order detail view shows "TEST" badge next to the order number on test orders.
 
 
+---
+
+## [Feb 2026] Iteration 29 — PayPal-style login, scroll-state preservation, real Stripe webhook
+
+### What the user asked
+1. **Login page rebuild** — strip the public-site newsletter band ("Join our list and save up to 81%"), the feature strip ("Genuine Products / Instant Delivery / 50,000+ Customers / Expert Support"), the "..................................." separator, and the footer.  Show only the company logo + an **"Admin login"** heading (replacing "Welcome back") + email + password + Log In button + Forgotten password link — modelled on the PayPal sign-in card.
+2. **No scroll-to-top jump** — clicking any sidebar item under the dashboard banner currently reloads the page and bounces the admin back to the top.  Preserve scroll position when navigating between tabs.
+3. **Stripe webhook** — wire `/stripe-webhook.php` for server-to-server fulfilment so license keys still flow when the customer closes the tab before the success-redirect lands.
+
+### What changed
+
+**Clean PayPal-style admin login (`login.php` full rewrite)**
+- `login.php` no longer pulls in `includes/header.php` / `includes/footer.php` — it's a self-contained page so none of the public-site chrome leaks in.
+- Light grey canvas (`#f7f8fa`), one centered 420 px white card with 14 px radius + soft drop-shadow.
+- Header: company SVG monogram (`render_logo(56)`) + brand wordmark.  If a real uploaded company logo exists AND its file size is ≥ 200 B (guards against 1×1-px placeholder uploads) we use the bitmap instead; otherwise the SVG monogram + gradient wordmark renders so the page never has an empty hero gap.
+- Title: **"Admin login"** (replaces "Welcome back").
+- Inputs are 52 px-tall light-grey rounded fields with the PayPal-style focus state (white background + blue border + soft shadow).
+- "Show / Hide" toggle baked into the password field (button on the right edge).
+- Big rounded blue "Log In" button (52 px, full-width, pill).
+- Forgotten password link.  Tiny footer with "Back to store" + copyright (no newsletter, no feature strip, no dots).
+
+**Scroll-state preservation (`includes/admin-shell.php`)**
+- Sets `history.scrollRestoration = 'manual'` so the browser stops fighting us.
+- Captures `window.scrollY` keyed by the CURRENT URL (`pathname + search`) just before any link-driven full-page navigation and on `beforeunload`.
+- Restores the saved scrollY on `DOMContentLoaded` for the destination URL, deferred to the next frame so layout has settled.
+- TTL: 30 minutes — stale positions are auto-evicted.
+- Skips new-tab clicks, modifier-key clicks, downloads, hash-only links, mailto/tel/javascript:, cross-origin and `[data-no-scroll-save]` opt-outs.
+- Result: bouncing between Products → Orders → Products lands the admin back where they were inside the Products list.  Verified end-to-end with Playwright (scroll 800 → switch tab → return → restored to 800).
+
+**Stripe webhook (`/stripe-webhook.php`)**
+- New endpoint that verifies the `Stripe-Signature` header against `setting_get('gw_card_webhook_secret')` via HMAC-SHA256 over `${timestamp}.${payload}` with a 5-minute replay window.
+- Idempotency: lazy-created `stripe_events` table indexed by `event_id` — a duplicate delivery returns 200 with `already_processed:true` instead of re-running the handler.
+- Routed events:
+  - `checkout.session.completed` → pulls card metadata via `stripe_extract_card_details()`, marks order paid, appends a `transaction_logs` row, calls `fulfill_order()` (which assigns license keys + sends the delivery email) and fires an admin bell notification.
+  - `payment_intent.succeeded` → idempotent fallback for orders not yet flipped to paid.
+  - `payment_intent.payment_failed` → flips the order to `cancelled` + surfaces the failure reason in the bell.
+  - `charge.refunded` → flips the order to `refunded` + logs a refund row + bell notification.
+- Any handler exception is swallowed + logged (we ALWAYS ack 2xx so Stripe stops retrying; replays are handled via idempotency).
+- Admin API → Card credentials form now shows a friendly **"Recommended Stripe events"** hint block listing the four event types as inline code chips, plus the read-only Webhook URL with a "paste into Stripe Dashboard" badge.
+
+### Files touched / created
+- `/app/php-version/login.php` (full rewrite — PayPal-style, no public-site chrome)
+- `/app/php-version/includes/admin-shell.php` (scroll-restoration JS block)
+- `/app/php-version/stripe-webhook.php` (NEW — 250-line signed webhook handler)
+- `/app/php-version/admin.php` (Webhook URL hint block on Card credentials form)
+- `/app/php-version/start.sh` (idempotent migrations for `orders.gw_mode` + `stripe_events` table)
+- DB: `CREATE TABLE stripe_events (event_id UNIQUE, event_type, payload, received_at)` for audit + idempotency.
+
+### Verification
+- `php -l` clean on all 4 edited PHP files; `bash -n start.sh` clean.
+- Playwright login screenshot: clean PayPal-style card, "Admin login" heading, gradient monogram + wordmark, no newsletter / no feature strip / no dots / no footer.
+- Playwright scroll test: scrolled Products to 800 px → navigated to Orders → returned to Products → scroll restored to 800 px exactly.
+- Webhook curl test cases (with HMAC-signed payloads):
+  - Valid signature + `checkout.session.completed` for pending order → 200, order flipped `pending→paid`, `fulfilled=1`, transaction_logs row created.
+  - Duplicate delivery of same event_id → 200 `{ok:true, already_processed:true}` (no double-fulfilment).
+  - Bad signature → 400 "Invalid signature".
+  - `charge.refunded` event → order flipped `paid→refunded`, refund row added to transaction_logs.
+
+

@@ -32,6 +32,18 @@ fi
 # 2b) Idempotent schema migrations (safe on every boot)
 mysql -uroot ucode_store -e "ALTER TABLE products ADD COLUMN IF NOT EXISTS activation_url VARCHAR(500) DEFAULT NULL" 2>/dev/null || true
 mysql -uroot ucode_store -e "ALTER TABLE products ADD COLUMN IF NOT EXISTS install_guide_url VARCHAR(500) DEFAULT NULL" 2>/dev/null || true
+# gw_mode on orders — captured at checkout so admins can filter test vs live orders
+mysql -uroot ucode_store -e "ALTER TABLE orders ADD COLUMN IF NOT EXISTS gw_mode VARCHAR(10) NOT NULL DEFAULT 'test' AFTER status" 2>/dev/null || true
+# stripe_events — audit + idempotency table for the /stripe-webhook.php endpoint
+mysql -uroot ucode_store -e "CREATE TABLE IF NOT EXISTS stripe_events (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    event_id   VARCHAR(80) NOT NULL,
+    event_type VARCHAR(80) NOT NULL,
+    payload    LONGTEXT,
+    received_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_event_id (event_id),
+    KEY idx_event_type (event_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci" 2>/dev/null || true
 
 # Visitor analytics — one row per public page view from a real human (bots/admin skipped at the PHP layer).
 mysql -uroot ucode_store -e "CREATE TABLE IF NOT EXISTS visitor_log (
