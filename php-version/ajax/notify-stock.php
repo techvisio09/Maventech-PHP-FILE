@@ -2,6 +2,7 @@
 // AJAX endpoint: subscribe a customer to "back in stock" notifications for a
 // specific product (current region). Publicly callable (no admin auth).
 require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/mailer.php';
 
 header('Content-Type: application/json');
 

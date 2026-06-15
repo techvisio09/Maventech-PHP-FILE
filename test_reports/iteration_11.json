@@ -1,0 +1,37 @@
+{
+  "summary": "Re-test of iteration 11 backend security/email-validation fixes. All 27 tests now PASS (1 skipped — TestSmoke::test_indexnow_key_endpoint_200 is conditional). Previously 25/27 in iteration 10. The 3 fixes by main agent are confirmed working end-to-end via the same pytest suite.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration11_email_validation_and_gateway.py",
+    "/app/test_reports/pytest/iteration11_retest.xml"
+  ],
+  "verified_fixes": [
+    "TestEmailValidationNotifyStock::test_notify_stock_no_mx_rejected — PASSED. /ajax/notify-stock.php now require_once mailer.php; bad MX (no-such-domain-xyzz123.con) returns HTTP 400 with reason='no_mx' instead of falsely returning ok:true.",
+    "TestLeadsOnline::test_leads_online_requires_admin — PASSED. /ajax/leads-online.php replaced ensure_admin() (seed) with inline current_user()+role==='admin' gate; anonymous callers now get HTTP 403 + {ok:false,error:'admin auth required'} instead of leaking PII.",
+    "TestGatewayKeyValidation::test_endpoint_requires_admin_auth — PASSED. /ajax/validate-gateway-key.php has same inline 403 gate; unauthenticated POST returns HTTP 403 + {ok:false,message:'Admin access required'} instead of calling Stripe.",
+    "Regression — TestLeadsOnline::test_leads_online_returns_install_pending PASSED (admin call still returns ok:true with install_pending/total/latest).",
+    "Regression — TestGatewayKeyValidation::test_stripe_live_key_in_test_slot PASSED (LIVE-key short-circuit before Stripe still works).",
+    "Regression — TestEmailValidationLead/Contact PASSED, forgot-password queued-row PASSED, sidebar badges PASSED, all SEO smoke endpoints (sitemap.xml, robots.txt, ai.txt, llms.txt, merchant-feed.xml) PASSED, admin tab renders (ai-blogger, schedule, leads) PASSED."
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "ensure_admin() vs require_admin() naming is confusing — ensure_admin() seeds the admin row while require_admin() does auth-gate-redirect. Consider renaming ensure_admin() to seed_admin_user() to prevent the same bug class from recurring (this iteration's root cause).",
+    "The inline current_user()+role==='admin' JSON-403 gate is now duplicated across leads-online.php, validate-gateway-key.php and likely others — extract into a single helper like require_admin_json() in functions.php to centralize the auth contract for AJAX endpoints."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "not tested (backend-only request)"},
+  "test_credentials": "admin@maventechsoftware.com / Admin@123 (from /app/memory/test_credentials.md). Cookie-jar admin login via /login.php worked correctly.",
+  "seed_data_creation": "None — used existing admin account. notify-stock subscription test inserts a row with TEST_-style email and is cleaned up by the test itself.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 11 backend fixes are fully verified. The pytest file /app/backend/tests/test_iteration11_email_validation_and_gateway.py is the authoritative regression suite for: PHP mailer email-validation (lead/contact/notify-stock), email outbox queueing on forgot-password, leads-online AJAX (admin-gated), validate-gateway-key AJAX (admin-gated, Stripe/PayPal short-circuits), gateway admin UI tabs, and SEO public endpoints. Keep using it for future iterations to detect regressions on these flows.",
+  "rca of the issue": "Confirmed root causes from iteration 10 are all fixed: (1) ensure_admin() was a seed function being misused as an auth gate — replaced with inline current_user()+role check; (2) mailer.php was not loaded in notify-stock.php so email_address_deliverable() always evaluated as undefined (function_exists guard skipped validation) — fixed by require_once at top of file. No new issues found."
+}

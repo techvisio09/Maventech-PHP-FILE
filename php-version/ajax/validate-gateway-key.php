@@ -19,6 +19,13 @@ require_once __DIR__ . '/../includes/functions.php';
 header('Content-Type: application/json');
 
 ensure_admin();
+// JSON 403 for unauthenticated callers — never redirect on this AJAX path.
+$_authedUser = current_user();
+if (!$_authedUser || ($_authedUser['role'] ?? '') !== 'admin') {
+    http_response_code(403);
+    echo json_encode(['ok' => false, 'message' => 'Admin access required']);
+    exit;
+}
 
 $in       = json_decode(file_get_contents('php://input'), true) ?: $_POST;
 $gateway  = strtolower(trim((string)($in['gateway'] ?? '')));
