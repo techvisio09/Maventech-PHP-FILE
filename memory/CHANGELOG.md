@@ -1,5 +1,21 @@
 # Changelog
-## 2026-02-15 — Homepage typography elegance pass
+## 2026-02-15 — Homepage typography elegance pass + v2 site-wide polish
+
+### v2 elegance polish (Feb 15 evening) — site-wide
+1. **Mega-menu shrink** — Microsoft Products dropdown padding reduced (`p-4` → `p-3`), antivirus min-width 320px → 260px. Tighter row gutters, smaller `.mega-heading` (.65rem), tighter `.mega-year` (.82rem), smaller `.mega-link` (.76rem). Topic-hub badges slimmed (padding/font/weight).
+2. **Volume Pricing card** — `functions.php` markup rebuilt with smaller icons, font sizes, button paddings; uses `fw-semibold` instead of `fw-bold`.
+3. **Cards / blocks shrunk** — global `.card.p-4` → 1.1rem padding; `.card.p-5` → 1.5rem; spotlight 1.25rem; side-product-row .75rem; `.py-5` 3rem → 2.4rem; `.py-4` 1.6rem.
+4. **Homepage card padding** — explicit `p-4` → `p-3` swaps on Welcome-back, How-it-works, Why-choose, hero stats, biz-card; CTA band `p-5` → `p-4`.
+5. **Site-wide boldness reduced again** — `.fw-bold` to 600, `.fw-semibold` to 500, navbar nav-links to 500, headings to 600, hero h1 to 650.
+6. **Contrast lift** — `--bs-body-color: #1e293b` (slate-800), `--bs-secondary-color: #475569` (slate-600), `--bs-emphasis-color: #0f172a` (slate-900). Dark mode mirrored with `#e2e8f0` / `#94a3b8` / `#f8fafc`.
+7. **Card aesthetics** — border-radius `.65rem` (smaller than .75rem), softer shadow, refined border color.
+8. **Buttons / chips** — Eyebrow .65rem 600 weight; btn-lg & btn-hero-cta paddings reduced.
+
+All changes are purely additive CSS overrides + tiny markup swaps — no regressions to admin or backend logic. Verified visually on homepage (hero + both mega-menus + sections), shop.php, blog.php, about-us.php in both light & dark themes.
+
+---
+
+## 2026-02-15 — Homepage typography elegance pass (initial)
 
 ### Less-bold, more-elegant content (assets/css/style.css)
 - Reduced `.fw-bold` weight from `800!important` → `600!important` (now semibold instead of black-bold)

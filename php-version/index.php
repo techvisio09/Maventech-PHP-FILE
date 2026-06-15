@@ -160,7 +160,7 @@ include __DIR__ . '/includes/header.php';
 <?php if ($welcomeBack): ?>
 <section class="py-4">
   <div class="container">
-    <div class="card p-4" data-testid="welcome-back-strip">
+    <div class="card p-3" data-testid="welcome-back-strip">
       <span class="eyebrow">TAILORED FOR RETURNING USERS</span>
       <div class="d-flex justify-content-between align-items-end flex-wrap gap-2 mb-3">
         <div>
@@ -351,7 +351,7 @@ include __DIR__ . '/includes/header.php';
   <div class="container">
     <div class="row g-4 align-items-center">
       <div class="col-lg-4">
-        <div class="rounded-4 text-white p-4 position-relative overflow-hidden biz-card" data-testid="business-card">
+        <div class="rounded-4 text-white p-3 position-relative overflow-hidden biz-card" data-testid="business-card">
           <div class="biz-glow"></div>
           <span class="badge rounded-pill text-bg-warning text-dark fw-bold mb-2" style="font-size:.62rem; letter-spacing:.12em;">VOLUME PRICING</span>
           <h3 class="fw-bold h4 mb-1">For Every <span class="text-warning">Business</span></h3>
@@ -393,7 +393,7 @@ include __DIR__ . '/includes/header.php';
       ];
       foreach ($steps as [$n, $t, $d]): ?>
         <div class="col-lg-3 col-sm-6">
-          <div class="card h-100 p-4">
+          <div class="card h-100 p-3">
             <div class="fs-3 fw-bold text-primary opacity-50"><?= $n ?></div>
             <h6 class="fw-bold mt-1"><?= $t ?></h6>
             <small class="text-secondary"><?= $d ?></small>
@@ -437,7 +437,7 @@ include __DIR__ . '/includes/header.php';
       ];
       foreach ($why as [$ic, $t, $d]): ?>
         <div class="col-lg-4 col-sm-6">
-          <div class="card h-100 p-4">
+          <div class="card h-100 p-3">
             <i class="bi <?= $ic ?> text-primary fs-3"></i>
             <h6 class="fw-bold mt-2"><?= $t ?></h6>
             <small class="text-secondary"><?= $d ?></small>
@@ -506,7 +506,7 @@ include __DIR__ . '/includes/header.php';
       <div class="col-lg-5">
         <div class="row g-3 text-center">
           <?php foreach ([['50,000+', 'Happy Customers'], ['2+ Yrs', 'In Business'], ['15-30min', 'Delivery Time'], ['4.6/5', 'Customer Rating']] as [$v, $l]): ?>
-            <div class="col-6"><div class="card p-4 h-100"><div class="fs-3 fw-bold text-primary"><?= $v ?></div><small class="text-secondary"><?= $l ?></small></div></div>
+            <div class="col-6"><div class="card p-3 h-100"><div class="fs-3 fw-bold text-primary"><?= $v ?></div><small class="text-secondary"><?= $l ?></small></div></div>
           <?php endforeach; ?>
         </div>
         <div class="text-center mt-3 small text-secondary">
@@ -552,7 +552,7 @@ include __DIR__ . '/includes/header.php';
 <!-- CTA band -->
 <section class="py-5">
   <div class="container">
-    <div class="rounded-4 text-center text-white p-5" style="background: linear-gradient(120deg, #2a1430 0%, #1b2240 50%, #0e4f5c 100%);" data-testid="cta-band">
+    <div class="rounded-4 text-center text-white p-4" style="background: linear-gradient(120deg, #2a1430 0%, #1b2240 50%, #0e4f5c 100%);" data-testid="cta-band">
       <h2 class="fw-bold">Get Your Microsoft Office License Today</h2>
       <p class="opacity-75 mx-auto" style="max-width:540px;">Authentic perpetual licenses with professional support and instant delivery. Join 50,000+ satisfied customers.</p>
       <div class="d-flex justify-content-center gap-4 flex-wrap small my-3 opacity-75">

@@ -1057,14 +1057,14 @@ function save_support_message(array $d): void
 function render_menu_promo(bool $compact = false): string
 {
     $phone = company_info()['phone'] ?: (defined('SITE_PHONE') ? SITE_PHONE : '');
-    $volume = '<div class="d-flex align-items-center gap-2 mb-1"><i class="bi bi-boxes text-primary fs-5"></i><span class="fw-bold">Volume Pricing</span></div>'
-            . '<small class="text-secondary d-block mb-2">Exclusive discounts on bulk licenses for teams and businesses.</small>'
-            . '<a href="contact.php" class="btn btn-sm btn-primary rounded-pill px-3" data-testid="menu-request-quote">Request a Quote</a>';
-    $question = '<div class="fw-bold small">Have a Question?</div>'
-              . '<small class="text-secondary d-block">Call Mon–Fri 9 AM–6 PM EST</small>'
-              . '<a href="tel:' . esc($phone) . '" class="fw-bold text-decoration-none">' . esc($phone) . '</a> '
-              . '<small class="text-secondary">or</small> '
-              . '<a href="#" onclick="toggleChat();return false;" class="fw-bold text-decoration-none text-primary">chat with a sales expert</a>';
+    $volume = '<div class="d-flex align-items-center gap-2 mb-1"><i class="bi bi-boxes text-primary"></i><span class="fw-semibold">Volume Pricing</span></div>'
+            . '<small class="text-secondary d-block mb-2" style="font-size:.72rem;">Exclusive discounts on bulk licenses for teams and businesses.</small>'
+            . '<a href="contact.php" class="btn btn-sm btn-primary rounded-pill" style="padding:.28rem .85rem;font-size:.76rem;" data-testid="menu-request-quote">Request a Quote</a>';
+    $question = '<div class="fw-semibold small" style="font-size:.82rem;">Have a Question?</div>'
+              . '<small class="text-secondary d-block" style="font-size:.7rem;">Call Mon–Fri 9 AM–6 PM EST</small>'
+              . '<a href="tel:' . esc($phone) . '" class="fw-semibold text-decoration-none" style="font-size:.82rem;">' . esc($phone) . '</a> '
+              . '<small class="text-secondary" style="font-size:.72rem;">or</small> '
+              . '<a href="#" onclick="toggleChat();return false;" class="fw-semibold text-decoration-none text-primary" style="font-size:.78rem;">chat with a sales expert</a>';
     if ($compact) {
         return '<div class="mega-promo mt-3 pt-3" data-testid="menu-promo">' . $volume . '<div class="mt-3">' . $question . '</div></div>';
     }

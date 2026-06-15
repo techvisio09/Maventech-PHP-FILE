@@ -376,7 +376,7 @@ endif; ?>
       <ul class="navbar-nav mx-auto">
         <li class="nav-item dropdown position-static">
           <a class="nav-link dropdown-toggle fw-semibold" href="#" data-bs-toggle="dropdown" data-testid="nav-microsoft">Microsoft Products</a>
-          <div class="dropdown-menu mega p-4 shadow">
+          <div class="dropdown-menu mega p-3 shadow">
             <div class="row g-4">
               <?php foreach (nav_microsoft() as $heading => $col): ?>
                 <div class="col-6 col-lg-3">
@@ -399,7 +399,7 @@ endif; ?>
         </li>
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle fw-semibold" href="#" data-bs-toggle="dropdown" data-testid="nav-antivirus">Antivirus</a>
-          <div class="dropdown-menu p-3 shadow antivirus-menu" style="min-width: 320px;">
+          <div class="dropdown-menu p-3 shadow antivirus-menu" style="min-width: 260px;">
             <div class="mega-heading mb-1">ANTIVIRUS</div>
             <?php $_av = nav_antivirus(); foreach ($_av['brands'] as $_avLabel => $_avSlug): ?>
               <a class="mega-year" href="category.php?slug=<?= esc($_avSlug) ?>" data-testid="menu-<?= esc($_avSlug) ?>"><?= esc($_avLabel) ?></a>

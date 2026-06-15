@@ -2070,3 +2070,139 @@ body:not([data-brand-motion="bounce"]) .navbar .logo-3d::before {
     animation: none !important;
   }
 }
+
+
+/* ============================================================
+   ELEGANCE POLISH v2 — Site-wide refinement (Feb 2026)
+   Goals (user feedback):
+   1. Shrink the mega-menu banner (Microsoft Products + Antivirus)
+   2. Reduce boldness across the entire site; lift contrast for richer reading
+   3. Make block/card sections smaller, simpler, less chunky
+   ============================================================ */
+
+/* --- 1. Lift body contrast (richer reading) --- */
+:root {
+  --bs-body-color: #1e293b;          /* slate-800, sharper than default #212529 muted */
+  --bs-secondary-color: #475569;     /* slate-600 for muted text */
+  --bs-emphasis-color: #0f172a;      /* slate-900 for headings */
+}
+body { color: var(--bs-body-color); }
+
+/* --- 2. Soften boldness globally (less aggressive than v1) --- */
+.fw-bold       { font-weight: 600 !important; }
+.fw-semibold   { font-weight: 500 !important; }
+strong, b      { font-weight: 600; }
+.btn           { font-weight: 500; }
+.navbar-nav .nav-link,
+.navbar-nav .nav-link.fw-semibold,
+.navbar-nav .dropdown-toggle.fw-semibold { font-weight: 500 !important; }
+h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6 { font-weight: 600; }
+.display-4, .display-5 { font-weight: 650; }
+.hero h1 { font-weight: 650; }
+.hero .hero-stats .fs-3 { font-weight: 650; }
+
+/* --- 3. Shrink the Microsoft Products mega menu --- */
+.navbar .dropdown-menu.mega {
+  padding: 1rem 1.1rem !important;          /* override inline p-4 */
+  border-radius: 0 0 .85rem .85rem;
+  box-shadow: 0 14px 36px rgba(2, 6, 23, .12);
+}
+.navbar .dropdown-menu.mega .row { --bs-gutter-x: 1.1rem; --bs-gutter-y: .5rem; }
+.mega .mega-heading,
+.antivirus-menu .mega-heading {
+  font-size: .65rem !important;
+  letter-spacing: .12em;
+  margin-bottom: .35rem !important;
+  font-weight: 600;
+}
+.mega-year {
+  font-size: .82rem;
+  padding: .14rem 0;
+  font-weight: 500;
+  line-height: 1.35;
+}
+.antivirus-menu .mega-link,
+.mega a.mega-link {
+  font-size: .76rem;
+  padding: .14rem 0;
+  font-weight: 500;
+}
+.mega a.mega-link.fw-bold,
+.antivirus-menu a.mega-link.fw-bold { font-weight: 600 !important; }
+
+/* --- 4. Shrink the Antivirus dropdown --- */
+.navbar .dropdown-menu.antivirus-menu {
+  min-width: 250px !important;
+  padding: .85rem !important;
+  border-radius: .75rem;
+}
+
+/* --- 5. Compact the Volume Pricing / Have-a-Question promo strip --- */
+.dropdown-menu .mega-promo {
+  margin-top: .85rem !important;
+  padding-top: .85rem !important;
+  font-size: .82rem;
+}
+.dropdown-menu .mega-promo .fw-bold { font-size: .9rem; font-weight: 600 !important; }
+.dropdown-menu .mega-promo small { font-size: .72rem; }
+.dropdown-menu .mega-promo .btn-sm { padding: .3rem .85rem; font-size: .78rem; }
+.dropdown-menu .mega-promo .bi-boxes { font-size: 1.1rem !important; }
+
+/* Topic hubs strip under the menu — slim it down */
+.dropdown-menu.mega > .border-top { margin-top: .7rem !important; padding-top: .6rem !important; }
+.dropdown-menu .badge { padding: 3px 8px !important; font-size: 10.5px !important; font-weight: 500 !important; }
+
+/* --- 6. Make all cards / blocks smaller & lighter --- */
+.card {
+  border-radius: .65rem;
+  border-color: rgba(15, 23, 42, .08);
+  box-shadow: 0 1px 2px rgba(2, 6, 23, .04), 0 2px 8px rgba(2, 6, 23, .04);
+}
+.card.p-4, .card.p-lg-4 { padding: 1.1rem !important; }
+.card.p-5 { padding: 1.5rem !important; }
+.card.p-3 { padding: .9rem !important; }
+[data-bs-theme="dark"] .card { border-color: rgba(103, 232, 249, .14); }
+
+/* Spotlight & side-product rows */
+.spotlight-card { padding: 1.25rem !important; }
+.side-product-row { padding: .75rem !important; }
+
+/* Compact section spacing (was py-5 = 3rem) */
+.py-5 { padding-top: 2.4rem !important; padding-bottom: 2.4rem !important; }
+.py-4 { padding-top: 1.6rem !important; padding-bottom: 1.6rem !important; }
+
+/* --- 7. Hero refinements --- */
+.hero { padding-top: 2.5rem !important; padding-bottom: 2.5rem !important; }
+.hero h1 { color: #0f172a; }
+.hero .text-secondary { color: #475569 !important; }
+.hero ul li { color: #1e293b; }
+
+/* --- 8. Eyebrow chips smaller --- */
+.eyebrow { font-size: .65rem; font-weight: 600; letter-spacing: .18em; }
+
+/* --- 9. Section headings smaller for elegance --- */
+section h2.fw-bold, section .h2.fw-bold { font-size: 1.55rem; }
+section h3.fw-bold, section .h3.fw-bold { font-size: 1.15rem; }
+section h6.fw-bold { font-size: .95rem; }
+
+/* --- 10. Trust-strip & badges slim --- */
+.trust-strip { padding: .65rem 0 !important; }
+
+/* --- 11. Buttons: pill, lighter weight, less chunky --- */
+.btn-lg { padding: .55rem 1.5rem; font-size: .95rem; }
+.btn-hero-cta { padding: .6rem 1.6rem; font-size: .95rem; }
+.btn-hero-ghost { padding: .55rem 1.5rem; font-size: .92rem; font-weight: 500; }
+
+/* --- 12. Subtle, refined dark mode tweaks --- */
+[data-bs-theme="dark"] {
+  --bs-body-color: #e2e8f0;
+  --bs-secondary-color: #94a3b8;
+  --bs-emphasis-color: #f8fafc;
+}
+
+/* --- 13. Mobile: keep the mega menu compact --- */
+@media (max-width: 991px) {
+  .navbar .dropdown-menu.mega { padding: .85rem !important; }
+  .navbar .dropdown-menu.mega .row { --bs-gutter-x: .75rem; }
+  .mega-year { font-size: .85rem; }
+}
