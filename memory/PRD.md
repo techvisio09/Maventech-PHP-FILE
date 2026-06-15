@@ -2219,3 +2219,55 @@ When admin creates a new category via the inline "+ Add Category" flow on the Ad
 - `/app/php-version/ajax/leads-online.php` — **NEW** endpoint.
 - `/app/php-version/ajax/proassist-schedule.php` — company-side notification email block after both insert + reschedule paths.
 
+
+
+## [Feb 2026 — Iteration 10] AI Auto-Blogger + SEO Health Check end-to-end QA pass
+
+**Scope**: Comprehensive hardening of the AI Auto-Blogger admin panel and Search Engine Visibility section so every button works correctly when the project is deployed to the operator's real domain.
+
+### Completed
+- **REAL SEO Health Check probes** (was hardcoded `ok=true` for 7 of 11 tiles) — new helper `seo_health_probe()` in `includes/seo-bot.php` (cached 10 min) runs live cURL probes against `/sitemap.xml`, `/robots.txt`, `/ai.txt`, `/llms.txt`, `/merchant-feed.xml`, the IndexNow key file, and the home page (JSON-LD block count). Each tile now shows HTTP code + Content-Type + byte-length (or a clear failure reason). Tiles turn RED automatically when the corresponding endpoint breaks on the real domain.
+- **"Re-run probes" admin button** + "Last probed Xm ago" age stamp on the Health Check summary (data-testid `seo-health-recheck-btn` / `seo-health-probe-age`). Bypasses the 10-min cache on demand.
+- **Cron URLs now respect the production domain** — both `cron/seo-daily.php` (AI Auto-Blogger Advanced Settings) and `cron.php` (SMTP Mail Server) now use `_seo_public_site_url()` instead of `site_url()`/`SITE_URL`. The URL the admin copies into cPanel/Plesk is always the right one (preview when previewing, production once `site_domain_url` is saved).
+- **GSC CSV drag-and-drop auto-import** — new drop-zone (data-testid `gsc-drop-zone`) above the SEO Discovery Lab upload form. Dragging a `.csv` or `.zip` (Search Console export bundle) onto it OR clicking `Browse` and picking a file auto-submits the form (no extra click needed). Paste path still works as before.
+- **Bug fix — duplicate breadcrumb on category pages**: `/category.php?slug=office-mac` was rendering TWO `<nav aria-label="breadcrumb">` blocks (`render_breadcrumb_nav` + `render_page_head` both emit one). Consolidated: `render_page_head` now accepts an empty `$crumbs` array to suppress the breadcrumb, and `category.php` passes `['Shop' => 'shop.php', $title => null]` so only ONE properly-aligned breadcrumb appears inside the dark hero band.
+
+### Already correct (verified end-to-end, no changes needed)
+- All 4 quick-action buttons publish posts LIVE (no `status='pending'` workflow exists — `blog_posts` schema has no status column, every insert goes straight to `blog.php`):
+  - `Write One Post` (`run_underserved_post`) — flashes "Force-published one post for ..."
+  - `Random Post` (`run_random_post`) — flashes "Random post published — featured ..."
+  - `Publish Full Batch` (`seo_run`) — flashes "AI Auto-Blogger run complete — N new blog posts" (24h cooldown enforced)
+  - `Trend Now` (`run_trends_article&force=1`) — flashes "Featured trends article published — ..."
+- Each successful insert immediately fires an IndexNow ping for the single new URL (`_seo_indexnow_submit_urls([$postUrl], ...)` at lines 1115 + 1386 of `seo-bot.php`).
+- `Submit Sitemap to All Search Engines` button collects URLs via `_seo_collect_index_urls` (always against the operator's `site_domain_url` via `_seo_public_site_url`), pings IndexNow, and stores `last_sitemap_submit_at` so the button flips to "Sitemap Submitted · N URLs · Xm ago" on next load.
+- `Auto-resubmit sitemap daily` toggle (data-testid `auto-weekly-toggle`) persists the `auto_sitemap_weekly` setting; `seo_bot_weekly_sitemap_tick()` runs in a shutdown-hook on every public page-load (cooldown 24h via `last_sitemap_submit_at`).
+- Token format validators in `save_seo_tokens` (line 1149+): GSC (30-96 alphanumeric + `-_`), Bing (16-64 alphanumeric or 32 hex), Yandex (12-64 hex or 12-96 alphanumeric), Pinterest (12-96 alphanumeric+`-_`), Google Merchant Center (6-20 digits) — invalid input is rejected with a friendly message; valid input persists via `setting_set()`.
+- `View Sitemap` (`view-sitemap-btn`) → `/sitemap.xml` returns HTTP 200 application/xml (87 KB)
+- `View Blog` → `/blog.php` returns HTTP 200
+- `Run SEO Audit` (`open-seo-audit-btn`) → `/seo-audit.php` returns HTTP 200
+- `Auto-generate from top categories` (`hubs-autogen-btn`) → `topic_hubs_auto_generate(2)` creates new hubs from categories with ≥2 active products; existing `/hub/microsoft-office`, `/hub/windows`, `/hub/antivirus` all return HTTP 200
+- All 6 public SEO endpoints serve real content: `/sitemap.xml` (87 KB) · `/robots.txt` (3.9 KB) · `/ai.txt` (1.9 KB) · `/llms.txt` (15.6 KB) · `/merchant-feed.xml` (59 KB) · IndexNow key file (32 bytes)
+
+### Testing
+- **`testing_agent_v3_fork` iteration 10** — 32/32 pytest assertions PASS, Playwright UI smoke clean
+- Test report: `/app/test_reports/iteration_9.json` (success_rate: 100% backend, 100% frontend)
+- Two test-script bugs were self-fixed by the testing agent inside the test file; no production code defects found
+
+### Files touched
+- `/app/php-version/includes/seo-bot.php` — new `seo_health_probe()` helper (~line 478)
+- `/app/php-version/admin.php` — Health Check tiles now read `$hp[...]['ok']` (lines 4811-4862), new `Re-run probes` button + age stamp (~line 4905), GSC drop-zone + auto-submit JS (~line 4615), cron URLs at lines 4989 + 9469 use `_seo_public_site_url()`, new `seo_health_recheck` handler (~line 1388)
+- `/app/php-version/includes/functions.php` — `render_page_head()` accepts empty `$crumbs` array to suppress duplicate breadcrumb
+- `/app/php-version/category.php` — passes `['Shop' => 'shop.php', $title => null]` to `render_page_head`, removed standalone `render_breadcrumb_nav` call
+
+### Verification matrix
+| Item | Verdict |
+|---|---|
+| Health Check tiles real | ✓ All 7 endpoint tiles show HTTP 200 + size + content-type (or RED with specific error) |
+| Re-run probes button | ✓ Flashes "✓ SEO health probes re-run — N/7 endpoints OK on `<site>`" |
+| Cron URL uses prod domain | ✓ `cron/seo-daily.php?token=...` and `cron.php?token=...` both emit full https URL |
+| GSC drop-zone | ✓ "Drop your Search Console export here" copy + drag/click both work |
+| 4 post buttons publish live | ✓ Each flashes a success message + new post visible on `/blog.php` |
+| `View Sitemap / View Blog / Run SEO Audit` | ✓ All return HTTP 200 |
+| Topic hubs `/hub/<slug>` | ✓ microsoft-office, windows, antivirus all return 200 |
+| Category breadcrumb regression | ✓ ONE breadcrumb, properly aligned inside hero band |
+| Token format validators | ✓ Reject garbage, accept valid AI/GSC/Bing/Yandex/Pinterest/Merchant ID formats |
