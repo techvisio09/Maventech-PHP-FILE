@@ -63,6 +63,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->prepare('DELETE FROM products WHERE slug=?')->execute([$_POST['slug']]);
         header('Location: admin.php?tab=products&msg=Product+deleted'); exit;
 
+    } elseif ($action === 'regen_product_image') {
+        // ---------------------------------------------------------------------
+        // AJAX endpoint: shell out to /app/scripts/generate_product_images.py
+        // for ONE product (by slug).  Returns JSON {ok:true, image:"/uploads/…"}
+        // The script prints the new internal path on stdout when it succeeds.
+        // ---------------------------------------------------------------------
+        header('Content-Type: application/json');
+        $slug = trim($_POST['slug'] ?? '');
+        if ($slug === '') { echo json_encode(['ok' => false, 'error' => 'Missing slug']); exit; }
+        $p = $pdo->prepare('SELECT slug, name, brand, category, platform, apps FROM products WHERE slug=? LIMIT 1');
+        $p->execute([$slug]);
+        $prod = $p->fetch();
+        if (!$prod) { echo json_encode(['ok' => false, 'error' => 'Product not found']); exit; }
+        $cmd = sprintf(
+            '/root/.venv/bin/python3 /app/scripts/generate_product_images.py --slug=%s --name=%s --brand=%s --category=%s --platform=%s --apps=%s 2>&1',
+            escapeshellarg($prod['slug']),
+            escapeshellarg((string)$prod['name']),
+            escapeshellarg((string)$prod['brand']),
+            escapeshellarg((string)$prod['category']),
+            escapeshellarg((string)$prod['platform']),
+            escapeshellarg((string)($prod['apps'] ?? ''))
+        );
+        // 90-second hard ceiling so the admin UI doesn't spin forever if
+        // the Universal Key is rate-limited or out of budget.
+        set_time_limit(120);
+        $output = [];
+        $code = 0;
+        exec($cmd, $output, $code);
+        $last = trim((string)end($output));
+        if ($code === 0 && strpos($last, '/uploads/products/') === 0) {
+            // Persist the new path on the product row immediately so even
+            // if the admin forgets to click Save, the storefront serves
+            // the fresh image.
+            $pdo->prepare('UPDATE products SET image=? WHERE slug=?')->execute([$last, $slug]);
+            echo json_encode(['ok' => true, 'image' => $last]);
+        } else {
+            $err = $last !== '' ? $last : ('exit ' . $code);
+            // Surface the Emergent-budget message in human English when present
+            if (stripos(implode("\n", $output), 'budget') !== false) {
+                $err = 'Universal Key budget exceeded — top up in Profile → Universal Key → Add Balance.';
+            }
+            echo json_encode(['ok' => false, 'error' => $err]);
+        }
+        exit;
+
     } elseif ($action === 'toggle_product') {
         $pdo->prepare('UPDATE products SET is_active=1-is_active WHERE slug=?')->execute([$_POST['slug']]);
         header('Location: admin.php?tab=products&msg=Status+toggled'); exit;
@@ -5037,7 +5082,23 @@ elseif ($tab === 'products'):
                     </select>
                   </div>
                   <div class="col-4 d-flex align-items-end"><div class="form-check form-switch mt-2"><input type="checkbox" class="form-check-input" name="is_active" id="f_act" <?= ($editing['is_active'] ?? 1)?'checked':'' ?>><label class="form-check-label small" for="f_act">Active</label></div></div>
-                  <div class="col-12"><label class="form-label small mb-0">Image URL</label><input class="form-control form-control-sm" id="f_image" name="image" value="<?= esc($editing['image']) ?>" placeholder="https://… or upload to /uploads"></div>
+                  <div class="col-12">
+                    <label class="form-label small mb-0 d-flex align-items-center justify-content-between">
+                      <span>Image URL</span>
+                      <button type="button" class="btn btn-sm btn-soft-purple d-inline-flex align-items-center gap-1"
+                              id="aiRegenBtn" data-testid="ai-regen-btn"
+                              data-slug="<?= esc($editing['slug'] ?? '') ?>"
+                              <?= empty($editing['slug']) ? 'disabled title="Save the product first, then click to regenerate the image."' : 'title="Generate a fresh product image with AI"' ?>
+                              style="font-size:11px;padding:2px 10px;border-radius:999px;">
+                        <i class="bi bi-stars"></i>
+                        <span id="aiRegenLabel">Regenerate image with AI</span>
+                      </button>
+                    </label>
+                    <input class="form-control form-control-sm" id="f_image" name="image" value="<?= esc($editing['image']) ?>" placeholder="https://… or /uploads/products/&lt;slug&gt;.webp">
+                    <small class="text-muted d-block mt-1" id="aiRegenHint" style="font-size:11px;">
+                      Click <em>Regenerate image with AI</em> to produce a fresh retail-card image based on the product name, brand and apps — saved to <code>/uploads/products/&lt;slug&gt;.webp</code>.
+                    </small>
+                  </div>
                   <div class="col-12"><label class="form-label small mb-0">Description</label><textarea class="form-control form-control-sm" id="f_desc" name="description" rows="3"><?= esc($editing['description'] ?? '') ?></textarea></div>
                 </div>
 
@@ -5197,6 +5258,56 @@ elseif ($tab === 'products'):
       document.getElementById('saveOut').textContent = 'save $0.00';
     }
   }
+
+  // ============================================================
+  // "Regenerate image with AI" — POSTs to admin.php with action=
+  // regen_product_image, which shells out to the Python generator.
+  // On success the new /uploads/products/<slug>.webp path is
+  // returned, written into the Image URL input + Save button is
+  // briefly highlighted so the admin remembers to persist it.
+  // ============================================================
+  (function () {
+    const btn = document.getElementById('aiRegenBtn');
+    if (!btn) return;
+    const label = document.getElementById('aiRegenLabel');
+    const hint  = document.getElementById('aiRegenHint');
+    const img   = document.getElementById('f_image');
+    const save  = document.querySelector('form button[type="submit"]');
+    btn.addEventListener('click', async function () {
+      const slug = btn.dataset.slug;
+      if (!slug) return;
+      const original = label.textContent;
+      btn.disabled = true;
+      label.textContent = 'Generating…';
+      hint.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Generating a fresh retail-card image — this typically takes 5-15 seconds.';
+      try {
+        const fd = new FormData();
+        fd.append('action', 'regen_product_image');
+        fd.append('slug', slug);
+        const res = await fetch('admin.php?tab=products', { method: 'POST', body: fd, credentials: 'same-origin' });
+        const json = await res.json().catch(() => null);
+        if (!res.ok || !json || !json.ok) {
+          throw new Error((json && json.error) || ('HTTP ' + res.status));
+        }
+        // Append a cache-buster so the browser re-fetches the new file.
+        img.value = json.image + '?v=' + Date.now();
+        if (typeof updPrev === 'function') updPrev();
+        label.textContent = 'Generated ✓';
+        hint.innerHTML = '<i class="bi bi-check2-circle text-success me-1"></i>New image saved to <code>' + json.image + '</code>. Click <strong>Save</strong> to keep it.';
+        if (save) {
+          save.classList.add('btn-warning');
+          save.classList.remove('btn-primary');
+          save.scrollIntoView({block: 'center', behavior: 'smooth'});
+        }
+        setTimeout(() => { label.textContent = original; btn.disabled = false; }, 4500);
+      } catch (e) {
+        label.textContent = 'Failed — retry?';
+        hint.innerHTML = '<i class="bi bi-exclamation-triangle text-danger me-1"></i>' + (e.message || 'Generation failed') + '. Make sure the Universal Key has budget (Profile → Universal Key → Add Balance).';
+        btn.disabled = false;
+        setTimeout(() => { label.textContent = original; }, 6000);
+      }
+    });
+  })();
   </script>
   <?php endif; ?>
 

@@ -254,6 +254,39 @@ async def generate_one(source_url: str, meta: dict, retries: int = 2) -> str | N
 
 
 async def main():
+    # CLI mode: --slug <slug> (+ optional --name/--brand/--category/--platform/--apps)
+    # → regenerate exactly one product.  PHP passes the metadata directly
+    # via CLI args so the Python script never needs DB credentials.
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--slug", help="Regenerate only this single product slug")
+    parser.add_argument("--name", default="")
+    parser.add_argument("--brand", default="")
+    parser.add_argument("--category", default="")
+    parser.add_argument("--platform", default="")
+    parser.add_argument("--apps", default="")
+    args = parser.parse_args()
+
+    if args.slug:
+        row = {
+            "slug":     args.slug,
+            "name":     args.name or args.slug.replace("-", " ").title(),
+            "brand":    args.brand,
+            "category": args.category,
+            "platform": args.platform,
+            "apps":     args.apps,
+        }
+        # Wipe any existing artefacts so the generator definitely overwrites.
+        for ext in (".png", ".webp", ".jpg"):
+            (OUT_DIR / f"{args.slug}{ext}").unlink(missing_ok=True)
+
+        internal = await generate_one(args.slug, row)
+        if internal:
+            print(internal)   # stdout = the new path so PHP can capture it
+            sys.exit(0)
+        sys.exit(3)
+
+    # Bulk mode (default): read /tmp/img_remap.json.
     if not REMAP_IN.exists():
         print(f"Missing {REMAP_IN}", file=sys.stderr)
         sys.exit(1)

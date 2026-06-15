@@ -1284,10 +1284,16 @@ body.has-deal-bar #chat-panel { bottom: 155px; }
 .pd-360-stage { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; perspective: 1000px; }
 .pd-360-img { width: 74%; max-height: 78%; object-fit: contain; pointer-events: none;
   transform-style: preserve-3d; will-change: transform;
-  /* No auto-sway — the image sits still by default.  Cursor-tilt and
-     drag-to-spin still work because those rules below override transform. */
+  /* Gentle vertical bounce only — no Y-axis rotation.  Cursor-tilt
+     and drag-to-spin still override this transform when the user
+     interacts (see `.tilting` / `.dragging` rules below). */
+  animation: pd-bounce-only 3.6s ease-in-out infinite;
   filter: drop-shadow(0 26px 34px rgba(15, 30, 50, .3));
   -webkit-box-reflect: below 10px linear-gradient(transparent 74%, rgba(15, 30, 50, .12)); }
+@keyframes pd-bounce-only {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-10px); }
+}
 [data-bs-theme="dark"] .pd-360-img { filter: drop-shadow(0 26px 36px rgba(2, 6, 23, .55));
   -webkit-box-reflect: below 10px linear-gradient(transparent 72%, rgba(255, 255, 255, .1)); }
 @keyframes pd-sway {

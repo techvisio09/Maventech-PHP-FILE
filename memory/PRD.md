@@ -1162,3 +1162,40 @@ Specifically:
 - `curl -I /uploads/products/microsoft-office-home-2024-pc.webp` → 200, 15 028 bytes.
 - `grep -rn gosoftwarebuy /app/php-version` → still 0 (last iteration's fix unaffected).
 
+
+---
+
+## [Feb 2026] Iteration 22 — Vertical-only bounce + one-click "Regenerate image with AI" in Admin
+
+### What the user asked
+1. Restore the bouncing effect on product images **without** the 360° rotation (vertical bob only).
+2. Wire `generate_product_images.py` into the **Admin → Edit Product** modal as a one-click button that regenerates the product's image on demand and attaches it automatically.
+
+### What changed
+
+**1) Vertical-only bounce on the product page**
+- `/app/php-version/assets/css/style.css`: replaced the previous "no animation" with a new keyframe `pd-bounce-only` that animates `translateY` (0 → −10px → 0) over 3.6s, ease-in-out, infinite. The image bobs gently like before but never spins around its Y axis.
+- Cursor-tilt + drag-to-spin keep working (their CSS rules override `transform` when the user interacts).
+- Playwright check on the live product page: `getComputedStyle(.pd-360-img).animationName === 'pd-bounce-only'` ✓.
+
+**2) One-click "Regenerate image with AI" button in the Edit Product modal**
+- **Python CLI mode**: `/app/scripts/generate_product_images.py` now accepts `--slug --name --brand --category --platform --apps`. When invoked this way it generates the WebP + PNG for that single product and prints the new internal URL on stdout (no MariaDB call needed — PHP passes the metadata directly).
+- **PHP endpoint**: new POST action `regen_product_image` in `admin.php` shells out to `/root/.venv/bin/python3 /app/scripts/generate_product_images.py` with the product's metadata, captures stdout, writes the new path into `products.image` and returns `{"ok": true, "image": "/uploads/products/<slug>.webp"}` as JSON.  On budget/error it surfaces the human-friendly message ("top up the Universal Key").
+- **UI**: a new pill button `data-testid="ai-regen-btn"` lives on the Image URL row of the Edit Product modal.  Clicking it:
+  - flips the label to "Generating…" with an hourglass hint,
+  - POSTs to `admin.php?tab=products&action=regen_product_image&slug=…`,
+  - writes the returned path back into the Image URL input + cache-buster querystring,
+  - calls the existing `updPrev()` so the Live Website Preview card refreshes,
+  - highlights the form's Save button in warning-amber so the admin remembers to persist.
+- Disabled (with a tooltip) when the row is a brand-new product without a slug yet.
+
+### Files touched
+- `/app/php-version/assets/css/style.css` — `pd-bounce-only` keyframe + animation.
+- `/app/php-version/admin.php` — `regen_product_image` POST action + button HTML + JS handler.
+- `/app/scripts/generate_product_images.py` — `argparse` CLI for single-product mode.
+
+### Verification
+- `curl -X POST admin.php?tab=products -d "action=regen_product_image&slug=microsoft-office-home-2024-pc"` → `{"ok": true, "image": "/uploads/products/microsoft-office-home-2024-pc.webp"}`. New WebP file written, product row `image` column updated, took ~9s wall-clock (well under PHP's `set_time_limit(120)`).
+- Live product page now bobs vertically without rotating; AI image preserved.
+- Live admin Edit Product modal screenshot shows the new sparkles button and the Live Website Preview rendering the freshly regenerated retail card.
+
