@@ -2471,3 +2471,27 @@ On the receipt page (`/order-history.php`), the "Resend link" button (which re-s
 - Dark mode at 1280×900: QR plate stays white (correctly — required for scan contrast), gradient tag + CTA glow elegantly against dark navy bg, all text readable
 - "Or copy the link" click confirmed → green "✓ Link copied to clipboard" state, reverts after 1.8s
 
+
+## [Feb 2026 — Iteration 17] QR + chat panel compaction
+
+### Completed
+- **QR section shrunk** to fit naturally on the screen:
+  - Column from `col-md-4` → `col-md-3` (narrower rail)
+  - QR matrix from 192×192 → 132×132
+  - White plate wrap from 220×220 → 156×156
+  - Tag font 10.5 → 9.5 px, title 14 → 12.5 px, help 12 → 11 px
+  - Margins tightened (18 → 12 px between elements)
+  - Copy button padding 9×22 → 7×16
+  - Total rail height ~430 px (was ~600 px)
+- **Chat panel compacted** for an elegant bottom-right corner widget:
+  - Width 360 → 320 px, height 510 → 440 px
+  - Head padding 1rem 1.1rem → 0.75rem 0.9rem
+  - Avatar 38 → 32 px, name 0.95 → 0.88 rem, sub 0.72 → 0.68 rem
+  - Body padding 1rem 0.9rem → 0.75rem 0.7rem
+  - Message bubbles padding 0.6 0.85 → 0.5 0.75 rem, font 0.87 → 0.8 rem
+- Both light + dark modes verified.
+
+### Files touched
+- `/app/php-version/order-success.php` — col-md-3/9 split, QR matrix render param 132×132
+- `/app/php-version/assets/css/style.css` — `.receipt-qr-*` dimensions + `#chat-panel`, `#chat-head`, `.chat-avatar`, `#chat-body`, `.chat-msg` shrunk
+

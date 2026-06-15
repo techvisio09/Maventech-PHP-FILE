@@ -100,8 +100,8 @@ if ($order && $order['status'] === 'paid') {
 <div class="container py-5" style="max-width: 1000px;">
   <?php if ($order && $order['status'] === 'paid'): ?>
   <div class="row g-4 align-items-start" data-testid="order-success-grid">
-    <!-- ===== QR code rail (left on ≥md, top on mobile) ===== -->
-    <div class="col-12 col-md-4">
+    <!-- ===== QR code rail (left on ≥md, top on mobile) — compact ===== -->
+    <div class="col-12 col-md-3">
       <div class="receipt-qr-block sticky-top text-center" data-testid="receipt-qr-card" style="top:24px;">
         <div class="receipt-qr-tag" data-testid="receipt-qr-tag">
           <i class="bi bi-qr-code-scan me-1"></i>SCAN WITH YOUR PHONE
@@ -128,7 +128,7 @@ if ($order && $order['status'] === 'paid') {
     </div>
 
     <!-- ===== Existing thank-you content (right column) ===== -->
-    <div class="col-12 col-md-8 text-center">
+    <div class="col-12 col-md-9 text-center">
     <div class="success-tick mb-4" data-testid="success-tick"><i class="bi bi-check-lg"></i></div>
     <h1 class="fw-bold mt-3 h3" data-testid="order-success-title">Thanks for purchasing with us<?= $order['first_name'] ? ', ' . esc($order['first_name']) : '' ?>!</h1>
     <p class="text-secondary" data-testid="order-success-msg">For your <strong>product key</strong>, please check your email <strong>inbox or spam folder</strong> — we've sent it to <strong><?= esc($order['email']) ?></strong>.</p>
@@ -224,8 +224,8 @@ if ($order && $order['status'] === 'paid') {
       try {
         new QRCode(el, {
           text: url,
-          width: 192,
-          height: 192,
+          width: 132,
+          height: 132,
           colorDark: '#0f172a',
           colorLight: '#ffffff',
           correctLevel: QRCode.CorrectLevel.M,
