@@ -525,7 +525,7 @@ body[data-brand-motion="static"] .logo-3d > img:first-of-type {
 .deal-bar-flash { color: #ffc107; animation: pill-float 2.6s ease-in-out infinite; }
 body.has-deal-bar { padding-bottom: 56px; }
 body.has-deal-bar #chat-bubble { bottom: 84px; }
-body.has-deal-bar #chat-panel { bottom: 155px; }
+/* Chat-panel-above-deal-bar override moved next to #chat-panel definition. */
 
 /* ---------- Home: Best Sellers spotlight (featured + side list) ---------- */
 .spotlight-card { overflow: hidden; }
@@ -830,15 +830,18 @@ body.has-deal-bar #chat-panel { bottom: 155px; }
 }
 
 #chat-panel {
-  position: fixed; bottom: 80px; right: 18px; z-index: 1080;
-  width: 280px; max-width: calc(100vw - 24px); height: 380px;
+  position: fixed; bottom: 16px; right: 16px; z-index: 1080;
+  width: 240px; max-width: calc(100vw - 24px); height: 320px;
   display: none; flex-direction: column;
   border-radius: 14px; overflow: hidden;
-  box-shadow: 0 16px 40px rgba(2, 6, 23, .3);
+  box-shadow: 0 12px 32px rgba(2, 6, 23, .3);
   background: var(--chat-surface);
   border: 1px solid var(--chat-border);
   font-weight: 400;
 }
+/* Keep the launcher bubble visible when the panel is open by parking the
+ * panel above the bubble's column.  Bubble lives at right:18 bottom:22. */
+body.has-deal-bar #chat-panel { bottom: 72px; }
 #chat-panel.open { display: flex; animation: chat-pop .25s ease; }
 @keyframes chat-pop { from { opacity: 0; transform: translateY(14px) scale(.97); } to { opacity: 1; transform: none; } }
 
@@ -1580,6 +1583,8 @@ body.has-deal-bar #chat-panel { bottom: 155px; }
   display: flex; align-items: center; justify-content: center;
   box-shadow: 0 16px 40px rgba(6, 182, 212, .4);
   animation: tick-pop .55s cubic-bezier(.34, 1.56, .64, 1); }
+.success-tick.success-tick-sm { width: 64px; height: 64px; font-size: 2rem;
+  box-shadow: 0 10px 26px rgba(6, 182, 212, .35); }
 @keyframes tick-pop { from { transform: scale(.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
 /* ---------- Order success: QR receipt rail (boxless, theme-aware) ----------
@@ -1687,7 +1692,7 @@ body.has-deal-bar #chat-panel { bottom: 155px; }
   .hero-brand-watermark svg { width: 240px; height: 240px; }
   body.has-deal-bar { padding-bottom: 86px; }
   body.has-deal-bar #chat-bubble { bottom: 104px; }
-  body.has-deal-bar #chat-panel { bottom: 170px; }
+  body.has-deal-bar #chat-panel { bottom: 102px; }
   .deal-bar .container { padding-right: 2.4rem; }
   .deal-bar-flash { display: none; }
   .deal-bar .fw-bold.small { font-size: .72rem; }

@@ -97,16 +97,17 @@ if ($order && $order['status'] === 'paid') {
            . '&order=' . urlencode((string)$order['order_number']);
 }
 ?>
-<div class="container py-5" style="max-width: 1000px;">
+<div class="container py-4" style="max-width: 1100px;">
   <?php if ($order && $order['status'] === 'paid'): ?>
-  <div class="row g-4 align-items-start" data-testid="order-success-grid">
-    <!-- ===== QR code rail (left on ≥md, top on mobile) — compact ===== -->
-    <div class="col-12 col-md-3">
-      <div class="receipt-qr-block sticky-top text-center" data-testid="receipt-qr-card" style="top:24px;">
+  <div class="row g-3 align-items-start" data-testid="order-success-grid">
+    <!-- ===== QR code rail (pulled toward the left edge so the centered
+         thank-you block has more breathing room) ===== -->
+    <div class="col-12 col-md-3 ms-md-n2">
+      <div class="receipt-qr-block sticky-top" data-testid="receipt-qr-card" style="top:24px;text-align:left;">
         <div class="receipt-qr-tag" data-testid="receipt-qr-tag">
           <i class="bi bi-qr-code-scan me-1"></i>SCAN WITH YOUR PHONE
         </div>
-        <div class="receipt-qr-wrap" data-testid="receipt-qr-wrap">
+        <div class="receipt-qr-wrap" data-testid="receipt-qr-wrap" style="margin-left:0;">
           <div id="receipt-qr"
                data-testid="receipt-qr"
                data-url="<?= esc($qrUrl) ?>"></div>
@@ -127,17 +128,18 @@ if ($order && $order['status'] === 'paid') {
       </div>
     </div>
 
-    <!-- ===== Existing thank-you content (right column) ===== -->
+    <!-- ===== Thank-you content (centered, narrower for a more elegant feel) ===== -->
     <div class="col-12 col-md-9 text-center">
-    <div class="success-tick mb-4" data-testid="success-tick"><i class="bi bi-check-lg"></i></div>
-    <h1 class="fw-bold mt-3 h3" data-testid="order-success-title">Thanks for purchasing with us<?= $order['first_name'] ? ', ' . esc($order['first_name']) : '' ?>!</h1>
-    <p class="text-secondary" data-testid="order-success-msg">For your <strong>product key</strong>, please check your email <strong>inbox or spam folder</strong> — we've sent it to <strong><?= esc($order['email']) ?></strong>.</p>
-    <div class="card co-banner p-4 my-4 text-start">
-      <div class="d-flex justify-content-between mb-2"><span class="text-secondary">Order Number</span><span class="fw-bold" data-testid="order-number">#<?= esc($order['order_number']) ?></span></div>
-      <div class="d-flex justify-content-between mb-2"><span class="text-secondary">Payment Method</span><span class="fw-semibold"><?= $order['payment_method'] === 'paypal' ? 'PayPal' : 'Credit/Debit Card' ?></span></div>
-      <div class="d-flex justify-content-between"><span class="text-secondary">Total</span><span class="fw-bold text-primary"><?= format_price((float)$order['total']) ?></span></div>
+      <div class="success-thanks-block mx-auto" style="max-width:560px;">
+    <div class="success-tick success-tick-sm mb-3" data-testid="success-tick"><i class="bi bi-check-lg"></i></div>
+    <h1 class="fw-bold mt-2 mb-1 h4" data-testid="order-success-title" style="font-size:1.35rem;letter-spacing:.1px;">Thanks for purchasing with us<?= $order['first_name'] ? ', ' . esc($order['first_name']) : '' ?>!</h1>
+    <p class="text-secondary mb-3" data-testid="order-success-msg" style="font-size:.85rem;line-height:1.5;">For your <strong>product key</strong>, please check your email <strong>inbox or spam folder</strong> &mdash; we've sent it to <strong><?= esc($order['email']) ?></strong>.</p>
+    <div class="card co-banner p-3 my-3 text-start" style="border-radius:12px;">
+      <div class="d-flex justify-content-between mb-2"><span class="text-secondary small">Order Number</span><span class="fw-bold" data-testid="order-number" style="font-size:.9rem;">#<?= esc($order['order_number']) ?></span></div>
+      <div class="d-flex justify-content-between mb-2"><span class="text-secondary small">Payment Method</span><span class="fw-semibold" style="font-size:.85rem;"><?= $order['payment_method'] === 'paypal' ? 'PayPal' : 'Credit/Debit Card' ?></span></div>
+      <div class="d-flex justify-content-between"><span class="text-secondary small">Total</span><span class="fw-bold text-primary" style="font-size:.95rem;"><?= format_price((float)$order['total']) ?></span></div>
     </div>
-    <p class="small text-secondary">The charge will appear as <strong><?= SITE_LEGAL ?></strong> on your card statement.</p>
+    <p class="small text-secondary mb-3" style="font-size:.78rem;">The charge will appear as <strong><?= SITE_LEGAL ?></strong> on your card statement.</p>
 
     <!-- Order History self-service -->
     <div class="card co-banner p-3 mb-4 text-start" style="background:linear-gradient(135deg,#ecfdf5,#f0fdfa);border:1px solid #a7f3d0;border-radius:14px;" data-testid="oh-cta-on-success">
@@ -207,7 +209,8 @@ if ($order && $order['status'] === 'paid') {
       </div>
     </div>
 
-    </div><!-- /.col-md-8 -->
+      </div><!-- /.success-thanks-block -->
+    </div><!-- /.col-md-9 -->
   </div><!-- /.row -->
 
   <!-- QR generator — pure client-side from the URL above.  Uses qrcodejs

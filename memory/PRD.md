@@ -2513,3 +2513,39 @@ User: "Chat size is still too big. I want to reduce the size, make it half of it
 - `/app/php-version/order-success.php` — col-md-3/9 split, QR matrix render param 132×132
 - `/app/php-version/assets/css/style.css` — `.receipt-qr-*` dimensions + `#chat-panel`, `#chat-head`, `.chat-avatar`, `#chat-body`, `.chat-msg` shrunk
 
+
+## [Feb 2026 — Iteration 19] Order-success polish: shrink "thanks" block · shift QR left · halve chat again
+
+### Completed (3 user-requested tweaks in one pass)
+
+1. **QR rail nudged toward the LEFT edge**
+   - Added `ms-md-n2` to the `col-md-3`, switched the inner block to `text-align:left`, removed `margin: 0 auto` from `.receipt-qr-wrap`
+   - QR + helper text now sit at the left edge of the page so the centered thank-you block has more breathing room
+
+2. **"Thanks for purchasing with us, X!" block shrunk and properly centered**
+   - Wrapper: new `.success-thanks-block` with `max-width:560px mx-auto` so the content stays narrow + centered in the col-md-9 even on wide screens
+   - `success-tick`: 96 → 64 px via new `.success-tick-sm` modifier (font 3rem → 2rem, shadow softened)
+   - Headline: `h1.h3` (~1.75rem) → `h1.h4` with inline `1.35rem` (smaller, more elegant)
+   - Sub-message: explicit `0.85rem` line-height 1.5
+   - Order card: padding p-4 → p-3, border-radius 14 → 12 px, fonts 0.85-0.95rem
+   - Card-statement fine-print: 0.78rem
+
+3. **Chat panel halved again + anchored hard to bottom-right corner**
+   - Width 280 → 240 px, height 380 → 320 px
+   - Position changed from `bottom:80px right:18px` → `bottom:16px right:16px` (literal corner)
+   - Deal-bar override re-tuned: `body.has-deal-bar #chat-panel { bottom: 72px; }` (was 155 px) — drops directly above the 56 px deal strip
+   - Mobile override (`@media max-width 540px`): bottom 102 px (was 170 px)
+   - Removed duplicate / conflicting `body.has-deal-bar #chat-panel` rule that was inherited from the previous full-size panel layout
+
+### Files touched
+- `/app/php-version/order-success.php` — container max-width 1000→1100 px, ms-md-n2 on QR col, `.success-thanks-block` wrapper, `.success-tick-sm`, smaller H1 + meta + order card font sizes
+- `/app/php-version/assets/css/style.css` — `.success-tick-sm` modifier, `#chat-panel` resized + repositioned, `body.has-deal-bar #chat-panel` rules unified, mobile chat-panel override
+
+### Verification
+- Screenshot at 1280×800 with chat OPEN:
+  - QR rail sits at the far-left of the page
+  - "Thanks for purchasing" block centered at narrow width, all elements proportionally smaller
+  - Order Number / Payment Method / Total card visible and not obscured
+  - Chat panel docked to the absolute bottom-right corner, ~240×320 — only overlaps right edge of the lower part of the page, leaving the order details readable
+  - Page rhythm: left QR → centered thanks block → right-corner chat (3 distinct visual zones)
+
