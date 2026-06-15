@@ -982,6 +982,16 @@ function send_email(string $to, string $subject, string $html, ?int $orderId = n
             ->execute([$to, $subject, $html, $ok ? 'sent' : 'failed',
                 $ok ? null : ('Delivery failed (HTTP ' . $code . ')'),
                 $orderId, $tok, $providerId, $ok ? date('Y-m-d H:i:s') : null, $templateCode, $attachJson]);
+        // Only buzz the admin bell when delivery FAILED — every successful
+        // sent message would be noisy.
+        if (!$ok && function_exists('admin_notify')) {
+            admin_notify(
+                'email',
+                'Email delivery failed',
+                'To: ' . $to . ' · Subject: ' . mb_substr($subject, 0, 80, 'UTF-8') . ' · HTTP ' . $code,
+                '/admin.php?tab=emails&filter=failed'
+            );
+        }
         return;
     }
 

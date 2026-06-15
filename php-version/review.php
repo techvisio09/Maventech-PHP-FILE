@@ -48,6 +48,20 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && $review) {
         $pdo->prepare('UPDATE customer_reviews SET rating=?, comment=?, ai_generated=?, status=?, submitted_at=NOW() WHERE request_token=?')
             ->execute([$rating, $comment, $ai, $autoStatus, $token]);
         $saved = true;
+        // Notify the admin PWA bell — low-rating reviews mark themselves
+        // as needing attention; happy reviews still buzz because they're
+        // an opportunity for a public testimonial / share.
+        try {
+            $custName = trim((string)($review['customer_name'] ?? '')) ?: 'A customer';
+            admin_notify(
+                'review',
+                $rating . '★ review from ' . $custName,
+                mb_substr((string)$comment, 0, 140, 'UTF-8'),
+                $rating <= 3
+                    ? '/admin.php?tab=reviews&status=hidden'
+                    : '/admin.php?tab=reviews&status=published'
+            );
+        } catch (Throwable $e) { /* best-effort */ }
     }
 }
 

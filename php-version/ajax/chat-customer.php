@@ -50,6 +50,21 @@ if ($action === 'send') {
     // Sending a message implies done typing — clear the beacon immediately.
     $pdo->prepare('UPDATE chat_leads SET typing_customer_at = NULL WHERE id=?')->execute([$leadId]);
 
+    // Surface this in the admin PWA bell so the team knows someone is
+    // chatting on the storefront even when the dashboard tab isn't open.
+    try {
+        $leadRow = $pdo->prepare("SELECT name, email FROM chat_leads WHERE id=?");
+        $leadRow->execute([$leadId]);
+        $lr = $leadRow->fetch();
+        $who = trim((string)($lr['name'] ?? '')) ?: (string)($lr['email'] ?? 'Customer');
+        admin_notify(
+            'lead',
+            'New chat message — ' . $who,
+            mb_substr($msg, 0, 140, 'UTF-8'),
+            '/admin.php?tab=leads&id=' . (int)$leadId
+        );
+    } catch (Throwable $e) { /* best-effort */ }
+
     // First-message auto-reply — set the tone, let the customer know
     // they've been heard, and prompt them to share more detail so the
     // admin has context the moment they open the chat.  Inserted as

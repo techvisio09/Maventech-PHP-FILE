@@ -33,6 +33,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['write_review'])) {
         $initials = strtoupper(substr($parts[0], 0, 1) . (isset($parts[1]) ? substr($parts[1], 0, 1) : ''));
         $ins = db()->prepare('INSERT INTO reviews (name, initials, location, review_date, rating, text, product, verified) VALUES (?, ?, ?, CURDATE(), ?, ?, ?, 1)');
         $ins->execute([$user['name'], $initials, $location !== '' ? $location : 'Verified Buyer', $rating, $text, $product]);
+        // Bubble up to the admin PWA bell so the team can moderate / share.
+        admin_notify(
+            'review',
+            $rating . '★ on-site review from ' . $user['name'],
+            mb_substr($text, 0, 140, 'UTF-8'),
+            '/admin.php?tab=reviews'
+        );
         header('Location: reviews.php?submitted=1');
         exit;
     }

@@ -1287,3 +1287,61 @@ Specifically:
 - Playwright clicked the button on the live Admin page: label transitioned `Generate with AI → Writing… → Written ✓`, textarea populated with the AI copy.
 - Confirms overwrite-protection: if the textarea already has content, a browser `confirm()` dialog asks before replacing.
 
+
+---
+
+## [Feb 2026] Iteration 26 — Admin PWA: installable web/mobile app + activity notifications
+
+### What the user asked
+- Add an **Install Now** button on the admin page so the admin panel can be installed as a web app + mobile app icon.
+- Once installed, login with email/password works the same as the existing flow.
+- Notifications on web + phone for: **Orders, Sales Detail, Lead Management, Install Schedule, Email Activity, Customer Reviews, Email Templates**.
+
+### What changed
+
+**PWA installation**
+- New manifest at `/admin-manifest.json` (`display: standalone`, theme `#06b6d4`, background `#0f172a`, name "Maventech Admin"). Includes 7 home-screen **shortcuts** — one per requested category — so long-press on Android lands directly on the right tab.
+- New icons (`/assets/images/icons/admin-{192,256,384,512}.png` + `-maskable` variants) generated with ImageMagick — bold white "M" monogram on a brand cyan-on-navy rounded square.
+- New service worker at `/admin-sw.js`:
+  - Caches the admin shell (`stale-while-revalidate`) so the dashboard re-opens instantly even on flaky network.
+  - Listens for `periodicsync` (`maventech-admin-poll`, 30 s minimum) + a `message` channel fallback so the tab can also trigger polling.
+  - Calls `/admin.php?ajax=notif_poll` and turns each new row into a system OS notification (icon + body + tag).
+  - `notificationclick` focuses an existing admin window OR opens the deep link.
+- `<head>` of every admin page now links the manifest, sets the theme-color, Apple touch icons, status-bar meta.
+- New **Install** button in the admin topbar (`data-testid="adm-install-btn"`):
+  - Listens for `beforeinstallprompt` (Android Chrome / desktop Chrome / desktop Edge), reveals the button, calls `.prompt()` on click.
+  - On iOS Safari (no `beforeinstallprompt`) we still reveal the button and show a clear "Share → Add to Home Screen" instruction modal.
+
+**Activity bell + 30-second polling**
+- New table `admin_notifications {id, type, title, body, link, created_at, read_at}` with indexes on `created_at`, `type`, `read_at`.
+- New helper `/app/php-version/includes/admin-notify.php` (auto-loaded by `functions.php`). One-liner: `admin_notify($type, $title, $body, $link)` with 30-second dedupe.
+- 3 new AJAX endpoints in `admin.php`:
+  - `?ajax=notif_poll[&since=…]` → `{ok, items, unread}`.
+  - `?ajax=notif_count` → `{ok, unread}`.
+  - `?ajax=notif_mark[&id=X]` (POST) → mark one (or all unread when id omitted).
+- New **Activity bell** in the admin topbar (`data-testid="adm-bell-activity"`): red unread-count badge, dropdown with icon-prefixed items (`cart-check`, `graph-up`, `person-plus`, `tools`, `envelope`, `star`, `file-earmark-text`), relative timestamp ("31 s ago" / "h" / "d"), "Mark all read" action, click-to-deep-link.
+- 30-second polling: every interval the dashboard JS refreshes the dropdown + badge + pings the SW so its background scan runs even when the tab is hidden.
+
+**7 trigger points wired up**
+| Type | Where | Notification example |
+|------|------|--------|
+| `order`    | `checkout.php` (after `INSERT INTO orders`) | "New order MVT-001 · John Doe · USD 129.99 · 2 items" |
+| `sale`     | `checkout.php` (same place) | "$129.99 sale — MVT-001 · …" |
+| `lead`     | `ajax/chat-customer.php` (storefront chat) | "New chat — Alice: Hi, do you have Office 2019 for Mac?" |
+| `install`  | `checkout.php` (when ProAssist Premium is in the order) | "New install to schedule — Order MVT-001 …" |
+| `email`    | `includes/email.php` (Resend HTTP non-2xx) | "Email delivery failed · To: x · HTTP 550" |
+| `review`   | `review.php` + `reviews.php` (on-site form) | "5★ review from Bob: Lightning-fast delivery …" |
+| `template` | `admin.php` (after `UPDATE email_templates`) | "Email template updated · Your Microsoft product key — …" |
+
+### Files touched / added
+- New: `admin-manifest.json`, `admin-sw.js`, `assets/images/icons/admin-{192,256,384,512}.png` + `-maskable.png` variants, `includes/admin-notify.php`.
+- Edited: `includes/admin-shell.php` (`<head>` manifest links + Install button + Activity bell + SW-registration script + bell CSS + polling JS), `admin.php` (AJAX endpoints + template-save notify), `checkout.php` (order + sale + install notifies), `ajax/chat-customer.php` (lead notify), `review.php` + `reviews.php` (review notify), `includes/email.php` (failed-email notify), `includes/functions.php` (auto-load the helper).
+- New DB table: `admin_notifications`.
+
+### Verification
+- PWA assets reachable: `manifest HTTP 200`, `sw HTTP 200`, `icon-192/512 HTTP 200`.
+- `php -l` clean on all 8 edited files.
+- AJAX flow tested via cURL: 0 notifications → seed 4 → poll returns 4 + `unread:4` → mark all read returns `unread:0`.
+- Live admin screenshot: activity bell badge `4`, dropdown lists install + review + lead + order with correct icons, titles, bodies, "31 s ago" timestamps, and "Mark all read" action.
+- Install button is registered on `beforeinstallprompt` (verified in code; only shown when Chrome/Edge fires the event — Playwright headless Chromium suppresses it).
+

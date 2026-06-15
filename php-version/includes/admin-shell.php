@@ -62,6 +62,14 @@ $adm_brand_logo   = function_exists('company_info') ? (company_info()['logo'] ??
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title><?= esc($pageTitle) ?></title>
+<!-- PWA: install on desktop + mobile, background notification polling -->
+<link rel="manifest" href="/admin-manifest.json">
+<meta name="theme-color" content="#06b6d4">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Maventech Admin">
+<link rel="apple-touch-icon" href="/assets/images/icons/admin-192.png">
+<link rel="apple-touch-icon" sizes="512x512" href="/assets/images/icons/admin-512.png">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
 <link href="assets/css/dark-mode-polish.css" rel="stylesheet">
@@ -1276,6 +1284,40 @@ hr { border-color: var(--border); opacity:.5; }
         <?php endforeach; ?>
       </div>
     </div>
+    <!-- PWA install button — visible when the browser/OS supports installing.
+         Hidden by default; the SW-registration script (below) toggles it
+         once `beforeinstallprompt` fires (Android Chrome, desktop Chrome,
+         desktop Edge) OR an iOS Safari banner is shown manually. -->
+    <button class="adm-iconbtn adm-install-btn d-none" id="admInstallBtn"
+            title="Install Maventech Admin as an app" data-testid="adm-install-btn">
+      <i class="bi bi-download"></i>
+      <span class="adm-install-label">Install</span>
+    </button>
+
+    <!-- Activity bell — pushes notifications for new orders, leads,
+         reviews, installs, emails, sales-detail, templates. -->
+    <div class="adm-dropdown" id="ddActivity" data-testid="adm-activity-dropdown">
+      <button class="adm-iconbtn adm-bell adm-bell-activity"
+              onclick="document.getElementById('ddActivity').classList.toggle('open'); markActivityRead();"
+              title="Activity — orders, leads, reviews, installs, emails"
+              data-testid="adm-bell-activity">
+        <i class="bi bi-broadcast-pin"></i>
+        <span class="adm-bell-badge d-none" id="admActivityBadge" data-testid="adm-activity-badge">0</span>
+      </button>
+      <div class="adm-dropdown-menu" style="min-width:340px;max-width:90vw;max-height:480px;overflow-y:auto;padding:6px 0;">
+        <div class="px-3 py-2 d-flex justify-content-between align-items-center" style="border-bottom:1px solid var(--border);">
+          <strong style="font-size:13px;">Activity</strong>
+          <a href="#" class="text-decoration-none" style="font-size:11.5px;" onclick="event.preventDefault();markActivityRead(true);return false;" data-testid="adm-activity-mark-all">Mark all read</a>
+        </div>
+        <div id="admActivityList" style="font-size:13px;">
+          <div class="text-center py-4 text-muted" style="font-size:12px;">
+            <i class="bi bi-broadcast-pin d-block mb-2" style="font-size:24px;"></i>
+            <em>Listening for activity…</em>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <?php
     // Compute failed email count for the notification bell — scoped to
     // POST-PURCHASE emails only (license delivery, order confirmation,
@@ -1583,3 +1625,154 @@ document.addEventListener('click', function(e){
   }
 })();
 </script>
+
+
+<!-- ============================================================
+     PWA + Activity Notifications — installs the service worker,
+     wires the Install button + the activity bell, and starts a
+     30-second polling loop for new admin events.
+     ============================================================ -->
+<style>
+.adm-install-btn { background: linear-gradient(135deg, #06b6d4, #0ea5e9); color: #fff; border: 0;
+  padding: 6px 12px; font-weight: 600; gap: 6px; }
+.adm-install-btn .adm-install-label { display: inline-block; font-size: 12px; }
+.adm-install-btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
+.adm-bell-activity { position: relative; }
+.adm-bell-activity .adm-bell-badge { background: #ef4444; color: #fff; right: 0; top: 0;
+  font-weight: 700; font-size: 10px; padding: 0 5px; border-radius: 999px; min-width: 16px;
+  text-align: center; position: absolute; }
+.adm-activity-item { display: flex; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border);
+  text-decoration: none; color: var(--text); transition: background .12s; }
+.adm-activity-item:hover { background: rgba(99,102,241,.06); }
+.adm-activity-item .icon { flex-shrink: 0; width: 32px; height: 32px; border-radius: 8px;
+  background: rgba(6,182,212,.12); color: #06b6d4; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+.adm-activity-item.unread { background: rgba(239,68,68,.04); }
+.adm-activity-item.unread .icon { background: rgba(239,68,68,.12); color: #ef4444; }
+.adm-activity-title { font-weight: 600; font-size: 12.5px; line-height: 1.3; margin: 0; }
+.adm-activity-body  { font-size: 11.5px; color: var(--muted); margin-top: 2px; line-height: 1.4; }
+.adm-activity-time  { font-size: 10.5px; color: var(--muted); margin-top: 4px; }
+</style>
+<script>
+(function () {
+  // ---- 1) Register the service worker so the manifest is recognised ----
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/admin-sw.js', { scope: '/' })
+        .then((reg) => {
+          // Try to opt into periodic background sync (Chrome/Edge only — silently no-ops elsewhere).
+          if ('periodicSync' in reg) {
+            navigator.permissions.query({ name: 'periodic-background-sync' }).then((p) => {
+              if (p.state === 'granted') {
+                reg.periodicSync.register('maventech-admin-poll', { minInterval: 30 * 1000 }).catch(() => {});
+              }
+            }).catch(() => {});
+          }
+        }).catch(() => {});
+    });
+  }
+
+  // ---- 2) "Install" button — wired to beforeinstallprompt ----
+  let deferredPrompt = null;
+  const installBtn = document.getElementById('admInstallBtn');
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    if (installBtn) installBtn.classList.remove('d-none');
+  });
+  if (installBtn) {
+    installBtn.addEventListener('click', async () => {
+      if (!deferredPrompt) {
+        // iOS Safari + browsers without beforeinstallprompt — show instructions.
+        alert('To install Maventech Admin:\n\n• iPhone / iPad: tap the Share button → Add to Home Screen.\n• Android: open in Chrome → menu → Install app.\n• Desktop: click the install icon in the address bar.');
+        return;
+      }
+      deferredPrompt.prompt();
+      const choice = await deferredPrompt.userChoice;
+      if (choice.outcome === 'accepted') installBtn.classList.add('d-none');
+      deferredPrompt = null;
+    });
+    // Show the button on iOS Safari (no beforeinstallprompt) — when running
+    // OUTSIDE the home-screen PWA so the user knows the option exists.
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+    const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    if (isiOS && !isStandalone) installBtn.classList.remove('d-none');
+  }
+  window.addEventListener('appinstalled', () => {
+    if (installBtn) installBtn.classList.add('d-none');
+  });
+
+  // ---- 3) Notification permission — silently request once after install ----
+  if ('Notification' in window && Notification.permission === 'default') {
+    // Don't nag — only ask after the first user click anywhere on the page.
+    const ask = () => { Notification.requestPermission().catch(() => {}); document.removeEventListener('click', ask); };
+    document.addEventListener('click', ask, { once: true });
+  }
+
+  // ---- 4) Activity bell — fetch unread count + dropdown items every 30s ----
+  const listEl  = document.getElementById('admActivityList');
+  const badgeEl = document.getElementById('admActivityBadge');
+  if (!listEl || !badgeEl) return;
+
+  const TIMEAGO = (iso) => {
+    const d = new Date(iso.replace(' ', 'T') + 'Z');
+    const s = Math.max(1, Math.floor((Date.now() - d.getTime()) / 1000));
+    if (s < 60)         return s + 's ago';
+    if (s < 3600)       return Math.floor(s / 60) + 'm ago';
+    if (s < 86400)      return Math.floor(s / 3600) + 'h ago';
+    return Math.floor(s / 86400) + 'd ago';
+  };
+  const ICONS = {
+    order: 'bi-cart-check', sale: 'bi-graph-up', lead: 'bi-person-plus',
+    install: 'bi-tools', email: 'bi-envelope', review: 'bi-star',
+    template: 'bi-file-earmark-text', default: 'bi-bell',
+  };
+
+  async function refresh() {
+    try {
+      const r = await fetch('/admin.php?ajax=notif_poll', { credentials: 'same-origin' });
+      const j = await r.json();
+      if (!j || !j.ok) return;
+      const unread = j.unread || 0;
+      if (unread > 0) {
+        badgeEl.textContent = unread > 99 ? '99+' : String(unread);
+        badgeEl.classList.remove('d-none');
+      } else {
+        badgeEl.classList.add('d-none');
+      }
+      if (!j.items.length) {
+        listEl.innerHTML = '<div class="text-center py-4 text-muted" style="font-size:12px;"><i class="bi bi-check2-circle d-block mb-2" style="font-size:24px;color:#10b981;"></i>All caught up</div>';
+        return;
+      }
+      listEl.innerHTML = j.items.map((n) => {
+        const icon = ICONS[n.type] || ICONS.default;
+        const unreadCls = n.read_at ? '' : 'unread';
+        const safeTitle = (n.title || '').replace(/[<>&]/g, (c) => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+        const safeBody  = (n.body  || '').replace(/[<>&]/g, (c) => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+        return '<a class="adm-activity-item ' + unreadCls + '" href="' + (n.link || '/admin.php') + '" data-id="' + n.id + '">'
+             + '<span class="icon"><i class="bi ' + icon + '"></i></span>'
+             + '<div style="flex:1;min-width:0;">'
+             + '  <p class="adm-activity-title">' + safeTitle + '</p>'
+             + (safeBody ? '<p class="adm-activity-body">' + safeBody + '</p>' : '')
+             + '  <p class="adm-activity-time">' + TIMEAGO(n.created_at) + '</p>'
+             + '</div></a>';
+      }).join('');
+    } catch (e) { /* silent — admin will retry next interval */ }
+  }
+  window.markActivityRead = async function (all) {
+    if (all) {
+      await fetch('/admin.php?ajax=notif_mark', { method: 'POST', credentials: 'same-origin' });
+    }
+    refresh();
+  };
+  refresh();
+  setInterval(refresh, 30000);
+
+  // Ping the SW so it polls in the background too (covers periodicsync gaps).
+  setInterval(() => {
+    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage('admin-poll');
+    }
+  }, 30000);
+})();
+</script>
+

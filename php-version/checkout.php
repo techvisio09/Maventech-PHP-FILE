@@ -116,6 +116,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach ($items as $i) {
             $itemStmt->execute([$orderId, $i['slug'], $i['name'], $i['price'], $i['qty']]);
         }
+
+        // Notification: new order placed → bubbles up to admin's PWA bell.
+        // We fire TWO rows (one per channel) so the user can filter the
+        // bell by "Orders" vs "Sales Detail" later if they want.
+        $orderTitle = 'New order ' . $orderNumber;
+        $orderBody  = trim($_POST['first_name']) . ' ' . trim($_POST['last_name'])
+                    . ' · ' . current_currency()['code'] . ' ' . number_format($total, 2)
+                    . ' · ' . count($items) . ' item' . (count($items) > 1 ? 's' : '');
+        admin_notify('order', $orderTitle, $orderBody, '/admin.php?tab=orders&q=' . urlencode($orderNumber));
+        admin_notify('sale',  '$' . number_format($total, 2) . ' sale — ' . $orderNumber,
+                     $orderBody, '/admin.php?tab=sales');
         if ($proAssist) {
             $itemStmt->execute([$orderId, 'proassist-premium', 'ProAssist Premium Installation', PRO_ASSIST_PRICE, 1]);
             // Surface this customer in Lead Management so the support team
@@ -156,6 +167,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             . "Feel free to drop any questions here in the meantime — we're online.";
                 $pdo->prepare('INSERT INTO chat_messages (lead_id, sender, message) VALUES (?,?,?)')
                     ->execute([$proLeadId, 'admin', $proWelcome]);
+                // Tell the admin PWA bell: a new ProAssist install must be scheduled.
+                admin_notify(
+                    'install',
+                    'New install to schedule — Order ' . $orderNumber,
+                    ($proName ?: 'A customer') . ' purchased ProAssist Premium Installation. Reach out within 1 business hour.',
+                    '/admin.php?tab=leads&id=' . $proLeadId
+                );
                 // Bind the chat token to this browser session so the chat
                 // widget on order-success.php auto-connects (no lead form
                 // shown — we already have name/email/phone).

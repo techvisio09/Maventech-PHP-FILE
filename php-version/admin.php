@@ -41,6 +41,52 @@ $rg = active_region();
 $region_code = active_region_code();
 
 // =========================================================================
+// AJAX endpoints — notification polling / counts / mark-as-read.
+// Lives BEFORE the POST/render branches so it never gets caught up in
+// the heavy admin-shell rendering.
+// =========================================================================
+$ajax = $_GET['ajax'] ?? '';
+if ($ajax !== '') {
+    header('Content-Type: application/json');
+    header('Cache-Control: no-store');
+    try {
+        if ($ajax === 'notif_poll') {
+            // Returns notifications newer than `since` (ISO datetime or empty).
+            $since = trim($_GET['since'] ?? '');
+            $sql = "SELECT id, type, title, body, link, created_at, read_at
+                      FROM admin_notifications";
+            $params = [];
+            if ($since !== '') { $sql .= " WHERE created_at > ?"; $params[] = $since; }
+            $sql .= " ORDER BY created_at DESC, id DESC LIMIT 20";
+            $st = $pdo->prepare($sql);
+            $st->execute($params);
+            $items = $st->fetchAll(PDO::FETCH_ASSOC);
+            $unread = (int)$pdo->query("SELECT COUNT(*) FROM admin_notifications WHERE read_at IS NULL")->fetchColumn();
+            echo json_encode(['ok' => true, 'items' => $items, 'unread' => $unread]); exit;
+        }
+        if ($ajax === 'notif_count') {
+            $unread = (int)$pdo->query("SELECT COUNT(*) FROM admin_notifications WHERE read_at IS NULL")->fetchColumn();
+            echo json_encode(['ok' => true, 'unread' => $unread]); exit;
+        }
+        if ($ajax === 'notif_mark') {
+            $id = (int)($_POST['id'] ?? 0);
+            if ($id > 0) {
+                $pdo->prepare('UPDATE admin_notifications SET read_at=NOW() WHERE id=? AND read_at IS NULL')->execute([$id]);
+            } else {
+                // No id → mark ALL as read (the "Mark all as read" link).
+                $pdo->exec('UPDATE admin_notifications SET read_at=NOW() WHERE read_at IS NULL');
+            }
+            $unread = (int)$pdo->query("SELECT COUNT(*) FROM admin_notifications WHERE read_at IS NULL")->fetchColumn();
+            echo json_encode(['ok' => true, 'unread' => $unread]); exit;
+        }
+    } catch (Throwable $e) {
+        echo json_encode(['ok' => false, 'error' => $e->getMessage()]); exit;
+    }
+    echo json_encode(['ok' => false, 'error' => 'Unknown ajax action']); exit;
+}
+
+
+// =========================================================================
 // POST ACTIONS
 // =========================================================================
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -772,6 +818,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare('UPDATE email_templates SET subject=?, html=?, current_version=?, active=? WHERE id=?')
                 ->execute([trim($_POST['subject']), $_POST['html'], $newV, isset($_POST['active'])?1:0, $tplId]);
         }
+        // Surface template edits in the admin PWA bell so any other open
+        // admin sessions know a change just landed.
+        admin_notify(
+            'template',
+            'Email template updated',
+            trim((string)$_POST['subject']) ?: ('Template #' . $tplId),
+            '/admin.php?tab=templates&edit=' . $tplId
+        );
         header('Location: admin.php?tab=templates&edit='.$tplId.'&msg=Template+saved'); exit;
 
     } elseif ($action === 'restore_template_version') {
