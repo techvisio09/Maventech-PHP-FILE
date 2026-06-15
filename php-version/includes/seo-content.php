@@ -60,14 +60,12 @@ function product_long_tail_keywords(array $p): string
         $kw[] = $base . ' ' . $year . ' lifetime activation';
         $kw[] = $name . ' new edition';
     }
-    // Microsoft Office high-intent keyword library (broad / phrase / exact
-    // match — covers 2024, 2021, 2019, Professional Plus, Home & Business,
-    // Home & Student, standalone Word / Excel).  Only injected when the
-    // product is detected as Microsoft Office.
-    $officeMeta = office_edition_meta($p);
-    if (!empty($officeMeta['is_office'])) {
-        $kw = array_merge($kw, office_intent_keywords($officeMeta));
-    }
+    // Category-aware high-intent keyword libraries — auto-detects Office,
+    // Windows OS, Microsoft Project/Visio, or Antivirus (Bitdefender /
+    // McAfee / Norton / Kaspersky) and appends the matching broad / phrase
+    // / exact match cluster.  Returns an empty array for uncategorised
+    // SKUs (so nothing changes for products outside the four clusters).
+    $kw = array_merge($kw, product_category_intent_keywords($p));
     return implode(', ', array_values(array_unique(array_filter($kw))));
 }
 
@@ -277,7 +275,327 @@ function office_intent_keywords(array $meta): array
         $out[] = 'Microsoft ' . $ed . ' ' . $year . ' digital download';
     }
 
+    // Mac platform variants — appended when the SKU is Office for Mac.
+    // Captures the Mac-specific transactional intent ("Office Mac lifetime
+    // license no subscription", "Microsoft Office Home & Business 2024 Mac",
+    // standalone Word/Excel 2021 Mac).
+    if (($meta['platform'] ?? '') === 'Mac') {
+        $out = array_merge($out, [
+            // Broad / commercial intent (Mac)
+            'buy Office Mac lifetime license no subscription',
+            'cheap Microsoft Office Mac product key',
+            'Microsoft Office for Mac digital download instant delivery',
+            'Microsoft Office Mac one time purchase',
+            'genuine Microsoft Office Mac activation key',
+            // Phrase match (Mac)
+            'Microsoft Office Home & Business 2024 Mac',
+            'Office 2021 Home & Student Mac',
+            'Microsoft Word 2021 Mac lifetime license',
+            'Microsoft Excel 2021 Mac lifetime license',
+            'Microsoft Office Home and Business 2019 Mac',
+        ]);
+        if ($year !== '') {
+            $out[] = 'Microsoft Office ' . $year . ' for Mac';
+            $out[] = 'Office ' . $year . ' Mac lifetime license';
+            $out[] = 'buy Office ' . $year . ' Mac product key';
+        }
+        if ($ed !== '' && $year !== '') {
+            $out[] = 'Microsoft Office ' . $ed . ' ' . $year . ' (Mac)';
+            $out[] = 'Microsoft Office ' . $ed . ' ' . $year . ' Mac lifetime license';
+        }
+    }
+
     return array_values(array_unique(array_filter($out)));
+}
+
+/* ------------------------------------------------------------------
+ *  windows_edition_meta()
+ *  Detects Windows OS SKUs (Windows 11 / 10 + Pro / Home / Education /
+ *  Enterprise).  Used to inject the high-intent Windows keyword library
+ *  ("buy original Windows 11 Pro product key", "Windows 11 Home
+ *  activation key", "Windows 10 Pro license key", OEM / Retail variants).
+ *
+ *  Returns:
+ *    [
+ *      'is_windows'  => bool,
+ *      'version'     => '11' | '10' | '',
+ *      'edition'     => 'Pro' | 'Home' | 'Education' | 'Enterprise' | '',
+ *      'edition_key' => 'pro' | 'home' | 'education' | 'enterprise' | '',
+ *    ]
+ * ----------------------------------------------------------------- */
+function windows_edition_meta(array $p): array
+{
+    $name = strtolower((string)($p['name'] ?? ''));
+    // Match only Windows OS SKUs — exclude "Office for Windows" type names.
+    $isWin = (bool)preg_match('/\bwindows\s+(10|11)\b/', $name);
+    if (!$isWin) return ['is_windows' => false, 'version' => '', 'edition' => '', 'edition_key' => ''];
+    if (strpos($name, 'office') !== false || strpos($name, 'word') !== false
+        || strpos($name, 'excel') !== false || strpos($name, 'project') !== false
+        || strpos($name, 'visio') !== false || strpos($name, 'outlook') !== false) {
+        return ['is_windows' => false, 'version' => '', 'edition' => '', 'edition_key' => ''];
+    }
+    $version = '';
+    if (preg_match('/\bwindows\s+(10|11)\b/', $name, $m)) $version = $m[1];
+    $edition = '';   $editionKey = '';
+    if (strpos($name, ' pro')        !== false) { $edition = 'Pro';        $editionKey = 'pro'; }
+    elseif (strpos($name, ' home')       !== false) { $edition = 'Home';       $editionKey = 'home'; }
+    elseif (strpos($name, 'education')   !== false) { $edition = 'Education';  $editionKey = 'education'; }
+    elseif (strpos($name, 'enterprise')  !== false) { $edition = 'Enterprise'; $editionKey = 'enterprise'; }
+    return ['is_windows' => true, 'version' => $version, 'edition' => $edition, 'edition_key' => $editionKey];
+}
+
+function windows_intent_keywords(array $meta): array
+{
+    if (empty($meta['is_windows'])) return [];
+    $v  = $meta['version'] ?: '';
+    $ed = $meta['edition'] ?: '';
+
+    $universal = [
+        // Broad intent
+        'buy original Windows 11 Pro product key',
+        'buy genuine Windows 10 license key',
+        'cheap Windows OEM product key',
+        'Windows retail license instant delivery',
+        'Windows one-time purchase product key',
+        'Windows lifetime activation key',
+        'Windows digital license download',
+        // Problem-solving
+        'upgrade from Windows 10 to Windows 11',
+        'difference between Windows 11 Pro and Home',
+        'Windows product key for new PC build',
+    ];
+    $versionLib = [
+        '11' => [
+            'Windows 11 Pro product key',
+            'Windows 11 Home activation key',
+            'Windows 11 Pro license key',
+            'Windows 11 Home product key',
+            'Windows 11 Pro lifetime activation',
+            'Windows 11 Pro 64-bit retail key',
+            'buy Windows 11 Pro genuine activation code',
+            'Windows 11 Pro for Workstations product key',
+            'Windows 11 Education product key',
+            'Windows 11 Pro (retail)',
+            'Windows 11 Home (retail)',
+        ],
+        '10' => [
+            'Windows 10 Pro license key',
+            'Windows 10 Home activation key',
+            'Windows 10 Pro product key',
+            'Windows 10 Home product key',
+            'Windows 10 Pro 64-bit retail key',
+            'buy Windows 10 Pro genuine activation code',
+            'Windows 10 Pro for Workstations product key',
+            'Windows 10 Education product key',
+            'Windows 10 Pro (retail)',
+            'Windows 10 Home (retail)',
+        ],
+    ];
+    $out = $universal;
+    if ($v !== '' && isset($versionLib[$v])) $out = array_merge($out, $versionLib[$v]);
+    if ($ed !== '' && $v !== '') {
+        $out[] = 'Windows ' . $v . ' ' . $ed;
+        $out[] = 'Windows ' . $v . ' ' . $ed . ' lifetime license';
+        $out[] = 'Windows ' . $v . ' ' . $ed . ' OEM key';
+        $out[] = 'Windows ' . $v . ' ' . $ed . ' retail key';
+        $out[] = 'buy Windows ' . $v . ' ' . $ed . ' product key';
+        $out[] = 'Windows ' . $v . ' ' . $ed . ' digital download activation code';
+    }
+    return array_values(array_unique(array_filter($out)));
+}
+
+/* ------------------------------------------------------------------
+ *  project_visio_meta()
+ *  Detects Microsoft Project / Visio SKUs (Professional / Standard,
+ *  2024 / 2021 / 2019).
+ * ----------------------------------------------------------------- */
+function project_visio_meta(array $p): array
+{
+    $name = strtolower((string)($p['name'] ?? ''));
+    $isProj  = (strpos($name, 'project') !== false);
+    $isVisio = (strpos($name, 'visio')   !== false);
+    if (!$isProj && !$isVisio) return ['is_project_visio' => false];
+    $kind = $isProj ? 'project' : 'visio';
+    $year = '';
+    if (preg_match('/\b(2024|2021|2019|2016)\b/', $name, $m)) $year = $m[1];
+    $edition = '';
+    if (strpos($name, 'professional') !== false) $edition = 'Professional';
+    elseif (strpos($name, 'standard')     !== false) $edition = 'Standard';
+    return [
+        'is_project_visio' => true,
+        'kind'             => $kind,         // 'project' | 'visio'
+        'kind_label'       => $kind === 'project' ? 'Project' : 'Visio',
+        'year'             => $year,
+        'edition'          => $edition,
+    ];
+}
+
+function project_visio_intent_keywords(array $meta): array
+{
+    if (empty($meta['is_project_visio'])) return [];
+    $k    = $meta['kind_label'];
+    $year = $meta['year'];
+    $ed   = $meta['edition'];
+
+    $base = [
+        'buy Microsoft ' . $k . ' lifetime license',
+        'cheap Microsoft ' . $k . ' product key',
+        'Microsoft ' . $k . ' digital download instant delivery',
+        'genuine Microsoft ' . $k . ' activation key',
+        'Microsoft ' . $k . ' one-time purchase Windows PC',
+        'Microsoft ' . $k . ' for Windows 11',
+        'Microsoft ' . $k . ' Professional download PC',
+        'Microsoft ' . $k . ' license for project managers',
+        'Microsoft ' . $k . ' license for business teams',
+    ];
+    if ($k === 'Project') {
+        $base = array_merge($base, [
+            'MS Project Professional 2024 PC',
+            'MS Project Professional 2021 PC',
+            'Microsoft Project 2019 Professional Windows',
+            'Microsoft Project Professional product key',
+            'project management software lifetime license Windows',
+        ]);
+    } else {
+        $base = array_merge($base, [
+            'MS Visio Professional 2024 Windows PC',
+            'MS Visio Professional 2021 Windows PC',
+            'Microsoft Visio 2019 Professional PC',
+            'Microsoft Visio Professional product key',
+            'diagram software lifetime license Windows',
+        ]);
+    }
+    if ($year !== '') {
+        $base[] = 'Microsoft ' . $k . ' ' . $year . ' Professional PC';
+        $base[] = 'Microsoft ' . $k . ' ' . $year . ' lifetime license Windows';
+        $base[] = 'buy Microsoft ' . $k . ' ' . $year . ' product key';
+        $base[] = 'Microsoft ' . $k . ' ' . $year . ' Windows PC digital download';
+    }
+    if ($ed !== '' && $year !== '') {
+        $base[] = 'Microsoft ' . $k . ' ' . $ed . ' ' . $year . ' (PC)';
+        $base[] = 'Microsoft ' . $k . ' ' . $ed . ' ' . $year . ' Windows PC';
+    }
+    return array_values(array_unique(array_filter($base)));
+}
+
+/* ------------------------------------------------------------------
+ *  antivirus_meta()
+ *  Detects antivirus / security suite SKUs (Bitdefender, McAfee,
+ *  Norton, Kaspersky, ESET, Avast, AVG, Trend Micro).  Also parses
+ *  the device count + duration from the product name when present
+ *  ("1 Mac, 1 Year", "5 Devices, 1 Year", "Unlimited Devices, 1 Year").
+ * ----------------------------------------------------------------- */
+function antivirus_meta(array $p): array
+{
+    $name = strtolower((string)($p['name'] ?? ''));
+    $brand = '';
+    foreach (['bitdefender', 'mcafee', 'norton', 'kaspersky', 'eset', 'avast', 'avg', 'trend micro'] as $b) {
+        if (strpos($name, $b) !== false) { $brand = $b; break; }
+    }
+    if ($brand === '') return ['is_antivirus' => false];
+    $brandLabel = ucwords($brand);
+    if ($brand === 'mcafee') $brandLabel = 'McAfee';
+
+    $devices = '';
+    if (preg_match('/(unlimited|1|3|5|10)\s*(devices?|macs?|pcs?)/i', $name, $m)) {
+        $devices = strtolower($m[1]) === 'unlimited' ? 'Unlimited devices'
+                 : ($m[1] . ' ' . rtrim($m[2], 's') . (($m[1] === '1') ? '' : 's'));
+    }
+    $duration = '';
+    if (preg_match('/(\d+)[\s-]+(year|month)s?/i', $name, $dm)) {
+        $duration = $dm[1] . ' ' . strtolower($dm[2]) . ($dm[1] === '1' ? '' : 's');
+    }
+    $platform = ($p['platform'] ?? '') ?: 'Windows';
+    return [
+        'is_antivirus' => true,
+        'brand'        => $brand,
+        'brand_label'  => $brandLabel,
+        'devices'      => $devices,
+        'duration'     => $duration,
+        'platform'     => $platform,
+    ];
+}
+
+function antivirus_intent_keywords(array $meta): array
+{
+    if (empty($meta['is_antivirus'])) return [];
+    $b   = $meta['brand_label'];
+    $dev = $meta['devices'];
+    $dur = $meta['duration'];
+    $plt = $meta['platform'];
+
+    $out = [
+        'buy ' . $b . ' antivirus product key',
+        'cheap ' . $b . ' license key',
+        'genuine ' . $b . ' activation code',
+        $b . ' antivirus digital download',
+        $b . ' instant key delivery email',
+        $b . ' lifetime renewable license',
+        'best antivirus for ' . $plt . ' PC',
+        $b . ' vs Norton vs McAfee antivirus comparison',
+        'cheapest legit ' . $b . ' subscription',
+    ];
+
+    if ($b === 'Bitdefender') {
+        $out = array_merge($out, [
+            'cheap Bitdefender antivirus Mac VPN license',
+            'Bitdefender Premium VPN unlimited devices',
+            'Bitdefender antivirus for Mac 1 Mac 1 year',
+            'Bitdefender Small Office Security 5 devices 1 year',
+            'Bitdefender Total Security download',
+            'Bitdefender Internet Security key',
+            'buy Bitdefender Antivirus Plus product key',
+        ]);
+    } elseif ($b === 'McAfee') {
+        $out = array_merge($out, [
+            'McAfee+ Premium Individual 1 year USA',
+            'McAfee Total Protection product key',
+            'McAfee LiveSafe activation code',
+            'McAfee Internet Security download key',
+            'buy McAfee+ Premium unlimited devices',
+            'McAfee antivirus subscription product key',
+        ]);
+    } elseif ($b === 'Norton') {
+        $out = array_merge($out, [
+            'Norton 360 Standard product key',
+            'Norton 360 Deluxe activation code',
+            'Norton 360 Premium 10 devices key',
+            'Norton 360 with LifeLock activation',
+            'buy Norton AntiVirus Plus product key',
+        ]);
+    }
+
+    if ($dev !== '') $out[] = $b . ' ' . $dev . ' license key';
+    if ($dur !== '') $out[] = $b . ' ' . $dur . ' subscription product key';
+    if ($dev !== '' && $dur !== '') {
+        $out[] = $b . ' ' . $dev . ' ' . $dur . ' digital download';
+        $out[] = 'buy ' . $b . ' ' . $dev . ' ' . $dur . ' instant delivery';
+    }
+    return array_values(array_unique(array_filter($out)));
+}
+
+/* ------------------------------------------------------------------
+ *  product_category_intent_keywords()
+ *  Dispatcher.  Detects the product's category (Office, Windows OS,
+ *  Project/Visio, Antivirus) and returns the matching high-intent
+ *  keyword library.  Returns an empty array for SKUs that do not fit
+ *  any of the curated categories.
+ * ----------------------------------------------------------------- */
+function product_category_intent_keywords(array $p): array
+{
+    $office = office_edition_meta($p);
+    if (!empty($office['is_office'])) return office_intent_keywords($office);
+
+    $win = windows_edition_meta($p);
+    if (!empty($win['is_windows'])) return windows_intent_keywords($win);
+
+    $pv = project_visio_meta($p);
+    if (!empty($pv['is_project_visio'])) return project_visio_intent_keywords($pv);
+
+    $av = antivirus_meta($p);
+    if (!empty($av['is_antivirus'])) return antivirus_intent_keywords($av);
+
+    return [];
 }
 
 /* ------------------------------------------------------------------
@@ -354,6 +672,72 @@ function product_seo_copy(array $p): string
 
         $h .= '<h3 class="fw-bold h5 mt-4 mb-2">Office without a monthly subscription &mdash; how it works</h3>';
         $h .= '<p class="text-secondary mb-3">Unlike Microsoft 365, ' . $name . ' is a <strong>perpetual licence</strong>. There is no annual renewal, no subscription auto-charge and no &ldquo;cloud account&rdquo; that locks you out the day you stop paying. Buy ' . $yearTxt . ' once at ' . esc($price) . ', activate inside the genuine ' . esc($brand) . ' installer on your ' . $platform . ' PC, and use Word, Excel, PowerPoint (and Outlook on Home &amp; Business and Professional Plus) for as long as you own the device.</p>';
+    }
+
+    // Windows OS intent block — renders for Windows 10/11 SKUs.
+    $winMeta = windows_edition_meta($p);
+    if (!empty($winMeta['is_windows'])) {
+        $v   = $winMeta['version'] ?: '';
+        $ed  = $winMeta['edition'] ?: '';
+        $vTxt   = $v  !== '' ? ('Windows ' . esc($v)) : 'Windows';
+        $edTxt  = $ed !== '' ? (' ' . esc($ed)) : '';
+
+        $h .= '<h3 class="fw-bold h5 mt-5 mb-2">' . $vTxt . $edTxt . ' &mdash; genuine product key, lifetime activation &amp; instant digital delivery</h3>';
+        $h .= '<p class="text-secondary mb-3">Shopping for a <strong>' . $vTxt . $edTxt . ' product key</strong>, a <strong>retail license</strong> or an <strong>OEM activation code</strong> for your PC build? This listing ships you exactly that. ';
+        $h .= 'Pay once at ' . esc($price) . ', receive the 25-character genuine activation code by email in 15&ndash;30 minutes, run the official Microsoft Media Creation Tool, paste the key, and your machine is fully activated &mdash; tied to your hardware, not to a subscription.</p>';
+
+        if ($v === '11') {
+            $h .= '<p class="text-secondary mb-3"><strong>Why Windows 11' . $edTxt . '?</strong> The latest perpetual Microsoft OS &mdash; redesigned Start menu, Snap Layouts, native Microsoft Store, DirectStorage gaming and full Copilot integration. Best buy for shoppers searching "<em>buy original Windows 11 Pro product key</em>", "<em>Windows 11 Home activation key</em>" or "<em>Windows 11 Pro 64-bit retail key</em>".</p>';
+        } elseif ($v === '10') {
+            $h .= '<p class="text-secondary mb-3"><strong>Why Windows 10' . $edTxt . '?</strong> Battle-tested on every workstation and gaming rig &mdash; minimal hardware requirements, faster boot than legacy Win 7/8.1, and free upgrades to Windows 11 when your hardware is ready. Perfect for "<em>Windows 10 Pro license key</em>", "<em>Windows 10 Home activation key</em>" or "<em>Windows 10 Pro 64-bit retail key</em>" intent.</p>';
+        }
+        if ($ed === 'Pro' || $ed === 'Education' || $ed === 'Enterprise') {
+            $h .= '<p class="text-secondary mb-3"><strong>' . $vTxt . ' ' . $ed . ' specifics:</strong> BitLocker drive encryption, Remote Desktop host, Hyper-V virtualisation, Group Policy, Windows Sandbox and Azure AD join &mdash; everything home builds miss. Activates from a Home install via Microsoft\'s built-in upgrade flow.</p>';
+        }
+        $h .= '<h3 class="fw-bold h5 mt-4 mb-2">How activation works</h3>';
+        $h .= '<p class="text-secondary mb-3">Open <em>Settings &rsaquo; System &rsaquo; Activation</em>, click <em>Change product key</em>, paste the 25-character code from your email. Activation completes in under five minutes. Each ' . $vTxt . $edTxt . ' key is single-PC under Microsoft\'s EULA &mdash; for multi-PC coverage pick a 3 or 5-seat bundle or buy additional keys with automatic volume discount.</p>';
+    }
+
+    // Microsoft Project / Visio intent block.
+    $pvMeta = project_visio_meta($p);
+    if (!empty($pvMeta['is_project_visio'])) {
+        $kind  = $pvMeta['kind_label'];                 // 'Project' or 'Visio'
+        $year  = $pvMeta['year'] ?: '';
+        $ed    = $pvMeta['edition'] ?: '';
+        $yTxt  = $year !== '' ? (' ' . esc($year)) : '';
+        $edTxt = $ed   !== '' ? (' ' . esc($ed))   : '';
+
+        $h .= '<h3 class="fw-bold h5 mt-5 mb-2">Microsoft ' . $kind . $yTxt . $edTxt . ' &mdash; lifetime license &amp; instant product key</h3>';
+        if ($kind === 'Project') {
+            $h .= '<p class="text-secondary mb-3">The professional grade tool millions of project managers, PMOs and construction teams depend on for Gantt charts, resource levelling, baseline tracking and earned-value analysis. This listing is a <strong>one-time purchase perpetual license</strong> for Microsoft Project' . $yTxt . $edTxt . ' on Windows PC &mdash; no monthly fee, no Microsoft Project Online subscription required. Matches intent for "<em>Microsoft Project ' . ($year ?: '2024') . ' Professional PC</em>", "<em>MS Project Professional product key</em>" and "<em>project management software lifetime license Windows</em>".</p>';
+        } else {
+            $h .= '<p class="text-secondary mb-3">The industry-standard diagramming app trusted by IT architects, network engineers and BPMN teams. This listing is a <strong>one-time purchase perpetual license</strong> for Microsoft Visio' . $yTxt . $edTxt . ' on Windows PC &mdash; full template library (network, floor plan, UML, ERD, BPMN, AWS / Azure shapes) without a Visio Plan 1 or Plan 2 subscription. Matches "<em>Microsoft Visio ' . ($year ?: '2024') . ' Professional Windows PC</em>", "<em>MS Visio Professional product key</em>" and "<em>diagram software lifetime license Windows</em>".</p>';
+        }
+        $h .= '<h3 class="fw-bold h5 mt-4 mb-2">Installs alongside Office</h3>';
+        $h .= '<p class="text-secondary mb-3">Microsoft ' . $kind . $yTxt . ' installs as a standalone app on the same Windows PC where your Office 365 / Office 2021 / Office 2024 already runs &mdash; they do not conflict. Activation uses your Microsoft account so you keep the licence when you change PCs (subject to Microsoft\'s standard reactivation flow).</p>';
+    }
+
+    // Antivirus / security suite intent block.
+    $avMeta = antivirus_meta($p);
+    if (!empty($avMeta['is_antivirus'])) {
+        $b    = $avMeta['brand_label'];
+        $dev  = $avMeta['devices'];
+        $dur  = $avMeta['duration'];
+        $plt  = $avMeta['platform'];
+        $covT = ($dev !== '' || $dur !== '') ? (' &mdash; ' . trim($dev . ($dev && $dur ? ', ' : '') . $dur)) : '';
+
+        $h .= '<h3 class="fw-bold h5 mt-5 mb-2">' . esc($b) . ' security' . $covT . ' &mdash; genuine subscription key, instant email delivery</h3>';
+        $h .= '<p class="text-secondary mb-3">Searching for a <strong>genuine ' . esc($b) . ' activation code</strong> or a <strong>cheaper-than-RRP renewal key</strong>? This is the right listing. Pay once at ' . esc($price) . ', receive the activation key by email in 15&ndash;30 minutes, sign in to your ' . esc($b) . ' Central / My Account dashboard, paste the code, and your ' . esc($plt) . ' device(s) are protected immediately &mdash; real-time malware shield, ransomware blocker, anti-phishing, web threat prevention and (where included) VPN + identity-theft monitoring.</p>';
+
+        if (stripos($b, 'Bitdefender') !== false) {
+            $h .= '<p class="text-secondary mb-3">Bitdefender consistently tops AV-Comparatives and AV-Test rankings for 0-day malware detection with the lowest CPU footprint in the category. Matches "<em>cheap Bitdefender antivirus ' . esc($plt) . ' VPN license</em>", "<em>Bitdefender Premium VPN unlimited devices</em>" and "<em>Bitdefender Small Office Security 5 devices 1 year</em>".</p>';
+        } elseif (stripos($b, 'McAfee') !== false) {
+            $h .= '<p class="text-secondary mb-3">McAfee+ ships with unlimited-device protection, secure VPN, password manager, file shredder and identity-monitoring on top of the core antivirus engine. Matches "<em>McAfee+ Premium Individual 1 year USA</em>", "<em>McAfee Total Protection product key</em>" and "<em>McAfee LiveSafe activation code</em>".</p>';
+        } elseif (stripos($b, 'Norton') !== false) {
+            $h .= '<p class="text-secondary mb-3">Norton 360 bundles antivirus, secure VPN, dark-web monitoring and (on Deluxe / Premium tiers) LifeLock identity-theft protection in a single subscription. Matches "<em>Norton 360 Standard product key</em>", "<em>Norton 360 Deluxe activation code</em>" and "<em>Norton 360 with LifeLock activation</em>".</p>';
+        }
+        $h .= '<h3 class="fw-bold h5 mt-4 mb-2">Activation works in under 2 minutes</h3>';
+        $h .= '<p class="text-secondary mb-3">Create or log in to your ' . esc($b) . ' account, paste the activation code from your email, install the official ' . esc($b) . ' app on each protected device, and the coverage clock starts. ' . ($dur !== '' ? ('Your subscription runs for ' . esc($dur) . ' from the day you redeem the key &mdash; not from the day we ship it &mdash; so feel free to buy now and activate later. ') : '') . 'Renewal is optional &mdash; no auto-charge when this subscription ends.</p>';
     }
 
     $h .= '</section>';
@@ -620,20 +1004,15 @@ function category_long_tail_keywords(string $title, string $platform = ''): stri
         $kw[] = $title . ' for ' . $platform . ' download';
         $kw[] = $title . ' ' . $platform . ' license key';
     }
-    // Microsoft Office high-intent keyword library — appended when the
-    // category title references Office (matches "Office 2024", "Office 2021",
-    // "Office 2019" or generic "Office") so the same broad/phrase/exact
-    // intent variants surface for both product AND category pages.
-    $titleLc = strtolower($title);
-    if (strpos($titleLc, 'office') !== false || strpos($titleLc, 'word ') !== false || strpos($titleLc, 'excel ') !== false) {
-        $year = '';
-        if (preg_match('/\b(2024|2021|2019)\b/', $titleLc, $ym)) $year = $ym[1];
-        $kw = array_merge($kw, office_intent_keywords([
-            'is_office' => true,
-            'year'      => $year,
-            'edition'   => '',
-        ]));
-    }
+    // Category-aware high-intent keyword libraries for the category title.
+    // We synthesise a stub product-name (the category title) and dispatch
+    // through product_category_intent_keywords() so categories like
+    // "Office 2024 for PC", "Windows 10", "Project & Visio Pro" or
+    // "Bitdefender Antivirus" all surface their full intent cluster.
+    $kw = array_merge(
+        $kw,
+        product_category_intent_keywords(['name' => $title, 'platform' => $platform])
+    );
     return implode(', ', array_values(array_unique(array_filter($kw))));
 }
 

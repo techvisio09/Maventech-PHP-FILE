@@ -1854,3 +1854,54 @@ Net effect: the clear DID happen in DB, but the visible state still claimed "Key
   - Visible H3 *"Office 2024 Professional Plus — lifetime license, product key & instant download"* renders below the activation steps.
 - Office 2021 product page → year-specific keywords confirmed (`Office 2021 Professional Plus download`, `Office 2021 Home Business download PC`, `Office 2021 Home Student Windows license`, etc.).
 - Admin sitemap button → clickable, opens `/sitemap.xml` in a new tab; sitemap renders with image + news XML namespaces and 179 URL entries.
+
+## [Feb 2026] Category-aware SEO/GEO/AEO keyword library — extended to all 4 product categories
+
+### What shipped
+Extended the Office keyword pattern to **Windows OS (10/11)**, **Office for Mac**, **Microsoft Project/Visio**, and **Antivirus (Bitdefender / McAfee / Norton / Kaspersky)** using a single dispatcher so every product page and every category page automatically surfaces the right broad/phrase/exact match intent cluster — no per-product hardcoding, all data-driven.
+
+### Helpers added (in `includes/seo-content.php`)
+- `windows_edition_meta($p)` → detects Windows 10/11 OS SKUs + edition (Pro/Home/Education/Enterprise); excludes Office-on-Windows so Office SKUs aren't mis-classified.
+- `windows_intent_keywords($meta)` → universal Windows OS intent (OEM key, retail key, lifetime activation) + version-specific cluster (Win 11: Copilot, DirectStorage; Win 10: free Win 11 upgrade path) + edition-specific tail.
+- `project_visio_meta($p)` → detects Microsoft Project / Visio + year + edition.
+- `project_visio_intent_keywords($meta)` → Project-specific and Visio-specific intent lists (PMO, Gantt; network/UML/BPMN diagrams).
+- `antivirus_meta($p)` → detects 8 AV brands (Bitdefender, McAfee, Norton, Kaspersky, ESET, Avast, AVG, Trend Micro), parses device count ("1 Mac", "5 Devices", "Unlimited devices") and duration ("1 year", "2 years") from the product name — including hyphenated forms like "1-Year".
+- `antivirus_intent_keywords($meta)` → universal AV intent + brand-specific transactional cluster (Bitdefender Premium VPN, McAfee+ Premium, Norton 360 / LifeLock, etc.).
+- `office_intent_keywords()` extended with **Mac variants** (Office Mac lifetime license, Word 2021 Mac lifetime license, Office Home & Business 2024 Mac, etc.) when `platform === 'Mac'`.
+- New dispatcher `product_category_intent_keywords($p)` that auto-routes to the right library.
+
+### Wired into the existing SEO infrastructure
+- `product_long_tail_keywords()` and `category_long_tail_keywords()` → use the dispatcher (replaces the Office-only check).
+- `product_seo_copy()` → added 3 new visible H3 intent blocks: Windows ("genuine product key, lifetime activation & instant digital delivery" + version-specific paragraphs + activation walkthrough), Project/Visio ("lifetime license & instant product key" + standalone vs Office compatibility), Antivirus ("genuine subscription key, instant email delivery" + brand-specific paragraph + 2-minute activation walkthrough). Office Mac is auto-covered by the existing Office block which now branches on `platform === 'Mac'`.
+- `product_faqs()` → category-specific FAQs (3 per category):
+  - **Windows**: genuine retail key?, activation on new build/refurbished?, upgrade path (Win 10 → from Windows 7/8.1, Win 11 → from Win 10).
+  - **Project/Visio**: one-time vs Online subscription?, installs alongside Office?, Win 11 + file format support?
+  - **Antivirus**: auto-renew?, when does coverage clock start?, install walkthrough for Bitdefender Central / McAfee My Account / Norton My Account / Kaspersky My Account.
+  - **Office for Mac**: existing 3 FAQs auto-rewrite to "Microsoft Word 2021" wording for standalone apps and ask "Will it work on macOS Sonoma / Sequoia?" for Mac SKUs.
+- `product.php` JSON-LD `additionalProperty` → category-aware:
+  - Windows → `Windows Version`, `Windows Edition`
+  - Project/Visio → `App Family`, `App Year`, `App Edition`
+  - Antivirus → `Security Vendor`, `Device Coverage`, `Subscription Term` + overrides `License Type` to "Fixed-term subscription license" and `Purchase Model` to "Prepaid one-time purchase — no auto-renewal".
+  - Office (Mac/PC) → existing `Office Year` + `Office Edition`.
+
+### Verification matrix (11 product pages tested via curl + JSON-LD parsing + Playwright)
+| Product | additionalProperty | FAQs (5 base + 3 cat) | Intent H3 | Sample keyword present |
+|---|---|---|---|---|
+| Windows 11 Pro | License Type, Platform, Windows Version=11, Windows Edition=Pro | 8 ✓ | ✓ | "Windows 11 Pro product key" ✓ |
+| Windows 10 Home | …, Windows Version=10, Windows Edition=Home | 8 ✓ | ✓ | "Windows 10 Home activation key" ✓ |
+| Office H&B 2024 Mac | …, Office Year=2024, Office Edition=Home & Business | 8 ✓ | ✓ | "buy Office Mac lifetime license no subscription" ✓ |
+| Word 2021 Mac | …, Office Year=2021, Office Edition=Word | 8 ✓ | ✓ | "Microsoft Word 2021 Mac lifetime license" ✓ |
+| Project 2024 | …, App Family=Microsoft Project, App Year=2024, App Edition=Professional | 8 ✓ | ✓ | "Microsoft Project 2024 Professional PC" ✓ |
+| Visio 2021 | …, App Family=Microsoft Visio, App Year=2021, App Edition=Professional | 8 ✓ | ✓ | "MS Visio Professional 2021 Windows PC" ✓ |
+| Bitdefender AV Mac 1Mac/1Y | …, Security Vendor=Bitdefender, Device Coverage=1 Mac, Subscription Term=1 year | 8 ✓ | ✓ | "Bitdefender antivirus for Mac 1 Mac 1 year" ✓ |
+| Bitdefender VPN Unlimited 1Y | …, Security Vendor=Bitdefender, Device Coverage=Unlimited devices, Subscription Term=1 year | 8 ✓ | ✓ | "Bitdefender Premium VPN unlimited devices" ✓ |
+| McAfee+ Premium 1Y USA | …, Security Vendor=McAfee, Device Coverage=Unlimited devices, Subscription Term=1 year | 8 ✓ | ✓ | "McAfee+ Premium Individual 1 year USA" ✓ |
+| Norton 360 LifeLock | …, Security Vendor=Norton | 8 ✓ | ✓ | "Norton 360 with LifeLock activation" ✓ |
+| Office 2024 Pro Plus (regression) | …, Office Year=2024, Office Edition=Professional Plus | 8 ✓ | ✓ | "Microsoft Office 2024 Professional Plus product key" ✓ |
+
+### Files touched
+- `/app/php-version/includes/seo-content.php` (4 new meta detectors + 4 new keyword libraries + dispatcher + extended Office Mac variants + 3 new visible H3 intent paragraphs)
+- `/app/php-version/includes/email.php` (`product_faqs()` 3 new category FAQ blocks + Office FAQ rewrite for Mac + standalone Word/Excel wording)
+- `/app/php-version/product.php` (JSON-LD `additionalProperty` extended with Windows / Project-Visio / Antivirus property values)
+- `/app/php-version/includes/functions.php` (`product_img_alt()` already updated earlier — verified working across all 11 test SKUs)
+

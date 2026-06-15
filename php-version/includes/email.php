@@ -479,20 +479,110 @@ function product_faqs(array $product): array {
         if (!empty($officeMeta['is_office'])) {
             $year       = $officeMeta['year'] ?: '';
             $edition    = $officeMeta['edition'] ?: '';
-            $editionTxt = $edition !== '' ? ' ' . $edition : '';
             $yearTxt    = $year !== ''    ? ' ' . $year    : '';
+            // Standalone Word / Excel / PowerPoint / Outlook reads more
+            // naturally as "Microsoft Word 2021" than "Microsoft Office
+            // 2021 Word" — switch the label when the edition is a single app.
+            $standalone = in_array($edition, ['Word', 'Excel', 'PowerPoint', 'Outlook'], true);
+            if ($standalone) {
+                $productLabel = 'Microsoft ' . $edition . $yearTxt;
+                $editionTxt   = '';
+            } else {
+                $productLabel = 'Microsoft Office' . $yearTxt . ($edition !== '' ? ' ' . $edition : '');
+                $editionTxt   = $edition !== '' ? ' ' . $edition : '';
+            }
 
             $faqs[] = [
-                'question' => 'Is this Microsoft Office' . $yearTxt . $editionTxt . ' a one-time purchase or a subscription?',
-                'answer'   => 'This is a one-time purchase with a perpetual lifetime license — not a Microsoft 365 subscription. Pay once at the price shown, activate the key inside the official Microsoft Office' . $yearTxt . ' installer on your Windows PC, and use Word, Excel, PowerPoint' . ($edition === 'Home & Business' || $edition === 'Professional Plus' ? ' and Outlook' : '') . ' for as long as you own the device. There are no monthly fees, no auto-renewals and no cloud account that locks you out if you stop paying.',
+                'question' => 'Is this ' . $productLabel . ' a one-time purchase or a subscription?',
+                'answer'   => 'This is a one-time purchase with a perpetual lifetime license — not a Microsoft 365 subscription. Pay once at the price shown, activate the key inside the official Microsoft Office' . $yearTxt . ' installer on your ' . ($officeMeta['platform'] === 'Mac' ? 'Mac' : 'Windows PC') . ', and use ' . ($standalone ? $edition : 'Word, Excel, PowerPoint' . ($edition === 'Home & Business' || $edition === 'Professional Plus' ? ' and Outlook' : '')) . ' for as long as you own the device. There are no monthly fees, no auto-renewals and no cloud account that locks you out if you stop paying.',
             ];
             $faqs[] = [
-                'question' => 'Will Microsoft Office' . $yearTxt . $editionTxt . ' work on Windows 11 PC?',
-                'answer'   => 'Yes. Microsoft Office' . $yearTxt . $editionTxt . ' is fully supported on Windows 11 and Windows 10 PCs (and Windows 8.1/7 for Office 2019). The product key you receive activates the official 64-bit installer directly from Microsoft, so every Word, Excel, PowerPoint and (where applicable) Outlook update for this edition is included for the life of the license. If your PC meets Microsoft\'s minimum system requirements, activation completes in under five minutes.',
+                'question' => 'Will ' . $productLabel . ' work on ' . ($officeMeta['platform'] === 'Mac' ? 'macOS Sonoma / Sequoia?' : 'Windows 11 PC?'),
+                'answer'   => $officeMeta['platform'] === 'Mac'
+                    ? 'Yes. ' . $productLabel . ' is fully supported on macOS Sonoma (14) and Sequoia (15), as well as previous releases back to macOS Big Sur (11). Activation runs from inside the official Microsoft AutoUpdate installer downloaded straight from microsoft.com — never a cracked DMG.'
+                    : 'Yes. ' . $productLabel . ' is fully supported on Windows 11 and Windows 10 PCs (and Windows 8.1/7 for Office 2019). The product key you receive activates the official 64-bit installer directly from Microsoft, so every Word, Excel, PowerPoint and (where applicable) Outlook update for this edition is included for the life of the license. If your PC meets Microsoft\'s minimum system requirements, activation completes in under five minutes.',
             ];
             $faqs[] = [
-                'question' => 'What is the difference between Microsoft Office' . $yearTxt . $editionTxt . ' and Microsoft 365?',
-                'answer'   => 'Microsoft Office' . $yearTxt . $editionTxt . ' is a one-time-purchase perpetual license — you pay once and own this version forever. Microsoft 365 is a monthly or yearly subscription that includes always-updated apps plus 1 TB OneDrive storage. If you do not need the cloud storage or the constant feature drops, Office' . $yearTxt . $editionTxt . ' is dramatically cheaper over five years and still delivers genuine Word, Excel and PowerPoint with full security updates for the version you bought.',
+                'question' => 'What is the difference between ' . $productLabel . ' and Microsoft 365?',
+                'answer'   => $productLabel . ' is a one-time-purchase perpetual license — you pay once and own this version forever. Microsoft 365 is a monthly or yearly subscription that includes always-updated apps plus 1 TB OneDrive storage. If you do not need the cloud storage or the constant feature drops, ' . $productLabel . ' is dramatically cheaper over five years and still delivers genuine ' . ($standalone ? $edition : 'Word, Excel and PowerPoint') . ' with full security updates for the version you bought.',
+            ];
+        }
+    }
+
+    // Windows OS FAQ block — Windows 10 / 11 (Pro / Home / Education).
+    if (function_exists('windows_edition_meta')) {
+        $winMeta = windows_edition_meta($product);
+        if (!empty($winMeta['is_windows'])) {
+            $v   = $winMeta['version'] ?: '';
+            $ed  = $winMeta['edition'] ?: '';
+            $vTxt   = $v  !== '' ? ' ' . $v  : '';
+            $edTxt  = $ed !== '' ? ' ' . $ed : '';
+            $faqs[] = [
+                'question' => 'Is this a genuine retail Windows' . $vTxt . $edTxt . ' product key?',
+                'answer'   => 'Yes. The 25-character key you receive is a genuine Microsoft activation code that pairs with the official Windows' . $vTxt . ' installer downloaded from microsoft.com/software-download. It is never an MAK, KMS or modified ISO. Activation completes inside Settings › System › Activation › Change product key, and the licence is tied to your hardware so it survives clean installs and Windows updates.',
+            ];
+            $faqs[] = [
+                'question' => 'Will this Windows' . $vTxt . $edTxt . ' key activate on a brand-new PC build or a refurbished laptop?',
+                'answer'   => 'Yes. The key activates fresh installs on new PC builds and clean reinstalls on refurbished or second-hand machines. Boot from the official Microsoft Media Creation Tool USB, install Windows' . $vTxt . ', skip the “I don\'t have a key” prompt and paste your code in Settings after install. ' . ($ed === 'Pro' ? 'Windows' . $vTxt . ' Pro additionally unlocks BitLocker, Remote Desktop host, Hyper-V and Group Policy.' : ''),
+            ];
+            $faqs[] = [
+                'question' => $v === '10'
+                    ? 'Can I upgrade from Windows 7 or 8.1 to Windows' . $vTxt . $edTxt . ' with this key?'
+                    : 'Can I upgrade from Windows 10' . ($ed && $ed !== 'Home' ? ' Home' : '') . ' to Windows' . $vTxt . $edTxt . ' with this key?',
+                'answer'   => $v === '10'
+                    ? 'Yes. Run the official Windows 10 Media Creation Tool, choose "Upgrade this PC now", and Windows performs an in-place upgrade preserving your apps and files. When prompted, paste the 25-character code in Settings › Activation › Change product key to activate the new licence.'
+                    : (($v === '11' && $ed)
+                        ? 'Yes. A clean install of Windows 11 ' . $ed . ' is the cleanest path; or upgrade in-place from Windows 10 via Microsoft\'s PC Health Check and free upgrade flow, then enter this ' . $ed . ' key in Settings › Activation › Change product key to switch from Home to ' . $ed . '.'
+                        : 'Yes. Open Settings › System › Activation › Change product key, paste the 25-character code, and Windows performs an in-place edition upgrade (e.g. Home → Pro) without reinstalling, without losing apps and without losing files.'),
+            ];
+        }
+    }
+
+    // Microsoft Project / Visio FAQ block.
+    if (function_exists('project_visio_meta')) {
+        $pvMeta = project_visio_meta($product);
+        if (!empty($pvMeta['is_project_visio'])) {
+            $k    = $pvMeta['kind_label'];   // 'Project' | 'Visio'
+            $year = $pvMeta['year'] ?: '';
+            $ed   = $pvMeta['edition'] ?: '';
+            $yTxt = $year !== '' ? ' ' . $year : '';
+            $faqs[] = [
+                'question' => 'Is this a one-time purchase or a subscription to Microsoft ' . $k . ' Online?',
+                'answer'   => 'This is a one-time purchase perpetual licence for Microsoft ' . $k . $yTxt . ($ed ? ' ' . $ed : '') . ' on Windows PC. There is no monthly subscription, no Microsoft ' . $k . ' Online seat fee and no auto-renewal. Activate the key once and use ' . $k . ' for as long as you own the device.',
+            ];
+            $faqs[] = [
+                'question' => 'Can Microsoft ' . $k . $yTxt . ' be installed alongside my existing Microsoft Office?',
+                'answer'   => 'Yes. Microsoft ' . $k . $yTxt . ' installs as a standalone app on the same Windows PC where Microsoft 365, Office 2024, Office 2021 or Office 2019 is already running. The installers do not conflict and you do not lose any existing Word, Excel, PowerPoint or Outlook settings.',
+            ];
+            $faqs[] = [
+                'question' => 'Does Microsoft ' . $k . $yTxt . ' support Windows 11 and the latest file formats?',
+                'answer'   => 'Yes. ' . ($k === 'Project'
+                    ? 'Microsoft Project ' . ($year ?: '2024') . ' Professional supports Windows 11 and Windows 10, opens .mpp files from every previous Project version, exports to Excel / PDF / image, and connects to Project Online and Project Server via on-premises connectors when needed.'
+                    : 'Microsoft Visio ' . ($year ?: '2024') . ' Professional supports Windows 11 and Windows 10, ships with the complete shape libraries (network, AWS / Azure / GCP, BPMN 2.0, UML 2.5, ITIL, floor plan, electrical) and reads / writes .vsd, .vsdx and .vsdm files cleanly.'),
+            ];
+        }
+    }
+
+    // Antivirus FAQ block (Bitdefender / McAfee / Norton / Kaspersky / etc.)
+    if (function_exists('antivirus_meta')) {
+        $avMeta = antivirus_meta($product);
+        if (!empty($avMeta['is_antivirus'])) {
+            $b   = $avMeta['brand_label'];
+            $dev = $avMeta['devices'] ?: 'the licensed number of devices';
+            $durRaw = $avMeta['duration'] ?? '';
+            $durTxt = $durRaw !== '' ? $durRaw : 'subscription term';
+            $plt = $avMeta['platform'] ?: 'Windows';
+            $faqs[] = [
+                'question' => 'Does this ' . $b . ' subscription auto-renew?',
+                'answer'   => 'No. This is a fixed prepaid ' . $durTxt . ' ' . $b . ' subscription. You will NOT be charged automatically when the term ends — your credit card is never stored against the ' . $b . ' billing system because we activate the licence from a redemption code, not a recurring card. Renew on your own schedule (or buy a fresh key from us at the same discount).',
+            ];
+            $faqs[] = [
+                'question' => 'When does the ' . $b . ' ' . $durTxt . ' coverage start counting?',
+                'answer'   => 'The clock starts the day you redeem the activation code inside your ' . $b . ' account — not the day we email it to you. That means you can buy ahead of an existing subscription ending and queue up the new key without losing a single protected day.',
+            ];
+            $faqs[] = [
+                'question' => 'How do I install ' . $b . ' on ' . $plt . ' after I receive the key?',
+                'answer'   => '(1) Create or log in to your ' . $b . ' account at the brand\'s portal (Bitdefender Central, McAfee My Account, Norton My Account or Kaspersky My Account). (2) Click "Add subscription" or "Redeem code" and paste the 16-25 character activation key from your email. (3) Download the installer for ' . $plt . ' and install it on each of ' . $dev . '. Each device counts as one seat against your subscription.',
             ];
         }
     }

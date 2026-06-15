@@ -125,6 +125,30 @@ if ($_officeMeta['is_office']) {
     if ($_officeMeta['year']    !== '') $_addProps[] = ['@type' => 'PropertyValue', 'name' => 'Office Year',    'value' => $_officeMeta['year']];
     if ($_officeMeta['edition'] !== '') $_addProps[] = ['@type' => 'PropertyValue', 'name' => 'Office Edition', 'value' => $_officeMeta['edition']];
 }
+$_winMeta = windows_edition_meta($product);
+if ($_winMeta['is_windows']) {
+    if ($_winMeta['version'] !== '') $_addProps[] = ['@type' => 'PropertyValue', 'name' => 'Windows Version', 'value' => $_winMeta['version']];
+    if ($_winMeta['edition'] !== '') $_addProps[] = ['@type' => 'PropertyValue', 'name' => 'Windows Edition', 'value' => $_winMeta['edition']];
+}
+$_pvMeta = project_visio_meta($product);
+if (!empty($_pvMeta['is_project_visio'])) {
+    $_addProps[] = ['@type' => 'PropertyValue', 'name' => 'App Family',  'value' => 'Microsoft ' . $_pvMeta['kind_label']];
+    if ($_pvMeta['year']    !== '') $_addProps[] = ['@type' => 'PropertyValue', 'name' => 'App Year',    'value' => $_pvMeta['year']];
+    if ($_pvMeta['edition'] !== '') $_addProps[] = ['@type' => 'PropertyValue', 'name' => 'App Edition', 'value' => $_pvMeta['edition']];
+}
+$_avMeta = antivirus_meta($product);
+if (!empty($_avMeta['is_antivirus'])) {
+    $_addProps[] = ['@type' => 'PropertyValue', 'name' => 'Security Vendor', 'value' => $_avMeta['brand_label']];
+    if ($_avMeta['devices']  !== '') $_addProps[] = ['@type' => 'PropertyValue', 'name' => 'Device Coverage', 'value' => $_avMeta['devices']];
+    if ($_avMeta['duration'] !== '') $_addProps[] = ['@type' => 'PropertyValue', 'name' => 'Subscription Term', 'value' => $_avMeta['duration']];
+    // Override the generic License Type for antivirus SKUs (most AV licences
+    // are fixed-term, not perpetual) so the structured data stays accurate.
+    foreach ($_addProps as &$_pv) {
+        if (($_pv['name'] ?? '') === 'License Type')   $_pv['value'] = 'Fixed-term subscription license';
+        if (($_pv['name'] ?? '') === 'Purchase Model') $_pv['value'] = 'Prepaid one-time purchase — no auto-renewal';
+    }
+    unset($_pv);
+}
 $jsonLd['additionalProperty'] = $_addProps;
 // Embed up to 5 real reviews inside the Product schema for richer rich-result eligibility.
 $_reviewItems = product_review_items_jsonld($product, 5);
