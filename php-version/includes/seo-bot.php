@@ -1124,6 +1124,20 @@ SYS;
     $out['written'] = true;
     $out['bytes']   = (int)$bytes;
     $out['path']    = $path;
+
+    // Ping IndexNow for /llms.txt + /agents.json freshness. AI crawlers
+    // (Bing's GPTBot/Copilot, Perplexity, Yandex AI) re-fetch these
+    // discovery files when IndexNow notifies them — the ping costs us
+    // one cheap POST and routinely shaves hours off re-crawl latency.
+    $publicHost   = trim((string)setting_get('site_domain_url', '')) ?: site_url();
+    $publicBase   = rtrim($publicHost, '/');
+    $pingTargets  = [$publicBase . '/llms.txt', $publicBase . '/agents.json'];
+    [$pingStatus, $pingCount] = _seo_indexnow_submit_urls($pingTargets, $report);
+    $out['indexnow_status'] = $pingStatus;
+    $out['indexnow_count']  = (int)$pingCount;
+    $report['llms_txt_indexnow_status'] = $pingStatus;
+    $report['llms_txt_indexnow_count']  = (int)$pingCount;
+
     return $out;
 }
 

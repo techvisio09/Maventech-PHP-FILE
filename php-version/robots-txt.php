@@ -74,3 +74,5 @@ Sitemap: <?= $base ?>/sitemap.xml
 Sitemap: <?= $base ?>/merchant-feed.xml
 
 Sitemap: <?= $base ?>/llms.txt
+
+Sitemap: <?= $base ?>/agents.json

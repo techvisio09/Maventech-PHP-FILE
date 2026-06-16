@@ -63,6 +63,10 @@ if ($path === '/llms.txt') {
     require __DIR__ . '/llms-txt.php';
     return true;
 }
+if ($path === '/agents.json') {
+    require __DIR__ . '/agents-json.php';
+    return true;
+}
 if ($path === '/robots.txt') {
     require __DIR__ . '/robots-txt.php';
     return true;

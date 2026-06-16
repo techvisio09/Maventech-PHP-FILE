@@ -1972,7 +1972,11 @@ if ($tab === 'ai-blogger') {
             $rep = ['errors' => []];
             $r   = _seo_generate_daily_llms_txt(db(), $rep);
             if (!empty($r['written'])) {
-                $_SESSION['seo_bot_flash'] = 'llms.txt refreshed — ' . number_format((int)$r['bytes']) . ' bytes written to ' . basename($r['path']) . ' (LLM tokens: ' . ($r['tokens_in']+$r['tokens_out']) . ').';
+                $inStatus = (string)($r['indexnow_status'] ?? 'skipped');
+                $inCount  = (int)($r['indexnow_count'] ?? 0);
+                $_SESSION['seo_bot_flash'] = 'llms.txt refreshed — ' . number_format((int)$r['bytes']) . ' bytes written to ' . basename($r['path'])
+                    . ' (LLM tokens: ' . ($r['tokens_in']+$r['tokens_out']) . ')'
+                    . ' · IndexNow: ' . $inStatus . ($inCount ? ' (' . $inCount . ' URLs notified)' : '') . '.';
             } else {
                 $_SESSION['seo_bot_flash'] = 'llms.txt refresh skipped — ' . ($r['skip_reason'] ?: 'no AI key') . '.';
             }
@@ -3754,12 +3758,15 @@ elseif ($tab === 'ai-blogger'):
         </div>
       </div>
       <div class="d-flex align-items-center gap-2">
-        <a href="/llms.txt" target="_blank" rel="noopener" class="btn btn-sm btn-soft-gray rounded-pill" data-testid="llms-txt-view">
-          <i class="bi bi-eye me-1"></i>View
+        <a href="/llms.txt"    target="_blank" rel="noopener" class="btn btn-sm btn-soft-gray rounded-pill" data-testid="llms-txt-view">
+          <i class="bi bi-eye me-1"></i>View llms.txt
+        </a>
+        <a href="/agents.json" target="_blank" rel="noopener" class="btn btn-sm btn-soft-gray rounded-pill" data-testid="agents-json-view">
+          <i class="bi bi-braces me-1"></i>agents.json
         </a>
         <a href="admin.php?tab=ai-blogger&refresh_llms_txt=1" class="btn btn-sm btn-soft-blue rounded-pill" data-testid="llms-txt-refresh"
-           onclick="return confirm('Force-regenerate /llms.txt right now using the latest live product catalog? This makes one LLM call (~15 seconds).');">
-          <i class="bi bi-arrow-clockwise me-1"></i>Refresh llms.txt now
+           onclick="return confirm('Force-regenerate /llms.txt right now using the latest live product catalog? This makes one LLM call + an IndexNow ping for /llms.txt and /agents.json (~15 seconds).');">
+          <i class="bi bi-arrow-clockwise me-1"></i>Refresh now
         </a>
       </div>
     </div>

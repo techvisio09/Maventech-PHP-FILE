@@ -32,6 +32,7 @@ RewriteRule ^uploads/order-pdfs/.* - [F,L]
 RewriteRule ^sitemap\.xml$        sitemap-xml.php   [L]
 RewriteRule ^merchant-feed\.xml$  merchant-feed.php [L]
 RewriteRule ^llms\.txt$           llms-txt.php      [L]
+RewriteRule ^agents\.json$        agents-json.php   [L]
 RewriteRule ^robots\.txt$         robots-txt.php    [L]
 RewriteRule ^ai\.txt$             ai-txt.php        [L]
 
