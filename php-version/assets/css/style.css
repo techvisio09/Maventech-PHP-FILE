@@ -3098,3 +3098,81 @@ body .brand-grad,
   .navbar.sticky-top.navbar-below-trustbar { top: 0; }
 }
 [data-bs-theme="dark"] .trustbar.trustbar-sticky { background: #111223; }
+
+/* --- Inline trustbar promo strip (replaces the floating deal-pill) --- */
+.trustbar-deal {
+  background: rgba(255, 255, 255, .08);
+  border: 1px solid rgba(255, 255, 255, .18);
+  border-radius: 999px;
+  padding: 2px 4px 2px 12px;
+  font-size: .76rem;
+  color: #ffffff;
+  line-height: 1.1;
+  margin-left: .25rem;
+}
+.trustbar-deal-text {
+  color: #fff;
+  font-weight: 600;
+  letter-spacing: .01em;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+.trustbar-deal-text .bi-tag-fill { color: #fbbf24; }
+.trustbar-deal-code {
+  display: inline-flex; align-items: center; gap: .3rem;
+  background: rgba(255, 255, 255, .15);
+  border: 1px dashed rgba(255, 255, 255, .55);
+  color: #ffffff;
+  border-radius: 999px;
+  padding: 1px 9px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  font-size: .72rem;
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease, transform .15s ease;
+}
+.trustbar-deal-code:hover {
+  background: rgba(255, 255, 255, .25);
+  border-color: rgba(255, 255, 255, .85);
+  transform: translateY(-1px);
+}
+.trustbar-deal-code .bi { font-size: .68rem; opacity: .85; }
+.trustbar-deal-code.is-copied {
+  background: rgba(16, 185, 129, .88);
+  border-color: rgba(16, 185, 129, .95);
+  border-style: solid;
+}
+.trustbar-deal-shop {
+  color: #ffffff !important;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: .74rem;
+  letter-spacing: .2px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--theme-primary, #0066CC);
+  border: 1px solid var(--theme-primary, #0066CC);
+  display: inline-flex;
+  align-items: center;
+  gap: .15rem;
+  transition: background .15s ease, transform .15s ease;
+}
+.trustbar-deal-shop:hover {
+  background: var(--theme-primary-hover, #0052A3);
+  border-color: var(--theme-primary-hover, #0052A3);
+  color: #fff !important;
+  text-decoration: none;
+  transform: translateY(-1px);
+}
+
+/* Hide the old standalone deal-bar pill (now lives inside the trustbar). */
+.deal-bar, #deal-bar { display: none !important; }
+body.has-deal-bar #chat-bubble { bottom: 22px; }
+
+/* On smaller screens collapse the headline to just the icon + code + Shop Now. */
+@media (max-width: 1199px) {
+  .trustbar-deal-text { display: none; }
+}
+

@@ -325,16 +325,43 @@ $ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.sv
 $_vibeTopbar = function_exists('render_vibe_promo_banner') ? render_vibe_promo_banner('topbar') : '';
 if ($_vibeTopbar !== ''):
   echo $_vibeTopbar;
-endif; ?>
+endif;
+
+// Resolve the active promo headline/code early so the inline trustbar
+// promo strip can display them. When a vibe-promo schedule is live, the
+// scheduled label/code wins; otherwise the static defaults below.
+$_vibePromo    = function_exists('active_vibe_promo') ? active_vibe_promo() : null;
+$_dealHeadline = 'Save up to 10%';
+$_dealCode     = 'MAVEN20';
+if ($_vibePromo && !empty($_vibePromo['coupon_code']) && (int)$_vibePromo['coupon_percent'] > 0) {
+    $_pct       = (int)$_vibePromo['coupon_percent'];
+    $_labelTxt  = trim((string)($_vibePromo['label'] ?? ''));
+    $_dealHeadline = $_labelTxt !== '' ? $_labelTxt : ('Save up to ' . $_pct . '%');
+    $_dealCode     = strtoupper((string)$_vibePromo['coupon_code']);
+}
+?>
 
 <!-- Trust bar (sticky-top so it stays visible while the user scrolls; the main
      navbar sticks below it so neither ever covers the other). -->
 <div class="trustbar trustbar-sticky py-1 px-3 d-none d-md-block">
   <div class="container d-flex justify-content-between align-items-center">
-    <div class="d-flex gap-4">
+    <div class="d-flex gap-3 align-items-center flex-wrap">
       <span><i class="bi bi-patch-check-fill text-success me-1"></i>Genuine Microsoft Products</span>
       <span><a href="reviews.php" class="text-decoration-none text-white"><span class="text-warning">★★★★★</span> 4.6/5 (4,722+ Reviews)</a></span>
       <span><i class="bi bi-lightning-charge-fill text-warning me-1"></i>Instant Digital Delivery</span>
+      <!-- Inline promo strip: configurable headline + copy-able code chip + Shop Now. -->
+      <span class="trustbar-deal d-inline-flex align-items-center gap-2" data-testid="trustbar-deal">
+        <span class="trustbar-deal-text"><i class="bi bi-tag-fill me-1"></i><?= esc($_dealHeadline ?? 'Save up to 10%') ?></span>
+        <button type="button"
+                class="trustbar-deal-code"
+                data-code="<?= esc($_dealCode ?? 'MAVEN20') ?>"
+                data-testid="trustbar-deal-code"
+                title="Click to copy"
+                onclick="(function(b){var c=b.getAttribute('data-code');if(!c)return;function done(){var o=b.dataset.orig||b.innerHTML;b.dataset.orig=b.dataset.orig||b.innerHTML;b.innerHTML='<i class=\'bi bi-check2\'></i> Copied';b.classList.add('is-copied');setTimeout(function(){b.innerHTML=o;b.classList.remove('is-copied');},1500);}if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(c).then(done,done);}else{var t=document.createElement('textarea');t.value=c;document.body.appendChild(t);t.select();try{document.execCommand('copy');}catch(_){}t.remove();done();}})(this)">
+          <span><?= esc($_dealCode ?? 'MAVEN20') ?></span><i class="bi bi-clipboard"></i>
+        </button>
+        <a href="shop.php" class="trustbar-deal-shop" data-testid="trustbar-deal-shop">Shop Now <i class="bi bi-chevron-right"></i></a>
+      </span>
     </div>
     <div class="d-flex gap-3 align-items-center">
       <span class="badge text-bg-warning text-dark">★ Trusted Software Store</span>
@@ -469,34 +496,6 @@ endif; ?>
     </div>
   </div>
 </nav>
-<!-- Sticky limited-time deal bar — live countdown resets daily at local midnight.
-     When an admin-scheduled Brand Vibe with a coupon is live, swap the
-     default "MAVEN20 20% off" copy for the scheduled label + code so the
-     deal-bar tracks whatever promo is currently running. -->
-<?php
-$_vibePromo  = function_exists('active_vibe_promo') ? active_vibe_promo() : null;
-$_dealHeadline = 'Save up to 20% on Microsoft Office 2024!';
-$_dealCode     = 'MAVEN20';
-if ($_vibePromo && !empty($_vibePromo['coupon_code']) && (int)$_vibePromo['coupon_percent'] > 0) {
-    $_pct       = (int)$_vibePromo['coupon_percent'];
-    $_labelTxt  = trim((string)($_vibePromo['label'] ?? ''));
-    $_dealHeadline = $_labelTxt !== ''
-        ? ($_labelTxt . ' — Save ' . $_pct . '%!')
-        : ('Save up to ' . $_pct . '% sitewide!');
-    $_dealCode  = strtoupper((string)$_vibePromo['coupon_code']);
-}
-?>
-<div class="deal-bar" id="deal-bar" data-testid="deal-bar">
-  <div class="deal-bar-pill" data-testid="deal-bar-pill">
-    <i class="bi bi-tag-fill deal-bar-icon" aria-hidden="true"></i>
-    <span class="deal-bar-headline" data-testid="deal-bar-headline">Apply code for 20%</span>
-    <a href="shop.php" class="deal-bar-shop-link" data-testid="deal-bar-cta">Shop Now <i class="bi bi-chevron-right"></i></a>
-    <button type="button" class="deal-bar-close-x" aria-label="Dismiss deal" data-testid="deal-bar-close">&times;</button>
-  </div>
-  <!-- Hidden helpers kept for backward compat with existing JS (MAVEN20 copy, countdown). -->
-  <span hidden data-testid="deal-bar-code-pill" data-code="<?= esc($_dealCode) ?>" class="deal-bar-code-pill"><span data-testid="deal-bar-code"><?= esc($_dealCode) ?></span></span>
-  <span class="deal-bar-countdown-wrap" data-testid="deal-bar-countdown-wrap" hidden>
-    <strong class="deal-countdown" id="deal-countdown" data-testid="deal-bar-countdown">--:--:--</strong>
-  </span>
-</div>
+<!-- Top promo strip moved INLINE into the trustbar above (next to
+     "Instant Digital Delivery") — no separate floating bar anymore. -->
 <?php endif; ?>
