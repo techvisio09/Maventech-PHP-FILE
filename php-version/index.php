@@ -580,14 +580,16 @@ include __DIR__ . '/includes/header.php';
       </div>
       <a href="blog.php" class="text-decoration-none fw-semibold flex-shrink-0">View All Articles <i class="bi bi-arrow-right"></i></a>
     </div>
-    <div class="row g-4">
+    <div class="row g-3">
       <?php foreach ($posts as $b): ?>
-        <div class="col-lg-4">
-          <a href="blog-post.php?id=<?= esc($b['id']) ?>" class="card h-100 text-decoration-none">
-            <img src="<?= esc($b['image']) ?>" class="card-img-top object-fit-cover" style="height:180px;" alt="<?= esc($b['title']) ?>">
-            <div class="card-body">
-              <small class="text-secondary"><?= esc($b['date']) ?> · <?= esc($b['read_time']) ?></small>
-              <h6 class="fw-bold mt-2 text-body"><?= esc($b['title']) ?></h6>
+        <div class="col-lg-4 col-md-6">
+          <a href="blog-post.php?id=<?= esc($b['id']) ?>" class="card h-100 text-decoration-none blog-card">
+            <div class="blog-card-img" style="height:150px;">
+              <img src="<?= esc($b['image']) ?>" alt="<?= esc($b['title']) ?>">
+            </div>
+            <div class="card-body p-3">
+              <small class="text-secondary" style="font-size:.72rem;"><?= esc($b['date']) ?> · <?= esc($b['read_time']) ?></small>
+              <h6 class="fw-bold mt-2 text-body blog-card-title"><?= esc($b['title']) ?></h6>
             </div>
           </a>
         </div>

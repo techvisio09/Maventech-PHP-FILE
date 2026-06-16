@@ -2901,6 +2901,43 @@ body > footer.footer-dark { margin-top: auto !important; }
 /* Disable any unintended growth/parallax: footer never animates its height */
 footer.footer-dark { transition: none !important; transform: none !important; will-change: auto !important; }
 
+/* --- BLOG CARDS — compact, elegant images contained, never stretched --- */
+.blog-card { overflow: hidden; }
+.blog-card-img {
+  width: 100%;
+  height: 130px;
+  background: linear-gradient(180deg, #F8FAFC 0%, #EFF3F8 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: .65rem;
+  overflow: hidden;
+  border-bottom: 1px solid var(--theme-border);
+}
+.blog-card-img img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  transition: transform .25s ease;
+}
+.blog-card:hover .blog-card-img img { transform: scale(1.05); }
+.blog-card-title {
+  font-size: .92rem;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 3.6rem;
+}
+[data-bs-theme="dark"] .blog-card-img {
+  background: linear-gradient(180deg, #1A2438 0%, #1E293B 100%);
+  border-bottom-color: rgba(148, 163, 184, .15);
+}
+
+
 [data-bs-theme="dark"] .cart-count-badge { background: #DC3545 !important; color: #fff !important; }
 [data-bs-theme="dark"] .text-primary { color: #60A5FA !important; }
 [data-bs-theme="dark"] .navbar.sticky-top { background: rgba(15, 23, 42, .95) !important; border-bottom-color: var(--theme-border); }

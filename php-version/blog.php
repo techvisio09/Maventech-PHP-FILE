@@ -145,19 +145,21 @@ include __DIR__ . '/includes/header.php';
       <a href="blog.php" class="btn btn-primary rounded-pill mx-auto px-4">View All Articles</a>
     </div>
   <?php else: ?>
-    <div class="row g-4" data-testid="blog-grid">
+    <div class="row g-3" data-testid="blog-grid">
       <?php foreach ($posts as $b): ?>
-        <div class="col-lg-4 col-md-6">
-          <a href="blog-post.php?id=<?= esc($b['id']) ?>" class="card h-100 text-decoration-none" data-testid="blog-card-<?= (int)$b['id'] ?>">
-            <img src="<?= esc($b['image']) ?>" class="card-img-top object-fit-cover" style="height:190px;" alt="<?= esc($b['title']) ?>" loading="lazy">
-            <div class="card-body">
-              <small class="text-secondary"><i class="bi bi-calendar3 me-1"></i><?= esc($b['date']) ?> · <?= esc($b['read_time']) ?>
+        <div class="col-lg-3 col-md-4 col-sm-6">
+          <a href="blog-post.php?id=<?= esc($b['id']) ?>" class="card h-100 text-decoration-none blog-card" data-testid="blog-card-<?= (int)$b['id'] ?>">
+            <div class="blog-card-img">
+              <img src="<?= esc($b['image']) ?>" alt="<?= esc($b['title']) ?>" loading="lazy">
+            </div>
+            <div class="card-body p-3">
+              <small class="text-secondary d-block mb-1" style="font-size:.72rem;"><i class="bi bi-calendar3 me-1"></i><?= esc($b['date']) ?> · <?= esc($b['read_time']) ?>
                 <?php if ($hasRegionCol && !empty($b['target_region']) && isset($allowedRegions[$b['target_region']])): ?>
-                  · <span class="badge bg-light text-secondary border" style="font-weight:500;"><?= esc($b['target_region']) ?></span>
+                  · <span class="badge bg-light text-secondary border" style="font-weight:500;font-size:.65rem;"><?= esc($b['target_region']) ?></span>
                 <?php endif; ?>
               </small>
-              <h5 class="fw-bold mt-2 text-body h6"><?= esc($b['title']) ?></h5>
-              <span class="text-primary small fw-semibold">Read more <i class="bi bi-arrow-right"></i></span>
+              <h6 class="fw-bold mb-2 text-body blog-card-title"><?= esc($b['title']) ?></h6>
+              <span class="text-primary small fw-semibold" style="font-size:.78rem;">Read more <i class="bi bi-arrow-right"></i></span>
             </div>
           </a>
         </div>
