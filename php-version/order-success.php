@@ -246,15 +246,35 @@ if ($order && $order['status'] === 'paid') {
           <i class="bi bi-key-fill me-1"></i>YOUR PRODUCTS &amp; LICENSE KEYS
         </span>
       </div>
-      <?php foreach ($orderItems as $oi): if (empty($oi['license_keys']) || ($oi['product_slug'] === 'proassist-premium')) continue; ?>
-        <?php foreach ($oi['license_keys'] as $idxKey => $lk): ?>
-        <div class="card co-banner p-3 mb-2" data-testid="success-product-card-<?= esc($oi['product_slug']) ?>-<?= (int)$idxKey ?>" style="border-radius:14px;">
+      <?php
+      foreach ($orderItems as $oi):
+        if (empty($oi['license_keys']) || ($oi['product_slug'] === 'proassist-premium')) continue;
+        // We now assign ONE key per line item (multi-seat). Always render
+        // just the FIRST key. The badge above tells the customer how many
+        // seats/devices the key is valid for.
+        $lk        = $oi['license_keys'][0];
+        $seats     = max(1, (int)($oi['qty'] ?? 1));
+        $isMS      = stripos((string)($oi['brand'] ?? ''), 'microsoft') !== false
+                  || stripos((string)$oi['name'], 'microsoft') !== false
+                  || stripos((string)$oi['name'], 'office') !== false
+                  || stripos((string)$oi['name'], 'windows') !== false;
+        $noun      = $isMS ? 'PC' : 'device';
+        $seatLabel = ($seats > 1) ? ('Valid for ' . $seats . ' ' . $noun . 's') : '';
+      ?>
+        <div class="card co-banner p-3 mb-2" data-testid="success-product-card-<?= esc($oi['product_slug']) ?>" style="border-radius:14px;">
           <div class="d-flex align-items-start gap-3">
             <?php if (!empty($oi['image'])): ?>
               <img src="<?= esc($oi['image']) ?>" alt="<?= esc($oi['name']) ?>" style="width:64px;height:64px;object-fit:contain;border-radius:10px;background:#fff;padding:6px;flex-shrink:0;">
             <?php endif; ?>
             <div style="flex:1;min-width:0;">
               <div class="fw-bold" style="font-size:.92rem;color:var(--bs-body-color);" data-testid="success-product-name"><?= esc($oi['name']) ?></div>
+              <?php if ($seatLabel): ?>
+                <div class="mt-2" data-testid="success-product-seats-<?= esc($oi['product_slug']) ?>">
+                  <span style="display:inline-flex;align-items:center;gap:.35rem;background:linear-gradient(135deg,#e0f2fe,#bae6fd);color:#075985;border:1px solid #7dd3fc;border-radius:999px;padding:3px 11px;font-size:.74rem;font-weight:700;letter-spacing:.3px;">
+                    <i class="bi bi-shield-check"></i><?= esc($seatLabel) ?>
+                  </span>
+                </div>
+              <?php endif; ?>
               <div class="text-secondary" style="font-size:.72rem;letter-spacing:.4px;text-transform:uppercase;font-weight:700;margin-top:6px;">LICENSE KEY</div>
               <div class="license-key-pill mt-1" data-testid="success-product-license"
                    style="font-family:ui-monospace,Menlo,monospace;background:linear-gradient(135deg,#ecfeff,#cffafe);color:#0e7490;border:1px dashed #06b6d4;border-radius:8px;padding:6px 10px;font-size:.85rem;font-weight:700;letter-spacing:.6px;display:inline-block;word-break:break-all;">
@@ -273,7 +293,6 @@ if ($order && $order['status'] === 'paid') {
             </div>
           </div>
         </div>
-        <?php endforeach; ?>
       <?php endforeach; ?>
     </div>
     <?php endif; ?>

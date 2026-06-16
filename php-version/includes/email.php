@@ -796,8 +796,23 @@ function render_products_block(array $assignments): string {
         $img = $a['image']
             ? '<img src="' . esc($a['image']) . '" width="68" height="68" alt="" style="border-radius:8px;background:#f8fafc;object-fit:contain;">'
             : '<div style="width:68px;height:68px;background:#f1f5f9;border-radius:8px;display:inline-block;"></div>';
+        // Multi-seat "Valid for N PCs/devices" badge — shown only when qty > 1.
+        // Microsoft / Office / Windows products use "PC" terminology; everything
+        // else uses "device" (covers antivirus, security suites, utilities, etc.).
+        $seats   = max(1, (int)($a['seats'] ?? 1));
+        $isMS    = (stripos((string)($a['brand'] ?? ''), 'microsoft') !== false)
+                || (stripos((string)$a['name'], 'microsoft') !== false)
+                || (stripos((string)$a['name'], 'office')    !== false)
+                || (stripos((string)$a['name'], 'windows')   !== false);
+        $noun    = $isMS ? 'PC' : 'device';
+        $seatBadge = ($seats > 1)
+            ? '<div style="margin-top:10px;text-align:center;">'
+              . '<span style="display:inline-block;background:linear-gradient(135deg,#dbeafe,#bfdbfe);color:#1e3a8a;border:1px solid #93c5fd;border-radius:999px;padding:5px 13px;font-size:12px;font-weight:700;letter-spacing:.2px;">'
+              . '&#10004; Valid for ' . $seats . ' ' . $noun . 's'
+              . '</span></div>'
+            : '';
         $key = $a['key']
-            ? '<div style="margin-top:10px;border:2px dashed #3b82f6;border-radius:10px;background:#eff6ff;padding:12px 14px;text-align:center;">
+            ? $seatBadge . '<div style="margin-top:10px;border:2px dashed #3b82f6;border-radius:10px;background:#eff6ff;padding:12px 14px;text-align:center;">
                  <div style="font-size:10px;color:#64748b;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px;font-weight:600;">License Key</div>
                  <div style="font-family:\'Courier New\',monospace;font-size:17px;font-weight:bold;color:#1d4ed8;letter-spacing:1.8px;">' . esc($a['key']) . '</div></div>'
             : '<div style="margin-top:10px;background:#fef3c7;color:#92400e;padding:10px 14px;border-radius:8px;font-size:13px;">Key being prepared — you\'ll receive it within 30 minutes.</div>';
@@ -1172,20 +1187,26 @@ function fulfill_order(int $orderId, bool $forceAdminOverride = false): void {
     $assignStmt = $pdo->prepare('UPDATE license_keys SET status = "sold", order_id = ?, assigned_at = NOW() WHERE id = ?');
     foreach ($items as $item) {
         if ($item['product_slug'] === 'proassist-premium') continue;
-        for ($i = 0; $i < (int)$item['qty']; $i++) {
-            $keyStmt->execute([$item['product_slug']]);
-            $keyRow = $keyStmt->fetch();
-            if ($keyRow) $assignStmt->execute([$orderId, $keyRow['id']]);
-            $assignments[] = [
-                'name' => $item['name'],
-                'image' => $item['image'],
-                'description' => $item['description'] ?? '',
-                'installation_guide' => $item['installation_guide'] ?? '',
-                'activation_url' => activation_url_for_product($item['name'], $item['brand'] ?? '', $item['activation_url'] ?? ''),
-                'install_guide_url' => $item['install_guide_url'] ?? '',
-                'key' => $keyRow['license_key'] ?? null,
-            ];
-        }
+        // Multi-seat assignment: send ONE license key per line item, regardless
+        // of qty. The customer's order line "5 × Microsoft Office 2024 (PC)"
+        // becomes a single multi-seat key valid for 5 devices. Customers see
+        // a "Valid for N PCs/devices" badge above the key on the success page
+        // and in their delivery email.
+        $seats = max(1, (int)$item['qty']);
+        $keyStmt->execute([$item['product_slug']]);
+        $keyRow = $keyStmt->fetch();
+        if ($keyRow) $assignStmt->execute([$orderId, $keyRow['id']]);
+        $assignments[] = [
+            'name' => $item['name'],
+            'image' => $item['image'],
+            'description' => $item['description'] ?? '',
+            'installation_guide' => $item['installation_guide'] ?? '',
+            'activation_url' => activation_url_for_product($item['name'], $item['brand'] ?? '', $item['activation_url'] ?? ''),
+            'install_guide_url' => $item['install_guide_url'] ?? '',
+            'key' => $keyRow['license_key'] ?? null,
+            'seats' => $seats,
+            'brand' => $item['brand'] ?? '',
+        ];
     }
     $pdo->prepare('UPDATE orders SET fulfilled = 1 WHERE id = ?')->execute([$orderId]);
     $tl['license_assigned'] = date('Y-m-d H:i:s');

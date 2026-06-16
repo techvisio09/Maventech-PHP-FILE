@@ -23,7 +23,12 @@ if (!defined('SEOBOT_INDEXNOW_BATCH'))  define('SEOBOT_INDEXNOW_BATCH', 100);
 if (!defined('SEOBOT_LLM_BATCH'))       define('SEOBOT_LLM_BATCH',      5);
 if (!defined('SEOBOT_REFRESH_DAYS'))    define('SEOBOT_REFRESH_DAYS',   30);
 if (!defined('SEOBOT_BLOG_COOLDOWN_H')) define('SEOBOT_BLOG_COOLDOWN_H',20); // min hours between two auto-blog batches
-if (!defined('SEOBOT_BLOG_POSTS_PER_REGION_PER_DAY')) define('SEOBOT_BLOG_POSTS_PER_REGION_PER_DAY', 6); // how many blogs per region per daily batch
+// Daily blog cadence — per-product feedback (2026-02): keep volume small.
+// Previously 6 posts/region × 4 regions = 24 posts/day. Now 1 post/region
+// × 4 regions = 4 posts/day (still one per market, but never spammy).
+// Also gated by SEOBOT_BLOG_MAX_TOTAL_PER_DAY which is a hard upper cap.
+if (!defined('SEOBOT_BLOG_POSTS_PER_REGION_PER_DAY')) define('SEOBOT_BLOG_POSTS_PER_REGION_PER_DAY', 1);
+if (!defined('SEOBOT_BLOG_MAX_TOTAL_PER_DAY'))        define('SEOBOT_BLOG_MAX_TOTAL_PER_DAY',        2); // never publish more than this many auto-posts in a single 24h window
 // Markets the auto-blogger targets — keep in sync with regions table.
 if (!defined('SEOBOT_BLOG_REGIONS'))    define('SEOBOT_BLOG_REGIONS',   'US,UK,AU,CA');
 
@@ -831,23 +836,42 @@ function _seo_generate_daily_blog_batch(PDO $pdo, array &$report): array
         }
     }
 
+    // Hard daily cap — never publish more than SEOBOT_BLOG_MAX_TOTAL_PER_DAY
+    // auto-posts in the last 24h regardless of region count. Surfaces the
+    // skip in the report so the admin "AI Auto-Blogger" panel can show it.
+    $hardCap = max(1, (int)SEOBOT_BLOG_MAX_TOTAL_PER_DAY);
+    try {
+        $countToday = (int)$pdo->query(
+            "SELECT COUNT(*) FROM blog_posts
+              WHERE created_at >= (NOW() - INTERVAL 24 HOUR)
+                AND source IN ('seo-bot', 'auto', 'ai-auto')"
+        )->fetchColumn();
+    } catch (Throwable $e) { $countToday = 0; }
+    if ($countToday >= $hardCap) {
+        $report['errors'][] = 'blog: daily cap reached — already published ' . $countToday . ' post' . ($countToday > 1 ? 's' : '') . ' in the last 24h (cap=' . $hardCap . ')';
+        return $out;
+    }
+    $remainingToday = max(0, $hardCap - $countToday);
+
     [$apiKey, $baseUrl] = _seo_resolve_llm_credentials();
     if ($apiKey === '' || $baseUrl === '') {
         $report['errors'][] = 'blog: LLM key not configured — add your AI key in the admin panel';
         return $out;
     }
 
-    // Loop EVERY target region (US, UK, AU, CA) × N posts each = 24 posts/day.
-    // Each post is written FOR that market — currency, locale, delivery
-    // wording all match the region.  Round-robin is maintained PER region,
-    // so the US queue and the UK queue evolve independently.
+    // Loop EVERY target region (US, UK, AU, CA) × N posts each, then clip
+    // to the hard daily total cap so we never publish more than
+    // SEOBOT_BLOG_MAX_TOTAL_PER_DAY auto-posts in a 24h window.
     $regions = array_values(array_filter(array_map('trim', explode(',', SEOBOT_BLOG_REGIONS))));
     $perRegion = max(1, (int)SEOBOT_BLOG_POSTS_PER_REGION_PER_DAY);
+    $totalPublishedThisRun = 0;
 
     foreach ($regions as $targetRegion) {
         $out['by_region'][$targetRegion] = 0;
         $usedProductIds = [];
         for ($i = 1; $i <= $perRegion; $i++) {
+            // Stop when the daily-cap budget is fully consumed.
+            if ($totalPublishedThisRun >= $remainingToday) break 2;
             $one = _seo_generate_one_blog_post($pdo, $apiKey, $baseUrl, $targetRegion, $usedProductIds, $report);
             $out['calls']      += (int)$one['calls'];
             $out['tokens_in']  += (int)$one['tokens_in'];
@@ -855,6 +879,7 @@ function _seo_generate_daily_blog_batch(PDO $pdo, array &$report): array
             if (!empty($one['blog_post_id'])) {
                 $usedProductIds[] = (int)$one['blog_product_id'];
                 $out['by_region'][$targetRegion]++;
+                $totalPublishedThisRun++;
                 $out['posts'][] = [
                     'blog_post_id'    => $one['blog_post_id'],
                     'blog_post_title' => $one['blog_post_title'],
