@@ -34,6 +34,15 @@ Create a comprehensive and user-friendly Admin Panel for Maventech Software with
 - `settings` — Card statement names
 
 ## Completed Features (as of Feb 2026)
+- **[Feb 2026]** **SEO meta-tag tightening + E.164 tel: + Backlink Bootstrap** (see CHANGELOG):
+  - `seo_clamp_title()` / `seo_clamp_description()` enforce 50-60 / 120-160 char limits on every page
+  - `tel_e164()` helper migrates all phone URIs to `+18886329902` format
+  - Wayback Machine "Save Page Now" submission added to daily SEO cron (auto-creates archive.org backlinks)
+  - New `/embed/badge.js` cookieless widget partners can embed (every install = real backlink)
+  - New `/press-kit` public page with copy-paste embed snippets, boilerplate, brand assets
+  - Admin Recent Activity table now shows Wayback submission counts
+
+
 - Full PHP+MariaDB scaffolding bypassing React/FastAPI
 - Elegant dashboard with KPI cards & conversion funnels
 - Multi-region product filter with on-the-fly USD↔region currency conversion
