@@ -918,20 +918,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $gw = $_POST['gateway']; // card | paypal
         if ($gw==='card') {
             setting_set('gw_card_status',         $_POST['status']);
-            setting_set('gw_card_provider',       trim($_POST['provider']));
-            setting_set('gw_card_merchant_name',  trim($_POST['merchant_name']));
-            // Mode-aware key fields. Empty input leaves the stored value untouched
-            // so the admin can update just the mode they're configuring.
-            if (!empty($_POST['public_key_test']))    setting_set('gw_card_public_key_test',    trim($_POST['public_key_test']));
-            if (!empty($_POST['secret_key_test']))    setting_set('gw_card_secret_key_test',    trim($_POST['secret_key_test']));
-            if (!empty($_POST['public_key_live']))    setting_set('gw_card_public_key_live',    trim($_POST['public_key_live']));
-            if (!empty($_POST['secret_key_live']))    setting_set('gw_card_secret_key_live',    trim($_POST['secret_key_live']));
-            // Legacy single-field inputs (kept for backwards compat — they
-            // populate the legacy non-prefixed setting which acts as a
-            // catch-all fallback for both modes).
-            if (!empty($_POST['public_key']))         setting_set('gw_card_public_key',         trim($_POST['public_key']));
-            if (!empty($_POST['secret_key']))         setting_set('gw_card_secret_key',         trim($_POST['secret_key']));
-            if (!empty($_POST['webhook_secret']))     setting_set('gw_card_webhook_secret',     trim($_POST['webhook_secret']));
+            // Active provider — drives WHICH gateway processes card payments.
+            // One of: stripe | authnet | nmi | custom. The legacy free-text
+            // 'gw_card_provider' is mirrored for human-readable display.
+            $providerType = $_POST['provider_type'] ?? 'stripe';
+            $allowed = ['stripe','authnet','nmi','custom'];
+            if (!in_array($providerType, $allowed, true)) $providerType = 'stripe';
+            setting_set('gw_card_provider_type', $providerType);
+            $labels = ['stripe'=>'Stripe','authnet'=>'Authorize.Net','nmi'=>'NMI','custom'=>trim($_POST['custom_gateway_name'] ?? '') ?: 'Custom Gateway'];
+            setting_set('gw_card_provider',      $labels[$providerType]);
+            setting_set('gw_card_merchant_name', trim($_POST['merchant_name']));
+            // ------ Stripe credentials ------
+            if ($providerType === 'stripe' || isset($_POST['public_key_test'])) {
+                if (!empty($_POST['public_key_test']))    setting_set('gw_card_public_key_test',    trim($_POST['public_key_test']));
+                if (!empty($_POST['secret_key_test']))    setting_set('gw_card_secret_key_test',    trim($_POST['secret_key_test']));
+                if (!empty($_POST['public_key_live']))    setting_set('gw_card_public_key_live',    trim($_POST['public_key_live']));
+                if (!empty($_POST['secret_key_live']))    setting_set('gw_card_secret_key_live',    trim($_POST['secret_key_live']));
+                if (!empty($_POST['public_key']))         setting_set('gw_card_public_key',         trim($_POST['public_key']));
+                if (!empty($_POST['secret_key']))         setting_set('gw_card_secret_key',         trim($_POST['secret_key']));
+                if (!empty($_POST['webhook_secret']))     setting_set('gw_card_webhook_secret',     trim($_POST['webhook_secret']));
+            }
+            // ------ Authorize.Net credentials ------
+            if (!empty($_POST['authnet_login_id_test']))         setting_set('gw_authnet_login_id_test',         trim($_POST['authnet_login_id_test']));
+            if (!empty($_POST['authnet_transaction_key_test']))  setting_set('gw_authnet_transaction_key_test',  trim($_POST['authnet_transaction_key_test']));
+            if (!empty($_POST['authnet_login_id_live']))         setting_set('gw_authnet_login_id_live',         trim($_POST['authnet_login_id_live']));
+            if (!empty($_POST['authnet_transaction_key_live']))  setting_set('gw_authnet_transaction_key_live',  trim($_POST['authnet_transaction_key_live']));
+            if (!empty($_POST['authnet_signature_key']))         setting_set('gw_authnet_signature_key',         trim($_POST['authnet_signature_key']));
+            // ------ NMI credentials ------
+            if (!empty($_POST['nmi_security_key_test']))         setting_set('gw_nmi_security_key_test',         trim($_POST['nmi_security_key_test']));
+            if (!empty($_POST['nmi_username_test']))             setting_set('gw_nmi_username_test',             trim($_POST['nmi_username_test']));
+            if (!empty($_POST['nmi_password_test']))             setting_set('gw_nmi_password_test',             trim($_POST['nmi_password_test']));
+            if (!empty($_POST['nmi_security_key_live']))         setting_set('gw_nmi_security_key_live',         trim($_POST['nmi_security_key_live']));
+            if (!empty($_POST['nmi_username_live']))             setting_set('gw_nmi_username_live',             trim($_POST['nmi_username_live']));
+            if (!empty($_POST['nmi_password_live']))             setting_set('gw_nmi_password_live',             trim($_POST['nmi_password_live']));
+            // ------ Custom / Other ------
+            if (isset($_POST['custom_gateway_name']))            setting_set('gw_custom_name',                   trim($_POST['custom_gateway_name']));
+            if (!empty($_POST['custom_endpoint_test']))          setting_set('gw_custom_endpoint_test',          trim($_POST['custom_endpoint_test']));
+            if (!empty($_POST['custom_api_key_test']))           setting_set('gw_custom_api_key_test',           trim($_POST['custom_api_key_test']));
+            if (!empty($_POST['custom_api_secret_test']))        setting_set('gw_custom_api_secret_test',        trim($_POST['custom_api_secret_test']));
+            if (!empty($_POST['custom_merchant_id_test']))       setting_set('gw_custom_merchant_id_test',       trim($_POST['custom_merchant_id_test']));
+            if (!empty($_POST['custom_webhook_test']))           setting_set('gw_custom_webhook_test',           trim($_POST['custom_webhook_test']));
+            if (!empty($_POST['custom_endpoint_live']))          setting_set('gw_custom_endpoint_live',          trim($_POST['custom_endpoint_live']));
+            if (!empty($_POST['custom_api_key_live']))           setting_set('gw_custom_api_key_live',           trim($_POST['custom_api_key_live']));
+            if (!empty($_POST['custom_api_secret_live']))        setting_set('gw_custom_api_secret_live',        trim($_POST['custom_api_secret_live']));
+            if (!empty($_POST['custom_merchant_id_live']))       setting_set('gw_custom_merchant_id_live',       trim($_POST['custom_merchant_id_live']));
+            if (!empty($_POST['custom_webhook_live']))           setting_set('gw_custom_webhook_live',           trim($_POST['custom_webhook_live']));
             // Mirror status to the legacy `card_enabled` flag used by some helpers
             setting_set('card_enabled', $_POST['status']==='active' ? '1' : '0');
         } else {
@@ -9969,6 +10000,33 @@ elseif ($tab === 'api'):
   $cardSecL   = setting_get('gw_card_secret_key_live','');
   $cardWh     = setting_get('gw_card_webhook_secret','');
   $cardWhUrl  = setting_get('gw_card_webhook_url','/stripe-webhook.php');
+  $cardProvType = setting_get('gw_card_provider_type', 'stripe'); // stripe|authnet|nmi|custom
+
+  // ------ Authorize.Net ------
+  $anLoginT  = setting_get('gw_authnet_login_id_test','');
+  $anTxKeyT  = setting_get('gw_authnet_transaction_key_test','');
+  $anLoginL  = setting_get('gw_authnet_login_id_live','');
+  $anTxKeyL  = setting_get('gw_authnet_transaction_key_live','');
+  $anSigKey  = setting_get('gw_authnet_signature_key','');
+  // ------ NMI ------
+  $nmiKeyT   = setting_get('gw_nmi_security_key_test','');
+  $nmiUserT  = setting_get('gw_nmi_username_test','');
+  $nmiPassT  = setting_get('gw_nmi_password_test','');
+  $nmiKeyL   = setting_get('gw_nmi_security_key_live','');
+  $nmiUserL  = setting_get('gw_nmi_username_live','');
+  $nmiPassL  = setting_get('gw_nmi_password_live','');
+  // ------ Custom ------
+  $customName    = setting_get('gw_custom_name','');
+  $customEndT    = setting_get('gw_custom_endpoint_test','');
+  $customApiKT   = setting_get('gw_custom_api_key_test','');
+  $customApiST   = setting_get('gw_custom_api_secret_test','');
+  $customMidT    = setting_get('gw_custom_merchant_id_test','');
+  $customWhT     = setting_get('gw_custom_webhook_test','');
+  $customEndL    = setting_get('gw_custom_endpoint_live','');
+  $customApiKL   = setting_get('gw_custom_api_key_live','');
+  $customApiSL   = setting_get('gw_custom_api_secret_live','');
+  $customMidL    = setting_get('gw_custom_merchant_id_live','');
+  $customWhL     = setting_get('gw_custom_webhook_live','');
 
   $ppStatus   = setting_get('gw_paypal_status','inactive');
   $ppAcc      = setting_get('gw_paypal_account_name','Maventech Software LLC');
@@ -10242,93 +10300,251 @@ elseif ($tab === 'api'):
         <div class="d-flex justify-content-between align-items-start mb-3">
           <div>
             <h6 class="fw-bold mb-1"><i class="bi bi-credit-card-2-front text-primary me-1"></i> Card Payment API</h6>
-            <small class="text-muted">Gateway: <?= esc($cardProv) ?></small>
+            <small class="text-muted">Active Gateway: <strong><?= esc($cardProv) ?></strong></small>
           </div>
           <span class="s-badge <?= $cardStatus==='active'?'paid':'failed' ?>"><?= esc($cardStatus) ?></span>
         </div>
-        <form method="post">
+        <form method="post" id="cardGatewayForm">
           <input type="hidden" name="action" value="save_api">
           <input type="hidden" name="gateway" value="card">
+
+          <!-- ============ Gateway Selector tiles ============ -->
+          <div class="mb-3">
+            <label class="form-label small fw-bold mb-2"><i class="bi bi-stack me-1"></i>Choose Card Gateway Provider</label>
+            <div class="row g-2 gw-tile-grid">
+              <?php
+                $tiles = [
+                  ['key'=>'stripe',  'name'=>'Stripe',         'icon'=>'bi-credit-card-2-front', 'grad'=>'linear-gradient(135deg,#635bff,#3b82f6)', 'desc'=>'Most popular. Card + Apple/Google Pay.'],
+                  ['key'=>'authnet', 'name'=>'Authorize.Net',  'icon'=>'bi-shield-shaded',       'grad'=>'linear-gradient(135deg,#0066cc,#003a75)', 'desc'=>'Long-standing US processor (Visa).'],
+                  ['key'=>'nmi',     'name'=>'NMI',            'icon'=>'bi-shield-lock',         'grad'=>'linear-gradient(135deg,#16a34a,#065f46)', 'desc'=>'Network Merchants Inc gateway.'],
+                  ['key'=>'custom',  'name'=>'Custom / Other', 'icon'=>'bi-plug',                'grad'=>'linear-gradient(135deg,#64748b,#1e293b)', 'desc'=>'Generic endpoint — any future gateway.'],
+                ];
+                foreach ($tiles as $t):
+                  $on = $cardProvType === $t['key'];
+              ?>
+                <div class="col-md-3 col-6">
+                  <label class="gw-tile <?= $on ? 'on':'' ?>" data-testid="gw-tile-<?= $t['key'] ?>">
+                    <input type="radio" name="provider_type" value="<?= $t['key'] ?>" <?= $on ? 'checked':'' ?> class="visually-hidden gw-tile-radio">
+                    <span class="gw-tile-ico" style="background:<?= $t['grad'] ?>;"><i class="bi <?= $t['icon'] ?>"></i></span>
+                    <span class="gw-tile-name"><?= esc($t['name']) ?></span>
+                    <small class="gw-tile-desc"><?= esc($t['desc']) ?></small>
+                    <span class="gw-tile-check"><i class="bi bi-check-circle-fill"></i></span>
+                  </label>
+                </div>
+              <?php endforeach; ?>
+            </div>
+          </div>
+
           <div class="row g-2 small mb-3">
-            <div class="col-6"><label class="form-label small mb-0">API Status</label>
-              <select name="status" class="form-select form-select-sm">
+            <div class="col-md-6"><label class="form-label small mb-0">API Status</label>
+              <select name="status" class="form-select form-select-sm" data-testid="api-card-status">
                 <option value="active" <?= $cardStatus==='active'?'selected':'' ?>>Active</option>
                 <option value="inactive" <?= $cardStatus!=='active'?'selected':'' ?>>Inactive</option>
               </select>
             </div>
-            <div class="col-6"><label class="form-label small mb-0">Gateway Provider</label><input class="form-control form-control-sm" name="provider" value="<?= esc($cardProv) ?>"></div>
-            <div class="col-12"><label class="form-label small mb-0">Merchant / Company Name <span class="badge bg-success ms-1" style="font-size:9px;">used in Billing notes</span></label>
+            <div class="col-md-6"><label class="form-label small mb-0">Merchant / Company Name <span class="badge bg-success ms-1" style="font-size:9px;">used in Billing notes</span></label>
               <input class="form-control form-control-sm" name="merchant_name" value="<?= esc($cardMerch) ?>" data-testid="api-card-merchant">
-              <small class="text-muted">Shown on bank/card statements <em>and</em> in the order-confirmation email billing note.</small>
             </div>
           </div>
 
-          <!-- ============ Mode-aware key pairs ============
-               Two columns so the admin can paste sandbox + live credentials side
-               by side.  The active set is chosen at checkout time by the global
-               Test↔Live toggle on the API / Payment Gateway overview. -->
           <?php
             $gwModeNow = setting_get('gw_mode', 'test');
             $isLiveNow = $gwModeNow === 'live';
+            $whBase = rtrim(site_url(), '/');
           ?>
-          <div class="row g-3 mb-3">
-            <div class="col-md-6">
-              <div class="card-e p-3 h-100" style="border:2px solid <?= $isLiveNow ? '#e5e7eb' : '#f59e0b' ?>;background:<?= $isLiveNow ? 'transparent' : 'rgba(245,158,11,.04)' ?>;">
-                <div class="d-flex align-items-center justify-content-between mb-2">
-                  <h6 class="fw-bold mb-0" style="font-size:13.5px;"><i class="bi bi-flask me-1" style="color:#f59e0b;"></i> Test / Sandbox keys</h6>
-                  <?php if (!$isLiveNow): ?>
-                    <span class="badge" style="background:#f59e0b;color:#fff;font-size:9.5px;letter-spacing:1px;">ACTIVE</span>
-                  <?php endif; ?>
+
+          <!-- ============ Stripe credentials ============ -->
+          <div class="gw-section" data-gw-section="stripe" style="display:<?= $cardProvType==='stripe'?'block':'none' ?>;">
+            <div class="alert alert-info py-2 small mb-3" style="font-size:12px;border-radius:8px;">
+              <i class="bi bi-info-circle me-1"></i><strong>Stripe is fully integrated</strong> — both Test and Live modes process payments correctly. Get your keys at <a href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener">dashboard.stripe.com/apikeys</a>.
+            </div>
+            <div class="row g-3 mb-3">
+              <div class="col-md-6">
+                <div class="card-e p-3 h-100" style="border:2px solid <?= $isLiveNow ? '#e5e7eb' : '#f59e0b' ?>;background:<?= $isLiveNow ? 'transparent' : 'rgba(245,158,11,.04)' ?>;">
+                  <div class="d-flex align-items-center justify-content-between mb-2">
+                    <h6 class="fw-bold mb-0" style="font-size:13.5px;"><i class="bi bi-flask me-1" style="color:#f59e0b;"></i> Test / Sandbox keys</h6>
+                    <?php if (!$isLiveNow): ?><span class="badge" style="background:#f59e0b;color:#fff;font-size:9.5px;letter-spacing:1px;">ACTIVE</span><?php endif; ?>
+                  </div>
+                  <small class="text-muted d-block mb-2" style="font-size:11px;">Paste your Stripe <code>sk_test_*</code> keys.</small>
+                  <label class="form-label small mb-0">Publishable Key (test) <small class="text-muted"><?= esc(mask($cardPubT)) ?></small></label>
+                  <input class="form-control form-control-sm mb-2" name="public_key_test" type="password" placeholder="pk_test_… (leave blank to keep current)" data-testid="api-card-public-test">
+                  <label class="form-label small mb-0">Secret Key (test) <small class="text-muted"><?= esc(mask($cardSecT)) ?></small></label>
+                  <input class="form-control form-control-sm" id="apiCardSecretTest" name="secret_key_test" type="password" placeholder="sk_test_… (leave blank to keep current)" data-testid="api-card-secret-test">
+                  <button type="button" class="btn btn-sm btn-outline-secondary mt-2 w-100 rounded-pill validate-key-btn" data-testid="api-card-validate-test"
+                          data-gateway="stripe" data-mode="test" data-secret-input="#apiCardSecretTest" data-result-target="#apiCardResultTest">
+                    <i class="bi bi-shield-check me-1"></i>Validate test key
+                  </button>
+                  <div id="apiCardResultTest" class="small mt-2" data-testid="api-card-result-test"></div>
                 </div>
-                <small class="text-muted d-block mb-2" style="font-size:11px;">Paste your Stripe <code>sk_test_*</code> keys here.  These are used while the global toggle is on <strong>Test mode</strong>.</small>
-                <label class="form-label small mb-0">Publishable Key (test) <small class="text-muted"><?= esc(mask($cardPubT)) ?></small></label>
-                <input class="form-control form-control-sm mb-2" name="public_key_test" type="password" placeholder="pk_test_… (leave blank to keep current)" data-testid="api-card-public-test">
-                <label class="form-label small mb-0">Secret Key (test) <small class="text-muted"><?= esc(mask($cardSecT)) ?></small></label>
-                <input class="form-control form-control-sm" id="apiCardSecretTest" name="secret_key_test" type="password" placeholder="sk_test_… (leave blank to keep current)" data-testid="api-card-secret-test">
-                <button type="button" class="btn btn-sm btn-outline-secondary mt-2 w-100 rounded-pill validate-key-btn" data-testid="api-card-validate-test"
-                        data-gateway="stripe" data-mode="test" data-secret-input="#apiCardSecretTest" data-result-target="#apiCardResultTest">
-                  <i class="bi bi-shield-check me-1"></i>Validate test key
-                </button>
-                <div id="apiCardResultTest" class="small mt-2" data-testid="api-card-result-test"></div>
+              </div>
+              <div class="col-md-6">
+                <div class="card-e p-3 h-100" style="border:2px solid <?= $isLiveNow ? '#10b981' : '#e5e7eb' ?>;background:<?= $isLiveNow ? 'rgba(16,185,129,.04)' : 'transparent' ?>;">
+                  <div class="d-flex align-items-center justify-content-between mb-2">
+                    <h6 class="fw-bold mb-0" style="font-size:13.5px;"><i class="bi bi-broadcast me-1" style="color:#10b981;"></i> Live / Production keys</h6>
+                    <?php if ($isLiveNow): ?><span class="badge" style="background:#10b981;color:#fff;font-size:9.5px;letter-spacing:1px;">ACTIVE</span><?php endif; ?>
+                  </div>
+                  <small class="text-muted d-block mb-2" style="font-size:11px;">Paste your Stripe <code>sk_live_*</code> keys. These charge real customers.</small>
+                  <label class="form-label small mb-0">Publishable Key (live) <small class="text-muted"><?= esc(mask($cardPubL)) ?></small></label>
+                  <input class="form-control form-control-sm mb-2" name="public_key_live" type="password" placeholder="pk_live_… (leave blank to keep current)" data-testid="api-card-public-live">
+                  <label class="form-label small mb-0">Secret Key (live) <small class="text-muted"><?= esc(mask($cardSecL)) ?></small></label>
+                  <input class="form-control form-control-sm" id="apiCardSecretLive" name="secret_key_live" type="password" placeholder="sk_live_… (leave blank to keep current)" data-testid="api-card-secret-live">
+                  <button type="button" class="btn btn-sm btn-outline-success mt-2 w-100 rounded-pill validate-key-btn" data-testid="api-card-validate-live"
+                          data-gateway="stripe" data-mode="live" data-secret-input="#apiCardSecretLive" data-result-target="#apiCardResultLive">
+                    <i class="bi bi-shield-check me-1"></i>Validate live key
+                  </button>
+                  <div id="apiCardResultLive" class="small mt-2" data-testid="api-card-result-live"></div>
+                </div>
               </div>
             </div>
-            <div class="col-md-6">
-              <div class="card-e p-3 h-100" style="border:2px solid <?= $isLiveNow ? '#10b981' : '#e5e7eb' ?>;background:<?= $isLiveNow ? 'rgba(16,185,129,.04)' : 'transparent' ?>;">
-                <div class="d-flex align-items-center justify-content-between mb-2">
-                  <h6 class="fw-bold mb-0" style="font-size:13.5px;"><i class="bi bi-broadcast me-1" style="color:#10b981;"></i> Live / Production keys</h6>
-                  <?php if ($isLiveNow): ?>
-                    <span class="badge" style="background:#10b981;color:#fff;font-size:9.5px;letter-spacing:1px;">ACTIVE</span>
-                  <?php endif; ?>
+            <div class="row g-2 small mb-3">
+              <div class="col-12"><label class="form-label small mb-0">Stripe Webhook Secret <small class="text-muted"><?= esc(mask($cardWh)) ?></small></label><input class="form-control form-control-sm" name="webhook_secret" type="password" placeholder="whsec_… (leave blank to keep current)" data-testid="api-card-webhook-secret"></div>
+              <div class="col-12"><label class="form-label small mb-0">Stripe Webhook URL <span class="badge bg-info ms-1" style="font-size:9px;">paste into Stripe Dashboard</span></label><input class="form-control form-control-sm" readonly value="<?= esc($whBase.$cardWhUrl) ?>" data-testid="api-card-webhook-url"></div>
+              <div class="col-12">
+                <div class="alert alert-secondary py-2 mb-0 small" style="font-size:11.5px;border-radius:8px;background:#f1f5f9;border:1px solid #e2e8f0;color:#475569;">
+                  <strong><i class="bi bi-info-circle me-1"></i> Recommended Stripe events</strong>:
+                  <code style="background:#fff;padding:1px 5px;border-radius:4px;">checkout.session.completed</code>,
+                  <code style="background:#fff;padding:1px 5px;border-radius:4px;">payment_intent.succeeded</code>,
+                  <code style="background:#fff;padding:1px 5px;border-radius:4px;">payment_intent.payment_failed</code>,
+                  <code style="background:#fff;padding:1px 5px;border-radius:4px;">charge.refunded</code>.
                 </div>
-                <small class="text-muted d-block mb-2" style="font-size:11px;">Paste your Stripe <code>sk_live_*</code> keys here.  These charge real customers when the toggle is on <strong>Live</strong>.</small>
-                <label class="form-label small mb-0">Publishable Key (live) <small class="text-muted"><?= esc(mask($cardPubL)) ?></small></label>
-                <input class="form-control form-control-sm mb-2" name="public_key_live" type="password" placeholder="pk_live_… (leave blank to keep current)" data-testid="api-card-public-live">
-                <label class="form-label small mb-0">Secret Key (live) <small class="text-muted"><?= esc(mask($cardSecL)) ?></small></label>
-                <input class="form-control form-control-sm" id="apiCardSecretLive" name="secret_key_live" type="password" placeholder="sk_live_… (leave blank to keep current)" data-testid="api-card-secret-live">
-                <button type="button" class="btn btn-sm btn-outline-success mt-2 w-100 rounded-pill validate-key-btn" data-testid="api-card-validate-live"
-                        data-gateway="stripe" data-mode="live" data-secret-input="#apiCardSecretLive" data-result-target="#apiCardResultLive">
-                  <i class="bi bi-shield-check me-1"></i>Validate live key
-                </button>
-                <div id="apiCardResultLive" class="small mt-2" data-testid="api-card-result-live"></div>
               </div>
             </div>
           </div>
 
-          <div class="row g-2 small mb-3">
-            <div class="col-12"><label class="form-label small mb-0">Webhook Secret <small class="text-muted"><?= esc(mask($cardWh)) ?></small></label><input class="form-control form-control-sm" name="webhook_secret" type="password" placeholder="whsec_… (leave blank to keep current)" data-testid="api-card-webhook-secret"></div>
-            <div class="col-12"><label class="form-label small mb-0">Webhook URL <span class="badge bg-info ms-1" style="font-size:9px;">paste into Stripe Dashboard</span></label><input class="form-control form-control-sm" readonly value="<?= esc(site_url().$cardWhUrl) ?>" data-testid="api-card-webhook-url"></div>
-            <div class="col-12">
-              <div class="alert alert-secondary py-2 mb-0 small" style="font-size:11.5px;border-radius:8px;background:#f1f5f9;border:1px solid #e2e8f0;color:#475569;">
-                <strong><i class="bi bi-info-circle me-1"></i> Recommended Stripe events</strong> to subscribe this webhook to:
-                <code style="background:#fff;padding:1px 5px;border-radius:4px;">checkout.session.completed</code>,
-                <code style="background:#fff;padding:1px 5px;border-radius:4px;">payment_intent.succeeded</code>,
-                <code style="background:#fff;padding:1px 5px;border-radius:4px;">payment_intent.payment_failed</code>,
-                <code style="background:#fff;padding:1px 5px;border-radius:4px;">charge.refunded</code>.
-                The handler is idempotent — duplicate deliveries are safely ignored.
+          <!-- ============ Authorize.Net credentials ============ -->
+          <div class="gw-section" data-gw-section="authnet" style="display:<?= $cardProvType==='authnet'?'block':'none' ?>;">
+            <div class="alert alert-warning py-2 small mb-3" style="font-size:12px;border-radius:8px;">
+              <i class="bi bi-info-circle me-1"></i><strong>Credentials saved here will be used once charge processing is wired.</strong> Until then, Stripe handles checkout charges. Get your credentials at <a href="https://account.authorize.net/" target="_blank" rel="noopener">account.authorize.net</a>.
+            </div>
+            <div class="row g-3 mb-3">
+              <div class="col-md-6">
+                <div class="card-e p-3 h-100" style="border:2px solid <?= $isLiveNow ? '#e5e7eb' : '#f59e0b' ?>;background:<?= $isLiveNow ? 'transparent' : 'rgba(245,158,11,.04)' ?>;">
+                  <div class="d-flex align-items-center justify-content-between mb-2">
+                    <h6 class="fw-bold mb-0" style="font-size:13.5px;"><i class="bi bi-flask me-1" style="color:#f59e0b;"></i> Sandbox credentials</h6>
+                    <?php if (!$isLiveNow): ?><span class="badge" style="background:#f59e0b;color:#fff;font-size:9.5px;letter-spacing:1px;">ACTIVE</span><?php endif; ?>
+                  </div>
+                  <small class="text-muted d-block mb-2" style="font-size:11px;">From sandbox.authorize.net.</small>
+                  <label class="form-label small mb-0">API Login ID (test) <small class="text-muted"><?= esc(mask($anLoginT)) ?></small></label>
+                  <input class="form-control form-control-sm mb-2" name="authnet_login_id_test" type="password" placeholder="(leave blank to keep current)" data-testid="api-authnet-login-test">
+                  <label class="form-label small mb-0">Transaction Key (test) <small class="text-muted"><?= esc(mask($anTxKeyT)) ?></small></label>
+                  <input class="form-control form-control-sm" name="authnet_transaction_key_test" type="password" placeholder="(leave blank to keep current)" data-testid="api-authnet-txkey-test">
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="card-e p-3 h-100" style="border:2px solid <?= $isLiveNow ? '#10b981' : '#e5e7eb' ?>;background:<?= $isLiveNow ? 'rgba(16,185,129,.04)' : 'transparent' ?>;">
+                  <div class="d-flex align-items-center justify-content-between mb-2">
+                    <h6 class="fw-bold mb-0" style="font-size:13.5px;"><i class="bi bi-broadcast me-1" style="color:#10b981;"></i> Live / Production credentials</h6>
+                    <?php if ($isLiveNow): ?><span class="badge" style="background:#10b981;color:#fff;font-size:9.5px;letter-spacing:1px;">ACTIVE</span><?php endif; ?>
+                  </div>
+                  <small class="text-muted d-block mb-2" style="font-size:11px;">From account.authorize.net (production).</small>
+                  <label class="form-label small mb-0">API Login ID (live) <small class="text-muted"><?= esc(mask($anLoginL)) ?></small></label>
+                  <input class="form-control form-control-sm mb-2" name="authnet_login_id_live" type="password" placeholder="(leave blank to keep current)" data-testid="api-authnet-login-live">
+                  <label class="form-label small mb-0">Transaction Key (live) <small class="text-muted"><?= esc(mask($anTxKeyL)) ?></small></label>
+                  <input class="form-control form-control-sm" name="authnet_transaction_key_live" type="password" placeholder="(leave blank to keep current)" data-testid="api-authnet-txkey-live">
+                </div>
               </div>
             </div>
+            <div class="row g-2 small mb-3">
+              <div class="col-md-12"><label class="form-label small mb-0">Signature Key (Webhook signing) <small class="text-muted"><?= esc(mask($anSigKey)) ?></small></label><input class="form-control form-control-sm" name="authnet_signature_key" type="password" placeholder="(leave blank to keep current)" data-testid="api-authnet-sigkey"></div>
+              <div class="col-12"><label class="form-label small mb-0">Authorize.Net Webhook URL <span class="badge bg-info ms-1" style="font-size:9px;">paste into AuthNet Dashboard</span></label><input class="form-control form-control-sm" readonly value="<?= esc($whBase.'/authnet-webhook.php') ?>" data-testid="api-authnet-webhook-url"></div>
+            </div>
           </div>
-          <button class="btn btn-soft-blue btn-sm w-100"><i class="bi bi-check2 me-1"></i> Save Card API Settings</button>
+
+          <!-- ============ NMI credentials ============ -->
+          <div class="gw-section" data-gw-section="nmi" style="display:<?= $cardProvType==='nmi'?'block':'none' ?>;">
+            <div class="alert alert-warning py-2 small mb-3" style="font-size:12px;border-radius:8px;">
+              <i class="bi bi-info-circle me-1"></i><strong>Credentials saved here will be used once charge processing is wired.</strong> Until then, Stripe handles checkout charges. Get your credentials in your NMI merchant portal.
+            </div>
+            <div class="row g-3 mb-3">
+              <div class="col-md-6">
+                <div class="card-e p-3 h-100" style="border:2px solid <?= $isLiveNow ? '#e5e7eb' : '#f59e0b' ?>;background:<?= $isLiveNow ? 'transparent' : 'rgba(245,158,11,.04)' ?>;">
+                  <div class="d-flex align-items-center justify-content-between mb-2">
+                    <h6 class="fw-bold mb-0" style="font-size:13.5px;"><i class="bi bi-flask me-1" style="color:#f59e0b;"></i> Sandbox credentials</h6>
+                    <?php if (!$isLiveNow): ?><span class="badge" style="background:#f59e0b;color:#fff;font-size:9.5px;letter-spacing:1px;">ACTIVE</span><?php endif; ?>
+                  </div>
+                  <label class="form-label small mb-0">Security Key (test) <small class="text-muted"><?= esc(mask($nmiKeyT)) ?></small></label>
+                  <input class="form-control form-control-sm mb-2" name="nmi_security_key_test" type="password" placeholder="(leave blank to keep current)" data-testid="api-nmi-key-test">
+                  <label class="form-label small mb-0">Username (optional)</label>
+                  <input class="form-control form-control-sm mb-2" name="nmi_username_test" value="<?= esc($nmiUserT) ?>" data-testid="api-nmi-user-test">
+                  <label class="form-label small mb-0">Password (optional)</label>
+                  <input class="form-control form-control-sm" name="nmi_password_test" type="password" placeholder="(leave blank to keep current)" data-testid="api-nmi-pass-test">
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="card-e p-3 h-100" style="border:2px solid <?= $isLiveNow ? '#10b981' : '#e5e7eb' ?>;background:<?= $isLiveNow ? 'rgba(16,185,129,.04)' : 'transparent' ?>;">
+                  <div class="d-flex align-items-center justify-content-between mb-2">
+                    <h6 class="fw-bold mb-0" style="font-size:13.5px;"><i class="bi bi-broadcast me-1" style="color:#10b981;"></i> Live / Production credentials</h6>
+                    <?php if ($isLiveNow): ?><span class="badge" style="background:#10b981;color:#fff;font-size:9.5px;letter-spacing:1px;">ACTIVE</span><?php endif; ?>
+                  </div>
+                  <label class="form-label small mb-0">Security Key (live) <small class="text-muted"><?= esc(mask($nmiKeyL)) ?></small></label>
+                  <input class="form-control form-control-sm mb-2" name="nmi_security_key_live" type="password" placeholder="(leave blank to keep current)" data-testid="api-nmi-key-live">
+                  <label class="form-label small mb-0">Username (optional)</label>
+                  <input class="form-control form-control-sm mb-2" name="nmi_username_live" value="<?= esc($nmiUserL) ?>" data-testid="api-nmi-user-live">
+                  <label class="form-label small mb-0">Password (optional)</label>
+                  <input class="form-control form-control-sm" name="nmi_password_live" type="password" placeholder="(leave blank to keep current)" data-testid="api-nmi-pass-live">
+                </div>
+              </div>
+            </div>
+            <div class="row g-2 small mb-3">
+              <div class="col-12"><label class="form-label small mb-0">NMI Webhook URL <span class="badge bg-info ms-1" style="font-size:9px;">paste into NMI portal</span></label><input class="form-control form-control-sm" readonly value="<?= esc($whBase.'/nmi-webhook.php') ?>" data-testid="api-nmi-webhook-url"></div>
+            </div>
+          </div>
+
+          <!-- ============ Custom / Other gateway ============ -->
+          <div class="gw-section" data-gw-section="custom" style="display:<?= $cardProvType==='custom'?'block':'none' ?>;">
+            <div class="alert alert-warning py-2 small mb-3" style="font-size:12px;border-radius:8px;">
+              <i class="bi bi-info-circle me-1"></i><strong>Generic gateway placeholder</strong> — saves credentials for any future gateway you want to plug in. Charge processing requires a one-time wiring per provider; share us your API docs when ready.
+            </div>
+            <div class="row g-2 mb-3 small">
+              <div class="col-12">
+                <label class="form-label small mb-0">Gateway Name</label>
+                <input class="form-control form-control-sm" name="custom_gateway_name" value="<?= esc($customName) ?>" placeholder="e.g. WorldPay, Square, Adyen…" data-testid="api-custom-name">
+              </div>
+            </div>
+            <div class="row g-3 mb-3">
+              <div class="col-md-6">
+                <div class="card-e p-3 h-100" style="border:2px solid <?= $isLiveNow ? '#e5e7eb' : '#f59e0b' ?>;background:<?= $isLiveNow ? 'transparent' : 'rgba(245,158,11,.04)' ?>;">
+                  <div class="d-flex align-items-center justify-content-between mb-2">
+                    <h6 class="fw-bold mb-0" style="font-size:13.5px;"><i class="bi bi-flask me-1" style="color:#f59e0b;"></i> Sandbox credentials</h6>
+                    <?php if (!$isLiveNow): ?><span class="badge" style="background:#f59e0b;color:#fff;font-size:9.5px;letter-spacing:1px;">ACTIVE</span><?php endif; ?>
+                  </div>
+                  <label class="form-label small mb-0">API Endpoint URL</label>
+                  <input class="form-control form-control-sm mb-2" name="custom_endpoint_test" value="<?= esc($customEndT) ?>" placeholder="https://sandbox.gateway.com/api" data-testid="api-custom-endpoint-test">
+                  <label class="form-label small mb-0">API Key <small class="text-muted"><?= esc(mask($customApiKT)) ?></small></label>
+                  <input class="form-control form-control-sm mb-2" name="custom_api_key_test" type="password" placeholder="(leave blank to keep current)" data-testid="api-custom-key-test">
+                  <label class="form-label small mb-0">API Secret <small class="text-muted"><?= esc(mask($customApiST)) ?></small></label>
+                  <input class="form-control form-control-sm mb-2" name="custom_api_secret_test" type="password" placeholder="(leave blank to keep current)" data-testid="api-custom-secret-test">
+                  <label class="form-label small mb-0">Merchant ID</label>
+                  <input class="form-control form-control-sm mb-2" name="custom_merchant_id_test" value="<?= esc($customMidT) ?>" placeholder="merchant id (optional)" data-testid="api-custom-mid-test">
+                  <label class="form-label small mb-0">Provider Webhook URL <span class="badge bg-light text-dark ms-1" style="font-size:9px;">URL on provider side</span></label>
+                  <input class="form-control form-control-sm" name="custom_webhook_test" value="<?= esc($customWhT) ?>" placeholder="https://provider.com/webhook (optional)" data-testid="api-custom-webhook-test">
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="card-e p-3 h-100" style="border:2px solid <?= $isLiveNow ? '#10b981' : '#e5e7eb' ?>;background:<?= $isLiveNow ? 'rgba(16,185,129,.04)' : 'transparent' ?>;">
+                  <div class="d-flex align-items-center justify-content-between mb-2">
+                    <h6 class="fw-bold mb-0" style="font-size:13.5px;"><i class="bi bi-broadcast me-1" style="color:#10b981;"></i> Live / Production credentials</h6>
+                    <?php if ($isLiveNow): ?><span class="badge" style="background:#10b981;color:#fff;font-size:9.5px;letter-spacing:1px;">ACTIVE</span><?php endif; ?>
+                  </div>
+                  <label class="form-label small mb-0">API Endpoint URL</label>
+                  <input class="form-control form-control-sm mb-2" name="custom_endpoint_live" value="<?= esc($customEndL) ?>" placeholder="https://api.gateway.com" data-testid="api-custom-endpoint-live">
+                  <label class="form-label small mb-0">API Key <small class="text-muted"><?= esc(mask($customApiKL)) ?></small></label>
+                  <input class="form-control form-control-sm mb-2" name="custom_api_key_live" type="password" placeholder="(leave blank to keep current)" data-testid="api-custom-key-live">
+                  <label class="form-label small mb-0">API Secret <small class="text-muted"><?= esc(mask($customApiSL)) ?></small></label>
+                  <input class="form-control form-control-sm mb-2" name="custom_api_secret_live" type="password" placeholder="(leave blank to keep current)" data-testid="api-custom-secret-live">
+                  <label class="form-label small mb-0">Merchant ID</label>
+                  <input class="form-control form-control-sm mb-2" name="custom_merchant_id_live" value="<?= esc($customMidL) ?>" placeholder="merchant id (optional)" data-testid="api-custom-mid-live">
+                  <label class="form-label small mb-0">Provider Webhook URL <span class="badge bg-light text-dark ms-1" style="font-size:9px;">URL on provider side</span></label>
+                  <input class="form-control form-control-sm" name="custom_webhook_live" value="<?= esc($customWhL) ?>" placeholder="https://provider.com/webhook (optional)" data-testid="api-custom-webhook-live">
+                </div>
+              </div>
+            </div>
+            <div class="row g-2 small mb-3">
+              <div class="col-12"><label class="form-label small mb-0">Custom Webhook URL (your store-side) <span class="badge bg-info ms-1" style="font-size:9px;">paste into provider dashboard</span></label><input class="form-control form-control-sm" readonly value="<?= esc($whBase.'/custom-webhook.php') ?>" data-testid="api-custom-store-webhook-url"></div>
+            </div>
+          </div>
+
+          <button class="btn btn-soft-blue btn-sm w-100" data-testid="api-card-save"><i class="bi bi-check2 me-1"></i> Save Card API Settings</button>
         </form>
         <div class="mt-3 pt-3 border-top d-flex justify-content-between small">
           <span class="text-muted">Webhook Status</span>
@@ -10339,6 +10555,48 @@ elseif ($tab === 'api'):
           <strong><?= $txCard ?></strong>
         </div>
       </div>
+
+      <style>
+        .gw-tile-grid .gw-tile {
+          display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+          padding: 14px 14px 12px; border: 2px solid #e2e8f0; border-radius: 14px;
+          background: #fff; cursor: pointer; transition: all .18s ease; position: relative;
+          height: 100%;
+        }
+        [data-bs-theme="dark"] .gw-tile { background: #0f172a; border-color: #1e293b; }
+        .gw-tile:hover { border-color: #94a3b8; transform: translateY(-1px); box-shadow: 0 6px 18px rgba(15,23,42,.06); }
+        .gw-tile.on { border-color: #2563eb; background: rgba(37,99,235,.04); box-shadow: 0 6px 22px rgba(37,99,235,.12); }
+        [data-bs-theme="dark"] .gw-tile.on { background: rgba(37,99,235,.10); }
+        .gw-tile-ico { width: 38px; height: 38px; border-radius: 10px; color: #fff; display:inline-flex; align-items:center; justify-content:center; font-size: 18px; }
+        .gw-tile-name { font-weight: 700; font-size: 13.5px; letter-spacing: -.2px; }
+        .gw-tile-desc { color: #64748b; font-size: 11px; line-height: 1.35; }
+        .gw-tile-check { position: absolute; top: 8px; right: 10px; color: #2563eb; font-size: 18px; opacity: 0; transition: opacity .15s ease; }
+        .gw-tile.on .gw-tile-check { opacity: 1; }
+      </style>
+
+      <script>
+      (function () {
+        // Multi-gateway selector — clicking a tile flips the radio, highlights
+        // the tile, and reveals only that gateway's credential section.
+        var tiles = document.querySelectorAll('.gw-tile-grid .gw-tile');
+        var sections = document.querySelectorAll('[data-gw-section]');
+        function show(key) {
+          sections.forEach(function (s) {
+            s.style.display = (s.getAttribute('data-gw-section') === key) ? 'block' : 'none';
+          });
+        }
+        tiles.forEach(function (t) {
+          t.addEventListener('click', function () {
+            var radio = t.querySelector('.gw-tile-radio');
+            if (!radio) return;
+            radio.checked = true;
+            tiles.forEach(function (x) { x.classList.remove('on'); });
+            t.classList.add('on');
+            show(radio.value);
+          });
+        });
+      })();
+      </script>
     </div>
 
     <div class="col-lg-12" <?= $apiTab!=='paypal' ? 'style="display:none;"' : '' ?>>

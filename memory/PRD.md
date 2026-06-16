@@ -2682,3 +2682,34 @@ Vibrant purple→indigo→blue→cyan gradient ribbon at the TOP of the page wit
 - **Fix**: replaced the nested `<form>` with a `<button type="button">` that, on click, builds and submits a brand-new, freshly created `<form>` appended to `document.body` (outside the modal/parent form). Inline `onclick` was rewritten as a standalone `<script>` block so the multi-line JS no longer breaks HTML attribute parsing (which had caused the "Move" button to render its entire onclick source as the visible label).
 - **Verified end-to-end via Playwright**: toggle ON → OFF → fill URLs → click Save Changes → page reloads with `?msg=Saved`; reopen the edit page → toggles still OFF, custom URLs still in the inputs, manual inputs still visible. Toggle round-trip (OFF → ON) also persists.
 
+
+## [Feb 2026 — Iteration 24] Multi-gateway Card Payment Credentials
+
+### User request
+"Under API payment gateway, I have multiple gateways — Stripe, Authorize.Net, NMI and others. Let me select one in the Card Payment section and have the credential form change to match that gateway (sandbox + live keys). Keep one option blank/Custom for any future gateway. Make sure Test mode and Live mode work cleanly going forward."
+
+### Completed
+- **4-tile gateway selector** at the top of the Card Payment Credentials page — `Stripe`, `Authorize.Net`, `NMI`, `Custom / Other`. Clicking a tile flips the active radio, highlights the tile, and reveals ONLY that gateway's credential section. Persists across save/reload.
+- **Per-gateway credential blocks** (each with side-by-side Sandbox + Live cards, ACTIVE pill mirrors global Test↔Live toggle):
+  - **Stripe**: `pk_test/sk_test`, `pk_live/sk_live`, Webhook Secret, validate buttons — unchanged. Auto-generated webhook URL: `/stripe-webhook.php`.
+  - **Authorize.Net**: API Login ID + Transaction Key (test + live), Signature Key (webhook signing). Auto-generated webhook URL: `/authnet-webhook.php`.
+  - **NMI**: Security Key + optional Username/Password (test + live). Auto-generated webhook URL: `/nmi-webhook.php`.
+  - **Custom / Other**: Gateway Name + API Endpoint URL + API Key + API Secret + Merchant ID + Provider Webhook URL (all in test + live pairs). Auto-generated webhook URL: `/custom-webhook.php`.
+- **Active gateway is global** — one card gateway active site-wide at a time. The `gw_card_provider_type` setting (`stripe|authnet|nmi|custom`) drives the UI; the legacy `gw_card_provider` setting is mirrored to a human-readable label (`Stripe`, `Authorize.Net`, etc) for billing notes + admin display.
+- **Webhook URLs auto-generated** for every gateway and shown read-only so the admin can copy-paste straight into the provider dashboard.
+- **Empty inputs are non-destructive** — leaving a key field blank keeps the stored value (so admins can update just one field without rewriting everything). Mirrors the existing Stripe behavior across all gateways.
+- **Honest scope banner** on non-Stripe sections: "Credentials saved here will be used once charge processing is wired. Until then, Stripe handles checkout charges." Keeps expectations clear while preserving the credentials for the eventual wiring.
+- **Test ↔ Live mode toggle verified clean** — sanity-checked via curl: switching `gw_mode` between `test` and `live` round-trips correctly; the storefront checkout still routes through `gw_card_secret_key_test`/`_live` (unchanged Stripe processing path).
+
+### Files touched
+- `/app/php-version/admin.php`:
+  - `save_api` handler (line ~917) extended to persist all 4 gateways' credentials + `gw_card_provider_type`.
+  - Card credentials view (line ~9990 onwards) rebuilt: load all per-gateway setting variables, render the 4-tile picker, render 4 conditional credential `<div class="gw-section">` blocks, add JS toggle, add CSS for tile hover/selected states.
+
+### Verified end-to-end
+- Playwright test: visited `/admin.php?tab=api&gw=card`, confirmed Stripe tile is on by default, then clicked Authorize.Net → its section showed, Stripe's hid. Clicked NMI → NMI showed. Clicked Custom → Custom showed (all sections hide/show correctly).
+- Saved with Authorize.Net selected + `authnet_login_id_test=test_login_123` and `authnet_transaction_key_test=test_txkey_abc` → page reloads with `?msg=API+settings+saved`, Authorize.Net tile is now the selected one, Authorize.Net section is visible.
+- Reset back to Stripe via direct DB write → tile correctly highlights Stripe on next load.
+- Confirmed Stripe processing path (`includes/stripe.php`) still reads `gw_card_secret_key_test/_live` — no checkout regression.
+
+
