@@ -266,9 +266,36 @@ include __DIR__ . '/includes/header.php';
          data-testid="checkout-test-mode-banner"
          style="border-radius:12px;line-height:1.5;font-weight:600;border:1px solid #f59e0b;background:linear-gradient(135deg,rgba(245,158,11,.08),rgba(234,88,12,.08));">
       <i class="bi bi-flask text-warning mt-1" style="font-size:18px;"></i>
-      <div>
+      <div class="flex-grow-1">
         <span class="badge bg-warning text-dark me-1" style="font-size:10.5px;letter-spacing:1px;">TEST MODE</span>
         Payments are not charged in this environment.  The order will be created and emails will be delivered, but no real money moves. Switch to <a href="/admin.php?tab=api&gw=toggles" class="alert-link">Live</a> from Admin → API to start processing real payments.
+      </div>
+      <button type="button" class="btn btn-sm btn-warning ms-2 flex-shrink-0" onclick="openTestPreview()" data-testid="checkout-test-preview-btn" style="font-weight:600;white-space:nowrap;">
+        <i class="bi bi-eye me-1"></i>Preview test order
+      </button>
+    </div>
+
+    <!-- Test-mode preview modal — opened by the button above. Shows the
+         3 things the user wants to verify before going to the test
+         gateway: customer success-page link, customer email body, and
+         admin notification copy. -->
+    <div class="modal fade" id="testPreviewModal" tabindex="-1" aria-hidden="true" data-testid="test-preview-modal">
+      <div class="modal-dialog modal-xl modal-dialog-scrollable modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title"><i class="bi bi-eye me-2 text-warning"></i>Test-mode order preview</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" id="testPreviewBody">
+            <div class="text-center py-5"><div class="spinner-border text-primary"></div><div class="small text-secondary mt-2">Building preview…</div></div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" data-testid="test-preview-close">Close</button>
+            <button type="button" class="btn btn-warning" onclick="document.getElementById('testPreviewModal') && bootstrap.Modal.getInstance(document.getElementById('testPreviewModal')).hide(); setTimeout(()=>document.querySelector('form.row.g-3.align-items-start').requestSubmit(), 200);" data-testid="test-preview-confirm">
+              <i class="bi bi-check2-circle me-1"></i>Continue with test payment
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   <?php endif; ?>
@@ -282,66 +309,8 @@ include __DIR__ . '/includes/header.php';
     <!-- Right column: Order Summary (receipt style) -->
     <div class="col-lg-5 order-lg-2">
     <div class="card co-banner co-summary-sticky p-3 position-relative" data-testid="co-banner-summary">
-      <span class="co-watermark" aria-hidden="true"><?= render_logo(300) ?></span>
-      <span class="co-banner-secure badge rounded-pill text-bg-success-subtle text-success border border-success-subtle position-absolute top-0 end-0 m-3" style="z-index:2;"><i class="bi bi-lock-fill me-1"></i>Secure Checkout</span>
-      <a href="index.php" class="logo-3d d-inline-flex align-items-center justify-content-center gap-2 mx-auto mb-2 text-decoration-none" data-testid="co-banner-brand">
-        <?= render_logo(36) ?>
-        <span>
-          <span class="brand-text d-block lh-1">Maventech <span class="brand-grad">Software</span></span>
-          <small class="brand-tag">AUTHORIZED RESELLER</small>
-        </span>
-      </a>
-      <small class="text-secondary">Pay <?= SITE_LEGAL ?></small>
-      <div class="receipt-amount fw-bold" data-testid="checkout-amount-banner"><?= format_price($total) ?></div>
-      <small class="text-secondary mb-2"><?= count($items) + ($proAssist ? 1 : 0) ?> item<?= (count($items) + ($proAssist ? 1 : 0)) !== 1 ? 's' : '' ?> · Instant digital delivery</small>
-      <hr class="my-2">
-      <?php foreach ($items as $i): ?>
-        <div class="d-flex gap-2 mb-2 align-items-center" data-testid="summary-item-<?= esc($i['slug']) ?>">
-          <img src="<?= esc($i['image']) ?>" alt="<?= esc($i['name']) ?> — lifetime license key | <?= SITE_BRAND ?>" style="width:40px;height:40px;object-fit:contain;" class="bg-body-tertiary rounded p-1">
-          <div class="flex-grow-1">
-            <div class="small fw-semibold"><?= esc($i['name']) ?></div>
-            <div class="d-flex justify-content-between align-items-center mt-1">
-              <div class="input-group input-group-sm" style="width: 96px;">
-                <button type="button" class="btn btn-outline-secondary px-2" data-cart-qty="<?= $i['qty'] - 1 ?>" data-slug="<?= esc($i['slug']) ?>">−</button>
-                <span class="form-control text-center px-1"><?= (int)$i['qty'] ?></span>
-                <button type="button" class="btn btn-outline-secondary px-2" data-cart-qty="<?= $i['qty'] + 1 ?>" data-slug="<?= esc($i['slug']) ?>">+</button>
-              </div>
-              <span class="fw-bold text-primary small"><?= format_price($i['price'] * $i['qty']) ?></span>
-            </div>
-          </div>
-        </div>
-      <?php endforeach; ?>
-      <?php if ($proAssist): ?>
-        <div class="d-flex gap-2 mb-3 border-top pt-3 align-items-center">
-          <span class="logo-mark" style="width:48px;height:48px;"><i class="bi bi-headset"></i></span>
-          <div class="flex-grow-1">
-            <div class="small fw-semibold">ProAssist Premium Installation</div>
-            <div class="d-flex justify-content-between small"><span class="text-secondary">Qty 1</span><span class="fw-bold text-primary"><?= format_price(PRO_ASSIST_PRICE) ?></span></div>
-          </div>
-        </div>
-      <?php endif; ?>
-      <hr class="my-2">
-      <!-- Coupon -->
-      <?php if ($couponCode): ?>
-        <div class="d-flex justify-content-between align-items-center small mb-2 text-success" data-testid="coupon-applied">
-          <span><i class="bi bi-tag-fill me-1"></i>Coupon <strong><?= esc($couponCode) ?></strong> applied</span>
-          <button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="applyCoupon('')" data-testid="coupon-remove">Remove</button>
-        </div>
-      <?php else: ?>
-        <div class="input-group input-group-sm mb-2" style="max-width: 320px;">
-          <input id="coupon-input" class="form-control" placeholder="Coupon code" data-testid="coupon-input">
-          <button type="button" class="btn btn-outline-primary" onclick="applyCoupon(document.getElementById('coupon-input').value)" data-testid="coupon-apply">Apply</button>
-        </div>
-      <?php endif; ?>
-      <div class="d-flex justify-content-between small mb-2"><span class="text-secondary">Subtotal</span><span class="fw-semibold"><?= format_price($subtotal) ?></span></div>
-      <?php if ($savings > 0): ?>
-        <div class="d-flex justify-content-between small mb-2 text-success"><span>You Save</span><span data-testid="checkout-savings">-<?= format_price($savings) ?></span></div>
-      <?php endif; ?>
-      <?php if ($discount > 0): ?>
-        <div class="d-flex justify-content-between small mb-2 text-success"><span>Coupon (<?= esc($couponCode) ?> — <?= $couponPct ?>% off)</span><span data-testid="checkout-discount">-<?= format_price($discount) ?></span></div>
-      <?php endif; ?>
-      <div class="summary-total d-flex justify-content-between align-items-center p-2 px-3 rounded-3 mt-1">
-        <span class="fw-bold">Total</span><span class="fw-bold text-primary fs-5" data-testid="checkout-total"><?= format_price($total) ?></span>
+      <div id="checkout-summary">
+      <?php include __DIR__ . '/includes/checkout-summary-partial.php'; ?>
       </div>
     </div>
     </div>
@@ -774,5 +743,88 @@ include __DIR__ . '/includes/header.php';
     });
   }
 })();
+
+/* ---------- Test-mode preview (only shown when gw_mode = test) ---------- */
+async function openTestPreview() {
+  const modalEl = document.getElementById('testPreviewModal');
+  const body    = document.getElementById('testPreviewBody');
+  if (!modalEl || !body) return;
+  body.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary"></div><div class="small text-secondary mt-2">Building preview…</div></div>';
+  const m = new bootstrap.Modal(modalEl);
+  m.show();
+
+  // Collect what the customer has typed so the preview emails/admin
+  // alerts reflect their actual contact info (falls back to demo data
+  // if a field is still empty).
+  const fd = new FormData();
+  ['first_name', 'last_name', 'email', 'phone', 'country', 'pro'].forEach(k => {
+    const el = document.querySelector(`[name="${k}"]`);
+    if (el && el.value) fd.append(k, el.value);
+  });
+
+  let data;
+  try {
+    const r = await fetch('ajax/checkout-test-preview.php' + (window.location.search || ''), { method: 'POST', body: fd, credentials: 'same-origin' });
+    data = await r.json();
+  } catch (e) {
+    body.innerHTML = '<div class="alert alert-danger">Failed to build preview. Try again.</div>';
+    return;
+  }
+  if (!data || !data.ok) {
+    body.innerHTML = '<div class="alert alert-danger">' + ((data && data.error) || 'Unable to build preview.') + '</div>';
+    return;
+  }
+
+  // Render three side-by-side preview panels using vanilla bootstrap markup.
+  body.innerHTML = `
+    <ul class="nav nav-tabs mb-3" role="tablist" data-testid="test-preview-tabs">
+      <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tp-customer" type="button" role="tab"><i class="bi bi-person-check me-1"></i>Customer screen</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tp-email" type="button" role="tab"><i class="bi bi-envelope me-1"></i>Customer email</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tp-admin" type="button" role="tab"><i class="bi bi-shield-lock me-1"></i>Admin alert</button></li>
+    </ul>
+    <div class="tab-content">
+      <div class="tab-pane fade show active" id="tp-customer" role="tabpanel">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+          <div>
+            <div class="fw-bold">What the customer sees after paying</div>
+            <small class="text-secondary">Order success page rendered with the test-order data</small>
+          </div>
+          <a href="${data.success_url}" target="_blank" class="btn btn-sm btn-outline-primary" data-testid="test-preview-open-success">Open in new tab <i class="bi bi-box-arrow-up-right ms-1"></i></a>
+        </div>
+        <div class="border rounded" style="overflow:hidden;background:#f8fafc;">
+          <iframe src="${data.success_url}" style="width:100%;height:520px;border:0;display:block;" data-testid="test-preview-success-iframe"></iframe>
+        </div>
+      </div>
+      <div class="tab-pane fade" id="tp-email" role="tabpanel">
+        <div class="row g-2 small mb-2">
+          <div class="col-md-3 text-secondary">To:</div><div class="col-md-9"><strong data-testid="test-preview-email-to">${data.email_to}</strong></div>
+          <div class="col-md-3 text-secondary">Subject:</div><div class="col-md-9"><strong data-testid="test-preview-email-subj">${escapeHtml(data.email_subj)}</strong></div>
+        </div>
+        <div class="border rounded" style="overflow:hidden;background:#fff;">
+          <iframe srcdoc="${data.email_html.replace(/"/g, '&quot;')}" style="width:100%;height:520px;border:0;display:block;background:#fff;" data-testid="test-preview-email-iframe"></iframe>
+        </div>
+      </div>
+      <div class="tab-pane fade" id="tp-admin" role="tabpanel">
+        <div class="row g-2 small mb-3">
+          <div class="col-md-3 text-secondary">Delivered to:</div><div class="col-md-9"><strong data-testid="test-preview-admin-to">${data.admin_to}</strong></div>
+        </div>
+        <div class="border rounded p-3 mb-3" style="background:#f8fafc;">
+          <div class="d-flex align-items-start gap-3">
+            <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:42px;height:42px;background:#1565C0;color:#fff;"><i class="bi bi-bell-fill"></i></div>
+            <div class="flex-grow-1">
+              <div class="fw-bold" data-testid="test-preview-admin-title">${escapeHtml(data.admin_title)}</div>
+              <div class="text-secondary small" data-testid="test-preview-admin-body">${escapeHtml(data.admin_body)}</div>
+              <a href="${data.admin_url}" class="btn btn-sm btn-link p-0 mt-1" data-testid="test-preview-admin-link">Open in admin panel <i class="bi bi-arrow-right ms-1"></i></a>
+            </div>
+          </div>
+        </div>
+        <div class="small text-secondary">
+          <i class="bi bi-info-circle me-1"></i>Two alerts are fired per order — one tagged <strong>Orders</strong> (above) and one tagged <strong>Sales Detail</strong> in the admin bell, so you can filter them later.
+        </div>
+      </div>
+    </div>
+  `;
+}
+function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 </script>
 <?php include __DIR__ . '/includes/footer.php'; ?>

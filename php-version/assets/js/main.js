@@ -197,12 +197,29 @@ async function submitNotify(ev) {
   }
 }
 
+// Helper: on the checkout page, refresh ONLY the right-column order
+// summary in place so the customer's typed Contact / Billing / Card
+// details aren't wiped out by a full page reload.
+async function refreshCheckoutSummary() {
+  const host = document.getElementById('checkout-summary');
+  if (!host) return false;
+  const qs = window.location.search || '';
+  try {
+    const r = await fetch('ajax/checkout-summary.php' + qs, { credentials: 'same-origin' });
+    if (r.status === 204) { window.location.href = 'cart.php'; return true; }
+    if (!r.ok) return false;
+    host.innerHTML = await r.text();
+    return true;
+  } catch (e) { return false; }
+}
+
 // Cart page qty / remove
 document.addEventListener('click', async (e) => {
   const qbtn = e.target.closest('[data-cart-qty]');
   if (qbtn) {
     const data = await cartAction({ action: 'update', slug: qbtn.dataset.slug, qty: parseInt(qbtn.dataset.cartQty, 10) });
     updateCartBadge(data.count);
+    if (await refreshCheckoutSummary()) return;
     location.reload();
     return;
   }
@@ -210,6 +227,7 @@ document.addEventListener('click', async (e) => {
   if (rbtn) {
     const data = await cartAction({ action: 'remove', slug: rbtn.dataset.cartRemove });
     updateCartBadge(data.count);
+    if (await refreshCheckoutSummary()) return;
     location.reload();
   }
 });
@@ -227,6 +245,9 @@ async function applyCoupon(code) {
   const data = await cartAction({ action: 'coupon', code: code || '' });
   if (data.ok) {
     showToast(data.coupon ? '<i class="bi bi-tag-fill me-1"></i> Coupon applied — ' + (data.pct || '') + '% off!' : 'Coupon removed.');
+    // On the checkout page, refresh only the right-column summary so the
+    // customer's typed details on the left don't get wiped.
+    if (await refreshCheckoutSummary()) return;
     location.reload();
   } else {
     showToast('<i class="bi bi-x-circle me-1"></i> ' + (data.error || 'Invalid coupon code'));

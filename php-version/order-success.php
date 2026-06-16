@@ -7,7 +7,35 @@ $pageTitle = 'Order Confirmed | ' . SITE_BRAND;
 $orderNumber = $_GET['order'] ?? '';
 $sessionId = $_GET['session_id'] ?? '';
 $order = null;
-if ($orderNumber) {
+$isDemo = (($_GET['demo'] ?? '') === '1');
+if ($isDemo) {
+    // Synthesised order for the test-preview iframe on /checkout.php.
+    // No DB write — purely a render preview.
+    $items = cart_items();
+    $subtotal = cart_subtotal();
+    $order = [
+        'id'           => 0,
+        'order_number' => $orderNumber ?: 'TEST-' . date('YmdHis'),
+        'email'        => 'customer@example.com',
+        'first_name'   => 'Sample',
+        'last_name'    => 'Customer',
+        'phone'        => '+1-555-000-0123',
+        'address'      => '123 Demo Street',
+        'city'         => 'San Francisco',
+        'state'        => 'CA',
+        'zip'          => '94107',
+        'country'      => 'US',
+        'subtotal'     => $subtotal,
+        'total'        => $subtotal,
+        'currency'     => current_currency()['code'],
+        'payment_method' => 'card',
+        'status'       => 'paid',
+        'fulfilled'    => 1,
+        'pro_assist'   => 0,
+        'gw_mode'      => 'test',
+        'created_at'   => date('Y-m-d H:i:s'),
+    ];
+} elseif ($orderNumber) {
     $stmt = db()->prepare('SELECT * FROM orders WHERE order_number = ?');
     $stmt->execute([$orderNumber]);
     $order = $stmt->fetch();
@@ -102,39 +130,60 @@ if ($order && $order['status'] === 'paid') {
     // in to activate + View installation guide" card that the email shows.
     // This is the "show more focus on the product" iteration 20 request.
     try {
-        $stIt = db()->prepare(
-            'SELECT oi.product_slug, oi.name, oi.qty, oi.price,
-                    p.image, p.brand, p.activation_url, p.install_guide_url
-             FROM order_items oi
-             LEFT JOIN products p ON p.slug = oi.product_slug
-             WHERE oi.order_id = ?'
-        );
-        $stIt->execute([(int)$order['id']]);
-        $orderItems = $stIt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-        // Attach assigned license keys per item (in insertion order)
-        $stKeys = db()->prepare(
-            'SELECT product_slug, license_key
-             FROM license_keys
-             WHERE order_id = ? AND status = "sold"
-             ORDER BY id ASC'
-        );
-        $stKeys->execute([(int)$order['id']]);
-        $keysByProduct = [];
-        foreach ($stKeys->fetchAll(PDO::FETCH_ASSOC) as $kr) {
-            $keysByProduct[$kr['product_slug']][] = $kr['license_key'];
-        }
-        foreach ($orderItems as &$it) {
-            $slug = $it['product_slug'];
-            $it['license_keys'] = $keysByProduct[$slug] ?? [];
-            if (function_exists('activation_url_for_product')) {
-                $it['activation_url'] = activation_url_for_product(
-                    (string)$it['name'],
-                    (string)($it['brand'] ?? ''),
-                    (string)($it['activation_url'] ?? '')
-                );
+        if ($isDemo) {
+            // Demo preview — use the live cart items + synthetic license keys
+            // so the iframe in checkout's test-preview modal looks realistic.
+            $orderItems = array_map(function($i) {
+                return [
+                    'product_slug' => $i['slug'],
+                    'name'         => $i['name'],
+                    'qty'          => (int)$i['qty'],
+                    'price'        => $i['price'],
+                    'image'        => $i['image'] ?? '',
+                    'brand'        => $i['brand'] ?? '',
+                    'activation_url'    => '',
+                    'install_guide_url' => '',
+                    'license_keys' => array_map(
+                        fn($n) => 'XXXXX-XXXXX-XXXXX-' . strtoupper(substr(md5($i['slug'].$n), 0, 5)) . '-DEMO',
+                        range(1, (int)$i['qty'])
+                    ),
+                ];
+            }, cart_items());
+        } else {
+            $stIt = db()->prepare(
+                'SELECT oi.product_slug, oi.name, oi.qty, oi.price,
+                        p.image, p.brand, p.activation_url, p.install_guide_url
+                 FROM order_items oi
+                 LEFT JOIN products p ON p.slug = oi.product_slug
+                 WHERE oi.order_id = ?'
+            );
+            $stIt->execute([(int)$order['id']]);
+            $orderItems = $stIt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            // Attach assigned license keys per item (in insertion order)
+            $stKeys = db()->prepare(
+                'SELECT product_slug, license_key
+                 FROM license_keys
+                 WHERE order_id = ? AND status = "sold"
+                 ORDER BY id ASC'
+            );
+            $stKeys->execute([(int)$order['id']]);
+            $keysByProduct = [];
+            foreach ($stKeys->fetchAll(PDO::FETCH_ASSOC) as $kr) {
+                $keysByProduct[$kr['product_slug']][] = $kr['license_key'];
             }
+            foreach ($orderItems as &$it) {
+                $slug = $it['product_slug'];
+                $it['license_keys'] = $keysByProduct[$slug] ?? [];
+                if (function_exists('activation_url_for_product')) {
+                    $it['activation_url'] = activation_url_for_product(
+                        (string)$it['name'],
+                        (string)($it['brand'] ?? ''),
+                        (string)($it['activation_url'] ?? '')
+                    );
+                }
+            }
+            unset($it);
         }
-        unset($it);
     } catch (Throwable $e) { /* non-fatal */ }
 }
 ?>
