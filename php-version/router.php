@@ -106,7 +106,41 @@ if (preg_match('#^/hub/(assets/.+|ajax/.+|uploads/.+)$#', $path, $m)) {
 }
 $file = __DIR__ . $path;
 if ($path !== '/' && file_exists($file) && !is_dir($file)) {
-    return false; // let the built-in server handle real files (php, css, js, images)
+    $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+    $longCacheExts = ['css','js','png','jpg','jpeg','gif','webp','avif','svg','ico','woff','woff2','ttf','eot','mp4','webm'];
+    if (in_array($ext, $longCacheExts, true)) {
+        // Serve the asset ourselves so our cache headers stick. PHP's
+        // built-in server otherwise overrides everything with
+        // "Cache-Control: no-store, no-cache, must-revalidate" which
+        // kills Lighthouse and explains the "Use efficient cache
+        // lifetimes" diagnostic.  We version CSS/JS with ?v=<filemtime>
+        // and uploads live at content-addressable paths, so a 1-year
+        // immutable cache is safe.
+        $mime = [
+            'css'=>'text/css; charset=UTF-8','js'=>'application/javascript; charset=UTF-8',
+            'png'=>'image/png','jpg'=>'image/jpeg','jpeg'=>'image/jpeg','gif'=>'image/gif',
+            'svg'=>'image/svg+xml','webp'=>'image/webp','avif'=>'image/avif','ico'=>'image/x-icon',
+            'woff'=>'font/woff','woff2'=>'font/woff2','ttf'=>'font/ttf','eot'=>'application/vnd.ms-fontobject',
+            'mp4'=>'video/mp4','webm'=>'video/webm',
+        ][$ext] ?? 'application/octet-stream';
+        header('Content-Type: ' . $mime, true);
+        header_remove('Cache-Control');
+        header_remove('Pragma');
+        header_remove('Expires');
+        header('Cache-Control: public, max-age=31536000, immutable', true);
+        header('Access-Control-Allow-Origin: *', true);
+        header('Content-Length: ' . filesize($file), true);
+        // Conditional GET — return 304 when ETag matches.
+        $etag = '"' . md5_file($file) . '"';
+        header('ETag: ' . $etag);
+        if (($_SERVER['HTTP_IF_NONE_MATCH'] ?? '') === $etag) {
+            http_response_code(304);
+            return true;
+        }
+        readfile($file);
+        return true;
+    }
+    return false; // dynamic (.php) — let the built-in server run it
 }
 if ($path === '/' || $path === '/index.php') {
     require __DIR__ . '/index.php';

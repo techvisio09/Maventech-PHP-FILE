@@ -1,4 +1,5 @@
 <?php /* Footer + chat widget + scripts */ ?>
+</main><!-- /#main-content (opened in header.php) -->
 <footer class="footer-dark pt-0 pb-4 mt-5">
 
   <!-- Newsletter band -->
@@ -25,7 +26,7 @@
       <div class="col-lg-4">
         <div class="d-flex align-items-center gap-2 mb-2">
           <?php if (!empty($brandLogo)): ?>
-            <img src="<?= esc($brandLogo) ?>" alt="<?= esc($brandName) ?>" style="height:42px;width:auto;max-width:140px;object-fit:contain;">
+            <img src="<?= esc($brandLogo) ?>" alt="<?= esc($brandName) ?>" style="height:42px;width:auto;max-width:140px;object-fit:contain;" width="140" height="42" loading="lazy" decoding="async">
           <?php else: ?>
             <?= render_logo(42) ?>
           <?php endif; ?>
@@ -137,8 +138,8 @@
       </div>
       <div class="col-md-4 text-md-end">
         <div class="d-flex gap-2 justify-content-center justify-content-md-end mb-2" data-testid="footer-trust-badges">
-          <img src="assets/images/badges/microsoft-verified.svg" alt="Microsoft Verified" class="trust-badge-img" loading="lazy">
-          <img src="assets/images/badges/pci-compliant.svg" alt="PCI Compliant" class="trust-badge-img" loading="lazy">
+          <img src="assets/images/badges/microsoft-verified.svg" alt="Microsoft Verified" class="trust-badge-img" loading="lazy" decoding="async" width="80" height="40">
+          <img src="assets/images/badges/pci-compliant.svg" alt="PCI Compliant" class="trust-badge-img" loading="lazy" decoding="async" width="80" height="40">
         </div>
         <small><i class="bi bi-award-fill text-warning me-1"></i>Authorized Reseller • 2+ Years</small>
       </div>

@@ -150,7 +150,7 @@ include __DIR__ . '/includes/header.php';
         <div class="col-lg-3 col-md-4 col-sm-6">
           <a href="blog-post.php?id=<?= esc($b['id']) ?>" class="card h-100 text-decoration-none blog-card" data-testid="blog-card-<?= (int)$b['id'] ?>">
             <div class="blog-card-img">
-              <img src="<?= esc($b['image']) ?>" alt="<?= esc($b['title']) ?>" loading="lazy">
+              <img src="<?= esc($b['image']) ?>" alt="<?= esc($b['title']) ?>" loading="lazy" decoding="async" width="400" height="225">
             </div>
             <div class="card-body p-3">
               <small class="text-secondary d-block mb-1" style="font-size:.72rem;"><i class="bi bi-calendar3 me-1"></i><?= esc($b['date']) ?> · <?= esc($b['read_time']) ?>
