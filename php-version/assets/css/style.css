@@ -2992,3 +2992,24 @@ footer.footer-dark { transition: none !important; transform: none !important; wi
 }
 .pa-welcome-phone i { font-size: .9rem; }
 [data-bs-theme="dark"] .pa-welcome-body { color: #E2E8F0; }
+
+
+/* --- Brand wordmark "Software" — solid rich navy blue (no shimmer) --- */
+.brand-grad,
+body .brand-grad,
+.logo-3d .brand-grad,
+[data-bs-theme="dark"] .brand-grad,
+.footer-dark .brand-grad {
+  background: none !important;
+  background-image: none !important;
+  color: #1E3A8A !important;          /* rich navy blue */
+  -webkit-text-fill-color: #1E3A8A !important;
+  -webkit-background-clip: initial !important;
+  background-clip: initial !important;
+  animation: none !important;
+}
+[data-bs-theme="dark"] .brand-grad,
+.footer-dark .brand-grad {
+  color: #93C5FD !important;          /* soft light navy for dark surfaces */
+  -webkit-text-fill-color: #93C5FD !important;
+}
