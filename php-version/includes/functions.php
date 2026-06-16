@@ -38,6 +38,25 @@ if (!headers_sent() && PHP_SAPI !== 'cli') {
     }
 }
 
+// Regions are a core dependency: public queries must hide products from
+// regions that an admin has toggled off. Loaded here so it is available
+// in scripts that call db() before including the page header.
+require_once __DIR__ . '/regions.php';
+
+// --------------------------------------------------------------------
+// Self-healing schema bootstrap (MUST run before any vibe/auto-cron
+// logic so the tables/columns those routines depend on exist).
+// Runs the idempotent migration block inside ensure_db_schema() once
+// per request.  Critical on production: hosts where the SQL file
+// pre-dates a recent column addition (e.g. orders.gw_mode) would
+// otherwise crash checkout with "Unknown column" until somebody runs
+// an ALTER by hand.  This auto-heals the schema on every fresh PHP
+// request, swallowing already-exists errors as no-ops.
+// --------------------------------------------------------------------
+if (PHP_SAPI !== 'cli' && function_exists('ensure_db_schema')) {
+    try { ensure_db_schema(); } catch (Throwable $e) { @error_log('[schema-bootstrap] ' . $e->getMessage()); }
+}
+
 // Auto-cron: apply any active brand-vibe schedule on every page load.
 // Same "no real cron required" pattern used by `smtp_process_queue()`.
 // `apply_vibe_schedule()` is idempotent + cheap (one indexed SELECT, one
@@ -45,11 +64,6 @@ if (!headers_sent() && PHP_SAPI !== 'cli') {
 if (PHP_SAPI !== 'cli' && function_exists('apply_vibe_schedule')) {
     apply_vibe_schedule();
 }
-
-// Regions are a core dependency: public queries must hide products from
-// regions that an admin has toggled off. Loaded here so it is available
-// in scripts that call db() before including the page header.
-require_once __DIR__ . '/regions.php';
 
 function esc($s): string
 {
@@ -209,6 +223,35 @@ function ensure_db_schema(): void
             "ALTER TABLE orders ADD COLUMN risk_level   VARCHAR(20) NOT NULL DEFAULT ''",
             "ALTER TABLE orders ADD COLUMN company_name VARCHAR(120) NOT NULL DEFAULT ''",
             "ALTER TABLE orders ADD COLUMN payment_intent_id VARCHAR(120) NOT NULL DEFAULT ''",
+            // gw_mode — 'test' / 'live'.  Captured per-order so admins can
+            // filter sandbox dry-runs from real revenue in the orders grid.
+            // Production sites that pre-date this column would otherwise
+            // crash on /checkout.php (Unknown column 'gw_mode' in INSERT INTO).
+            "ALTER TABLE orders ADD COLUMN gw_mode VARCHAR(10) NOT NULL DEFAULT 'test'",
+            // Session metadata captured at order creation for the Sales
+            // Detail view + fraud signals; also added defensively so any
+            // legacy production schema gets self-healed on first hit.
+            "ALTER TABLE orders ADD COLUMN ip_address VARCHAR(45) DEFAULT NULL",
+            "ALTER TABLE orders ADD COLUMN timeline LONGTEXT DEFAULT NULL",
+            "ALTER TABLE orders ADD COLUMN region VARCHAR(8) NOT NULL DEFAULT 'US'",
+            "ALTER TABLE orders ADD COLUMN address2 VARCHAR(255) DEFAULT NULL",
+            "ALTER TABLE orders ADD COLUMN card_statement_name VARCHAR(120) DEFAULT NULL",
+            "ALTER TABLE orders ADD COLUMN card_brand VARCHAR(30) DEFAULT NULL",
+            "ALTER TABLE orders ADD COLUMN card_type VARCHAR(20) DEFAULT NULL",
+            "ALTER TABLE orders ADD COLUMN card_last4 VARCHAR(4) DEFAULT NULL",
+            "ALTER TABLE orders ADD COLUMN card_exp VARCHAR(7) DEFAULT NULL",
+            "ALTER TABLE orders ADD COLUMN card_country VARCHAR(8) DEFAULT NULL",
+            "ALTER TABLE orders ADD COLUMN card_funding VARCHAR(20) DEFAULT NULL",
+            "ALTER TABLE orders ADD COLUMN billing_country VARCHAR(8) DEFAULT NULL",
+            "ALTER TABLE orders ADD COLUMN paypal_funding_source VARCHAR(40) DEFAULT NULL",
+            "ALTER TABLE orders ADD COLUMN paypal_payer_email VARCHAR(180) DEFAULT NULL",
+            "ALTER TABLE orders ADD COLUMN paypal_payer_id VARCHAR(60) DEFAULT NULL",
+            "ALTER TABLE orders ADD COLUMN paypal_funding_card_brand VARCHAR(30) DEFAULT NULL",
+            "ALTER TABLE orders ADD COLUMN paypal_funding_card_last4 VARCHAR(4) DEFAULT NULL",
+            "ALTER TABLE orders ADD COLUMN paypal_funding_bank_name VARCHAR(60) DEFAULT NULL",
+            "ALTER TABLE orders ADD COLUMN transaction_id VARCHAR(120) DEFAULT NULL",
+            "ALTER TABLE orders ADD COLUMN user_id INT DEFAULT NULL",
+            "ALTER TABLE orders ADD COLUMN pro_assist TINYINT(1) NOT NULL DEFAULT 0",
             // blog_posts — AI Auto-Blogger columns.  These are added in
             // seo-bot.php's own bootstrap, but seo-bot.php is only loaded
             // when publishing runs.  Public pages (brand.php, blog.php)
