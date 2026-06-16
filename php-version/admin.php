@@ -879,6 +879,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $back = $rs ? 'admin.php?tab=products&inv='.urlencode($rs).'&invtab=available' : 'admin.php?tab=products';
         header('Location: '.$back.'&msg=Key+removed'); exit;
 
+    } elseif ($action === 'backfill_multiseat_keys') {
+        // One-shot backfill: undo the historical multi-seat over-deduction.
+        // Pre-fix, every paid order with qty>N on a single line consumed N
+        // license_keys (one per seat). Post-fix, only ONE key is consumed
+        // per line item. This action finds every (order_id, product_slug)
+        // where >1 key was marked 'sold' AND the order_items.qty is also >1
+        // (= a multi-seat line, not 2 separate single-seat purchases), keeps
+        // the OLDEST sold key (the one actually delivered to the customer
+        // via email) and re-marks the rest as 'available' so the inventory
+        // count recovers.
+        $rows = $pdo->query("
+            SELECT lk.order_id, lk.product_slug, oi.qty,
+                   GROUP_CONCAT(lk.id ORDER BY lk.assigned_at, lk.id) AS key_ids,
+                   COUNT(*) AS sold_count
+              FROM license_keys lk
+              JOIN order_items oi ON oi.order_id = lk.order_id AND oi.product_slug = lk.product_slug
+             WHERE lk.status = 'sold'
+               AND oi.qty > 1
+             GROUP BY lk.order_id, lk.product_slug
+            HAVING sold_count > 1
+        ")->fetchAll(PDO::FETCH_ASSOC);
+
+        $ordersFixed = 0; $keysRestored = 0;
+        foreach ($rows as $r) {
+            $ids = array_map('intval', explode(',', $r['key_ids']));
+            // Keep the first (oldest assigned) key as the delivered one.
+            $extras = array_slice($ids, 1);
+            if (!$extras) continue;
+            $ph = implode(',', array_fill(0, count($extras), '?'));
+            $pdo->prepare("UPDATE license_keys SET status='available', order_id=NULL, assigned_at=NULL WHERE id IN ($ph)")
+                ->execute($extras);
+            $ordersFixed++;
+            $keysRestored += count($extras);
+        }
+        $_SESSION['flash_inv'] = "Multi-seat backfill complete — restored {$keysRestored} key(s) across {$ordersFixed} order(s) to <code>available</code>.";
+        header('Location: admin.php?tab=products&backfill_done=1'); exit;
+
     } elseif ($action === 'save_template') {
         $tplId = (int)$_POST['tpl_id'];
         $tpl = $pdo->prepare('SELECT * FROM email_templates WHERE id=?');
@@ -6244,6 +6281,45 @@ elseif ($tab === 'products'):
     </div>
   </div>
 
+  <?php
+    // Multi-seat over-deduction detector — surface a one-click backfill
+    // banner when there's any historical multi-seat order that consumed
+    // more than 1 license_key for the same product (pre-fix legacy bug).
+    $msAnomaly = $pdo->query("
+        SELECT COUNT(*) FROM (
+            SELECT lk.order_id, lk.product_slug, COUNT(*) c
+              FROM license_keys lk
+              JOIN order_items oi ON oi.order_id = lk.order_id AND oi.product_slug = lk.product_slug
+             WHERE lk.status = 'sold' AND oi.qty > 1
+             GROUP BY lk.order_id, lk.product_slug
+            HAVING c > 1
+        ) x")->fetchColumn();
+    $msAnomalyCount = (int)$msAnomaly;
+    if (!empty($_SESSION['flash_inv'])) {
+        echo '<div class="alert alert-success py-2 px-3 mb-3 d-flex align-items-center justify-content-between" data-testid="inv-flash" style="border-radius:10px;border:1px solid #bbf7d0;background:rgba(187,247,208,.18);">'
+           . '<span><i class="bi bi-check-circle-fill me-1" style="color:#16a34a;"></i>' . $_SESSION['flash_inv'] . '</span>'
+           . '<button type="button" class="btn-close btn-sm" style="font-size:11px;" onclick="this.parentElement.remove()" aria-label="Close"></button>'
+           . '</div>';
+        unset($_SESSION['flash_inv']);
+    }
+  ?>
+  <?php if ($msAnomalyCount > 0): ?>
+    <div class="alert alert-warning d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3" data-testid="multiseat-backfill-banner"
+         style="border-radius:10px;background:rgba(245,158,11,.08);border:1px solid #fde68a;">
+      <div class="small" style="line-height:1.5;">
+        <i class="bi bi-exclamation-triangle-fill me-1" style="color:#d97706;"></i>
+        <strong><?= $msAnomalyCount ?> historical multi-seat order<?= $msAnomalyCount === 1 ? '' : 's' ?></strong>
+        consumed extra keys from a single license (legacy behaviour before the multi-seat fix). Run the backfill to re-mark the extras as <code>available</code> and recover your stock count.
+      </div>
+      <form method="post" class="d-inline" onsubmit="return confirm('Backfill <?= (int)$msAnomalyCount ?> multi-seat order(s)? This re-marks the extra keys as available so your inventory count recovers. The oldest sold key per order (= the one actually delivered) stays sold.');">
+        <input type="hidden" name="action" value="backfill_multiseat_keys">
+        <button class="btn btn-warning btn-sm rounded-pill text-white fw-semibold" data-testid="run-multiseat-backfill">
+          <i class="bi bi-arrow-counterclockwise me-1"></i>Run multi-seat backfill
+        </button>
+      </form>
+    </div>
+  <?php endif; ?>
+
   <!-- REDESIGNED FILTER BAR -->
   <div class="card-e p-3 mb-3" data-testid="product-filters">
 
@@ -8610,6 +8686,15 @@ elseif ($tab === 'keys'):
     <div class="col-6 col-md-3"><div class="kpi-tile amber"><div class="kpi-icon"><i class="bi bi-cart-check"></i></div><div class="kpi-label">Keys sold</div><div class="kpi-value" data-testid="kpi-sold"><?= $kpiSold ?></div></div></div>
     <div class="col-6 col-md-3"><div class="kpi-tile red"><div class="kpi-icon"><i class="bi bi-exclamation-triangle"></i></div><div class="kpi-label">Out / Low (&lt;5)</div><div class="kpi-value"><?= $kpiOutCount ?> <small class="text-muted fs-6">/ <?= $kpiLowCount ?></small></div></div></div>
   </div>
+
+  <?php
+    // (Legacy dead-code block — the redirect at line 38 sends tab=keys → tab=products,
+    // so this branch never renders. The actual banner lives in tab=products.)
+    if (!empty($_SESSION['flash_inv'])) {
+        echo '<div class="alert alert-success py-2 px-3 mb-3" data-testid="inv-flash">' . $_SESSION['flash_inv'] . '</div>';
+        unset($_SESSION['flash_inv']);
+    }
+  ?>
 
   <?php if (empty($invProducts)): ?>
     <div class="card-e p-5 text-center text-muted">No products in this region match the filter.</div>
