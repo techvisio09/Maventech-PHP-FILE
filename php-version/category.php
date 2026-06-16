@@ -65,7 +65,12 @@ include __DIR__ . '/includes/header.php';
         $title . ' Products',
         count($products) . ' products — genuine licenses, delivered in minutes',
         ['Shop' => 'shop.php', $title => null],
-        'category-title'
+        'category-title',
+        [
+            ['icon' => 'box-seam',           'label' => count($products) . ' product' . (count($products) === 1 ? '' : 's') . ' available'],
+            ['icon' => 'patch-check-fill',   'label' => 'Genuine licenses'],
+            ['icon' => 'lightning-charge-fill', 'label' => '15-min delivery'],
+        ]
     ) ?>
 <div class="container py-4 py-lg-5">
 

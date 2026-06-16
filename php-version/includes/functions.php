@@ -1321,7 +1321,7 @@ function render_stock_pill(string $slug, string $size = 'sm'): string {
 // Elegant page-header band with breadcrumb (shop / category / blog / cart)
 // $crumbs: [label => href|null]; null = active crumb. Pass [] to suppress
 // the breadcrumb entirely (used when the caller already rendered one).
-function render_page_head(string $title, string $subtitle = '', array $crumbs = [], string $testId = 'page-head-title'): string
+function render_page_head(string $title, string $subtitle = '', array $crumbs = [], string $testId = 'page-head-title', array $trustItems = []): string
 {
     $h = '<div class="page-head"><div class="container py-4 py-lg-5">';
     if ($crumbs) {
@@ -1336,6 +1336,18 @@ function render_page_head(string $title, string $subtitle = '', array $crumbs = 
     }
     $h .= '<h1 class="fw-bold h2 mb-1" data-testid="' . esc($testId) . '">' . esc($title) . '</h1>';
     if ($subtitle) $h .= '<p class="text-secondary mb-0">' . esc($subtitle) . '</p>';
+    // Optional trust-signal strip rendered as a small horizontal row of
+    // icon+label chips ($trustItems = [['icon'=>'shield-check','label'=>'Genuine licenses'], …])
+    if ($trustItems) {
+        $h .= '<div class="page-head-trust d-flex flex-wrap align-items-center gap-3 mt-3" data-testid="' . esc($testId) . '-trust">';
+        foreach ($trustItems as $t) {
+            $ic = esc($t['icon']  ?? 'check2-circle');
+            $lb = esc($t['label'] ?? '');
+            if ($lb === '') continue;
+            $h .= '<span class="page-head-trust-item"><i class="bi bi-' . $ic . '"></i>' . $lb . '</span>';
+        }
+        $h .= '</div>';
+    }
     return $h . '</div></div>';
 }
 

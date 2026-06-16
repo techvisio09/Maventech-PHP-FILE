@@ -257,17 +257,36 @@ body[data-brand-motion="static"] .logo-3d > img:first-of-type {
 [data-bs-theme="dark"] .navbar.sticky-top { background: rgba(21, 31, 56, .88) !important; }
 
 /* ---------- Page head band ---------- */
-.page-head { background: linear-gradient(135deg, #E7F1FB 0%, #DBE9F7 50%, #CFE0F2 100%); border-bottom: 1px solid rgba(21, 101, 192, .18); position: relative; }
+.page-head { background: linear-gradient(180deg, #F8FBFE 0%, #ECF4FD 100%); border-bottom: 1px solid rgba(21, 101, 192, .12); position: relative; overflow: hidden; }
 .page-head::before { content: ""; position: absolute; inset: 0; background-image:
-    radial-gradient(circle at 18% 28%, rgba(21, 101, 192, .12), transparent 45%),
-    radial-gradient(circle at 82% 78%, rgba(26, 115, 232, .10), transparent 50%);
-    pointer-events: none; opacity: .8; }
+    radial-gradient(ellipse 60% 80% at 12% -10%, rgba(21, 101, 192, .22), transparent 55%),
+    radial-gradient(ellipse 40% 60% at 95% 110%, rgba(26, 115, 232, .14), transparent 55%);
+    pointer-events: none; }
 .page-head > * { position: relative; z-index: 1; }
-[data-bs-theme="dark"] .page-head { background: linear-gradient(135deg, #0F1B33 0%, #11203F 55%, #0B1426 100%); border-bottom-color: rgba(96, 165, 250, .22); }
+[data-bs-theme="dark"] .page-head { background: linear-gradient(180deg, #11203F 0%, #0B1426 100%); border-bottom-color: rgba(96, 165, 250, .22); }
 [data-bs-theme="dark"] .page-head::before { background-image:
-    radial-gradient(circle at 18% 28%, rgba(96, 165, 250, .15), transparent 45%),
-    radial-gradient(circle at 82% 78%, rgba(26, 115, 232, .12), transparent 50%);
+    radial-gradient(ellipse 60% 80% at 12% -10%, rgba(96, 165, 250, .25), transparent 55%),
+    radial-gradient(ellipse 40% 60% at 95% 110%, rgba(26, 115, 232, .18), transparent 55%);
 }
+/* Trust-strip chips inside .page-head */
+.page-head-trust { font-size: .82rem; }
+.page-head-trust-item {
+  display: inline-flex; align-items: center; gap: .35rem;
+  padding: .3rem .7rem;
+  background: rgba(255, 255, 255, .7);
+  border: 1px solid rgba(21, 101, 192, .18);
+  border-radius: 999px;
+  color: #1F2937;
+  font-weight: 500;
+  backdrop-filter: saturate(120%);
+}
+.page-head-trust-item .bi { color: #1565C0; font-size: .92rem; }
+[data-bs-theme="dark"] .page-head-trust-item {
+  background: rgba(255, 255, 255, .06);
+  border-color: rgba(96, 165, 250, .35);
+  color: #E2E8F0;
+}
+[data-bs-theme="dark"] .page-head-trust-item .bi { color: #93C5FD; }
 .breadcrumb-item + .breadcrumb-item::before { color: var(--bs-secondary-color); }
 .breadcrumb a { text-decoration: none; }
 
@@ -3149,6 +3168,67 @@ body .brand-grad,
 }
 .trustbar-deal-code .bi { font-size: .68rem; opacity: .85; }
 .trustbar-deal-code.is-copied {
+
+/* --- Mobile-only promo chip (sits above the navbar on phones) --- */
+.mobile-promo {
+  background: linear-gradient(135deg, #1565C0 0%, #1976D2 60%, #0D47A1 100%);
+  color: #fff;
+  padding: 7px 12px;
+  font-size: .78rem;
+  border-bottom: 1px solid rgba(255, 255, 255, .15);
+  box-shadow: 0 2px 8px rgba(13, 71, 161, .25);
+}
+.mobile-promo-link {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  color: #fff !important;
+  text-decoration: none;
+  font-weight: 600;
+  width: 100%;
+  justify-content: center;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+.mobile-promo-icon { color: #fbbf24; font-size: .9rem; flex-shrink: 0; }
+.mobile-promo-text { color: #fff; }
+.mobile-promo-code {
+  display: inline-flex; align-items: center; gap: .25rem;
+  background: rgba(255, 255, 255, .18);
+  border: 1px dashed rgba(255, 255, 255, .55);
+  color: #fff;
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-weight: 700;
+  letter-spacing: .8px;
+  font-size: .7rem;
+  cursor: pointer;
+  transition: background .15s ease;
+}
+.mobile-promo-code:hover, .mobile-promo-code:active {
+  background: rgba(255, 255, 255, .3);
+}
+.mobile-promo-code.is-copied {
+  background: rgba(16, 185, 129, .88);
+  border-color: rgba(16, 185, 129, .95);
+  border-style: solid;
+}
+.mobile-promo-code .bi { font-size: .65rem; opacity: .85; }
+.mobile-promo-cta {
+  display: inline-flex; align-items: center; gap: .15rem;
+  background: rgba(255, 255, 255, .25);
+  border: 1px solid rgba(255, 255, 255, .4);
+  border-radius: 999px;
+  padding: 1px 9px;
+  font-weight: 700;
+  font-size: .74rem;
+}
+/* Tighten on very narrow viewports so the row never wraps */
+@media (max-width: 359px) {
+  .mobile-promo-text { display: none; }
+}
+
   background: rgba(16, 185, 129, .88);
   border-color: rgba(16, 185, 129, .95);
   border-style: solid;
