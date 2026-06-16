@@ -3670,11 +3670,11 @@ elseif ($tab === 'ai-blogger'):
         <a href="admin.php?tab=ai-blogger&seo_run=1" class="card text-decoration-none h-100" style="border:2px solid #fef3c7;border-radius:12px;padding:14px;transition:all .15s;background:linear-gradient(135deg,#fffbeb,#fef9c3);" data-testid="ai-blogger-run-now"
            onmouseover="this.style.borderColor='#f59e0b';this.style.transform='translateY(-2px)'"
            onmouseout="this.style.borderColor='#fef3c7';this.style.transform='none'"
-           onclick="return confirm('Publish the full daily batch? This writes 24 posts — takes about 3 minutes.')">
+           onclick="return confirm('Publish the full daily batch? This writes 4 posts — one random product per country (US, UK, AU, CA) — and takes about 45 seconds.')">
           <div class="text-center">
             <div style="font-size:24px;color:#f59e0b;"><i class="bi bi-play-circle-fill"></i></div>
             <div class="fw-bold mt-1" style="font-size:13px;color:#0f172a;">Publish Full Batch</div>
-            <div class="text-secondary" style="font-size:11px;">24 posts (6 × 4 countries)</div>
+            <div class="text-secondary" style="font-size:11px;">4 posts (1 random product × 4 countries)</div>
           </div>
         </a>
       </div>
@@ -3736,9 +3736,11 @@ elseif ($tab === 'ai-blogger'):
 
   <!-- ====== 2. TODAY'S STATS — always visible (compact) ====== -->
   <?php
-    $dailyCap   = 24;
+    // Mirrors SEOBOT_BLOG_MAX_TOTAL_PER_DAY (4) — show progress out of the
+    // actual hard cap so the bar is accurate when the batch is partial.
+    $dailyCap   = (int)(defined('SEOBOT_BLOG_MAX_TOTAL_PER_DAY') ? SEOBOT_BLOG_MAX_TOTAL_PER_DAY : 4);
     $todayCount = (int)$mon['posts_24h'];
-    $pct        = max(0, min(100, (int)round($todayCount / $dailyCap * 100)));
+    $pct        = max(0, min(100, (int)round($todayCount / max(1, $dailyCap) * 100)));
   ?>
   <div class="row g-2 mb-3">
     <div class="col-6 col-md-3">

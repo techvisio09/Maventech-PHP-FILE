@@ -24,11 +24,12 @@ if (!defined('SEOBOT_LLM_BATCH'))       define('SEOBOT_LLM_BATCH',      5);
 if (!defined('SEOBOT_REFRESH_DAYS'))    define('SEOBOT_REFRESH_DAYS',   30);
 if (!defined('SEOBOT_BLOG_COOLDOWN_H')) define('SEOBOT_BLOG_COOLDOWN_H',20); // min hours between two auto-blog batches
 // Daily blog cadence — per-product feedback (2026-02): keep volume small.
-// Previously 6 posts/region × 4 regions = 24 posts/day. Now 1 post/region
-// × 4 regions = 4 posts/day (still one per market, but never spammy).
-// Also gated by SEOBOT_BLOG_MAX_TOTAL_PER_DAY which is a hard upper cap.
+// Previously 6 posts/region × 4 regions = 24 posts/day. Then 1 post/region
+// × 4 regions = 4 posts/day, capped at 2. Now 4 posts/day total — one random
+// product per country, all 4 countries hit on every full batch, country
+// order is shuffled per run so we don't favor any single market.
 if (!defined('SEOBOT_BLOG_POSTS_PER_REGION_PER_DAY')) define('SEOBOT_BLOG_POSTS_PER_REGION_PER_DAY', 1);
-if (!defined('SEOBOT_BLOG_MAX_TOTAL_PER_DAY'))        define('SEOBOT_BLOG_MAX_TOTAL_PER_DAY',        2); // never publish more than this many auto-posts in a single 24h window
+if (!defined('SEOBOT_BLOG_MAX_TOTAL_PER_DAY'))        define('SEOBOT_BLOG_MAX_TOTAL_PER_DAY',        4); // never publish more than this many auto-posts in a single 24h window
 // Markets the auto-blogger targets — keep in sync with regions table.
 if (!defined('SEOBOT_BLOG_REGIONS'))    define('SEOBOT_BLOG_REGIONS',   'US,UK,AU,CA');
 
@@ -862,7 +863,12 @@ function _seo_generate_daily_blog_batch(PDO $pdo, array &$report): array
     // Loop EVERY target region (US, UK, AU, CA) × N posts each, then clip
     // to the hard daily total cap so we never publish more than
     // SEOBOT_BLOG_MAX_TOTAL_PER_DAY auto-posts in a 24h window.
+    // Shuffle the country order so no single market is repeatedly favored
+    // when the daily cap is reached early — every full-batch run now picks
+    // 4 random products and assigns each to a different country in a
+    // freshly randomized order.
     $regions = array_values(array_filter(array_map('trim', explode(',', SEOBOT_BLOG_REGIONS))));
+    shuffle($regions);
     $perRegion = max(1, (int)SEOBOT_BLOG_POSTS_PER_REGION_PER_DAY);
     $totalPublishedThisRun = 0;
 
@@ -922,10 +928,10 @@ function _seo_generate_one_blog_post(PDO $pdo, string $apiKey, string $baseUrl, 
         'tokens_out'      => 0,
     ];
 
-    // Per-region round-robin: a product can be blogged for each region once,
-    // and within each region we always pick the one whose last AI post for
-    // THIS region is the oldest (or none yet).  Plus a NOT-IN guard to keep
-    // the current batch fresh.
+    // Pure random product pick — the user wants "pick 4 random products and
+    // shoot them to 4 different countries randomly", so RAND() is the only
+    // ORDER BY key. We still exclude products already used earlier in this
+    // batch so the 4 posts are guaranteed to be 4 distinct products.
     $excludeSql = '';
     if ($excludeProductIds) {
         $excludeSql = ' AND p.id NOT IN (' . implode(',', array_fill(0, count($excludeProductIds), '?')) . ')';
@@ -939,7 +945,7 @@ function _seo_generate_one_blog_post(PDO $pdo, string $apiKey, string $baseUrl, 
           FROM products p
          WHERE p.is_active = 1
            $excludeSql
-         ORDER BY (last_ai_post_at IS NULL) DESC, last_ai_post_at ASC, RAND()
+         ORDER BY RAND()
          LIMIT 1");
     $stmt->execute(array_merge([$targetRegion], $excludeProductIds));
     $product = $stmt->fetch();
