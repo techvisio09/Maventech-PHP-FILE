@@ -717,142 +717,24 @@ function paSchedInit() {
     .then(r => r.json())
     .then(j => {
       if (!j || !j.ok || !j.is_proassist) return;
-      if (j.schedule && j.schedule.status !== 'cancelled') {
-        paSchedShowConfirmed(j.schedule);
-      } else {
-        paSchedShowPicker();
-      }
+      // ProAssist customers no longer pick a date/time slot from the
+      // chat widget — the operator handles scheduling in conversation.
+      // Just surface the priority-support welcome card.
+      const card = document.getElementById('pa-sched-card');
+      if (card) card.style.display = 'block';
     })
     .catch(() => {});
 }
 
-function paSchedShowPicker() {
-  const card = document.getElementById('pa-sched-card');
-  const conf = document.getElementById('pa-sched-confirm');
-  if (!card) return;
-  if (conf) conf.style.display = 'none';
-  card.style.display = 'block';
-  // Reset state to step 1 (date selection).
-  document.getElementById('pa-sched-step-time').style.display = 'none';
-  const err = document.getElementById('pa-sched-error');
-  if (err) err.style.display = 'none';
-  paSchedRenderDates();
-  // Scroll the card into view so the customer sees the calendar.
-  setTimeout(() => {
-    const body = document.getElementById('chat-body');
-    if (body) body.scrollTop = 0;
-  }, 60);
-}
-
-function paSchedShowConfirmed(sched) {
-  const card = document.getElementById('pa-sched-card');
-  const conf = document.getElementById('pa-sched-confirm');
-  if (card) card.style.display = 'none';
-  if (!conf) return;
-  conf.style.display = 'block';
-  const when = document.getElementById('pa-sched-confirm-when');
-  if (when) when.textContent = sched.pretty || sched.scheduled_at;
-}
-
-function paSchedRenderDates() {
-  const root = document.getElementById('pa-sched-dates');
-  if (!root) return;
-  root.innerHTML = '';
-  // Next 14 calendar days starting today (skip Sundays).
-  const dows = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  const mons = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  let added = 0;
-  const today = new Date();
-  for (let i = 0; i < 21 && added < 12; i++) {
-    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + i);
-    if (d.getDay() === 0) continue; // skip Sundays
-    const iso = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'pa-sched-date';
-    btn.setAttribute('data-date', iso);
-    btn.setAttribute('data-testid', 'pa-sched-date-' + iso);
-    btn.innerHTML = '<span class="pa-sched-date-dow">'+dows[d.getDay()]+'</span>'
-                  + '<span class="pa-sched-date-day">'+d.getDate()+'</span>'
-                  + '<span class="pa-sched-date-mon">'+mons[d.getMonth()]+'</span>';
-    btn.addEventListener('click', () => paSchedSelectDate(iso, btn));
-    root.appendChild(btn);
-    added++;
-  }
-}
-
-function paSchedSelectDate(iso, btn) {
-  _paSchedSelectedDate = iso;
-  // Highlight the selected date pill.
-  document.querySelectorAll('.pa-sched-date.is-selected').forEach(n => n.classList.remove('is-selected'));
-  if (btn) btn.classList.add('is-selected');
-  // Load slots.
-  const timesRoot = document.getElementById('pa-sched-times');
-  const timeStep  = document.getElementById('pa-sched-step-time');
-  if (timesRoot) timesRoot.innerHTML = '<div class="pa-sched-empty">Loading slots…</div>';
-  if (timeStep) timeStep.style.display = 'block';
-  const token = localStorage.getItem('uc_chat_token');
-  fetch('ajax/proassist-schedule.php', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'slots', token, date: iso }),
-  })
-    .then(r => r.json())
-    .then(j => {
-      if (!timesRoot) return;
-      if (!j || !j.ok) { timesRoot.innerHTML = '<div class="pa-sched-empty">Unable to load slots — please try again.</div>'; return; }
-      if (j.closed)   { timesRoot.innerHTML = '<div class="pa-sched-closed">' + (j.reason || 'Office closed on this day') + '</div>'; return; }
-      const slots = (j.slots || []).filter(s => !s.past); // hide past, keep taken (greyed)
-      if (!slots.length) { timesRoot.innerHTML = '<div class="pa-sched-empty">No open slots left today — try a different day.</div>'; return; }
-      timesRoot.innerHTML = '';
-      slots.forEach(s => {
-        const t = document.createElement('button');
-        t.type = 'button';
-        t.className = 'pa-sched-time' + (s.taken ? ' is-taken' : '');
-        t.textContent = s.label;
-        t.setAttribute('data-time', s.time);
-        t.setAttribute('data-testid', 'pa-sched-slot-' + s.time);
-        if (!s.taken) t.addEventListener('click', () => paSchedBook(s.time));
-        timesRoot.appendChild(t);
-      });
-    })
-    .catch(() => { if (timesRoot) timesRoot.innerHTML = '<div class="pa-sched-empty">Network error — please retry.</div>'; });
-}
-
-function paSchedBackToDates() {
-  const timeStep = document.getElementById('pa-sched-step-time');
-  if (timeStep) timeStep.style.display = 'none';
-  _paSchedSelectedDate = null;
-  document.querySelectorAll('.pa-sched-date.is-selected').forEach(n => n.classList.remove('is-selected'));
-}
-
-function paSchedBook(time) {
-  if (!_paSchedSelectedDate || !time) return;
-  const err = document.getElementById('pa-sched-error');
-  if (err) { err.style.display = 'none'; err.textContent = ''; }
-  const token = localStorage.getItem('uc_chat_token');
-  fetch('ajax/proassist-schedule.php', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'book', token, date: _paSchedSelectedDate, time }),
-  })
-    .then(r => r.json())
-    .then(j => {
-      if (!j || !j.ok) {
-        if (err) { err.textContent = (j && j.error) ? j.error : 'Unable to book that slot.'; err.style.display = 'block'; }
-        return;
-      }
-      paSchedShowConfirmed(j.schedule);
-      // The server inserts an admin chat_messages confirmation — the
-      // regular admin poller will pick it up within the next tick and
-      // append it as a green bubble.  No need to chatAppend here.
-    })
-    .catch(() => { if (err) { err.textContent = 'Network error — please retry.'; err.style.display = 'block'; } });
-}
-
-function paSchedReschedule() {
-  paSchedShowPicker();
-}
+// Legacy stubs kept so any older test scripts referencing these names
+// don't throw; they now no-op since the calendar UI was removed.
+function paSchedShowPicker()     { const c = document.getElementById('pa-sched-card'); if (c) c.style.display = 'block'; }
+function paSchedShowConfirmed()  { const c = document.getElementById('pa-sched-card'); if (c) c.style.display = 'block'; }
+function paSchedRenderDates()    {}
+function paSchedSelectDate()     {}
+function paSchedBackToDates()    {}
+function paSchedBook()           {}
+function paSchedReschedule()     { paSchedShowPicker(); }
 
 // Hook into the chat toggle so paSchedInit runs every time the panel
 // opens (cheap — internally guarded by _paSchedInitDone).

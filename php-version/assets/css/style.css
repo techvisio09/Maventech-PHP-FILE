@@ -2954,3 +2954,34 @@ footer.footer-dark { transition: none !important; transform: none !important; wi
 [data-bs-theme="dark"] .filter-group-title { color: #60A5FA !important; }
 [data-bs-theme="dark"] .topbar { background: linear-gradient(90deg, #0B1426 0%, #0F2D5C 50%, #1A4B9C 100%) !important; }
 [data-bs-theme="dark"] .trustbar { background: #0B1426 !important; color: #93C5FD; }
+
+
+/* --- Pro Assistance welcome card (replaces the old calendar/time picker) --- */
+.pa-sched-welcome { padding: .85rem .9rem; }
+.pa-welcome-body {
+  font-size: .82rem;
+  color: var(--theme-text);
+  line-height: 1.45;
+}
+.pa-welcome-body p { margin-bottom: .5rem !important; }
+.pa-welcome-phone {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .42rem .9rem;
+  border-radius: 999px;
+  background: var(--theme-primary);
+  color: #fff !important;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: .82rem;
+  transition: background .15s ease, transform .15s ease;
+  margin-top: .35rem;
+}
+.pa-welcome-phone:hover {
+  background: var(--theme-primary-hover);
+  transform: translateY(-1px);
+  color: #fff !important;
+}
+.pa-welcome-phone i { font-size: .9rem; }
+[data-bs-theme="dark"] .pa-welcome-body { color: #E2E8F0; }

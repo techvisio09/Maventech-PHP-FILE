@@ -247,33 +247,24 @@
            [data-testid=lead-chat-btn] still trigger submitLead('chat'). -->
       <button type="button" class="d-none" onclick="submitLead('chat')" data-testid="lead-chat-btn"></button>
     </div>
-    <!-- ProAssist install-call scheduler card (hidden until JS detects a ProAssist lead). -->
-    <div id="pa-sched-card" class="pa-sched-card" style="display:none;" data-testid="pa-sched-card">
+    <!-- ProAssist welcome card (shown when JS detects a ProAssist lead — no calendar/time picker, just a clear instruction). -->
+    <div id="pa-sched-card" class="pa-sched-card pa-sched-welcome" style="display:none;" data-testid="pa-sched-card">
       <div class="pa-sched-header">
-        <i class="bi bi-calendar2-week"></i>
+        <i class="bi bi-headset"></i>
         <div>
-          <div class="pa-sched-title" data-testid="pa-sched-title">Schedule your install call</div>
-          <div class="pa-sched-sub" data-testid="pa-sched-sub">Pick a 30-minute slot — Mon-Sat · 9 AM – 6 PM EST</div>
+          <div class="pa-sched-title" data-testid="pa-sched-title">Pro Assistance</div>
+          <div class="pa-sched-sub" data-testid="pa-sched-sub">Connected · priority support</div>
         </div>
       </div>
-      <div class="pa-sched-step" id="pa-sched-step-date">
-        <div class="pa-sched-step-label">1. Choose a date</div>
-        <div class="pa-sched-dates" id="pa-sched-dates" data-testid="pa-sched-dates"><!-- date pills injected by JS --></div>
+      <div class="pa-welcome-body">
+        <p class="mb-2">For Pro Assistance, please type your message below to connect with an agent — or call our toll-free number.</p>
+        <a href="tel:<?= esc($brandPhone) ?>" class="pa-welcome-phone" data-testid="pa-welcome-phone">
+          <i class="bi bi-telephone-fill"></i><?= esc($brandPhone) ?>
+        </a>
       </div>
-      <div class="pa-sched-step" id="pa-sched-step-time" style="display:none;">
-        <div class="pa-sched-step-label">2. Choose a time <span class="pa-sched-tz">EST</span></div>
-        <div class="pa-sched-times" id="pa-sched-times" data-testid="pa-sched-times"><!-- time pills injected by JS --></div>
-        <button type="button" class="pa-sched-back" onclick="paSchedBackToDates()" data-testid="pa-sched-back"><i class="bi bi-arrow-left me-1"></i>Pick a different date</button>
-      </div>
-      <div class="pa-sched-error" id="pa-sched-error" style="display:none;" data-testid="pa-sched-error"></div>
     </div>
-    <!-- ProAssist booked confirmation card (shown after booking, hides the picker). -->
-    <div id="pa-sched-confirm" class="pa-sched-confirm" style="display:none;" data-testid="pa-sched-confirm">
-      <div class="pa-sched-confirm-icon"><i class="bi bi-check2-circle"></i></div>
-      <div class="pa-sched-confirm-title">Install call scheduled</div>
-      <div class="pa-sched-confirm-when" id="pa-sched-confirm-when" data-testid="pa-sched-confirm-when">—</div>
-      <button type="button" class="pa-sched-reschedule" onclick="paSchedReschedule()" data-testid="pa-sched-reschedule"><i class="bi bi-arrow-repeat me-1"></i>Reschedule</button>
-    </div>
+    <!-- (Calendar / time picker removed per Pro Assistance flow update.) -->
+    <div id="pa-sched-confirm" style="display:none;" data-testid="pa-sched-confirm" hidden></div>
   </div>
   <div id="chat-typing" class="chat-typing" style="display:none;" data-testid="chat-admin-typing">
     <div class="chat-typing-bubble">
