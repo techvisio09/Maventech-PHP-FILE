@@ -18,7 +18,9 @@ if (!$product) {
  * itself targets two-to-three additional intent variants. */
 $_pTitleYear = '';
 if (preg_match('/\b(20\d{2})\b/', $product['name'], $_m)) $_pTitleYear = ' ' . $_m[1];
-$pageTitle = $product['name'] . ' — Lifetime License Key for ' . ($product['platform'] ?: 'Windows') . ' | ' . SITE_BRAND;
+/* SEO: keep title under 60 chars so Google doesn't truncate it.
+ * Pattern: "{Product Name} License Key | {Brand}" */
+$pageTitle = $product['name'] . ' License Key | ' . SITE_BRAND;
 $preloadImage = $product['image'] ?? '';
 /* SEO: description, OG image and Product structured data
  * Prefer the LLM-generated meta_description (refreshed daily by the SEO

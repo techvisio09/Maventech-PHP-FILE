@@ -77,7 +77,7 @@ include __DIR__ . '/includes/header.php';
         <i class="bi bi-telephone-fill text-primary fs-2"></i>
         <h3 class="h6 fw-bold mt-2 mb-1">Phone Support</h3>
         <small class="text-secondary d-block mb-2"><?= SITE_HOURS ?></small>
-        <a href="tel:<?= SITE_PHONE ?>" class="fw-bold text-decoration-none"><?= SITE_PHONE ?></a>
+        <a href="tel:<?= esc(tel_e164(SITE_PHONE)) ?>" class="fw-bold text-decoration-none"><?= SITE_PHONE ?></a>
       </div>
     </div>
     <div class="col-lg-4">

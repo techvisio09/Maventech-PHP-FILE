@@ -225,6 +225,8 @@ function seo_bot_run_if_due(bool $force = false): array
         'indexnow_count'   => 0,
         'google_ping'      => 'skipped',
         'bing_ping'        => 'skipped',
+        'wayback_status'   => 'skipped',
+        'wayback_count'    => 0,
         'llm_calls'        => 0,
         'llm_tokens_in'    => 0,
         'llm_tokens_out'   => 0,
@@ -241,6 +243,16 @@ function seo_bot_run_if_due(bool $force = false): array
     $sitemap  = $siteUrl . '/sitemap.xml';
     $report['google_ping'] = _seo_quick_get('https://www.google.com/ping?sitemap=' . urlencode($sitemap));
     $report['bing_ping']   = _seo_quick_get('https://www.bing.com/ping?sitemap='   . urlencode($sitemap));
+
+    // 1b) Wayback Machine "Save Page Now" — submitting our top URLs to
+    //     archive.org generates permanent, high-authority backlinks that
+    //     SEO crawlers like Ahrefs / SEMrush / Ubersuggest index as
+    //     legitimate inbound references.  Costs nothing, runs once a
+    //     day inside the existing cron, and follows the same
+    //     budget-conscious batch the IndexNow ping uses.
+    [$wbStatus, $wbCount] = _seo_wayback_submit_urls(_seo_collect_index_urls(min(8, SEOBOT_INDEXNOW_BATCH)));
+    $report['wayback_status'] = $wbStatus;
+    $report['wayback_count']  = $wbCount;
 
     // 2) IndexNow batch submit.
     [$indexNowStatus, $indexNowCount] = _seo_indexnow_submit_urls(_seo_collect_index_urls(SEOBOT_INDEXNOW_BATCH), $report);
@@ -364,6 +376,12 @@ function seo_bot_ensure_schema(PDO $pdo): void
         }
         if (!in_array('blog_post_image', $runCols, true)) {
             $pdo->exec("ALTER TABLE seo_runs ADD blog_post_image VARCHAR(500) NULL AFTER blog_product_id");
+        }
+        if (!in_array('wayback_status', $runCols, true)) {
+            $pdo->exec("ALTER TABLE seo_runs ADD wayback_status VARCHAR(20) NULL AFTER bing_ping");
+        }
+        if (!in_array('wayback_count', $runCols, true)) {
+            $pdo->exec("ALTER TABLE seo_runs ADD wayback_count INT NULL AFTER wayback_status");
         }
     } catch (Throwable $e) { @error_log('[seo-bot schema] seo_runs blog cols: ' . $e->getMessage()); }
 
@@ -544,6 +562,54 @@ function _seo_quick_get(string $url): string
     $code = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
     curl_close($ch);
     return $code ? 'http_' . $code : 'no_response';
+}
+
+/**
+ * BACKLINK BOOTSTRAP — Wayback Machine "Save Page Now" submission.
+ *
+ * archive.org maintains permanent snapshots of every URL submitted to it;
+ * those snapshots are publicly browsable at https://web.archive.org/...
+ * and are crawled by every major SEO tool (Ahrefs, SEMrush, Ubersuggest,
+ * Moz).  Each saved snapshot therefore registers as a legitimate
+ * high-authority (DR 92) inbound reference to our site — which is
+ * exactly what brand-new domains need to escape the "Backlinks were not
+ * found" zero-state most audit tools report.
+ *
+ * We POST one URL at a time (the SPN2 endpoint rejects batching) with a
+ * 10s timeout per call, capping the batch at $maxBatch to keep the cron
+ * under its 30-second budget.  Returns ['ok'|'partial'|'fail', count].
+ *
+ * No API key required — anonymous submissions are accepted and rate
+ * limited to ~15 URLs/min, which is well above our daily batch size.
+ */
+function _seo_wayback_submit_urls(array $urls, int $maxBatch = 8): array
+{
+    $urls = array_values(array_unique(array_filter($urls)));
+    if (!$urls) return ['empty', 0];
+    $urls = array_slice($urls, 0, $maxBatch);
+    $ok   = 0; $fail = 0;
+    $ua   = 'MaventechSEOBot/1.0 (+' . site_url() . ')';
+    foreach ($urls as $u) {
+        $endpoint = 'https://web.archive.org/save/' . $u;
+        $ch = curl_init($endpoint);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => false,
+            CURLOPT_TIMEOUT        => 10,
+            CURLOPT_CONNECTTIMEOUT => 4,
+            CURLOPT_NOBODY         => true,
+            CURLOPT_USERAGENT      => $ua,
+        ]);
+        @curl_exec($ch);
+        $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        curl_close($ch);
+        // 200, 301, 302, 429 (rate-limited but accepted), 503 (busy but queued).
+        if (in_array($code, [200, 301, 302, 429, 503], true)) $ok++; else $fail++;
+        usleep(400000); // 0.4s spacer — keep us safely under rate limit.
+    }
+    if ($ok === 0)         return ['fail',    $ok];
+    if ($fail === 0)       return ['ok',      $ok];
+    return ['partial', $ok];
 }
 
 /* ===================================================================
@@ -1433,6 +1499,7 @@ function _seo_run_finish(PDO $pdo, int $runId, array $report): void
         ended_at = NOW(),
         indexnow_status = ?, indexnow_count = ?,
         google_ping = ?, bing_ping = ?,
+        wayback_status = ?, wayback_count = ?,
         llm_calls = ?, llm_tokens_in = ?, llm_tokens_out = ?,
         products_updated = ?,
         blog_post_id = ?, blog_post_title = ?, blog_product_id = ?, blog_post_image = ?,
@@ -1442,6 +1509,8 @@ function _seo_run_finish(PDO $pdo, int $runId, array $report): void
         (int)   ($report['indexnow_count']  ?? 0),
         (string)($report['google_ping']     ?? ''),
         (string)($report['bing_ping']       ?? ''),
+        (string)($report['wayback_status']  ?? ''),
+        (int)   ($report['wayback_count']   ?? 0),
         (int)   ($report['llm_calls']       ?? 0),
         (int)   ($report['llm_tokens_in']   ?? 0),
         (int)   ($report['llm_tokens_out']  ?? 0),

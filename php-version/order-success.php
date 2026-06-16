@@ -359,7 +359,7 @@ if ($order && $order['status'] === 'paid') {
     <div class="text-start">
       <div class="small fw-bold mb-2">Still having problems? Connect with us:</div>
       <div class="row g-2">
-        <div class="col-4"><a href="tel:<?= SITE_PHONE ?>" class="card p-3 text-center text-decoration-none d-block"><i class="bi bi-telephone text-primary"></i><div class="small fw-semibold mt-1">Phone</div></a></div>
+        <div class="col-4"><a href="tel:<?= esc(tel_e164(SITE_PHONE)) ?>" class="card p-3 text-center text-decoration-none d-block"><i class="bi bi-telephone text-primary"></i><div class="small fw-semibold mt-1">Phone</div></a></div>
         <div class="col-4"><a href="contact.php" class="card p-3 text-center text-decoration-none d-block"><i class="bi bi-envelope text-primary"></i><div class="small fw-semibold mt-1">Email</div></a></div>
         <div class="col-4"><a href="#" onclick="toggleChat();return false;" class="card p-3 text-center text-decoration-none d-block"><i class="bi bi-chat-dots text-primary"></i><div class="small fw-semibold mt-1">Chat</div></a></div>
       </div>

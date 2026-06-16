@@ -1,8 +1,8 @@
 <?php
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/seo-content.php';
-$pageTitle = SITE_BRAND . ' | Genuine Microsoft Software Licenses — Instant Delivery';
-$pageDescription = 'Genuine Microsoft Office 2024/2021/2019, Windows 11 and antivirus license keys at up to 81% off. Instant digital delivery in 15-30 minutes, lifetime activation, 30-day money-back guarantee.';
+$pageTitle = 'Microsoft Office & Windows 11 Keys | ' . SITE_BRAND;
+$pageDescription = 'Buy genuine Microsoft Office 2024, Windows 11 and antivirus keys at up to 81% off. Instant 15-30 minute delivery, lifetime activation.';
 $pageKeywords    = marquee_page_keywords('home');
 
 /* ================== SEO + GEO: WebSite + SearchAction schema =====
@@ -56,7 +56,7 @@ include __DIR__ . '/includes/header.php';
     <div class="row align-items-center g-4 g-lg-5">
       <div class="col-lg-7">
         <span class="hero-badge mb-3"><i class="bi bi-lightning-charge-fill me-1"></i>Instant Digital Delivery</span>
-        <h1 class="display-4">Boost Productivity with Microsoft Office 2024 <span class="accent">for Business and Personal Use</span></h1>
+        <h1 class="display-4">Genuine Microsoft Office &amp; Windows 11 Keys <span class="accent">for Business and Personal Use</span></h1>
         <p class="text-secondary fs-5 mt-3">Trusted by over fifty thousand users across the globe.</p>
         <ul class="list-unstyled d-grid gap-2 my-4">
           <li><i class="bi bi-check-circle-fill text-success me-2"></i>Genuine Microsoft License Keys</li>

@@ -1,8 +1,8 @@
 <?php
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/seo-content.php';
-$pageTitle = 'Shop All Products | ' . SITE_BRAND;
-$pageDescription = 'Browse our full catalog of genuine Microsoft Office, Windows, Project, Visio, Server and antivirus licenses. Filter by year, platform and price — instant digital delivery on every order.';
+$pageTitle = 'Shop Microsoft Office & Windows Keys | ' . SITE_BRAND;
+$pageDescription = 'Browse genuine Microsoft Office, Windows, Project, Visio and antivirus license keys. Filter by year, platform and price — instant delivery.';
 $pageKeywords    = marquee_page_keywords('shop');
 
 $selCats = array_values((array)($_GET['cat'] ?? []));
@@ -81,7 +81,7 @@ $jsonLdBreadcrumb = [
 
 include __DIR__ . '/includes/header.php';
 ?>
-<?= render_page_head('All Products', count($all) . ' genuine products — instant digital delivery on every order', ['Shop' => null]) ?>
+<?= render_page_head('Microsoft Office, Windows & Antivirus Keys', count($all) . ' genuine products — instant digital delivery on every order', ['Shop' => null]) ?>
 <div class="container py-4 py-lg-5">
   <form method="get" id="shopForm">
     <input type="hidden" name="view" value="<?= esc($view) ?>" id="viewInput">

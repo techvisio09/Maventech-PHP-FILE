@@ -5131,9 +5131,12 @@ https://youtu.be/YYYYY"><?php
               <td class="text-secondary"><?= date('M j, g:ia', strtotime($rr['started_at'])) ?></td>
               <td>
                 <?php if ($rr['indexnow_status'] === 'ok'): ?>
-                  <span class="badge rounded-pill" style="background:#d1fae5;color:#047857;font-size:10px;">Submitted <?= (int)$rr['indexnow_count'] ?> pages</span>
+                  <span class="badge rounded-pill" style="background:#d1fae5;color:#047857;font-size:10px;">IndexNow · <?= (int)$rr['indexnow_count'] ?></span>
                 <?php else: ?>
                   <span class="text-secondary">—</span>
+                <?php endif; ?>
+                <?php $wb = (string)($rr['wayback_status'] ?? ''); $wbc = (int)($rr['wayback_count'] ?? 0); if ($wb !== '' && $wb !== 'skipped'): ?>
+                  <span class="badge rounded-pill ms-1" style="background:#fef3c7;color:#92400e;font-size:10px;" title="Wayback Machine archived URLs — creates permanent inbound references."><i class="bi bi-archive"></i> Wayback · <?= $wbc ?></span>
                 <?php endif; ?>
               </td>
               <td>

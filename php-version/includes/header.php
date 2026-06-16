@@ -16,12 +16,17 @@ $brandEmail = $co['email'] ?: (defined('SITE_EMAIL') ? SITE_EMAIL : '');
 $brandPhone = $co['phone'] ?: (defined('SITE_PHONE') ? SITE_PHONE : '');
 $brandLogo  = $co['logo']  ?: '';
 $brandAddress = $co['address'] ?: (defined('SITE_ADDRESS') ? SITE_ADDRESS : '');
-$pageTitle = $pageTitle ?? ($brandName . ' | Genuine Microsoft Software');
+$pageTitle = $pageTitle ?? ($brandName . ' | Genuine Microsoft Software Keys');
 $cur = current_currency();
 $checkoutHeader = $checkoutHeader ?? false;
 
 /* ---- SEO defaults (pages may override before including this header) ---- */
-$pageDescription = $pageDescription ?? 'Buy genuine Microsoft Office, Windows and antivirus license keys at up to 81% off. Instant digital delivery, lifetime activation and 24/7 US-based support.';
+$pageDescription = $pageDescription ?? 'Buy genuine Microsoft Office, Windows 11 & antivirus license keys at up to 81% off. Instant delivery, lifetime activation, 24/7 US support.';
+/* Auto-clamp every page title (50-60 chars) and description (120-160 chars)
+   so admin-edited copy can never blow past Google's SERP cut-off. */
+$pageTitle       = seo_clamp_title($pageTitle, 60);
+$pageDescription = seo_clamp_description($pageDescription, 158);
+$pageTitleShort  = $pageTitleShort ?? seo_clamp_title(preg_replace('/\s+\|\s+.*$/u', '', $pageTitle), 55);
 $script = basename($_SERVER['SCRIPT_NAME'] ?? '');
 $noIndex = $noIndex ?? in_array($script, ['cart.php', 'checkout.php', 'login.php', 'register.php', 'account.php', 'admin.php', 'admin-email-preview.php', 'logout.php', 'order-success.php', '404.php'], true);
 if (!isset($canonicalUrl)) {
@@ -362,7 +367,7 @@ $ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.sv
       <span class="badge text-bg-warning text-dark">★ 4.6</span>
     </div>
     <div class="d-flex align-items-center gap-3 small">
-      <a href="tel:<?= esc($brandPhone) ?>" class="text-decoration-none fw-semibold"><i class="bi bi-telephone-fill me-1"></i><?= esc($brandPhone) ?></a>
+      <a href="tel:<?= esc(tel_e164($brandPhone)) ?>" class="text-decoration-none fw-semibold"><i class="bi bi-telephone-fill me-1"></i><?= esc($brandPhone) ?></a>
       <span class="text-success fw-semibold d-none d-sm-inline"><i class="bi bi-lock-fill me-1"></i>Secure Checkout</span>
     </div>
   </div>
@@ -419,7 +424,7 @@ if ($_vibePromo && !empty($_vibePromo['coupon_code']) && (int)$_vibePromo['coupo
     <div class="d-flex gap-3 align-items-center">
       <span class="badge text-bg-warning text-dark">★ Trusted Software Store</span>
       <span class="badge bg-white text-dark border">2 <small>YRS</small></span>
-      <a href="tel:<?= esc($brandPhone) ?>" class="text-decoration-none text-white trustbar-phone"><i class="bi bi-telephone-fill me-1"></i><?= esc($brandPhone) ?></a>
+      <a href="tel:<?= esc(tel_e164($brandPhone)) ?>" class="text-decoration-none text-white trustbar-phone"><i class="bi bi-telephone-fill me-1"></i><?= esc($brandPhone) ?></a>
     </div>
   </div>
 </div>
@@ -512,7 +517,7 @@ if ($_vibePromo && !empty($_vibePromo['coupon_code']) && (int)$_vibePromo['coupo
         <li class="nav-item"><a class="nav-link fw-semibold" href="track-order.php" data-testid="nav-track-order"><i class="bi bi-truck me-1"></i>Track Order</a></li>
       </ul>
       <div class="d-flex align-items-center gap-1 flex-nowrap" data-testid="navbar-actions" style="white-space:nowrap;">
-        <a href="tel:<?= esc($brandPhone) ?>" class="phone-cta d-none d-xl-inline-flex flex-shrink-0" data-testid="navbar-phone-cta" title="Call toll-free — Mon–Fri 9 AM–6 PM EST">
+        <a href="tel:<?= esc(tel_e164($brandPhone)) ?>" class="phone-cta d-none d-xl-inline-flex flex-shrink-0" data-testid="navbar-phone-cta" title="Call toll-free — Mon–Fri 9 AM–6 PM EST">
           <span class="phone-cta-icon"><i class="bi bi-telephone-fill"></i></span>
           <span class="fw-bold"><?= esc($brandPhone) ?></span>
         </a>
@@ -555,7 +560,7 @@ if ($_vibePromo && !empty($_vibePromo['coupon_code']) && (int)$_vibePromo['coupo
         <div class="text-secondary" style="font-size:.62rem;">Call Mon–Fri 9 AM–6 PM EST</div>
       </div>
       <div class="d-flex gap-2 flex-shrink-0">
-        <a href="tel:<?= esc($brandPhone) ?>" class="btn btn-sm rounded-pill fw-bold phone-cta-mobile" data-testid="mobile-call-btn"><i class="bi bi-telephone-fill me-1"></i><?= esc($brandPhone) ?></a>
+        <a href="tel:<?= esc(tel_e164($brandPhone)) ?>" class="btn btn-sm rounded-pill fw-bold phone-cta-mobile" data-testid="mobile-call-btn"><i class="bi bi-telephone-fill me-1"></i><?= esc($brandPhone) ?></a>
         <button class="btn btn-sm btn-primary rounded-pill fw-bold" style="font-size:.7rem;" onclick="toggleChat()" data-testid="mobile-chat-btn"><i class="bi bi-chat-dots-fill me-1"></i>Chat</button>
       </div>
     </div>

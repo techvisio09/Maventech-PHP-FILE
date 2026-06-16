@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/includes/functions.php';
-$pageTitle = 'Contact Us | ' . SITE_BRAND;
-$pageDescription = 'Get in touch with the ' . SITE_BRAND . ' team — sales, activation help, refunds and partnership enquiries. Live chat, email and phone support Monday to Saturday.';
+$pageTitle = 'Contact ' . SITE_BRAND . ' | Sales, Support & Activation';
+$pageDescription = 'Get in touch with ' . SITE_BRAND . ' for sales, activation help, refunds or partnerships. Live chat, email and phone support Mon–Sat.';
 
 /* ================== SEO + AEO + GEO: ContactPage + Organization =====
    Tells Google / Bing / ChatGPT / Perplexity exactly who to contact
@@ -103,7 +103,7 @@ include __DIR__ . '/includes/header.php';
 <div class="page-head">
   <div class="container py-5 text-center">
     <span class="eyebrow">WE'RE HERE TO HELP</span>
-    <h1 class="fw-bold display-6 mt-1" data-testid="contact-title">Contact Us</h1>
+    <h1 class="fw-bold display-6 mt-1" data-testid="contact-title">Contact <?= esc(SITE_BRAND) ?> — Sales &amp; Support</h1>
     <p class="text-secondary mx-auto" style="max-width:620px;">Have questions about your order, license activation, or need technical support? Our team is ready to assist you.</p>
     <div class="d-flex justify-content-center gap-4 flex-wrap small mt-3">
       <span><i class="bi bi-patch-check-fill text-success me-1"></i>Genuine Microsoft Licenses</span>
@@ -139,7 +139,7 @@ include __DIR__ . '/includes/header.php';
         <i class="bi bi-telephone-fill text-primary fs-2"></i>
         <h3 class="h6 fw-bold mt-2 mb-1">Phone Support</h3>
         <small class="text-secondary d-block mb-2">Talk to a specialist</small>
-        <a href="tel:<?= SITE_PHONE ?>" class="fw-bold text-decoration-none"><?= SITE_PHONE ?></a>
+        <a href="tel:<?= esc(tel_e164(SITE_PHONE)) ?>" class="fw-bold text-decoration-none"><?= SITE_PHONE ?></a>
       </div>
     </div>
   </div>

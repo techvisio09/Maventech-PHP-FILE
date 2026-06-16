@@ -71,6 +71,54 @@ function esc($s): string
 }
 
 /**
+ * SEO helpers — keep `<title>` and `<meta description>` within the lengths
+ * Google actually renders on the SERP.  Cuts on the nearest word boundary
+ * and appends an ellipsis when truncated; idempotent on already-short input.
+ *
+ * Targets follow Moz / Ahrefs guidance:
+ *   • title       → 50-60 chars (we hard-cap at 60)
+ *   • description → 120-160 chars (we hard-cap at 158)
+ */
+function seo_clamp_title(string $title, int $max = 60): string
+{
+    $title = trim(preg_replace('/\s+/u', ' ', $title));
+    if (mb_strlen($title) <= $max) return $title;
+    $cut = mb_substr($title, 0, $max - 1);
+    $sp  = mb_strrpos($cut, ' ');
+    if ($sp !== false && $sp > $max * 0.6) $cut = mb_substr($cut, 0, $sp);
+    return rtrim($cut, " -—|·,:;") . '…';
+}
+
+function seo_clamp_description(string $desc, int $max = 158): string
+{
+    $desc = trim(preg_replace('/\s+/u', ' ', $desc));
+    if (mb_strlen($desc) <= $max) return $desc;
+    $cut = mb_substr($desc, 0, $max - 1);
+    $sp  = mb_strrpos($cut, ' ');
+    if ($sp !== false && $sp > $max * 0.6) $cut = mb_substr($cut, 0, $sp);
+    return rtrim($cut, " -—|·,:;") . '…';
+}
+
+/**
+ * Convert any human-readable phone string (e.g. "1-888-632-9902",
+ * "(888) 632-9902 ext. 12") into an RFC-3966-safe `tel:` URI value in
+ * E.164 form when possible: "+18886329902".  Falls back gracefully if
+ * the input is too short or already contains a leading "+".
+ */
+function tel_e164(string $phone): string
+{
+    $raw = trim($phone);
+    if ($raw === '') return '';
+    $hasPlus = str_starts_with($raw, '+');
+    $digits  = preg_replace('/\D+/', '', $raw);
+    if ($digits === '' || strlen($digits) < 7) return $raw;
+    // US/CA default: 10-digit number gets +1 prefix.
+    if (!$hasPlus && strlen($digits) === 10) return '+1' . $digits;
+    if (!$hasPlus && strlen($digits) === 11 && $digits[0] === '1') return '+' . $digits;
+    return ($hasPlus ? '+' : '+') . $digits;
+}
+
+/**
  * Returns the base URL path the application is installed under, always with
  * a trailing slash.  Works whether the project lives at the domain root
  * ("/") or inside a subfolder ("/admin/", "/my-shop/").
@@ -1113,7 +1161,7 @@ function render_menu_promo(bool $compact = false): string
             . '<a href="contact.php" class="btn btn-sm btn-primary rounded-pill" style="padding:.28rem .85rem;font-size:.76rem;" data-testid="menu-request-quote">Request a Quote</a>';
     $question = '<div class="fw-semibold small" style="font-size:.82rem;">Have a Question?</div>'
               . '<small class="text-secondary d-block" style="font-size:.7rem;">Call Mon–Fri 9 AM–6 PM EST</small>'
-              . '<a href="tel:' . esc($phone) . '" class="fw-semibold text-decoration-none" style="font-size:.82rem;">' . esc($phone) . '</a> '
+              . '<a href="tel:' . esc(tel_e164($phone)) . '" class="fw-semibold text-decoration-none" style="font-size:.82rem;">' . esc($phone) . '</a> '
               . '<small class="text-secondary" style="font-size:.72rem;">or</small> '
               . '<a href="#" onclick="toggleChat();return false;" class="fw-semibold text-decoration-none text-primary" style="font-size:.78rem;">chat with a sales expert</a>';
     if ($compact) {

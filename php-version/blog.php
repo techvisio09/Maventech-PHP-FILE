@@ -1,8 +1,8 @@
 <?php
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/seo-content.php';
-$pageTitle = 'Blog | ' . SITE_BRAND;
-$pageDescription = 'Guides, tips and comparisons for Microsoft Office, Windows and security software — installation help, feature breakdowns and buying advice from the ' . SITE_BRAND . ' team.';
+$pageTitle = 'Microsoft Software Guides & Tutorials | ' . SITE_BRAND;
+$pageDescription = 'Guides, tips and comparisons for Microsoft Office, Windows and security software — install help, features and buying advice from ' . SITE_BRAND . '.';
 $pageKeywords    = marquee_page_keywords('blog');
 
 $perPage = 10;
@@ -103,7 +103,7 @@ $jsonLdBreadcrumb = [
 
 include __DIR__ . '/includes/header.php';
 ?>
-<?= render_page_head(SITE_BRAND . ' Blog', 'Expert tips, guides, and insights to help you get the most out of your software.', ['Blog' => null]) ?>
+<?= render_page_head('Microsoft Software Guides & Tutorials', 'Expert tips, guides and comparisons to help you choose, install and activate genuine software.', ['Blog' => null]) ?>
 <div class="container py-4 py-lg-5">
 
   <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">

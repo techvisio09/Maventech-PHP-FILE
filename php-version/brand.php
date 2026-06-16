@@ -93,8 +93,8 @@ if ($products) {
     $reviewCount = $rWeights;
 }
 
-$pageTitle       = $brandLabel . ' — All Products & Articles | ' . SITE_BRAND;
-$pageDescription = 'Shop all genuine ' . $brandLabel . ' software licenses at ' . SITE_BRAND . '. ' . count($products) . ' products available · ' . count($articles) . ' editorial articles · instant digital delivery to US, UK, AU and CA.';
+$pageTitle       = $brandLabel . ' Software Keys & Guides | ' . SITE_BRAND;
+$pageDescription = 'Shop genuine ' . $brandLabel . ' software keys at ' . SITE_BRAND . ' — ' . count($products) . ' products, ' . count($articles) . ' guides, instant delivery.';
 $pageKeywords    = $brandLabel . ' licenses, buy ' . $brandLabel . ', ' . $brandLabel . ' software, ' . $brandLabel . ' deals';
 $canonicalUrl    = site_url() . '/brand.php?slug=' . rawurlencode($slug);
 $ogType          = 'website';

@@ -25,10 +25,10 @@ if ($isPlatformCat && $platform !== $implied) {
 }
 
 $year = date('Y');
-/* SEO: long-tail title that targets two-to-three intent variants in one tag.
- * Examples: "Microsoft Office 2024 for PC — Lifetime License Keys (2026) | Brand" */
-$pageTitle       = $title . ' — Lifetime License Keys (' . $year . ') | ' . SITE_BRAND;
-$pageDescription = 'Buy genuine ' . $title . ' license keys at up to 81% off retail. Lifetime perpetual licence, no subscription, instant email delivery in 15-30 minutes and 30-day money-back guarantee from ' . SITE_BRAND . '. Updated ' . $year . '.';
+/* SEO: tight 50-60 char title and 120-160 char description.
+ * Example: "Microsoft Office 2024 License Keys (2026) | Maventech" */
+$pageTitle       = $title . ' License Keys (' . $year . ') | ' . SITE_BRAND;
+$pageDescription = 'Buy genuine ' . $title . ' keys at up to 81% off — lifetime activation, no subscription, instant 15-30 min delivery from ' . SITE_BRAND . '.';
 $pageKeywords    = category_long_tail_keywords($title, $platform);
 
 $products = get_products($cats, $platform, $sort);
@@ -62,8 +62,8 @@ include __DIR__ . '/includes/header.php';
  * shows two stacked trails (Feb 2026 alignment fix). */
 ?>
 <?= render_page_head(
-        $title . ' Products',
-        count($products) . ' products — genuine licenses, delivered in minutes',
+        $title . ' License Keys',
+        count($products) . ' genuine ' . $title . ' license keys — lifetime activation, delivered in 15-30 minutes',
         ['Shop' => 'shop.php', $title => null],
         'category-title',
         [

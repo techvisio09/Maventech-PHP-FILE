@@ -81,6 +81,23 @@ if (preg_match('#^/hub/([a-z0-9\-]+)/?$#', $path, $m)) {
     require __DIR__ . '/hub.php';
     return true;
 }
+
+/* ============================================================
+ *  BACKLINK BOOTSTRAP — Embeddable badge widget.
+ *  Partners/bloggers paste a single <script> tag on their site:
+ *     <script src="https://yourdomain/embed/badge.js"
+ *             data-product="microsoft-office-2024" async></script>
+ *  That script injects a styled "Buy from Maventech" badge that
+ *  links back to us with a UTM-tagged anchor — every install is
+ *  a real, crawlable backlink. */
+if ($path === '/embed/badge.js' || $path === '/embed/badge') {
+    require __DIR__ . '/embed-badge.php';
+    return true;
+}
+if ($path === '/embed' || $path === '/embed/' || $path === '/press-kit' || $path === '/press-kit.php') {
+    require __DIR__ . '/press-kit.php';
+    return true;
+}
 // Serve site assets even when accessed under /hub/... (the browser
 // resolves relative URLs like `assets/css/x.css` against /hub/<slug>
 // — without a trailing slash, the last segment is dropped, so requests

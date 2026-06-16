@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/includes/functions.php';
-$pageTitle = 'About Us | ' . SITE_BRAND;
-$pageDescription = SITE_BRAND . ' is a licensed digital software reseller specialising in genuine Microsoft Office, Windows and antivirus licence keys at up to 81% below retail. Trusted by 50,000+ home users, small businesses and IT teams.';
+$pageTitle = 'About ' . SITE_BRAND . ' | Genuine Software Licenses';
+$pageDescription = SITE_BRAND . ' resells genuine Microsoft Office, Windows and antivirus keys at up to 81% off — trusted by 50,000+ users worldwide.';
 
 /* AboutPage schema — gives AI search engines and Google a clear,
    citation-friendly snapshot of who we are, what we sell, and why

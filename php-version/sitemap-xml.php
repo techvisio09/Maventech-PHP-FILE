@@ -49,6 +49,7 @@ foreach ([
     ['/why-choose-us.php', '0.6', 'monthly'],
     ['/affiliate.php',     '0.6', 'monthly'],
     ['/contact.php',       '0.6', 'monthly'],
+    ['/press-kit',         '0.6', 'monthly'],
     ['/support.php',       '0.6', 'monthly'],
     ['/returns.php',       '0.5', 'monthly'],
     ['/sitemap.php',       '0.4', 'monthly'],

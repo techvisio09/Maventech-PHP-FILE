@@ -48,7 +48,7 @@
           <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-arrow-right"></i></button>
         </form>
 
-        <p class="small mb-1"><i class="bi bi-telephone me-2 text-info"></i><a href="tel:<?= esc($brandPhone) ?>"><?= esc($brandPhone) ?></a></p>
+        <p class="small mb-1"><i class="bi bi-telephone me-2 text-info"></i><a href="tel:<?= esc(tel_e164($brandPhone)) ?>"><?= esc($brandPhone) ?></a></p>
         <p class="small mb-1"><i class="bi bi-envelope me-2 text-info"></i><a href="mailto:<?= esc($brandEmail) ?>"><?= esc($brandEmail) ?></a></p>
         <p class="small mb-2"><i class="bi bi-geo-alt me-2 text-info"></i><?= esc($brandAddress) ?></p>
         <a href="https://www.google.com/maps/search/?api=1&query=<?= urlencode($brandAddress) ?>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-light rounded-pill mb-2 gmap-btn" data-testid="footer-gmap-btn">
@@ -114,6 +114,7 @@
             <li><a href="brand.php?slug=<?= esc($bSlug) ?>" data-testid="footer-brand-<?= esc($bSlug) ?>"><?= esc($bn) ?> Hub</a></li>
           <?php endforeach; ?>
           <li><a href="affiliate.php">Affiliate Program</a></li>
+          <li><a href="press-kit" data-testid="footer-press-kit">Press Kit &amp; Embeds</a></li>
         </ul>
       </div>
     </div>
@@ -259,7 +260,7 @@
       </div>
       <div class="pa-welcome-body">
         <p class="mb-2">For Pro Assistance, please type your message below to connect with an agent — or call our toll-free number.</p>
-        <a href="tel:<?= esc($brandPhone) ?>" class="pa-welcome-phone" data-testid="pa-welcome-phone">
+        <a href="tel:<?= esc(tel_e164($brandPhone)) ?>" class="pa-welcome-phone" data-testid="pa-welcome-phone">
           <i class="bi bi-telephone-fill"></i><?= esc($brandPhone) ?>
         </a>
       </div>
@@ -279,7 +280,7 @@
     <input id="chat-input" class="form-control form-control-sm chat-input" placeholder="Type a message…" autocomplete="off" data-testid="chat-input">
     <button class="btn chat-send-btn" type="submit" aria-label="Send" data-testid="chat-send"><i class="bi bi-send-fill"></i></button>
   </form>
-  <div class="chat-talk-band" data-testid="chat-talk-band">Prefer to talk?<a href="tel:<?= esc($brandPhone) ?>" class="chat-talk-phone" data-testid="chat-talk-phone"><i class="bi bi-telephone-fill chat-talk-phone-ring"></i><?= esc($brandPhone) ?></a></div>
+  <div class="chat-talk-band" data-testid="chat-talk-band">Prefer to talk?<a href="tel:<?= esc(tel_e164($brandPhone)) ?>" class="chat-talk-phone" data-testid="chat-talk-phone"><i class="bi bi-telephone-fill chat-talk-phone-ring"></i><?= esc($brandPhone) ?></a></div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>

@@ -110,7 +110,7 @@ include __DIR__ . '/includes/header.php';
 
   <div class="text-center small text-secondary mt-4">
     Questions about refunds? Read our <a href="page.php?slug=refund-policy" class="fw-semibold text-decoration-none">Refund Policy</a>
-    or call <a href="tel:<?= SITE_PHONE ?>" class="fw-semibold text-decoration-none"><?= SITE_PHONE ?></a> (<?= SITE_HOURS ?>).
+    or call <a href="tel:<?= esc(tel_e164(SITE_PHONE)) ?>" class="fw-semibold text-decoration-none"><?= SITE_PHONE ?></a> (<?= SITE_HOURS ?>).
   </div>
 </div>
 <?php include __DIR__ . '/includes/footer.php'; ?>
