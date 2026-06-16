@@ -299,8 +299,8 @@ include __DIR__ . '/includes/header.php';
       <div class="d-flex gap-3 align-items-center mb-4 flex-wrap">
         <div class="input-group" style="width: 130px;">
           <button class="btn btn-outline-secondary" type="button" onclick="const q=document.getElementById('pd-qty'); q.value=Math.max(1, parseInt(q.value)-1)" <?= $stockN<=0?'disabled':'' ?>>−</button>
-          <input id="pd-qty" type="number" class="form-control text-center" value="1" min="1" max="<?= max(1,$stockN) ?>" <?= $stockN<=0?'disabled':'' ?> data-testid="pd-qty-input">
-          <button class="btn btn-outline-secondary" type="button" onclick="const q=document.getElementById('pd-qty'); q.value=Math.min(<?= max(1,$stockN) ?>, parseInt(q.value)+1)" <?= $stockN<=0?'disabled':'' ?>>+</button>
+          <input id="pd-qty" type="number" class="form-control text-center" value="1" min="1" max="100" <?= $stockN<=0?'disabled':'' ?> data-testid="pd-qty-input">
+          <button class="btn btn-outline-secondary" type="button" onclick="const q=document.getElementById('pd-qty'); q.value=Math.min(100, parseInt(q.value)+1)" <?= $stockN<=0?'disabled':'' ?>>+</button>
         </div>
         <?php if ($stockN > 0): ?>
           <button class="btn btn-orange-solid btn-lg rounded-pill px-4 add-to-cart-btn" data-slug="<?= esc($product['slug']) ?>" data-testid="pd-add-to-cart"><i class="bi bi-cart-plus me-2"></i>Add to Cart</button>

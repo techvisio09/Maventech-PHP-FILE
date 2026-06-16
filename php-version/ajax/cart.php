@@ -17,39 +17,45 @@ if ($action === 'add' && $slug && get_product($slug)) {
         echo json_encode(['ok' => false, 'error' => 'This product is currently out of stock.', 'count' => cart_count()]);
         exit;
     }
-    // Cap final cart line at available stock
-    $newQty = min($stock, $cur + $qty);
-    $capped = ($newQty < $cur + $qty);
+    // Multi-seat semantics: one license key covers N PCs/devices. `qty` is the
+    // seat count the customer wants on a single key — it never consumes more
+    // than ONE key from stock no matter how large. So we no longer cap qty by
+    // stock; only enforce a sane upper bound (100 seats) to block accidental
+    // 9999 typos. Once the order is fulfilled, fulfill_order() flips exactly
+    // ONE license_key.status='sold' regardless of qty.
+    $SEAT_CAP   = 100;
+    $newQty     = min($SEAT_CAP, $cur + $qty);
+    $cappedAt   = $newQty < ($cur + $qty);
     $_SESSION['cart'][$slug] = $newQty;
-    if ($capped) {
+    if ($cappedAt) {
         echo json_encode([
             'ok'      => true,
             'capped'  => true,
             'qty'     => $newQty,
             'stock'   => $stock,
-            'message' => "Only {$stock} unit" . ($stock===1?'':'s') . " available — cart updated to {$newQty}.",
+            'message' => "Capped at {$SEAT_CAP} seats per license.",
             'count'   => cart_count(),
         ]);
         exit;
     }
 } elseif ($action === 'set' && $slug && get_product($slug)) {
-    // "Buy Now" semantics: set the line to EXACTLY the selected qty (1 by default).
-    // No accumulation — clicking Buy Now twice still means "I want N of this", not 2N.
+    // "Buy Now" semantics: set the line to EXACTLY the selected seat count.
     $qty = max(1, (int)($in['qty'] ?? 1));
     $stock = available_keys_count($slug);
     if ($stock <= 0) {
         echo json_encode(['ok' => false, 'error' => 'This product is currently out of stock.', 'count' => cart_count()]);
         exit;
     }
-    $capped = $qty > $stock;
-    $_SESSION['cart'][$slug] = min($stock, $qty);
+    $SEAT_CAP = 100;
+    $capped   = $qty > $SEAT_CAP;
+    $_SESSION['cart'][$slug] = min($SEAT_CAP, $qty);
     if ($capped) {
         echo json_encode([
             'ok'      => true,
             'capped'  => true,
             'qty'     => $_SESSION['cart'][$slug],
             'stock'   => $stock,
-            'message' => "Only {$stock} unit" . ($stock===1?'':'s') . " available — quantity set to {$stock}.",
+            'message' => "Capped at {$SEAT_CAP} seats per license.",
             'count'   => cart_count(),
         ]);
         exit;
@@ -65,15 +71,16 @@ if ($action === 'add' && $slug && get_product($slug)) {
             echo json_encode(['ok' => false, 'error' => 'This product is now out of stock.', 'count' => cart_count()]);
             exit;
         }
-        $capped = $qty > $stock;
-        $_SESSION['cart'][$slug] = min($stock, $qty);
+        $SEAT_CAP = 100;
+        $capped   = $qty > $SEAT_CAP;
+        $_SESSION['cart'][$slug] = min($SEAT_CAP, $qty);
         if ($capped) {
             echo json_encode([
                 'ok'      => true,
                 'capped'  => true,
                 'qty'     => $_SESSION['cart'][$slug],
                 'stock'   => $stock,
-                'message' => "Only {$stock} unit" . ($stock===1?'':'s') . " available.",
+                'message' => "Capped at {$SEAT_CAP} seats per license.",
                 'count'   => cart_count(),
             ]);
             exit;
