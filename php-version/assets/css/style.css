@@ -1336,12 +1336,12 @@ body.has-deal-bar #chat-panel { bottom: 72px; }
  * pulse animation so it still pops, but the height now matches its
  * neighbours (≈32 px) instead of towering over them. */
 .phone-cta { align-items: center; gap: .4rem; padding: .25rem .85rem .25rem .3rem; border-radius: 999px;
-  background: linear-gradient(135deg, #ff7849, #ea580c); color: #fff !important; text-decoration: none;
+  background: linear-gradient(135deg, #1565C0, #0D47A1); color: #fff !important; text-decoration: none;
   font-weight: 700; font-size: .85rem; line-height: 1; letter-spacing: .01em; white-space: nowrap;
   box-shadow: 0 6px 14px rgba(255, 120, 73, .32);
   animation: phone-pulse 2.6s ease-in-out infinite;
   transition: transform .15s ease, box-shadow .15s ease; }
-.phone-cta:hover { color: #fff; transform: translateY(-1px) scale(1.02); box-shadow: 0 10px 22px rgba(255, 120, 73, .5); }
+.phone-cta:hover { color: #fff; transform: translateY(-1px) scale(1.02); box-shadow: 0 10px 22px rgba(21, 101, 192, .5); }
 .phone-cta-icon { width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0; font-size: .8rem;
   background: rgba(255, 255, 255, .22); border: 1px solid rgba(255, 255, 255, .38);
   display: inline-flex; align-items: center; justify-content: center;
@@ -1371,7 +1371,7 @@ body.has-deal-bar #chat-panel { bottom: 72px; }
   animation: phone-ring 2.6s ease-in-out infinite;
   display: inline-block;
 }
-.phone-cta-mobile { font-size: .78rem; background: linear-gradient(135deg, #ff7849, #ea580c); color: #fff;
+.phone-cta-mobile { font-size: .78rem; background: linear-gradient(135deg, #1565C0, #0D47A1); color: #fff;
   border: none; box-shadow: 0 4px 12px rgba(255, 120, 73, .35); animation: phone-pulse 2.6s ease-in-out infinite; }
 .phone-cta-mobile:hover { color: #fff; }
 @media (prefers-reduced-motion: reduce) { .phone-cta, .phone-cta-icon, .trustbar-phone .bi, .phone-cta-mobile { animation: none; } }
