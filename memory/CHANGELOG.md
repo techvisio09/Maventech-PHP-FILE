@@ -1,4 +1,26 @@
 # Changelog
+## 2026-02-15 — PayPal outline highlight + product elegance + mega-menu shrink v3
+
+### New asks delivered (3 changes)
+1. **Product boxes more elegant** — 1.5px outer outline (rgba(15,23,42,.14)), 14px border-radius, refined inner image-wrap with light gradient, hover lifts border to `#0f172a` solid + translateY(-3px) + 12px shadow.
+
+2. **PayPal-style outlined boxes & buttons** (every clickable element):
+   - `.btn-hero-cta` (Shop Now) → solid dark `#0f172a` pill with 1.5px border, white text — exactly like PayPal "Pay with PayPal"
+   - `.btn-hero-ghost` (Compare Editions) → white pill, 1.5px dark border, dark text
+   - `.btn-primary`, `.btn-outline-primary`, `.btn-outline-secondary` → all rebuilt as dark pill outlines
+   - `.card`, `.product-card`, `.spotlight-card`, `.side-product-row`, `[data-testid="welcome-back-strip"]`, trust-badges, how-it-works, why-choose, accordion-items → all get the 1.5px dark outline + refined hover
+   - `.cat-chip` → pill outline, dark on hover
+   - Dark-mode mirror for all of the above
+
+3. **Mega-menu shrunk further (v3)**:
+   - Microsoft Products: padding `1rem 1.1rem` → `.7rem .85rem`, mega-heading `.65rem` → `.6rem`, mega-year `.82rem` → `.78rem`, mega-link `.76rem` → `.72rem`
+   - Antivirus: min-width `250px` → `220px`, padding `.85rem` → `.65rem`, border-radius `.75rem` → `.65rem`
+   - Volume Pricing promo: even tighter — fonts, button padding, icon size reduced
+
+Verified visually: hero, both mega-menus, best-sellers spotlight, picked-for-you grid, trust badges, how-it-works, why-choose, FAQ — every box has refined defined outlines, buttons feel like PayPal pills, mega-menus are significantly smaller.
+
+---
+
 ## 2026-02-15 — PayPal-style typography (heavy headings + clean body) — v3
 
 ### Big swing: bold display headings + light body

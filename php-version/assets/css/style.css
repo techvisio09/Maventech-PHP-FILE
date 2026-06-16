@@ -2122,52 +2122,56 @@ h5, .h5, h6, .h6 { font-weight: 700; letter-spacing: -.01em; color: var(--bs-emp
 }
 .hero .hero-stats .fs-3 { font-weight: 800; letter-spacing: -.02em; }
 
-/* --- 3. Shrink the Microsoft Products mega menu --- */
+/* --- 3. Shrink the Microsoft Products mega menu (v3: even smaller) --- */
 .navbar .dropdown-menu.mega {
-  padding: 1rem 1.1rem !important;          /* override inline p-4 */
-  border-radius: 0 0 .85rem .85rem;
-  box-shadow: 0 14px 36px rgba(2, 6, 23, .12);
+  padding: .7rem .85rem !important;
+  border-radius: 0 0 .75rem .75rem;
+  box-shadow: 0 12px 30px rgba(2, 6, 23, .1);
+  border: 1px solid rgba(15, 23, 42, .08);
+  max-width: 1100px;
 }
-.navbar .dropdown-menu.mega .row { --bs-gutter-x: 1.1rem; --bs-gutter-y: .5rem; }
+.navbar .dropdown-menu.mega .row { --bs-gutter-x: .85rem; --bs-gutter-y: .35rem; }
 .mega .mega-heading,
 .antivirus-menu .mega-heading {
-  font-size: .65rem !important;
-  letter-spacing: .12em;
-  margin-bottom: .35rem !important;
+  font-size: .6rem !important;
+  letter-spacing: .14em;
+  margin-bottom: .22rem !important;
   font-weight: 600;
 }
 .mega-year {
-  font-size: .82rem;
-  padding: .14rem 0;
+  font-size: .78rem;
+  padding: .1rem 0;
   font-weight: 500;
-  line-height: 1.35;
+  line-height: 1.3;
 }
 .antivirus-menu .mega-link,
 .mega a.mega-link {
-  font-size: .76rem;
-  padding: .14rem 0;
+  font-size: .72rem;
+  padding: .1rem 0;
   font-weight: 500;
 }
 .mega a.mega-link.fw-bold,
-.antivirus-menu a.mega-link.fw-bold { font-weight: 600 !important; }
+.antivirus-menu a.mega-link.fw-bold { font-weight: 600 !important; font-size: .74rem; }
 
-/* --- 4. Shrink the Antivirus dropdown --- */
+/* --- 4. Shrink the Antivirus dropdown (v3: even tighter) --- */
 .navbar .dropdown-menu.antivirus-menu {
-  min-width: 250px !important;
-  padding: .85rem !important;
-  border-radius: .75rem;
+  min-width: 220px !important;
+  padding: .65rem !important;
+  border-radius: .65rem;
+  border: 1px solid rgba(15, 23, 42, .08);
 }
 
 /* --- 5. Compact the Volume Pricing / Have-a-Question promo strip --- */
 .dropdown-menu .mega-promo {
-  margin-top: .85rem !important;
-  padding-top: .85rem !important;
-  font-size: .82rem;
+  margin-top: .6rem !important;
+  padding-top: .6rem !important;
+  font-size: .78rem;
 }
-.dropdown-menu .mega-promo .fw-bold { font-size: .9rem; font-weight: 600 !important; }
-.dropdown-menu .mega-promo small { font-size: .72rem; }
-.dropdown-menu .mega-promo .btn-sm { padding: .3rem .85rem; font-size: .78rem; }
-.dropdown-menu .mega-promo .bi-boxes { font-size: 1.1rem !important; }
+.dropdown-menu .mega-promo .fw-bold,
+.dropdown-menu .mega-promo .fw-semibold { font-size: .82rem; font-weight: 600 !important; }
+.dropdown-menu .mega-promo small { font-size: .68rem; }
+.dropdown-menu .mega-promo .btn-sm { padding: .25rem .75rem; font-size: .72rem; }
+.dropdown-menu .mega-promo .bi-boxes { font-size: .95rem !important; }
 
 /* Topic hubs strip under the menu — slim it down */
 .dropdown-menu.mega > .border-top { margin-top: .7rem !important; padding-top: .6rem !important; }
@@ -2232,4 +2236,247 @@ section p, section li, .accordion-body { font-weight: 400; }
   .navbar .dropdown-menu.mega { padding: .85rem !important; }
   .navbar .dropdown-menu.mega .row { --bs-gutter-x: .75rem; }
   .mega-year { font-size: .85rem; }
+}
+
+
+/* ============================================================
+   PAYPAL-STYLE OUTLINE HIGHLIGHT v3 (Feb 2026)
+   Goal: every clickable / content box has a clear, refined outer
+   layer like the PayPal "Pay with PayPal" pill — pronounced
+   dark border, no chunky fill, refined hover lift.
+   ============================================================ */
+
+/* --- All content cards get a defined PayPal-style outer outline --- */
+.card,
+.spotlight-card,
+.side-product-row {
+  border: 1.5px solid rgba(15, 23, 42, .15) !important;
+  border-radius: 14px;
+  background-color: #fff;
+  box-shadow: 0 1px 2px rgba(2, 6, 23, .02);
+  transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+.card:hover,
+.spotlight-card:hover,
+.side-product-row:hover {
+  border-color: rgba(15, 23, 42, .35) !important;
+  box-shadow: 0 8px 22px rgba(2, 6, 23, .08);
+}
+
+/* Product cards — refined elegance with crisper outline */
+.product-card {
+  border: 1.5px solid rgba(15, 23, 42, .14) !important;
+  border-radius: 14px;
+  background: #fff;
+  overflow: hidden;
+  transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+}
+.product-card:hover {
+  border-color: #0f172a !important;
+  box-shadow: 0 12px 28px rgba(2, 6, 23, .1);
+  transform: translateY(-3px);
+}
+.product-card .product-img-wrap {
+  border-radius: 10px !important;
+  border: 1px solid rgba(15, 23, 42, .06);
+  background: linear-gradient(180deg, #fafbfd, #f1f5f9) !important;
+}
+
+/* Welcome-back outer wrapper card — distinct outline */
+[data-testid="welcome-back-strip"] {
+  border: 1.5px solid rgba(15, 23, 42, .15) !important;
+  border-radius: 14px;
+}
+[data-testid="welcome-back-strip"] .card {
+  border: 1px solid rgba(15, 23, 42, .1) !important;
+  border-radius: 10px;
+}
+
+/* Trust badges — defined outlines */
+[data-testid="trust-badges-row"] .card,
+[data-testid="how-it-works"] .card,
+[data-testid="why-choose-grid"] .card,
+[data-testid="trust-badges-row"] > div > .card {
+  border: 1.5px solid rgba(15, 23, 42, .14) !important;
+  border-radius: 14px;
+}
+
+/* --- Buttons get the PayPal pill-outline aesthetic --- */
+.btn-hero-cta {
+  background: #0f172a !important;
+  color: #fff !important;
+  border: 1.5px solid #0f172a !important;
+  border-radius: 999px;
+  padding: .7rem 1.85rem;
+  font-weight: 700;
+  letter-spacing: -.005em;
+  box-shadow: none;
+  transition: background .18s ease, transform .18s ease, box-shadow .18s ease;
+}
+.btn-hero-cta:hover,
+.btn-hero-cta:focus {
+  background: #1e293b !important;
+  color: #fff !important;
+  border-color: #1e293b !important;
+  transform: translateY(-2px);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, .25);
+}
+
+.btn-hero-ghost {
+  background: #fff !important;
+  color: #0f172a !important;
+  border: 1.5px solid #0f172a !important;
+  border-radius: 999px;
+  padding: .65rem 1.75rem;
+  font-weight: 600;
+  transition: background .18s ease, color .18s ease, transform .18s ease;
+}
+.btn-hero-ghost:hover,
+.btn-hero-ghost:focus {
+  background: #0f172a !important;
+  color: #fff !important;
+  transform: translateY(-2px);
+}
+
+/* Outline-style primary buttons / category chips */
+.btn-outline-primary {
+  border: 1.5px solid #0f172a !important;
+  color: #0f172a !important;
+  border-radius: 999px;
+  background: transparent !important;
+  font-weight: 600;
+}
+.btn-outline-primary:hover,
+.btn-outline-primary:focus {
+  background: #0f172a !important;
+  color: #fff !important;
+  border-color: #0f172a !important;
+  transform: translateY(-1px);
+}
+
+.btn-outline-secondary {
+  border: 1.5px solid rgba(15, 23, 42, .35) !important;
+  color: #0f172a !important;
+  border-radius: 999px;
+  background: transparent !important;
+}
+.btn-outline-secondary:hover {
+  background: #0f172a !important;
+  color: #fff !important;
+  border-color: #0f172a !important;
+}
+
+/* Primary solid button (Shop Now in body / Add to Cart) — refined dark pill */
+.btn-primary {
+  background-image: none !important;
+  background-color: #0f172a !important;
+  border: 1.5px solid #0f172a !important;
+  color: #fff !important;
+  border-radius: 999px;
+  font-weight: 600;
+}
+.btn-primary:hover,
+.btn-primary:focus {
+  background-color: #1e293b !important;
+  border-color: #1e293b !important;
+  color: #fff !important;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, .22);
+}
+
+/* Category chips & browse pills */
+.cat-chip {
+  border: 1.5px solid rgba(15, 23, 42, .14) !important;
+  border-radius: 999px;
+  padding: .35rem .9rem;
+  color: #0f172a;
+  background: #fff;
+  font-weight: 500;
+  font-size: .82rem;
+  transition: border-color .15s ease, background .15s ease, color .15s ease;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.cat-chip:hover {
+  border-color: #0f172a !important;
+  background: #0f172a;
+  color: #fff;
+}
+
+/* Accordion items get the PayPal outline */
+.accordion-item {
+  border: 1.5px solid rgba(15, 23, 42, .14) !important;
+  border-radius: 12px !important;
+  margin-bottom: .5rem;
+  overflow: hidden;
+}
+.accordion-button {
+  background: #fff;
+  font-weight: 600;
+}
+.accordion-button:not(.collapsed) {
+  background: #f8fafc;
+  color: #0f172a;
+  box-shadow: none;
+}
+
+/* Hero photo CTA tiles / hero rating chip */
+.hero-rating-chip {
+  border: 1.5px solid rgba(15, 23, 42, .14) !important;
+  border-radius: 999px !important;
+}
+
+/* DARK MODE: invert the outlines so they remain visible on dark surfaces */
+[data-bs-theme="dark"] .card,
+[data-bs-theme="dark"] .product-card,
+[data-bs-theme="dark"] .spotlight-card,
+[data-bs-theme="dark"] .side-product-row,
+[data-bs-theme="dark"] .accordion-item,
+[data-bs-theme="dark"] [data-testid="welcome-back-strip"],
+[data-bs-theme="dark"] .cat-chip {
+  border-color: rgba(255, 255, 255, .14) !important;
+  background-color: rgba(255, 255, 255, .02) !important;
+}
+[data-bs-theme="dark"] .card:hover,
+[data-bs-theme="dark"] .product-card:hover {
+  border-color: rgba(103, 232, 249, .55) !important;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, .35);
+}
+[data-bs-theme="dark"] .btn-hero-cta,
+[data-bs-theme="dark"] .btn-primary {
+  background-color: #06b6d4 !important;
+  border-color: #06b6d4 !important;
+  color: #051620 !important;
+}
+[data-bs-theme="dark"] .btn-hero-cta:hover,
+[data-bs-theme="dark"] .btn-primary:hover {
+  background-color: #67e8f9 !important;
+  border-color: #67e8f9 !important;
+}
+[data-bs-theme="dark"] .btn-hero-ghost {
+  background: transparent !important;
+  color: #e2e8f0 !important;
+  border-color: rgba(255, 255, 255, .35) !important;
+}
+[data-bs-theme="dark"] .btn-hero-ghost:hover {
+  background: rgba(255, 255, 255, .08) !important;
+  color: #fff !important;
+}
+[data-bs-theme="dark"] .btn-outline-primary,
+[data-bs-theme="dark"] .btn-outline-secondary {
+  border-color: rgba(255, 255, 255, .35) !important;
+  color: #e2e8f0 !important;
+}
+[data-bs-theme="dark"] .btn-outline-primary:hover,
+[data-bs-theme="dark"] .btn-outline-secondary:hover {
+  background: #67e8f9 !important;
+  color: #051620 !important;
+  border-color: #67e8f9 !important;
+}
+[data-bs-theme="dark"] .accordion-button { background: transparent; color: #e2e8f0; }
+[data-bs-theme="dark"] .accordion-button:not(.collapsed) { background: rgba(103, 232, 249, .08); color: #67e8f9; }
+[data-bs-theme="dark"] .cat-chip:hover {
+  background: #67e8f9;
+  color: #051620;
+  border-color: #67e8f9 !important;
 }
