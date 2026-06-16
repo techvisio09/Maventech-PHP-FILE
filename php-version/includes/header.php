@@ -374,7 +374,9 @@ if ($_vibePromo && !empty($_vibePromo['coupon_code']) && (int)$_vibePromo['coupo
 <!-- Mobile-only promo chip (sits above the navbar on phones; the trustbar
      itself is hidden on mobile, so this carries the "Save 10% • CODE •
      Shop Now" nudge to the 60-70% of traffic that's mobile). -->
-<div class="mobile-promo d-md-none" data-testid="mobile-promo">
+<!-- Mobile promo bar removed per request — keep markup in case it's
+     re-enabled later, but hidden via CSS. -->
+<div class="mobile-promo d-none" data-testid="mobile-promo" hidden>
   <a href="shop.php" class="mobile-promo-link" data-testid="mobile-promo-link">
     <i class="bi bi-tag-fill mobile-promo-icon"></i>
     <span class="mobile-promo-cta">Shop Now <i class="bi bi-chevron-right"></i></span>
