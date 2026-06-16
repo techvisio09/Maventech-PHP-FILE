@@ -29,6 +29,23 @@ if (!isset($items)) { return; }
     <img src="<?= esc($i['image']) ?>" alt="<?= esc($i['name']) ?> — lifetime license key | <?= SITE_BRAND ?>" style="width:40px;height:40px;object-fit:contain;" class="bg-body-tertiary rounded p-1">
     <div class="flex-grow-1">
       <div class="small fw-semibold"><?= esc($i['name']) ?></div>
+      <?php
+        // Multi-seat hint right under the product name so the customer
+        // sees "1 key, 5 PCs" before they hit Proceed to Pay.
+        $_seats = max(1, (int)$i['qty']);
+        if ($_seats > 1) {
+            $_isMS = (stripos((string)($i['brand'] ?? ''), 'microsoft') !== false)
+                  || (stripos((string)$i['name'], 'microsoft') !== false)
+                  || (stripos((string)$i['name'], 'office')    !== false)
+                  || (stripos((string)$i['name'], 'windows')   !== false);
+            $_noun = $_isMS ? 'PC' : 'device';
+      ?>
+        <div class="mt-1" data-testid="summary-seats-<?= esc($i['slug']) ?>">
+          <span style="display:inline-flex;align-items:center;gap:.25rem;background:linear-gradient(135deg,#e0f2fe,#bae6fd);color:#075985;border:1px solid #7dd3fc;border-radius:999px;padding:1px 8px;font-size:.66rem;font-weight:700;letter-spacing:.2px;line-height:1.3;">
+            <i class="bi bi-shield-check"></i>1 key · <?= $_seats ?> <?= $_noun ?>s
+          </span>
+        </div>
+      <?php } ?>
       <div class="d-flex justify-content-between align-items-center mt-1">
         <div class="input-group input-group-sm" style="width: 96px;">
           <button type="button" class="btn btn-outline-secondary px-2" data-cart-qty="<?= $i['qty'] - 1 ?>" data-slug="<?= esc($i['slug']) ?>">−</button>

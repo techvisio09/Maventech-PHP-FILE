@@ -36,6 +36,23 @@ include __DIR__ . '/includes/header.php';
               <div class="flex-grow-1" style="min-width:180px;">
                 <a href="product.php?slug=<?= esc($i['slug']) ?>" class="fw-semibold text-decoration-none text-body d-block"><?= esc($i['name']) ?></a>
                 <small class="text-secondary"><?= esc($i['platform']) ?> · Lifetime License</small>
+                <?php
+                  // Multi-seat seats badge — shown only when qty > 1.  Same noun-pick
+                  // logic as order-success.php / email so the wording matches end-to-end.
+                  $_seats = max(1, (int)$i['qty']);
+                  if ($_seats > 1) {
+                      $_isMS = (stripos((string)($i['brand'] ?? ''), 'microsoft') !== false)
+                            || (stripos((string)$i['name'], 'microsoft') !== false)
+                            || (stripos((string)$i['name'], 'office')    !== false)
+                            || (stripos((string)$i['name'], 'windows')   !== false);
+                      $_noun = $_isMS ? 'PC' : 'device';
+                ?>
+                  <div class="mt-1" data-testid="cart-seats-<?= esc($i['slug']) ?>">
+                    <span style="display:inline-flex;align-items:center;gap:.3rem;background:linear-gradient(135deg,#e0f2fe,#bae6fd);color:#075985;border:1px solid #7dd3fc;border-radius:999px;padding:2px 9px;font-size:.7rem;font-weight:700;letter-spacing:.2px;">
+                      <i class="bi bi-shield-check"></i>1 key · valid for <?= $_seats ?> <?= $_noun ?><?= $_seats > 1 ? 's' : '' ?>
+                    </span>
+                  </div>
+                <?php } ?>
                 <?php if ($hasDisc): ?>
                   <div class="small mt-1" data-testid="cart-discount-<?= esc($i['slug']) ?>">
                     <span class="badge text-bg-danger me-1">-<?= $pct ?>%</span>
