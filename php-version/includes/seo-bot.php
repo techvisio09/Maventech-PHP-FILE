@@ -115,6 +115,14 @@ function _seo_resolve_llm_credentials(): array
 {
     $key = '';
     $url = '';
+    $provider = '';
+
+    // 0) Provider override from DB (admin picked a specific platform OR
+    //    pasted a custom base URL). 'auto' (or empty) keeps the legacy
+    //    auto-detect-from-key-prefix behaviour for backwards compat.
+    try {
+        $provider = function_exists('setting_get') ? trim((string)setting_get('ai_blogger_llm_provider', 'auto')) : 'auto';
+    } catch (Throwable $e) { $provider = 'auto'; }
 
     // 1) Database settings table FIRST (saved from admin panel — highest priority)
     try {
@@ -149,16 +157,42 @@ function _seo_resolve_llm_credentials(): array
 
     // Clean key — remove accidental whitespace/newlines
     $key = trim($key);
+    if ($key === '') return ['', ''];
 
-    // ALWAYS resolve base URL from the key type — never trust config.php's URL
-    // because on real hosting without env vars, it defaults to api.openai.com which is WRONG for Emergent keys
-    if ($key !== '') {
+    // Provider → base URL map. All endpoints below are OpenAI-compatible
+    // /chat/completions so the existing curl payloads in seo-bot.php work
+    // unchanged.
+    $providerUrls = [
+        'emergent'   => 'https://integrations.emergentagent.com/llm/v1',
+        'openai'     => 'https://api.openai.com/v1',
+        'anthropic'  => 'https://api.anthropic.com/v1',
+        'gemini'     => 'https://generativelanguage.googleapis.com/v1beta/openai', // OpenAI-compatible
+        'groq'       => 'https://api.groq.com/openai/v1',
+        'openrouter' => 'https://openrouter.ai/api/v1',
+        'mistral'    => 'https://api.mistral.ai/v1',
+        'together'   => 'https://api.together.xyz/v1',
+        'deepseek'   => 'https://api.deepseek.com/v1',
+    ];
+
+    if (isset($providerUrls[$provider])) {
+        $url = $providerUrls[$provider];
+    } elseif ($provider === 'custom') {
+        // Admin pasted their own OpenAI-compatible endpoint.
+        $custom = function_exists('setting_get') ? trim((string)setting_get('ai_blogger_llm_base_url', '')) : '';
+        $url = rtrim($custom, '/');
+        if ($url !== '' && !preg_match('#^https?://#i', $url)) $url = '';
+    } else {
+        // 'auto' or unknown — fall back to key-prefix sniffing for legacy keys.
         if (str_contains($key, 'emergent') || str_starts_with($key, 'ek-')) {
-            $url = 'https://integrations.emergentagent.com/llm/v1';
+            $url = $providerUrls['emergent'];
         } elseif (str_starts_with($key, 'sk-ant-')) {
-            $url = 'https://api.anthropic.com/v1';
+            $url = $providerUrls['anthropic'];
+        } elseif (str_starts_with($key, 'gsk_')) {
+            $url = $providerUrls['groq'];
+        } elseif (str_starts_with($key, 'sk-or-')) {
+            $url = $providerUrls['openrouter'];
         } else {
-            $url = 'https://api.openai.com/v1';
+            $url = $providerUrls['openai'];
         }
     }
 
@@ -236,6 +270,23 @@ function seo_bot_run_if_due(bool $force = false): array
         $report['llm_calls']       += (int)$blogSummary['calls'];
         $report['llm_tokens_in']   += (int)$blogSummary['tokens_in'];
         $report['llm_tokens_out']  += (int)$blogSummary['tokens_out'];
+    }
+
+    // 5) AI-generated llms.txt — rebuilt once per 24h from the live product
+    //    catalog. Writes the AI summary to /llms.txt at the site root so
+    //    LLM crawlers (ChatGPT, Claude, Perplexity, Gemini, Bing Chat) get
+    //    a clean, current, AI-optimized site overview without any
+    //    server-side template parsing on every hit.
+    $llmsSummary = _seo_generate_daily_llms_txt($pdo, $report);
+    if (!empty($llmsSummary['written'])) {
+        $report['llms_txt_status']     = 'ok';
+        $report['llms_txt_bytes']      = (int)$llmsSummary['bytes'];
+        $report['llms_txt_path']       = $llmsSummary['path'];
+        $report['llm_calls']          += (int)$llmsSummary['calls'];
+        $report['llm_tokens_in']      += (int)$llmsSummary['tokens_in'];
+        $report['llm_tokens_out']     += (int)$llmsSummary['tokens_out'];
+    } else {
+        $report['llms_txt_status'] = $llmsSummary['skip_reason'] ?? 'skipped';
     }
 
     // Persist.
@@ -905,6 +956,174 @@ function _seo_generate_daily_blog_batch(PDO $pdo, array &$report): array
     if ($out['posts']) {
         setting_set('seo_bot_last_blog_post_at', date('Y-m-d H:i:s'));
     }
+    return $out;
+}
+
+/**
+ * Daily AI-generated llms.txt.
+ *
+ * Calls the LLM once per 24h to produce a fresh, SEO/AEO-optimized
+ * llms.txt site overview (the spec from llmstxt.org — markdown front
+ * page that LLM crawlers consume to summarize the site). Output is
+ * written directly to /llms.txt at the site root so future hits are
+ * served as a flat static file (zero PHP work, zero DB hits).
+ *
+ * The prompt feeds the live product catalog + company info so the AI
+ * always reflects the current price + availability. Caching is gated by
+ * the `seo_bot_last_llms_txt_at` setting so this fires at most once per
+ * full SEO bot run cycle.
+ */
+function _seo_generate_daily_llms_txt(PDO $pdo, array &$report): array
+{
+    $out = ['written'=>false, 'bytes'=>0, 'path'=>'', 'calls'=>0, 'tokens_in'=>0, 'tokens_out'=>0, 'skip_reason'=>''];
+
+    // 24h cooldown (same cadence as the blog batch).
+    $last = setting_get('seo_bot_last_llms_txt_at', '');
+    if ($last) {
+        $hoursSince = (time() - strtotime($last)) / 3600;
+        if ($hoursSince < SEOBOT_BLOG_COOLDOWN_H) {
+            $out['skip_reason'] = 'cooldown: ' . round($hoursSince,1) . 'h since last run';
+            return $out;
+        }
+    }
+
+    [$apiKey, $baseUrl] = _seo_resolve_llm_credentials();
+    if ($apiKey === '' || $baseUrl === '') {
+        $out['skip_reason'] = 'no LLM key';
+        $report['errors'][] = 'llms.txt: LLM key not configured';
+        return $out;
+    }
+
+    // Collect everything the model needs to write an accurate llms.txt.
+    $ci      = function_exists('company_info') ? company_info() : ['name'=>'Maventech Software','email'=>'','phone'=>'','address'=>''];
+    $brand   = $ci['name']  ?: 'Maventech Software';
+    $email   = $ci['email'] ?? '';
+    $phone   = $ci['phone'] ?? '';
+    $siteUrl = rtrim(site_url(), '/');
+
+    $productRows = $pdo->query("
+        SELECT slug, name, price, original_price, region, category, brand, version, badge,
+               LEFT(COALESCE(ai_summary, description, ''), 240) AS summary
+          FROM products WHERE is_active = 1 ORDER BY category, name LIMIT 80
+    ")->fetchAll(PDO::FETCH_ASSOC);
+
+    $catalogLines = [];
+    foreach ($productRows as $p) {
+        $price = $p['price'] !== null ? '$' . number_format((float)$p['price'], 2) : '';
+        $catalogLines[] = '- [' . $p['name'] . '](' . $siteUrl . '/product.php?slug=' . $p['slug'] . ')'
+                        . ($price ? ' — ' . $price : '')
+                        . ' (' . ($p['category'] ?: 'misc') . ', ' . ($p['region'] ?: 'global') . ')';
+    }
+    $catalogDump = implode("\n", array_slice($catalogLines, 0, 80));
+
+    $sys = <<<SYS
+You are an SEO/AEO content engineer writing the canonical /llms.txt file for
+a software-reseller storefront. The output you generate becomes the site's
+public AI-discovery document at https://example.com/llms.txt — the file
+LLM crawlers (OpenAI GPTBot, Google-Extended, Anthropic ClaudeBot,
+Perplexity PerplexityBot, Common Crawl, etc.) read to understand the site.
+
+Follow the llmstxt.org spec STRICTLY:
+  - Start with `# {brand}` (H1).
+  - Then a `> blockquote` paragraph (3-4 sentences) summarizing what the
+    site sells, who it's for, and the trust signals (genuine keys,
+    instant delivery, 24/7 support, 30-day money back).
+  - Then 4-7 `## Section` headers covering:
+       * "Key facts" — bullet list of business model, payment, delivery,
+         support, returns, regions served.
+       * "What customers buy" — categories + activation flow per brand.
+       * "Featured products" — bullet list of 12-20 top items from the
+         catalog dump below, formatted as `- [name](url) — price`.
+       * "Trust + compliance" — guarantees, payment security, refund.
+       * "Contact" — phone, email, support hours.
+       * "For AI assistants" — instructions an LLM should follow when
+         answering customer questions (cite the product page, never
+         invent prices, link the activation URL, etc.).
+
+Rules:
+ - Write in confident, neutral American English. No marketing fluff.
+ - Use plain markdown only (no HTML, no code fences, no emoji).
+ - Absolute URLs (https://…) for every product / page link.
+ - Keep total length under 5000 characters.
+ - Output the markdown directly — NO preamble, NO explanation, NO JSON
+   wrapper. Just the llms.txt body starting with the H1.
+SYS;
+
+    $usr = "BRAND: {$brand}\n"
+         . "SITE_URL: {$siteUrl}\n"
+         . "EMAIL: {$email}\n"
+         . "PHONE: {$phone}\n"
+         . "TOTAL_ACTIVE_PRODUCTS: " . count($productRows) . "\n"
+         . "TODAY: " . date('Y-m-d') . "\n\n"
+         . "LIVE_PRODUCT_CATALOG (slug · name · price · category · region):\n"
+         . $catalogDump;
+
+    $payload = json_encode([
+        'model'       => 'claude-haiku-4-5-20251001',
+        'messages'    => [
+            ['role'=>'system', 'content'=>$sys],
+            ['role'=>'user',   'content'=>$usr],
+        ],
+        'temperature' => 0.4,
+        'max_tokens'  => 2400,
+    ]);
+
+    $ch = curl_init($baseUrl . '/chat/completions');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,
+        CURLOPT_HTTPHEADER     => ['Content-Type: application/json', 'Authorization: Bearer ' . $apiKey],
+        CURLOPT_POSTFIELDS     => $payload,
+        CURLOPT_TIMEOUT        => 60,
+        CURLOPT_CONNECTTIMEOUT => 8,
+    ]);
+    $resp = curl_exec($ch);
+    $http = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $cerr = curl_error($ch);
+    curl_close($ch);
+    $out['calls'] = 1;
+
+    if ($http !== 200 || !$resp) {
+        $report['errors'][] = 'llms.txt: LLM ' . $http . ' ' . substr($cerr ?: $resp ?: '', 0, 120);
+        $out['skip_reason'] = 'llm http ' . $http;
+        return $out;
+    }
+    $json = json_decode($resp, true);
+    $body = $json['choices'][0]['message']['content'] ?? '';
+    $out['tokens_in']  = (int)($json['usage']['prompt_tokens']     ?? 0);
+    $out['tokens_out'] = (int)($json['usage']['completion_tokens'] ?? 0);
+    $body = trim($body);
+    // Strip accidental code fences if the model wrapped the response.
+    if (str_starts_with($body, '```')) {
+        $body = preg_replace('/^```[a-z]*\s*\n?/i', '', $body);
+        $body = preg_replace('/\n?```\s*$/', '', $body);
+        $body = trim($body);
+    }
+    if ($body === '' || !str_starts_with($body, '#')) {
+        $report['errors'][] = 'llms.txt: AI returned malformed body (no H1)';
+        $out['skip_reason'] = 'malformed';
+        return $out;
+    }
+
+    // Prepend the metadata header the static file always carried so admins
+    // can tell at a glance when it was last refreshed + by what.
+    $header = "# Generated " . date('Y-m-d H:i') . " UTC by Maventech AI Auto-Blogger\n"
+            . "# Refreshes once per 24h. Source: live product catalog.\n\n";
+    $finalBody = $header . $body . "\n";
+
+    $path = __DIR__ . '/../llms.txt';
+    $bytes = @file_put_contents($path, $finalBody);
+    if ($bytes === false) {
+        $report['errors'][] = 'llms.txt: write failed at ' . $path;
+        $out['skip_reason'] = 'fs write failed';
+        return $out;
+    }
+
+    setting_set('seo_bot_last_llms_txt_at', date('Y-m-d H:i:s'));
+    setting_set('seo_bot_llms_txt_bytes',   (string)$bytes);
+    $out['written'] = true;
+    $out['bytes']   = (int)$bytes;
+    $out['path']    = $path;
     return $out;
 }
 

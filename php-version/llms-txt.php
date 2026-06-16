@@ -6,11 +6,30 @@
  * live products table, so generative engines (ChatGPT, Claude, Perplexity,
  * Gemini, Bing Chat) always see the current price + availability of every
  * product.  Caches publicly for 1 hour.
+ *
+ * Fast path (added 2026-02): if the AI Auto-Blogger has produced a fresh
+ * /llms.txt cache file within the last 25 hours (gated by the
+ * `seo_bot_last_llms_txt_at` setting written by _seo_generate_daily_llms_txt),
+ * serve that pre-built file directly. The dynamic template below is the
+ * fallback for first-time / stale states.
  */
 require_once __DIR__ . '/includes/functions.php';
 
 header('Content-Type: text/plain; charset=UTF-8');
 header('Cache-Control: public, max-age=3600');
+
+$cachePath = __DIR__ . '/llms.txt';
+$lastAi    = (string)setting_get('seo_bot_last_llms_txt_at', '');
+if ($lastAi && is_readable($cachePath)) {
+    $ageH = (time() - strtotime($lastAi)) / 3600;
+    if ($ageH <= 25) {
+        header('X-LLMs-Source: ai-auto-blogger');
+        header('X-LLMs-Generated-At: ' . $lastAi);
+        readfile($cachePath);
+        exit;
+    }
+}
+header('X-LLMs-Source: live-template');
 
 $ci    = company_info();
 $brand = $ci['name']  ?? (defined('SITE_BRAND') ? SITE_BRAND : 'Maventech Software');

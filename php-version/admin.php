@@ -1063,13 +1063,20 @@ if ($tab === 'ai-blogger') {
             return $s;
         };
         $validateAi  = function (string $s): bool {
-            // Emergent Universal Key OR an OpenAI key (incl. project / service-account).
-            // Length floor of 24 chars knocks out "abc" / "test123" style typos
-            // while leaving room for short legacy test keys.
+            // Accept ANY plausible API key shape — Emergent (sk-emergent-),
+            // OpenAI (sk-, sk-proj-, sk-svcacct-), Anthropic (sk-ant-),
+            // Groq (gsk_), OpenRouter (sk-or-), Google AI (AIza…), Mistral,
+            // Together, DeepSeek, or any opaque token from a self-hosted
+            // gateway. Floor of 16 chars + key-safe charset is enough to
+            // knock out copy-paste accidents like "test123" without
+            // bouncing legitimate keys from new providers we haven't
+            // hard-coded yet.
             if ($s === '') return false;
-            if (preg_match('/^sk-emergent-[a-zA-Z0-9_\-]{8,}$/', $s)) return true;
-            if (preg_match('/^sk-(?:proj-|svcacct-)?[a-zA-Z0-9_\-]{20,}$/', $s)) return true;
-            return false;
+            // Reject anything with spaces or shell-control chars early.
+            if (preg_match('/\s/', $s)) return false;
+            // Accept the broad key-safe alphabet that all major providers use.
+            if (!preg_match('/^[A-Za-z0-9_\-.~+\/=]{16,}$/', $s)) return false;
+            return true;
         };
         $validateGsc = function (string $s): bool {
             // Google's verification tokens are 43 chars of base64url. We
@@ -1098,6 +1105,23 @@ if ($tab === 'ai-blogger') {
         $gscNew   = trim((string)($_POST['google_search_console'] ?? ''));
         $bingNew  = trim((string)($_POST['bing_webmaster']        ?? ''));
 
+        // Provider selector + optional custom base URL — always persisted
+        // even when the key field is empty (so the admin can switch
+        // providers without re-pasting their key).
+        $allowedProviders = ['auto','emergent','openai','anthropic','gemini','groq','openrouter','mistral','together','deepseek','custom'];
+        $providerPosted = isset($_POST['llm_provider']) ? trim((string)$_POST['llm_provider']) : null;
+        if ($providerPosted !== null) {
+            if (!in_array($providerPosted, $allowedProviders, true)) $providerPosted = 'auto';
+            setting_set('ai_blogger_llm_provider', $providerPosted);
+        }
+        if (isset($_POST['llm_base_url'])) {
+            $customUrl = trim((string)$_POST['llm_base_url']);
+            // Allow only http(s) — silently drop anything else so we never
+            // hand the LLM a file:// or javascript: scheme.
+            if ($customUrl !== '' && !preg_match('#^https?://#i', $customUrl)) $customUrl = '';
+            setting_set('ai_blogger_llm_base_url', rtrim($customUrl, '/'));
+        }
+
         $updated   = [];
         $errors    = [];
         $cleared   = [];
@@ -1117,7 +1141,7 @@ if ($tab === 'ai-blogger') {
                 setting_set('ai_blogger_llm_key', '');
                 $cleared[] = 'AI Key';
             } elseif (!$validateAi($aiTarget)) {
-                $errors[] = 'AI Key looks invalid — paste a key that starts with "sk-emergent-" (Emergent Universal) or "sk-" / "sk-proj-" / "sk-svcacct-" (OpenAI).';
+                $errors[] = 'AI Key looks invalid — keys are typically 20+ alphanumeric characters with no spaces. Paste your provider key without surrounding quotes.';
             } else {
                 $envPath = __DIR__ . '/.env';
                 $envContent = '';
@@ -1913,8 +1937,9 @@ if ($tab === 'ai-blogger') {
                 $publishedCount = is_array($r['blog_posts'] ?? null) ? count($r['blog_posts']) : (!empty($r['blog_post_id']) ? 1 : 0);
                 $_SESSION['seo_bot_flash'] = 'AI Auto-Blogger run complete — ' . $publishedCount . ' new blog post' . ($publishedCount === 1 ? '' : 's')
                     . ' · IndexNow ' . $r['indexnow_status']
-                    . ' (' . $r['indexnow_count'] . ' URLs) · LLM refresh: ' . $r['products_updated'] . ' product(s) · '
-                    . count($r['errors']) . ' error(s).';
+                    . ' (' . $r['indexnow_count'] . ' URLs) · LLM refresh: ' . $r['products_updated'] . ' product(s)'
+                    . ' · llms.txt ' . ($r['llms_txt_status'] ?? 'skipped') . (($r['llms_txt_bytes'] ?? 0) ? ' (' . $r['llms_txt_bytes'] . ' bytes)' : '')
+                    . ' · ' . count($r['errors']) . ' error(s).';
                 if (!empty($r['blog_posts'])) {
                     // Highlight the LIST of new posts in the announcement card.
                     $_SESSION['seo_bot_blog_flash'] = [
@@ -1933,6 +1958,26 @@ if ($tab === 'ai-blogger') {
             }
         } catch (Throwable $e) {
             $_SESSION['seo_bot_flash'] = 'AI Auto-Blogger error: ' . $e->getMessage();
+        }
+        header('Location: admin.php?tab=ai-blogger');
+        exit;
+    }
+
+    // Force-regenerate the AI-optimized /llms.txt on demand. Bypasses the 24h
+    // cooldown by clearing the `seo_bot_last_llms_txt_at` setting before the
+    // generator runs.
+    if (!empty($_GET['refresh_llms_txt'])) {
+        try {
+            setting_set('seo_bot_last_llms_txt_at', '');
+            $rep = ['errors' => []];
+            $r   = _seo_generate_daily_llms_txt(db(), $rep);
+            if (!empty($r['written'])) {
+                $_SESSION['seo_bot_flash'] = 'llms.txt refreshed — ' . number_format((int)$r['bytes']) . ' bytes written to ' . basename($r['path']) . ' (LLM tokens: ' . ($r['tokens_in']+$r['tokens_out']) . ').';
+            } else {
+                $_SESSION['seo_bot_flash'] = 'llms.txt refresh skipped — ' . ($r['skip_reason'] ?: 'no AI key') . '.';
+            }
+        } catch (Throwable $e) {
+            $_SESSION['seo_bot_flash'] = 'llms.txt refresh error: ' . $e->getMessage();
         }
         header('Location: admin.php?tab=ai-blogger');
         exit;
@@ -3679,6 +3724,45 @@ elseif ($tab === 'ai-blogger'):
         </a>
       </div>
     </div>
+
+    <?php
+      // llms.txt status — surfaces the daily AI-refresh status so the admin
+      // can see when the public /llms.txt was last rewritten by the AI bot
+      // and force a refresh on demand.
+      $lastLlms      = (string)setting_get('seo_bot_last_llms_txt_at', '');
+      $lastLlmsBytes = (int)setting_get('seo_bot_llms_txt_bytes', 0);
+      $hasLlms       = $lastLlms !== '';
+      $hoursAgo      = $hasLlms ? round((time() - strtotime($lastLlms)) / 3600, 1) : null;
+      $isFresh       = $hasLlms && $hoursAgo <= 25;
+    ?>
+    <div class="card-e mt-3 px-3 py-2 d-flex align-items-center justify-content-between flex-wrap gap-2" data-testid="llms-txt-status"
+         style="border-radius:10px;border:1px solid <?= $isFresh ? '#bbf7d0' : '#fed7aa' ?>;background:<?= $isFresh ? 'rgba(187,247,208,.15)' : 'rgba(254,215,170,.15)' ?>;">
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <i class="bi bi-robot" style="font-size:18px;color:<?= $isFresh ? '#16a34a' : '#ea580c' ?>;"></i>
+        <div>
+          <div class="fw-bold small mb-0" style="color:#0f172a;">AI-generated <code>/llms.txt</code></div>
+          <div class="small text-secondary" data-testid="llms-txt-meta">
+            <?php if ($hasLlms): ?>
+              Last refresh: <strong data-testid="llms-txt-last"><?= esc($lastLlms) ?></strong>
+              <?= $hoursAgo !== null ? '<span class="text-muted">(' . esc($hoursAgo) . 'h ago)</span>' : '' ?>
+              <?php if ($lastLlmsBytes): ?>· <strong><?= number_format($lastLlmsBytes) ?> bytes</strong><?php endif; ?>
+              · Daily refresh auto-runs with the full batch.
+            <?php else: ?>
+              Not yet generated. Click <strong>Refresh llms.txt now</strong> to write the first AI-optimized copy to your site root.
+            <?php endif; ?>
+          </div>
+        </div>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <a href="/llms.txt" target="_blank" rel="noopener" class="btn btn-sm btn-soft-gray rounded-pill" data-testid="llms-txt-view">
+          <i class="bi bi-eye me-1"></i>View
+        </a>
+        <a href="admin.php?tab=ai-blogger&refresh_llms_txt=1" class="btn btn-sm btn-soft-blue rounded-pill" data-testid="llms-txt-refresh"
+           onclick="return confirm('Force-regenerate /llms.txt right now using the latest live product catalog? This makes one LLM call (~15 seconds).');">
+          <i class="bi bi-arrow-clockwise me-1"></i>Refresh llms.txt now
+        </a>
+      </div>
+    </div>
   </div>
 
   <!-- Quick Actions country picker — rewrites each card's href in place. -->
@@ -3783,109 +3867,153 @@ elseif ($tab === 'ai-blogger'):
         <div class="row g-3">
           <!-- AI Key -->
           <div class="col-md-4">
-            <label class="form-label small fw-semibold d-flex align-items-center gap-2">
-              AI Key (Emergent / OpenAI)
+            <?php
+              // Resolve currently saved provider so the dropdown defaults
+              // to the right option. 'auto' = let the resolver sniff the
+              // key prefix (legacy behaviour).
+              $aiProvider    = (string)setting_get('ai_blogger_llm_provider', 'auto');
+              $aiCustomUrl   = (string)setting_get('ai_blogger_llm_base_url', '');
+              $aiProviders   = [
+                'auto'       => ['label'=>'Auto-detect',     'tint'=>'#64748b'],
+                'emergent'   => ['label'=>'Emergent',        'tint'=>'#06b6d4'],
+                'openai'     => ['label'=>'OpenAI',          'tint'=>'#10a37f'],
+                'anthropic'  => ['label'=>'Anthropic',       'tint'=>'#d97706'],
+                'gemini'     => ['label'=>'Google Gemini',   'tint'=>'#4285f4'],
+                'groq'       => ['label'=>'Groq',            'tint'=>'#f55036'],
+                'openrouter' => ['label'=>'OpenRouter',      'tint'=>'#a855f7'],
+                'mistral'    => ['label'=>'Mistral',         'tint'=>'#ff7000'],
+                'together'   => ['label'=>'Together AI',     'tint'=>'#3b82f6'],
+                'deepseek'   => ['label'=>'DeepSeek',        'tint'=>'#0ea5e9'],
+                'custom'     => ['label'=>'Custom endpoint', 'tint'=>'#64748b'],
+              ];
+              if (!isset($aiProviders[$aiProvider])) $aiProvider = 'auto';
+              $aiProviderLabel = $aiProviders[$aiProvider]['label'];
+              $aiProviderTint  = $aiProviders[$aiProvider]['tint'];
+            ?>
+            <label class="form-label small fw-semibold d-flex align-items-center gap-2 mb-1">
+              <span><i class="bi bi-cpu me-1 text-warning"></i>AI Provider</span>
               <button type="button" class="btn btn-link p-0 m-0" data-bs-toggle="popover"
                       data-bs-trigger="click hover focus" data-bs-placement="top"
                       data-bs-html="true"
                       data-bs-title="Which keys work here?"
-                      data-bs-content="<div style='font-size:12.5px;line-height:1.6;'><strong>Either of these will work — paste whichever you have:</strong><ul class='mb-1 ps-3'><li><strong style='color:#06b6d4'>Emergent Universal Key</strong> &mdash; starts with <code>sk-emergent-</code>. One key unlocks OpenAI <em>and</em> Anthropic <em>and</em> Gemini through Emergent's proxy. Billed against your Emergent wallet. <em>Recommended for the AI Auto-Blogger + product image generation.</em></li><li><strong style='color:#10a37f'>Direct OpenAI Key</strong> &mdash; starts with <code>sk-</code>, <code>sk-proj-</code>, or <code>sk-svcacct-</code>. Billed straight to your OpenAI account. Only OpenAI models will work.</li></ul><div class='mt-1 text-muted' style='font-size:11.5px;'>The key type is auto-detected from the prefix &mdash; no manual switching needed.</div></div>"
+                      data-bs-content="<div style='font-size:12.5px;line-height:1.6;'><strong>Universal AI key support.</strong> Pick your provider from the dropdown, then paste its API key. Built-in providers: Emergent (recommended — one key, all models), OpenAI, Anthropic, Google Gemini, Groq, OpenRouter, Mistral, Together AI, DeepSeek. Select <strong>Custom</strong> if you run your own OpenAI-compatible endpoint and provide its base URL.<div class='mt-1 text-muted' style='font-size:11.5px;'>Leave on <em>Auto-detect</em> if you're not sure — we'll sniff the prefix.</div></div>"
                       style="line-height:1;color:#0ea5e9;" data-testid="ai-key-help">
                 <i class="bi bi-info-circle-fill"></i>
               </button>
             </label>
-            <?php if ($aiKeyState === 'admin-saved'):
-              $aiBg     = $isValidAiKey ? '#f0fdf4' : '#fffbeb';
-              $aiBorder = $isValidAiKey ? '#bbf7d0' : '#fde68a';
-              $aiIcon   = $isValidAiKey ? 'bi-check-circle-fill text-success' : 'bi-exclamation-triangle-fill text-warning';
-              $aiTitle  = $isValidAiKey ? 'Key Uploaded' : 'Key Invalid';
-              $aiColor  = $isValidAiKey ? '#065f46' : '#92400e';
-            ?>
-              <div id="ai-key-display" class="ai-key-uploaded" style="background:<?= $aiBg ?>;border:1px solid <?= $aiBorder ?>;border-radius:8px;padding:10px 12px;" data-testid="ai-key-state-admin">
-                <div class="d-flex align-items-center justify-content-between">
-                  <div>
-                    <i class="bi <?= $aiIcon ?> me-1"></i>
-                    <span class="fw-semibold" style="font-size:13px;color:<?= $aiColor ?>;"><?= $aiTitle ?></span>
-                    <?php if (!$isValidAiKey): ?>
-                      <span class="badge ms-1" style="background:#f59e0b;color:#fff;font-size:9px;letter-spacing:.5px;padding:2px 7px;">INVALID FORMAT</span>
-                    <?php elseif ($llmKeyKindLabel !== ''): ?>
-                      <span class="badge ms-1" data-testid="ai-key-kind-badge"
-                            style="background:<?= esc($llmKeyKindBg) ?>;color:#fff;font-size:9.5px;letter-spacing:.6px;padding:2px 7px;vertical-align:middle;">
-                        <?= esc(strtoupper($llmKeyKindLabel)) ?>
-                      </span>
-                    <?php endif; ?>
-                    <div style="font-size:11px;font-family:monospace;margin-top:2px;opacity:.7;"><?= esc($maskedKey) ?></div>
+
+            <!-- Provider picker — single elegant select, no bulky card. -->
+            <div class="ai-key-elegant">
+              <select name="llm_provider" class="form-select form-select-sm mb-2" data-testid="ai-provider-select" id="aiProviderSelect">
+                <?php foreach ($aiProviders as $k => $p): ?>
+                  <option value="<?= esc($k) ?>" data-tint="<?= esc($p['tint']) ?>" <?= $k === $aiProvider ? 'selected' : '' ?>><?= esc($p['label']) ?></option>
+                <?php endforeach; ?>
+              </select>
+
+              <!-- Custom-only: base URL input (revealed when Provider = Custom). -->
+              <div id="aiCustomUrlWrap" class="mb-2" style="display:<?= $aiProvider === 'custom' ? 'block' : 'none' ?>;">
+                <input type="url" name="llm_base_url" class="form-control form-control-sm"
+                       placeholder="https://your-endpoint.com/v1"
+                       value="<?= esc($aiCustomUrl) ?>"
+                       data-testid="ai-custom-url-input">
+                <small class="text-muted" style="font-size:10.5px;">Must end in <code>/v1</code> and be OpenAI-compatible (<code>/chat/completions</code>).</small>
+              </div>
+
+              <!-- Key state strip — one tight row, no dashed mega-card. -->
+              <?php if ($aiKeyState === 'admin-saved'):
+                $stateColor = $isValidAiKey ? '#10b981' : '#f59e0b';
+                $stateIcon  = $isValidAiKey ? 'bi-check-circle-fill' : 'bi-exclamation-triangle-fill';
+                $stateLabel = $isValidAiKey ? 'Key uploaded' : 'Key invalid';
+              ?>
+                <div id="ai-key-display" class="ai-key-strip" style="--ai-tint:<?= esc($aiProviderTint) ?>;" data-testid="ai-key-state-admin">
+                  <span class="ai-key-strip-dot" style="background:<?= esc($stateColor) ?>;"></span>
+                  <div class="flex-grow-1">
+                    <div class="ai-key-strip-line"><i class="bi <?= esc($stateIcon) ?>" style="color:<?= esc($stateColor) ?>;"></i> <?= esc($stateLabel) ?> · <span class="ai-key-strip-prov"><?= esc($aiProviderLabel) ?></span></div>
+                    <div class="ai-key-strip-mono"><?= esc($maskedKey) ?></div>
                   </div>
-                  <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" data-testid="ai-key-change-btn" onclick="mvOpenKeyEditor('ai-key')"><i class="bi bi-pencil me-1"></i>Change</button>
+                  <button type="button" class="btn btn-sm btn-link p-0 ai-key-change-link" data-testid="ai-key-change-btn" onclick="mvOpenKeyEditor('ai-key')"><i class="bi bi-pencil"></i> Change</button>
                 </div>
-              </div>
-              <div id="ai-key-edit" style="display:none;">
-                <div class="input-group mt-1">
-                  <input type="password" name="llm_api_key_edit" class="form-control" placeholder="sk-emergent-… or sk-… (leave blank to clear)" style="font-size:13px;" data-testid="ai-key-input" disabled>
-                  <button type="button" class="btn btn-outline-secondary btn-sm" onclick="var i=this.previousElementSibling;i.type=i.type==='password'?'text':'password';"><i class="bi bi-eye"></i></button>
-                </div>
-                <div class="d-flex align-items-center justify-content-between mt-1">
-                  <button type="button" class="btn btn-sm btn-link text-secondary p-0" onclick="mvCancelKeyEditor('ai-key')">Cancel</button>
-                  <span class="small text-muted" style="font-size:10.5px;"><i class="bi bi-info-circle me-1"></i>Save with the box empty to remove the key.</span>
-                </div>
-              </div>
-            <?php elseif ($aiKeyState === 'fallback'): ?>
-              <!-- Fallback state — there's a pod/.env-level key available BUT
-                   the admin hasn't explicitly saved one.  Show this as INFO
-                   (not "Key Uploaded") so it's clear what's happening.
-                   Card colours are theme-aware via `.ai-fallback-card`. -->
-              <div id="ai-key-display" data-testid="ai-key-state-fallback" class="ai-fallback-card" style="border-radius:8px;padding:10px 12px;">
-                <div class="d-flex align-items-center justify-content-between">
-                  <div>
-                    <i class="bi bi-info-circle-fill me-1 ai-fallback-icon"></i>
-                    <span class="fw-semibold ai-fallback-title" style="font-size:13px;">Using built-in fallback key</span>
-                    <?php if ($llmKeyKindLabel !== ''): ?>
-                      <span class="badge ms-1" data-testid="ai-key-kind-badge"
-                            style="background:<?= esc($llmKeyKindBg) ?>;color:#fff;font-size:9.5px;letter-spacing:.6px;padding:2px 7px;vertical-align:middle;">
-                        <?= esc(strtoupper($llmKeyKindLabel)) ?>
-                      </span>
-                    <?php endif; ?>
-                    <div class="ai-fallback-mono" style="font-size:11px;font-family:monospace;margin-top:2px;opacity:.7;"><?= esc($maskedKey) ?></div>
-                    <div class="small ai-fallback-help mt-1" style="font-size:11px;">Provided by your hosting environment (pod-level <code>EMERGENT_LLM_KEY</code>). Paste your own key below to override it.</div>
+                <div id="ai-key-edit" style="display:none;" class="mt-2">
+                  <div class="input-group input-group-sm">
+                    <input type="password" name="llm_api_key_edit" class="form-control" placeholder="Paste new key (leave blank to clear)" data-testid="ai-key-input" disabled>
+                    <button type="button" class="btn btn-outline-secondary" onclick="var i=this.previousElementSibling;i.type=i.type==='password'?'text':'password';"><i class="bi bi-eye"></i></button>
                   </div>
-                  <button type="button" class="btn btn-sm btn-outline-primary rounded-pill" data-testid="ai-key-change-btn" onclick="mvOpenKeyEditor('ai-key')"><i class="bi bi-key me-1"></i>Use my own</button>
+                  <div class="d-flex align-items-center justify-content-between mt-1">
+                    <button type="button" class="btn btn-sm btn-link text-secondary p-0" onclick="mvCancelKeyEditor('ai-key')">Cancel</button>
+                    <span class="small text-muted" style="font-size:10.5px;"><i class="bi bi-info-circle me-1"></i>Empty save = clear the key.</span>
+                  </div>
                 </div>
-              </div>
-              <style>
-                /* Light theme defaults */
-                .ai-fallback-card { background:#eff6ff; border:1px dashed #93c5fd; }
-                .ai-fallback-card .ai-fallback-icon  { color:#2563eb; }
-                .ai-fallback-card .ai-fallback-title { color:#1e3a8a; }
-                .ai-fallback-card .ai-fallback-help  { color:#475569; }
-                .ai-fallback-card .ai-fallback-mono  { color:#1e293b; }
-                /* Dark theme — softer navy card with bright accents */
-                [data-bs-theme="dark"] .ai-fallback-card { background:rgba(37,99,235,.10); border:1px dashed #3b82f6; }
-                [data-bs-theme="dark"] .ai-fallback-card .ai-fallback-icon  { color:#60a5fa; }
-                [data-bs-theme="dark"] .ai-fallback-card .ai-fallback-title { color:#dbeafe; }
-                [data-bs-theme="dark"] .ai-fallback-card .ai-fallback-help  { color:#cbd5e1; }
-                [data-bs-theme="dark"] .ai-fallback-card .ai-fallback-mono  { color:#e2e8f0; }
-              </style>
-              <div id="ai-key-edit" style="display:none;">
-                <div class="input-group mt-1">
-                  <input type="password" name="llm_api_key_edit" class="form-control" placeholder="sk-emergent-… or sk-… (paste to override)" style="font-size:13px;" data-testid="ai-key-input" disabled>
-                  <button type="button" class="btn btn-outline-secondary btn-sm" onclick="var i=this.previousElementSibling;i.type=i.type==='password'?'text':'password';"><i class="bi bi-eye"></i></button>
+              <?php elseif ($aiKeyState === 'fallback'): ?>
+                <div id="ai-key-display" class="ai-key-strip ai-key-strip-fallback" data-testid="ai-key-state-fallback" style="--ai-tint:#3b82f6;">
+                  <span class="ai-key-strip-dot" style="background:#3b82f6;"></span>
+                  <div class="flex-grow-1">
+                    <div class="ai-key-strip-line"><i class="bi bi-info-circle-fill" style="color:#3b82f6;"></i> Using built-in fallback · <span class="ai-key-strip-prov">Emergent</span></div>
+                    <div class="ai-key-strip-mono"><?= esc($maskedKey) ?> <span class="text-muted">· from pod env</span></div>
+                  </div>
+                  <button type="button" class="btn btn-sm btn-link p-0 ai-key-change-link" data-testid="ai-key-change-btn" onclick="mvOpenKeyEditor('ai-key')"><i class="bi bi-key"></i> Use my own</button>
                 </div>
-                <div class="d-flex align-items-center justify-content-between mt-1">
-                  <button type="button" class="btn btn-sm btn-link text-secondary p-0" onclick="mvCancelKeyEditor('ai-key')">Cancel</button>
-                  <span class="small text-muted" style="font-size:10.5px;"><i class="bi bi-info-circle me-1"></i>Empty save = keep using the built-in fallback.</span>
+                <div id="ai-key-edit" style="display:none;" class="mt-2">
+                  <div class="input-group input-group-sm">
+                    <input type="password" name="llm_api_key_edit" class="form-control" placeholder="Paste your provider key" data-testid="ai-key-input" disabled>
+                    <button type="button" class="btn btn-outline-secondary" onclick="var i=this.previousElementSibling;i.type=i.type==='password'?'text':'password';"><i class="bi bi-eye"></i></button>
+                  </div>
+                  <div class="d-flex align-items-center justify-content-between mt-1">
+                    <button type="button" class="btn btn-sm btn-link text-secondary p-0" onclick="mvCancelKeyEditor('ai-key')">Cancel</button>
+                    <span class="small text-muted" style="font-size:10.5px;"><i class="bi bi-info-circle me-1"></i>Empty save = keep the fallback.</span>
+                  </div>
                 </div>
-              </div>
-            <?php else: ?>
-              <div class="input-group">
-                <input type="password" name="llm_api_key" class="form-control" placeholder="sk-emergent-… or sk-… (OpenAI)" style="font-size:13px;" data-testid="ai-key-input">
-                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="var i=this.previousElementSibling;i.type=i.type==='password'?'text':'password';"><i class="bi bi-eye"></i></button>
-              </div>
-              <div class="small mt-1 text-danger"><i class="bi bi-exclamation-circle-fill me-1"></i>Required — AI won't work without this</div>
-              <div class="small mt-1 text-secondary" style="font-size:11.5px;line-height:1.45;">
-                <i class="bi bi-info-circle me-1"></i>
-                Accepts <strong>either</strong> an Emergent Universal Key (<code style="font-size:10.5px;">sk-emergent-…</code>) <strong>or</strong> a direct OpenAI key (<code style="font-size:10.5px;">sk-…</code>). Type is auto-detected.
-              </div>
-            <?php endif; ?>
+              <?php else: ?>
+                <div class="input-group input-group-sm">
+                  <input type="password" name="llm_api_key" class="form-control" placeholder="Paste your provider API key" data-testid="ai-key-input">
+                  <button type="button" class="btn btn-outline-secondary" onclick="var i=this.previousElementSibling;i.type=i.type==='password'?'text':'password';"><i class="bi bi-eye"></i></button>
+                </div>
+                <div class="small mt-1 text-danger" style="font-size:11px;"><i class="bi bi-exclamation-circle-fill me-1"></i>Required — AI features won't run without a key.</div>
+              <?php endif; ?>
+            </div>
+
+            <style>
+              /* Elegant single-line key strip — replaces the bulky dashed card. */
+              .ai-key-elegant .ai-key-strip {
+                display: flex; align-items: center; gap: 10px;
+                padding: 9px 12px; border-radius: 10px;
+                background: #f8fafc; border: 1px solid #e2e8f0;
+                transition: border-color .15s ease, box-shadow .15s ease;
+              }
+              .ai-key-elegant .ai-key-strip:hover { border-color: var(--ai-tint,#3b82f6); box-shadow: 0 2px 8px rgba(15,23,42,.05); }
+              .ai-key-elegant .ai-key-strip-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 0 3px rgba(16,185,129,.18); }
+              .ai-key-elegant .ai-key-strip-fallback .ai-key-strip-dot { box-shadow: 0 0 0 3px rgba(59,130,246,.18); }
+              .ai-key-elegant .ai-key-strip-line { font-size: 12.5px; font-weight: 600; color: #0f172a; line-height: 1.3; }
+              .ai-key-elegant .ai-key-strip-prov { color: var(--ai-tint,#3b82f6); font-weight: 700; }
+              .ai-key-elegant .ai-key-strip-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Cascadia Mono", monospace; font-size: 10.5px; color: #64748b; margin-top: 1px; word-break: break-all; }
+              .ai-key-elegant .ai-key-change-link { color: var(--ai-tint,#3b82f6); font-size: 11.5px; font-weight: 600; text-decoration: none; white-space: nowrap; }
+              .ai-key-elegant .ai-key-change-link:hover { text-decoration: underline; }
+              [data-bs-theme="dark"] .ai-key-elegant .ai-key-strip { background: #0f172a; border-color: #1e293b; }
+              [data-bs-theme="dark"] .ai-key-elegant .ai-key-strip-line { color: #e2e8f0; }
+              [data-bs-theme="dark"] .ai-key-elegant .ai-key-strip-mono { color: #94a3b8; }
+            </style>
+
+            <script>
+            (function () {
+              // Reveal/hide the Custom Base URL input when the dropdown
+              // toggles to/from "custom".  Also retints the key-strip
+              // accent dot so the colour follows the selected provider.
+              var sel = document.getElementById('aiProviderSelect');
+              var wrap = document.getElementById('aiCustomUrlWrap');
+              var strip = document.querySelector('.ai-key-elegant .ai-key-strip');
+              var provLabel = document.querySelector('.ai-key-elegant .ai-key-strip-prov');
+              if (!sel) return;
+              function sync() {
+                var v = sel.value;
+                if (wrap) wrap.style.display = (v === 'custom') ? 'block' : 'none';
+                var opt = sel.options[sel.selectedIndex];
+                var tint = opt ? opt.getAttribute('data-tint') : '';
+                if (strip && tint) strip.style.setProperty('--ai-tint', tint);
+                if (provLabel && opt) provLabel.textContent = opt.textContent;
+              }
+              sel.addEventListener('change', sync);
+              sync();
+            })();
+            </script>
           </div>
           <!-- Google Search Console -->
           <div class="col-md-4">
