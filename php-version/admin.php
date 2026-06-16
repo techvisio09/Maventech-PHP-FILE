@@ -10693,13 +10693,28 @@ elseif ($tab === 'api'):
   </div>
 
   <div class="card-e p-3 mt-3">
-    <h6 class="fw-bold mb-2"><i class="bi bi-list-ul me-1"></i> Recent Transaction Logs</h6>
+    <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+      <h6 class="fw-bold mb-0"><i class="bi bi-list-ul me-1"></i> Recent Transaction Logs <span class="text-muted small fw-normal">— <?= $apiTab==='paypal' ? 'PayPal' : 'Card' ?> payments</span></h6>
+      <?php
+        // Page-scoped: Card page → card-family rows, PayPal page → paypal rows.
+        $gwFilter = $apiTab === 'paypal' ? ['paypal','pp'] : ['card','stripe','authnet','nmi','custom'];
+        $ph       = implode(',', array_fill(0, count($gwFilter), '?'));
+        $totalSt  = $pdo->prepare("SELECT COUNT(*) FROM transaction_logs WHERE LOWER(gateway) IN ($ph)");
+        $totalSt->execute($gwFilter);
+        $totalLogs = (int)$totalSt->fetchColumn();
+      ?>
+      <span class="badge bg-light text-dark" style="font-size:11px;font-weight:600;border:1px solid #e2e8f0;" data-testid="tx-logs-total">
+        <i class="bi bi-stack me-1"></i><?= $totalLogs ?> total
+      </span>
+    </div>
     <div class="tbl-e">
       <table class="table table-sm mb-0" data-testid="tx-logs-table">
         <thead><tr><th>Gateway</th><th>Payment Mode</th><th>Transaction</th><th>Order</th><th>Amount</th><th>Status</th><th>When</th></tr></thead>
         <tbody>
           <?php
-          $logs = $pdo->query('SELECT tl.*, o.order_number FROM transaction_logs tl LEFT JOIN orders o ON o.id=tl.order_id ORDER BY tl.created_at DESC LIMIT 50');
+          $logsSt = $pdo->prepare("SELECT tl.*, o.order_number FROM transaction_logs tl LEFT JOIN orders o ON o.id=tl.order_id WHERE LOWER(tl.gateway) IN ($ph) ORDER BY tl.created_at DESC LIMIT 10");
+          $logsSt->execute($gwFilter);
+          $logs = $logsSt->fetchAll();
           $any=false; foreach ($logs as $tl):
             $any=true;
             $gw = strtolower((string)$tl['gateway']);
@@ -10722,10 +10737,17 @@ elseif ($tab === 'api'):
               <td><small class="text-muted"><?= esc(date('M j, Y H:i', strtotime($tl['created_at']))) ?></small></td>
             </tr>
           <?php endforeach; ?>
-          <?php if (!$any): ?><tr><td colspan="7" class="text-center text-muted py-3">No transactions logged yet — they'll appear here automatically as orders are processed.</td></tr><?php endif; ?>
+          <?php if (!$any): ?><tr><td colspan="7" class="text-center text-muted py-3">No <?= $apiTab==='paypal'?'PayPal':'card' ?> transactions logged yet — they'll appear here automatically as orders are processed.</td></tr><?php endif; ?>
         </tbody>
       </table>
     </div>
+    <?php if ($totalLogs > count($logs)): ?>
+      <div class="text-end mt-2">
+        <a href="?tab=orders" class="btn btn-sm btn-soft-gray rounded-pill" data-testid="tx-logs-view-all">
+          <i class="bi bi-list me-1"></i> View all <?= $totalLogs ?> in Orders →
+        </a>
+      </div>
+    <?php endif; ?>
   </div>
   <?php endif; // end apiTab toggles/else ?>
 
