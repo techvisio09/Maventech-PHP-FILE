@@ -29,7 +29,8 @@ header('Content-Type: application/json');
 
 $in = json_decode(file_get_contents('php://input'), true) ?: ($_POST ?: $_GET);
 $emailId = (int)($in['email_id'] ?? 0);
-$newTo   = trim((string)($in['new_recipient'] ?? ''));
+$newTo   = trim((string)($in['new_recipient']   ?? ''));
+$newKey  = trim((string)($in['new_license_key'] ?? ''));
 
 if (!$emailId) { echo json_encode(['ok'=>false, 'error'=>'email_id required']); exit; }
 
@@ -42,6 +43,45 @@ if (!$em) { echo json_encode(['ok'=>false, 'error'=>'Email not found']); exit; }
 $to = $newTo !== '' ? $newTo : $em['recipient'];
 if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
     echo json_encode(['ok'=>false, 'error'=>'Invalid email address']); exit;
+}
+
+/* ---- 1a. Optional: swap the license key shown in the email body.
+   We rewrite the FIRST monospace "Courier New" block inside the email's
+   HTML — that's the License Key pill rendered by render_products_block()
+   in includes/email.php. Subsequent product keys (if any) are left
+   untouched, since the admin is updating one specific customer key. ---- */
+$emailHtml = $em['html'];
+if ($newKey !== '') {
+    $replaced = false;
+    $rewritten = preg_replace_callback(
+        '#(<div\s+style="[^"]*font-family:[\'"]?Courier New[^"]*">)([^<]+)(</div>)#i',
+        function ($m) use ($newKey, &$replaced) {
+            if ($replaced) return $m[0];
+            $replaced = true;
+            return $m[1] . htmlspecialchars($newKey, ENT_QUOTES, 'UTF-8') . $m[3];
+        },
+        $emailHtml,
+        1
+    );
+    if ($rewritten !== null && $replaced) {
+        $emailHtml = $rewritten;
+    }
+    // If the regex didn't match (unusual email layout), append a clear
+    // "Updated License Key" callout near the top so the customer still
+    // sees the new key.  Falls back gracefully on weird template variants.
+    if (!$replaced) {
+        $callout = '<div style="margin:18px 24px;padding:14px;border:2px dashed #3b82f6;border-radius:10px;background:#eff6ff;text-align:center;">'
+                 . '<div style="font-size:10px;color:#64748b;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px;font-weight:600;">Updated License Key</div>'
+                 . '<div style="font-family:\'Courier New\',monospace;font-size:17px;font-weight:bold;color:#1d4ed8;letter-spacing:1.8px;">'
+                 . htmlspecialchars($newKey, ENT_QUOTES, 'UTF-8')
+                 . '</div></div>';
+        // Inject right after the opening <body> if present, else prepend.
+        if (stripos($emailHtml, '<body') !== false) {
+            $emailHtml = preg_replace('#(<body\b[^>]*>)#i', '$1' . $callout, $emailHtml, 1) ?: ($callout . $emailHtml);
+        } else {
+            $emailHtml = $callout . $emailHtml;
+        }
+    }
 }
 
 /* ---- 1. Pre-flight deliverability check on the new recipient ---- */
@@ -66,17 +106,19 @@ if ($smtpReady) {
     // synchronously so we can report success/failure to the admin.
     // Use a defensive INSERT — older schemas may not have the retry/priority
     // columns, so we ALSO try a minimal form on column-mismatch errors.
-    $note = 'Edit & Resend of email #' . $emailId . ($newTo !== '' ? ' (to ' . $newTo . ')' : '');
+    $note = 'Edit & Resend of email #' . $emailId
+          . ($newTo  !== '' ? ' (to ' . $newTo . ')' : '')
+          . ($newKey !== '' ? ' (license key updated)' : '');
     try {
         $pdo->prepare("INSERT INTO email_outbox
             (recipient, subject, html, status, note, order_id, tracking_token, template_code, retry_count, max_retries, next_retry_at, priority, attachments_json)
             VALUES (?,?,?,'queued',?,?,?,?,0,?,NOW(),?,?)")
-            ->execute([$to, $em['subject'], $em['html'], $note, $em['order_id'], $tok, $em['template_code'], $maxRetries, 3, $em['attachments_json'] ?? null]);
+            ->execute([$to, $em['subject'], $emailHtml, $note, $em['order_id'], $tok, $em['template_code'], $maxRetries, 3, $em['attachments_json'] ?? null]);
     } catch (Throwable $e) {
         $pdo->prepare("INSERT INTO email_outbox
             (recipient, subject, html, status, note, order_id, tracking_token, template_code, attachments_json)
             VALUES (?,?,?,'queued',?,?,?,?,?)")
-            ->execute([$to, $em['subject'], $em['html'], $note, $em['order_id'], $tok, $em['template_code'], $em['attachments_json'] ?? null]);
+            ->execute([$to, $em['subject'], $emailHtml, $note, $em['order_id'], $tok, $em['template_code'], $em['attachments_json'] ?? null]);
     }
     $newId = (int)$pdo->lastInsertId();
 
@@ -103,8 +145,8 @@ if ($smtpReady) {
         ->execute([
             $to,
             $em['subject'],
-            $em['html'],
-            '⚠ Captured in dev mode — SMTP disabled, NOT delivered to customer. Edit & Resend of email #' . $emailId,
+            $emailHtml,
+            '⚠ Captured in dev mode — SMTP disabled, NOT delivered to customer. Edit & Resend of email #' . $emailId . ($newKey !== '' ? ' (license key updated)' : ''),
             $em['order_id'],
             $tok,
             $em['template_code'],

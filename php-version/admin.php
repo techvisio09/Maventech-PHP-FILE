@@ -8729,6 +8729,16 @@ elseif ($tab === 'emails'):
               <div class="form-text">Use this to fix typos or send to a corrected address.</div>
             </div>
 
+            <!-- Optional: send a fresh license key alongside the resend.
+                 If left blank, the original key in the email body is preserved.
+                 If filled, the FIRST license-key block in the email body is
+                 swapped with this value before the message goes out. -->
+            <div class="mb-3">
+              <label class="form-label small fw-semibold"><i class="bi bi-key me-1 text-success"></i>Update license key <span class="text-muted">(optional)</span></label>
+              <input type="text" class="form-control" name="new_license_key" id="er_license_key" placeholder="Leave blank to keep the original key" data-testid="er-license-input" autocomplete="off" style="font-family:ui-monospace,Menlo,monospace;letter-spacing:1px;">
+              <div class="form-text">Provide a replacement key only if the customer needs a different one (e.g. activation issue). Leave blank otherwise.</div>
+            </div>
+
             <div class="mb-2">
               <label class="form-label small fw-semibold text-muted mb-1"><i class="bi bi-card-heading me-1"></i>Subject <span class="text-muted">(default — not editable)</span></label>
               <div id="er_subject_preview" class="border rounded px-3 py-2 bg-light small text-muted" style="font-style:italic;"></div>
@@ -8762,9 +8772,10 @@ elseif ($tab === 'emails'):
     //  bell counter — so the admin sees the resolution instantly without
     //  any page reload.
     // ----------------------------------------------------------------------
-    async function doEmailResend(emailId, newRecipient) {
+    async function doEmailResend(emailId, newRecipient, newLicenseKey) {
       const body = { email_id: emailId };
-      if (newRecipient) body.new_recipient = newRecipient;
+      if (newRecipient)   body.new_recipient   = newRecipient;
+      if (newLicenseKey)  body.new_license_key = newLicenseKey;
       const r = await fetch((window.MAVEN_BASE||'/') + 'ajax/email-resend.php', {
         method: 'POST', headers: {'Content-Type':'application/json'},
         body: JSON.stringify(body),
@@ -8943,6 +8954,7 @@ elseif ($tab === 'emails'):
     function openEditResendModal(id, recipient, subject, customerName) {
       document.getElementById('er_email_id').value = id;
       document.getElementById('er_recipient').value = recipient || '';
+      var lk = document.getElementById('er_license_key'); if (lk) lk.value = '';
       document.getElementById('er_subject_preview').textContent = subject || '(no subject)';
       var cb = document.getElementById('er_customer_block');
       if (customerName && customerName.trim() !== '') {
@@ -8969,18 +8981,19 @@ elseif ($tab === 'emails'):
       ev.preventDefault();
       const emailId = parseInt(document.getElementById('er_email_id').value, 10);
       const newTo   = (document.getElementById('er_recipient').value || '').trim();
+      const newKey  = ((document.getElementById('er_license_key') || {}).value || '').trim();
       const submit  = ev.target.querySelector('button[type=submit]');
       const oldHtml = submit.innerHTML;
       submit.disabled = true;
       submit.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Sending…';
       try {
-        const j = await doEmailResend(emailId, newTo);
+        const j = await doEmailResend(emailId, newTo, newKey);
         closeEditResendModal();
         if (j.delivered) {
           flipCardToSent(emailId, newTo);
           updateBellFailedCount(j.failed_count);
           adjustTabCounts();
-          showResendToast('Email resent successfully to ' + j.recipient, true);
+          showResendToast('Email resent successfully to ' + j.recipient + (newKey ? ' (with updated license key)' : ''), true);
         } else {
           showResendToast('Email queued for retry — ' + (j.error || 'will retry in background'), false);
         }
