@@ -146,6 +146,25 @@ $ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.sv
         }
     } catch (Throwable $e) { /* schema is best-effort */ }
     $currenciesAccepted = $currenciesAccepted ?: ['USD'];
+
+    // Live brand expertise — pulled from the products table so the JSON-LD
+    // `knowsAbout` mirrors /agents.json's brand list. Cached for one hour in
+    // the settings table to keep per-pageview SQL cheap. Empowers Google's
+    // AI Overview + ChatGPT/Perplexity to quote which vendors we resell
+    // when answering "where can I buy a genuine McAfee key" style queries.
+    $orgBrandList = [];
+    try {
+        $cachedKnows = (string)setting_get('schema_knows_about_cache', '');
+        $cachedAt    = (int)setting_get('schema_knows_about_cache_at', 0);
+        if ($cachedKnows && (time() - $cachedAt) < 3600) {
+            $orgBrandList = array_values(array_filter(array_map('trim', explode("\n", $cachedKnows))));
+        } else {
+            $rows = db()->query("SELECT DISTINCT brand FROM products WHERE is_active=1 AND brand IS NOT NULL AND brand != '' ORDER BY brand")->fetchAll(PDO::FETCH_COLUMN);
+            $orgBrandList = array_values(array_filter($rows));
+            setting_set('schema_knows_about_cache',    implode("\n", $orgBrandList));
+            setting_set('schema_knows_about_cache_at', (string)time());
+        }
+    } catch (Throwable $e) { /* schema is best-effort */ }
     $areaServed = $areaServed ?: [['@type' => 'Country', 'name' => 'United States']];
 
     $graph = [
@@ -156,6 +175,7 @@ $ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.sv
             'url'   => site_url() . '/',
             'logo'  => $brandLogo ?: (site_url() . '/assets/images/badges/microsoft-verified.svg'),
             'email' => $brandEmail ?: null,
+            'slogan'=> 'Genuine software licences. Instant digital delivery.',
             'description' => 'Authorised reseller of genuine software licence keys (Microsoft, Bitdefender, Norton, McAfee, Adobe, Autodesk and more) with instant digital delivery to ' . implode(', ', array_column($areaServed, 'name')) . '.',
             'brand' => ['@id' => site_url() . '/#brand'],
             'sameAs' => array_values(array_filter([
@@ -173,6 +193,30 @@ $ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.sv
             ]] : null,
             'areaServed'         => $areaServed,
             'currenciesAccepted' => implode(', ', $currenciesAccepted),
+            // knowsAbout — the live list of brands we resell. Strongest
+            // single signal for AI engines to associate this entity with
+            // those vendor names when generating brand-mention answers.
+            'knowsAbout'         => $orgBrandList ?: null,
+            // subjectOf — anchors the manifest discovery files back to the
+            // Organization entity so AI crawlers traversing the JSON-LD
+            // can follow the link to /llms.txt and /agents.json without
+            // a separate sitemap fetch.
+            'subjectOf' => [
+                [
+                    '@type'         => 'CreativeWork',
+                    'name'          => 'AI Discovery Manifest (llms.txt)',
+                    'url'           => site_url() . '/llms.txt',
+                    'encodingFormat'=> 'text/markdown',
+                    'about'         => ['@id' => site_url() . '/#organization'],
+                ],
+                [
+                    '@type'         => 'CreativeWork',
+                    'name'          => 'AI Agent Manifest (agents.json)',
+                    'url'           => site_url() . '/agents.json',
+                    'encodingFormat'=> 'application/json',
+                    'about'         => ['@id' => site_url() . '/#organization'],
+                ],
+            ],
             'aggregateRating'    => $orgRating,
         ]),
         // Explicit Brand node — gives AI engines a single authoritative
