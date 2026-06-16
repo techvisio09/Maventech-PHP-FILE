@@ -1,4 +1,39 @@
 # Changelog
+## 2026-02-15 — Corporate Blue Theme v4 (gosoftwarebuy.com reference)
+
+### Complete theme transformation (no content changes)
+User shared `new theme.pdf` referencing gosoftwarebuy.com's corporate blue look. Replaced the previous dark-pill PayPal aesthetic with a clean professional blue palette across the entire app.
+
+### New palette
+- **Primary blue**: `#0066CC` (vibrant corporate blue), hover `#0052A3`, dark `#003D7A`, light `#E7F1FB`, soft `#F0F7FF`
+- **Accent**: `#1A73E8` (Google-style blue gradient pair)
+- **Success green**: `#28A745` restored for "Genuine" / verified labels (was royal blue)
+- **Star gold**: `#FFC107`
+- **Body text**: `#1F2937`, muted `#4B5563`, subtle `#6B7280`
+- **Borders**: `#E5E7EB` light / `#D1D5DB` strong
+- **Surfaces**: white `#FFFFFF`, soft `#F8FAFC`, muted `#F1F5F9`
+
+### Component changes
+- **Buttons** — rounded rectangles (8px radius, NOT pills): primary solid blue, outline white-with-blue-border. Same for hero CTA / Compare Editions.
+- **Cards** — clean white, 1px `#E5E7EB` border, 10px radius, subtle 2-layer shadow, blue border on hover.
+- **Topbar / trustbar** — corporate navy → blue gradient (`#003D7A → #0066CC → #1A73E8`), trustbar `#003D7A`.
+- **Hero** — white → soft-blue gradient bg, blue gradient text on "for Business and Personal Use".
+- **For Every Business card** — corporate blue gradient (replaces previous cyan-teal).
+- **CTA band** — navy → blue gradient.
+- **Eyebrows / mega-headings / filter titles** — corporate blue.
+- **Hero badge / Ask AI pill / accordion active state** — soft blue chip.
+- **Inputs** — 8px radius, focus ring in corporate blue.
+- **Dark mode** — corporate dark variant with `#60A5FA` cyan-blue accents on `#0F172A` surface; navy navbar; same button rules inverted.
+
+### Files touched
+- `/app/php-version/assets/css/style.css` — appended ~330-line `CORPORATE BLUE THEME v4` override block at end of file (no content changes)
+- No PHP markup modified
+
+### Verified
+Hero, mega-menu (MS Products + Antivirus), Best-Sellers spotlight, Picked-for-you grid, For-Every-Business card, How-it-works, Why-choose, Testimonials, CTA band, FAQ, shop, blog — all render with the corporate blue theme in both light and dark mode.
+
+---
+
 ## 2026-02-15 — PayPal outline highlight + product elegance + mega-menu shrink v3
 
 ### New asks delivered (3 changes)

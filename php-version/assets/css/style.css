@@ -2480,3 +2480,415 @@ section p, section li, .accordion-body { font-weight: 400; }
   color: #051620;
   border-color: #67e8f9 !important;
 }
+
+
+/* ============================================================
+   CORPORATE BLUE THEME v4 — gosoftwarebuy.com reference (Feb 2026)
+   Goal: clean professional blue theme. White cards, soft shadows,
+   rounded rectangles (not pills), generous whitespace, refined
+   blue accents — replaces the dark-pill PayPal aesthetic.
+   ============================================================ */
+
+:root {
+  /* Brand palette */
+  --theme-primary: #0066CC;
+  --theme-primary-hover: #0052A3;
+  --theme-primary-dark: #003D7A;
+  --theme-primary-light: #E7F1FB;
+  --theme-primary-soft: #F0F7FF;
+  --theme-accent: #1A73E8;
+  --theme-success: #28A745;
+  --theme-success-soft: #E6F4EA;
+  --theme-warning: #FFC107;
+  --theme-danger: #DC3545;
+
+  /* Surfaces */
+  --theme-bg: #FFFFFF;
+  --theme-bg-soft: #F8FAFC;
+  --theme-bg-muted: #F1F5F9;
+
+  /* Text */
+  --theme-text: #1F2937;
+  --theme-text-muted: #4B5563;
+  --theme-text-subtle: #6B7280;
+
+  /* Borders & shadows */
+  --theme-border: #E5E7EB;
+  --theme-border-strong: #D1D5DB;
+  --theme-shadow-sm: 0 1px 2px rgba(15, 23, 42, .04), 0 1px 3px rgba(15, 23, 42, .06);
+  --theme-shadow-md: 0 4px 12px rgba(15, 23, 42, .08);
+  --theme-shadow-lg: 0 10px 28px rgba(15, 23, 42, .12);
+
+  /* Override existing brand vars to corporate blue */
+  --bs-primary: var(--theme-primary);
+  --bs-primary-rgb: 0, 102, 204;
+  --bs-link-color: var(--theme-primary);
+  --bs-link-hover-color: var(--theme-primary-hover);
+  --bs-body-color: var(--theme-text);
+  --bs-secondary-color: var(--theme-text-muted);
+  --bs-emphasis-color: #0F172A;
+  --bs-border-color: var(--theme-border);
+  --uc-blue: var(--theme-primary);
+  --uc-blue-dark: var(--theme-primary-hover);
+  --uc-indigo: var(--theme-primary);
+  --uc-grad: linear-gradient(135deg, #0066CC, #1A73E8);
+  --uc-grad-hover: linear-gradient(135deg, #0052A3, #0F62D6);
+  --uc-soft: var(--theme-bg-soft);
+  --uc-ring: rgba(0, 102, 204, .25);
+  --uc-shadow-sm: var(--theme-shadow-sm);
+  --uc-shadow-lg: var(--theme-shadow-lg);
+}
+
+/* Body & background */
+body {
+  background: var(--theme-bg);
+  color: var(--theme-text);
+}
+.bg-soft { background: var(--theme-bg-soft) !important; }
+.bg-body-tertiary { background: var(--theme-bg-muted) !important; }
+
+/* --- BUTTONS — corporate rounded rectangles (NOT pills) --- */
+.btn { border-radius: 8px !important; }
+
+/* Primary solid blue */
+.btn-primary,
+.btn-hero-cta {
+  background: var(--theme-primary) !important;
+  background-image: none !important;
+  border: 1.5px solid var(--theme-primary) !important;
+  color: #fff !important;
+  border-radius: 8px !important;
+  padding: .6rem 1.5rem;
+  font-weight: 600;
+  letter-spacing: -.005em;
+  box-shadow: 0 1px 2px rgba(0, 102, 204, .18);
+  transition: background-color .18s ease, border-color .18s ease, transform .18s ease, box-shadow .18s ease;
+}
+.btn-primary:hover, .btn-primary:focus,
+.btn-hero-cta:hover, .btn-hero-cta:focus {
+  background: var(--theme-primary-hover) !important;
+  border-color: var(--theme-primary-hover) !important;
+  color: #fff !important;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0, 102, 204, .28);
+}
+
+/* Outline / secondary — white fill, blue border */
+.btn-outline-primary,
+.btn-hero-ghost {
+  background: #fff !important;
+  color: var(--theme-primary) !important;
+  border: 1.5px solid var(--theme-primary) !important;
+  border-radius: 8px !important;
+  font-weight: 600;
+  padding: .55rem 1.4rem;
+}
+.btn-outline-primary:hover, .btn-outline-primary:focus,
+.btn-hero-ghost:hover, .btn-hero-ghost:focus {
+  background: var(--theme-primary) !important;
+  color: #fff !important;
+  border-color: var(--theme-primary) !important;
+  transform: translateY(-1px);
+}
+
+/* Secondary muted button */
+.btn-outline-secondary {
+  border: 1.5px solid var(--theme-border-strong) !important;
+  color: var(--theme-text) !important;
+  background: #fff !important;
+  border-radius: 8px !important;
+  font-weight: 500;
+}
+.btn-outline-secondary:hover {
+  background: var(--theme-bg-soft) !important;
+  color: var(--theme-text) !important;
+  border-color: var(--theme-text-muted) !important;
+}
+
+/* Light button (on dark backgrounds like CTA band) */
+.btn-light {
+  background: #fff !important;
+  color: var(--theme-primary) !important;
+  border: 1.5px solid #fff !important;
+  border-radius: 8px !important;
+  font-weight: 600;
+}
+.btn-light:hover {
+  background: #f1f5f9 !important;
+  color: var(--theme-primary-hover) !important;
+}
+.btn-outline-light {
+  border: 1.5px solid rgba(255,255,255,.7) !important;
+  color: #fff !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+  font-weight: 600;
+}
+.btn-outline-light:hover {
+  background: rgba(255, 255, 255, .12) !important;
+  color: #fff !important;
+  border-color: #fff !important;
+}
+
+/* Small buttons stay rounded rectangles */
+.btn-sm { border-radius: 6px !important; padding: .35rem .9rem; font-size: .82rem; }
+
+/* --- CARDS — clean white, soft shadow, light grey border (corporate look) --- */
+.card,
+.spotlight-card,
+.side-product-row,
+.product-card,
+[data-testid="welcome-back-strip"],
+[data-testid="trust-badges-row"] .card,
+[data-testid="how-it-works"] .card,
+[data-testid="why-choose-grid"] .card {
+  background: #fff !important;
+  border: 1px solid var(--theme-border) !important;
+  border-radius: 10px !important;
+  box-shadow: var(--theme-shadow-sm);
+  transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+.card:hover,
+.spotlight-card:hover,
+.side-product-row:hover,
+.product-card:hover {
+  border-color: var(--theme-primary) !important;
+  box-shadow: var(--theme-shadow-md) !important;
+  transform: translateY(-2px);
+}
+.product-card .product-img-wrap {
+  background: var(--theme-bg-muted) !important;
+  border: none !important;
+  border-radius: 8px !important;
+}
+
+/* Accordion items match the corporate card style */
+.accordion-item {
+  background: #fff !important;
+  border: 1px solid var(--theme-border) !important;
+  border-radius: 10px !important;
+  margin-bottom: .5rem;
+}
+.accordion-button { background: #fff; color: var(--theme-text); font-weight: 600; }
+.accordion-button:not(.collapsed) {
+  background: var(--theme-primary-soft) !important;
+  color: var(--theme-primary) !important;
+  box-shadow: inset 0 -1px 0 var(--theme-primary-light);
+}
+.accordion-button:focus { box-shadow: 0 0 0 .15rem var(--uc-ring); }
+
+/* Category chips — pill outlines but with corporate colors */
+.cat-chip {
+  background: #fff !important;
+  border: 1px solid var(--theme-border) !important;
+  color: var(--theme-text) !important;
+  border-radius: 999px;
+  padding: .38rem 1rem;
+  font-weight: 500;
+  font-size: .82rem;
+}
+.cat-chip:hover {
+  background: var(--theme-primary) !important;
+  border-color: var(--theme-primary) !important;
+  color: #fff !important;
+}
+
+/* --- COLOR UTILITIES → corporate blue --- */
+.text-primary { color: var(--theme-primary) !important; }
+.bg-primary { background: var(--theme-primary) !important; }
+.border-primary { border-color: var(--theme-primary) !important; }
+.text-bg-primary { background: var(--theme-primary-light) !important; color: var(--theme-primary) !important; }
+
+/* Success — restore proper green for genuine/verified labels */
+.text-success { color: var(--theme-success) !important; }
+.text-success-emphasis { color: #1E7E34 !important; }
+.bg-success { background: var(--theme-success) !important; }
+.badge.text-bg-success { background: var(--theme-success) !important; color: #fff !important; }
+.badge.text-bg-success-subtle { background: var(--theme-success-soft) !important; color: var(--theme-success) !important; }
+.alert-success { --bs-alert-bg: var(--theme-success-soft); --bs-alert-color: #1E7E34; --bs-alert-border-color: #B7E1C1; }
+.btn-success { --bs-btn-bg: var(--theme-success); --bs-btn-border-color: var(--theme-success); --bs-btn-hover-bg: #1E7E34; --bs-btn-hover-border-color: #1E7E34; }
+
+/* Yellow stars retain proper gold */
+.text-warning { color: var(--theme-warning) !important; }
+
+/* --- TOPBAR & HEADER — clean corporate blue --- */
+.topbar {
+  background: linear-gradient(90deg, #003D7A 0%, #0066CC 50%, #1A73E8 100%) !important;
+  color: #fff;
+}
+.topbar strong { color: #BFDBFE; }
+.trustbar {
+  background: #003D7A !important;
+  color: #DBEAFE;
+  border-top: 1px solid rgba(255, 255, 255, .1);
+}
+
+/* Navbar glassy, sticky */
+.navbar.sticky-top { background: rgba(255, 255, 255, .96) !important; border-bottom: 1px solid var(--theme-border); }
+
+/* Nav links */
+.navbar .nav-link { color: var(--theme-text) !important; }
+.navbar .nav-link:hover { color: var(--theme-primary) !important; }
+
+/* --- EYEBROW labels in corporate blue --- */
+.eyebrow {
+  color: var(--theme-primary) !important;
+  font-weight: 600;
+  letter-spacing: .16em;
+}
+
+/* --- MEGA-MENU keeps its compact size, just blue accents now --- */
+.mega .mega-heading,
+.antivirus-menu .mega-heading,
+.filter-group-title {
+  color: var(--theme-primary) !important;
+}
+.mega-year:hover,
+.mega a.mega-link:hover,
+.antivirus-menu .mega-link:hover { color: var(--theme-primary) !important; }
+
+/* --- HERO — clean white background, blue accents --- */
+.hero { background: linear-gradient(180deg, #FFFFFF 0%, #F0F7FF 100%) !important; }
+.hero h1 { color: var(--bs-emphasis-color) !important; }
+.hero h1 .accent {
+  background: linear-gradient(90deg, var(--theme-primary), var(--theme-accent));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.hero .text-secondary { color: var(--theme-text-muted) !important; }
+.hero-badge {
+  background: var(--theme-primary-soft) !important;
+  border: 1px solid var(--theme-primary-light) !important;
+  color: var(--theme-primary) !important;
+}
+
+/* Hero rating chip — corporate */
+.hero-rating-chip {
+  background: #fff !important;
+  border: 1px solid var(--theme-border) !important;
+  border-radius: 8px !important;
+  color: var(--theme-text);
+  box-shadow: var(--theme-shadow-sm);
+}
+
+/* --- "For Every Business" biz-card — corporate blue gradient --- */
+.biz-card {
+  background: linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-accent) 100%) !important;
+  box-shadow: 0 10px 28px rgba(0, 102, 204, .28);
+}
+.biz-chip {
+  background: rgba(255, 255, 255, .15);
+  border: 1px solid rgba(255, 255, 255, .25);
+  color: #fff;
+  border-radius: 999px;
+}
+
+/* --- CTA band at bottom — corporate gradient --- */
+[data-testid="cta-band"] {
+  background: linear-gradient(135deg, #003D7A 0%, #0066CC 60%, #1A73E8 100%) !important;
+}
+
+/* --- FORMS — corporate inputs --- */
+.form-control, .form-select, .form-control:focus, .form-select:focus {
+  border-radius: 8px;
+  border-color: var(--theme-border-strong);
+  color: var(--theme-text);
+}
+.form-control:focus, .form-select:focus {
+  border-color: var(--theme-primary);
+  box-shadow: 0 0 0 .18rem var(--uc-ring);
+}
+.form-check-input:checked {
+  background-color: var(--theme-primary);
+  border-color: var(--theme-primary);
+}
+
+/* --- BADGES — corporate blue accents --- */
+.badge.text-bg-danger { background: #FEE2E2 !important; color: var(--theme-danger) !important; }
+.badge.text-bg-warning { background: #FFF3CD !important; color: #856404 !important; }
+.badge.text-bg-info { background: var(--theme-primary-light) !important; color: var(--theme-primary) !important; }
+.badge.text-bg-light { background: var(--theme-bg-muted) !important; color: var(--theme-text) !important; }
+
+/* --- Section headings — corporate look --- */
+section h2, section .h2 { color: var(--bs-emphasis-color); }
+section h3, section .h3, section h6 { color: var(--bs-emphasis-color); }
+
+/* --- "Ask AI" pill — corporate --- */
+.ask-ai-pill {
+  background: var(--theme-primary-soft) !important;
+  border: 1px solid var(--theme-primary-light) !important;
+  border-radius: 999px;
+}
+.ask-ai-mark {
+  background: linear-gradient(135deg, var(--theme-primary), var(--theme-accent)) !important;
+  color: #fff;
+}
+
+/* --- DARK MODE: corporate dark variant with cyan-blue --- */
+[data-bs-theme="dark"] {
+  --theme-bg: #0F172A;
+  --theme-bg-soft: #1E293B;
+  --theme-bg-muted: #1A2438;
+  --theme-text: #E2E8F0;
+  --theme-text-muted: #94A3B8;
+  --theme-border: rgba(148, 163, 184, .22);
+  --theme-border-strong: rgba(148, 163, 184, .35);
+  --bs-body-bg: var(--theme-bg);
+  --bs-body-color: var(--theme-text);
+  --bs-emphasis-color: #F8FAFC;
+  --bs-border-color: var(--theme-border);
+}
+[data-bs-theme="dark"] body { background: var(--theme-bg); }
+[data-bs-theme="dark"] .card,
+[data-bs-theme="dark"] .product-card,
+[data-bs-theme="dark"] .spotlight-card,
+[data-bs-theme="dark"] .side-product-row,
+[data-bs-theme="dark"] .accordion-item,
+[data-bs-theme="dark"] [data-testid="welcome-back-strip"] {
+  background: var(--theme-bg-soft) !important;
+  border-color: var(--theme-border) !important;
+}
+[data-bs-theme="dark"] .card:hover,
+[data-bs-theme="dark"] .product-card:hover {
+  border-color: #60A5FA !important;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, .35) !important;
+}
+[data-bs-theme="dark"] .btn-primary,
+[data-bs-theme="dark"] .btn-hero-cta {
+  background: #1A73E8 !important;
+  border-color: #1A73E8 !important;
+  color: #fff !important;
+}
+[data-bs-theme="dark"] .btn-primary:hover,
+[data-bs-theme="dark"] .btn-hero-cta:hover {
+  background: #4285F4 !important;
+  border-color: #4285F4 !important;
+}
+[data-bs-theme="dark"] .btn-outline-primary,
+[data-bs-theme="dark"] .btn-hero-ghost {
+  background: transparent !important;
+  border-color: #60A5FA !important;
+  color: #60A5FA !important;
+}
+[data-bs-theme="dark"] .btn-outline-primary:hover,
+[data-bs-theme="dark"] .btn-hero-ghost:hover {
+  background: #1A73E8 !important;
+  border-color: #1A73E8 !important;
+  color: #fff !important;
+}
+[data-bs-theme="dark"] .text-primary { color: #60A5FA !important; }
+[data-bs-theme="dark"] .navbar.sticky-top { background: rgba(15, 23, 42, .95) !important; border-bottom-color: var(--theme-border); }
+[data-bs-theme="dark"] .hero { background: linear-gradient(180deg, #0F172A 0%, #1E293B 100%) !important; }
+[data-bs-theme="dark"] .hero h1 { color: #F8FAFC !important; }
+[data-bs-theme="dark"] .hero-badge { background: rgba(96, 165, 250, .12) !important; border-color: rgba(96, 165, 250, .3) !important; color: #93C5FD !important; }
+[data-bs-theme="dark"] .accordion-button { background: var(--theme-bg-soft); color: var(--theme-text); }
+[data-bs-theme="dark"] .accordion-button:not(.collapsed) { background: rgba(96, 165, 250, .1) !important; color: #93C5FD !important; }
+[data-bs-theme="dark"] .cat-chip { background: var(--theme-bg-soft) !important; border-color: var(--theme-border) !important; color: var(--theme-text) !important; }
+[data-bs-theme="dark"] .cat-chip:hover { background: #1A73E8 !important; border-color: #1A73E8 !important; color: #fff !important; }
+[data-bs-theme="dark"] .eyebrow,
+[data-bs-theme="dark"] .mega .mega-heading,
+[data-bs-theme="dark"] .antivirus-menu .mega-heading,
+[data-bs-theme="dark"] .filter-group-title { color: #60A5FA !important; }
+[data-bs-theme="dark"] .topbar { background: linear-gradient(90deg, #0B1426 0%, #0F2D5C 50%, #1A4B9C 100%) !important; }
+[data-bs-theme="dark"] .trustbar { background: #0B1426 !important; color: #93C5FD; }
