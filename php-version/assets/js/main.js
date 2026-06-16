@@ -379,22 +379,44 @@ function playChatTypingIntro() {
   }, 1200);
 }
 
-/* ---------- Chat unread bell helpers (customer side) ---------- */
+/* ---------- Chat unread badge (customer side) ---------- */
+/* Persisted via localStorage so the bright red count survives page
+   navigations — admin replies that arrive while the customer is on a
+   different page still surface a badge on the chat bubble. */
 let _chatBellCount = 0;
-function showChatBell(addCount) {
-  _chatBellCount = (typeof addCount === 'number' ? _chatBellCount + addCount : _chatBellCount + 1);
+const UC_UNREAD_KEY = 'uc_chat_unread';
+function _persistUnread(n) {
+  try { (n > 0) ? localStorage.setItem(UC_UNREAD_KEY, String(n)) : localStorage.removeItem(UC_UNREAD_KEY); } catch (e) {}
+}
+function _renderBell() {
   const bell = document.getElementById('chat-bell');
   const cnt  = document.getElementById('chat-bell-count');
   if (!bell || !cnt) return;
-  bell.style.display = 'inline-flex';
-  cnt.textContent = _chatBellCount > 9 ? '9+' : String(_chatBellCount);
+  if (_chatBellCount > 0) {
+    bell.style.display = 'inline-flex';
+    cnt.textContent = _chatBellCount > 9 ? '9+' : String(_chatBellCount);
+  } else {
+    bell.style.display = 'none';
+  }
+}
+function showChatBell(addCount) {
+  _chatBellCount = (typeof addCount === 'number' ? _chatBellCount + addCount : _chatBellCount + 1);
+  _persistUnread(_chatBellCount);
+  _renderBell();
 }
 function clearChatBell() {
   _chatBellCount = 0;
-  const bell = document.getElementById('chat-bell');
-  if (bell) bell.style.display = 'none';
+  _persistUnread(0);
+  _renderBell();
   hideChatMsgPreview();
 }
+/* Restore badge from localStorage on every page load. */
+document.addEventListener('DOMContentLoaded', () => {
+  try {
+    const stored = parseInt(localStorage.getItem(UC_UNREAD_KEY) || '0', 10);
+    if (stored > 0) { _chatBellCount = stored; _renderBell(); }
+  } catch (e) {}
+});
 
 /* ---------- Messenger-style admin-reply preview ---------- */
 let _msgPreviewTimer = null;
