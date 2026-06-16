@@ -2648,3 +2648,31 @@ Vibrant purple→indigo→blue→cyan gradient ribbon at the TOP of the page wit
 ### Visual verification
 - Screenshot at 1280×250: deal bar renders cleanly at the top in the exact gradient + pill + link + × layout from the user's reference. No content overlap. Chat bubble stays bottom-right.
 
+
+## [Feb 2026 — Iteration 23] Email image fix + AI-vs-manual URL toggle
+
+### User reported issues
+1. "Broken product images in order delivery emails."
+2. "Under Activation Sign-in URL and Installation Guide URL — give two options: auto-fill with AI or update manually. By default AI; if I want to change, I uncheck AI and type my own URL."
+
+### Completed
+- **Email images now absolute** — added `email_absolute_url()` helper in `/app/php-version/includes/email.php`. Every `<img>` in `render_products_block()` (product art) and the company logo blocks in `render_template()` + `build_order_email_html()` prepend the configured public host (`site_domain_url` setting → falls back to `site_url()`) when the path is root-relative. Verified: a fresh test order email now renders `<img src="https://indexnow-checker.preview.emergentagent.com/uploads/products/microsoft-office-2024-…webp">` instead of the broken `/uploads/products/…webp` relative path. Empty / `data:` / already-absolute URLs are passed through untouched.
+- **Per-product AI vs manual URL mode** — admin product editor now has two `iOS-style switches` ("Auto-fill with AI", default ON) above each URL field.
+  - **ON**: manual input + brand quick-pick row collapse; an info card surfaces the current AI-resolved URL ("AI will pick this URL. Current AI value: …"). Save persists `activation_url_mode='ai'` / `install_url_mode='ai'`.
+  - **OFF**: the input + quick-pick row reveal so admin can paste any custom URL (vendor portal, KB article, internal page). Save persists mode = `manual`.
+  - The existing per-product **"Auto-fill with AI"** purple button at the top of the URL section now also auto-flips both toggles ON (so the result it just wrote is preserved as AI-managed) — keeps the UX intuitive.
+- **Batch AI auto-fill respects manual mode** — the `?action=ai_autofill_urls` handler now SELECTs `activation_url_mode` + `install_url_mode` per row and skips the AI-resolved URL for any column whose mode is `manual`. Confirmed via direct DB test: a product locked to `manual` with `https://manual.keep.test/...` kept its value while a sibling product on `ai` got rewritten to `https://AI-FILLED.example.com/...`.
+- **Schema migration** — `ensure_db_schema()` in `/app/php-version/includes/functions.php` now adds `products.activation_url_mode VARCHAR(10) DEFAULT 'ai'` and `products.install_url_mode VARCHAR(10) DEFAULT 'ai'` idempotently on every admin page-load. Existing installs upgrade automatically without manual SQL.
+
+### Files touched
+- `/app/php-version/includes/email.php` — new `email_absolute_url()` helper; product / company-logo `<img>` srcs run through it
+- `/app/php-version/includes/functions.php` — `ensure_db_schema()` adds two new product columns
+- `/app/php-version/admin.php` — product editor URL section rebuilt with two AI toggles + collapsible manual panels + AI-state info card; `update_product` / `add_product` POST handlers persist both mode columns; `ai_autofill_urls` batch + `ai_urls_one` single handlers both honour the manual lock; existing AI button JS now re-syncs the toggles to ON after a successful AI fetch
+
+### Verified end-to-end
+- Direct DB check after curl POSTs:
+  - `activation_url_ai=1` + `install_url_ai=1` → modes = `ai`, URLs saved
+  - Without flags → modes = `manual`, URLs saved exactly as typed
+- Email render test: order #MV2606168CE1A produced 3 `<img src=https://indexnow-checker.preview.emergentagent.com/uploads/products/…webp>` — fully absolute, no broken images.
+- Screenshot test: toggle ON shows the blue "AI will pick this URL" card; toggle OFF reveals the manual input + brand quick-pick row.
+

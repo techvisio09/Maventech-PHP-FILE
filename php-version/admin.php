@@ -94,8 +94,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'update_product') {
         $categorySlug = ensure_category((string)($_POST['category'] ?? ''));
+        // Activation / Install URL modes — toggle from the AI switch in the form.
+        // When mode=ai, the typed value is still saved (it holds the current
+        // AI-resolved URL). When mode=manual, AI auto-fill batches will skip
+        // this product so the admin's value is never overwritten.
+        $actMode = !empty($_POST['activation_url_ai']) ? 'ai' : 'manual';
+        $insMode = !empty($_POST['install_url_ai'])    ? 'ai' : 'manual';
         $pdo->prepare('UPDATE products SET name=?, sku=?, brand=?, year=?, platform=?, category=?, license_type=?,
-            price=?, original_price=?, badge=?, description=?, is_active=?, activation_url=?, install_guide_url=?, image=COALESCE(NULLIF(?,""),image) WHERE slug=?')
+            price=?, original_price=?, badge=?, description=?, is_active=?, activation_url=?, install_guide_url=?, activation_url_mode=?, install_url_mode=?, image=COALESCE(NULLIF(?,""),image) WHERE slug=?')
             ->execute([
                 trim($_POST['name']), trim($_POST['sku']), trim($_POST['brand']) ?: null,
                 $_POST['year']!==''?(int)$_POST['year']:null, $_POST['platform'], $categorySlug,
@@ -105,6 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 isset($_POST['is_active']) ? 1 : 0,
                 trim($_POST['activation_url'] ?? '') ?: null,
                 trim($_POST['install_guide_url'] ?? '') ?: null,
+                $actMode, $insMode,
                 trim($_POST['image'] ?? ''), $_POST['slug']
             ]);
         header('Location: admin.php?tab=products&edit='.urlencode($_POST['slug']).'&msg=Saved'); exit;
@@ -136,12 +143,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } catch (Throwable $e) { /* non-fatal — product still saves below */ }
         }
         $slug = preg_replace('/[^a-z0-9]+/i','-', strtolower(trim($_POST['name']))) . '-' . substr(md5(uniqid()),0,5);
-        $pdo->prepare('INSERT INTO products (slug,name,sku,brand,year,platform,category,license_type,price,original_price,badge,description,image,is_active,activation_url,install_guide_url,region,apps,rating,reviews) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,4.5,0)')
+        $actMode = !empty($_POST['activation_url_ai']) ? 'ai' : 'manual';
+        $insMode = !empty($_POST['install_url_ai'])    ? 'ai' : 'manual';
+        $pdo->prepare('INSERT INTO products (slug,name,sku,brand,year,platform,category,license_type,price,original_price,badge,description,image,is_active,activation_url,install_guide_url,activation_url_mode,install_url_mode,region,apps,rating,reviews) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,4.5,0)')
             ->execute([$slug, trim($_POST['name']), trim($_POST['sku']) ?: 'SKU-'.strtoupper(substr(md5($slug),0,8)), trim($_POST['brand']) ?: null,
                 $_POST['year']!==''?(int)$_POST['year']:null, $_POST['platform'], $categorySlug, $_POST['license_type'],
                 (float)$_POST['price'], $_POST['original_price']!==''?(float)$_POST['original_price']:null,
                 trim($_POST['badge']) ?: null, trim($_POST['description'] ?? '') ?: null, trim($_POST['image'] ?? '') ?: null,
-                isset($_POST['is_active']) ? 1 : 0, trim($_POST['activation_url'] ?? '') ?: null, trim($_POST['install_guide_url'] ?? '') ?: null, $region_code, '']);
+                isset($_POST['is_active']) ? 1 : 0, trim($_POST['activation_url'] ?? '') ?: null, trim($_POST['install_guide_url'] ?? '') ?: null,
+                $actMode, $insMode,
+                $region_code, '']);
         header('Location: admin.php?tab=products&edit='.urlencode($slug).'&msg=Product+created'); exit;
 
     } elseif ($action === 'duplicate_product') {
@@ -273,7 +284,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $onlyMissing = !empty($_POST['only_missing']);
         $wh = "WHERE region=?";
         if ($onlyMissing) $wh .= " AND (activation_url IS NULL OR activation_url='' OR install_guide_url IS NULL OR install_guide_url='')";
-        $st = $pdo->prepare("SELECT slug, name, brand FROM products $wh ORDER BY id");
+        $st = $pdo->prepare("SELECT slug, name, brand, activation_url_mode, install_url_mode FROM products $wh ORDER BY id");
         $st->execute([$region_code]);
         $prods = $st->fetchAll();
 
@@ -329,16 +340,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $parsed = json_decode($text, true);
             $results = $parsed['results'] ?? null;
             if (is_array($results)) {
+                // Build a lookup of activation/install URL modes per slug — when
+                // mode='manual' the admin chose to type their own URL and AI
+                // batch must NOT overwrite it.
+                $modeBySlug = [];
+                foreach ($prods as $p) {
+                    $modeBySlug[$p['slug']] = [
+                        'act' => ($p['activation_url_mode'] ?? 'ai') === 'manual' ? 'manual' : 'ai',
+                        'ins' => ($p['install_url_mode']    ?? 'ai') === 'manual' ? 'manual' : 'ai',
+                    ];
+                }
                 $upd = $pdo->prepare('UPDATE products SET
                     activation_url    = CASE WHEN (activation_url IS NULL OR activation_url="")    THEN ? ELSE activation_url    END,
                     install_guide_url = CASE WHEN (install_guide_url IS NULL OR install_guide_url="") THEN ? ELSE install_guide_url END
                     WHERE slug=?');
                 foreach ($results as $r) {
                     if (empty($r['slug'])) continue;
-                    $au = filter_var($r['activation_url'] ?? '', FILTER_VALIDATE_URL) ? $r['activation_url'] : null;
-                    $gu = filter_var($r['install_guide_url'] ?? '', FILTER_VALIDATE_URL) ? $r['install_guide_url'] : null;
+                    $slug = $r['slug'];
+                    $modes = $modeBySlug[$slug] ?? ['act'=>'ai','ins'=>'ai'];
+                    $au = ($modes['act'] === 'ai' && filter_var($r['activation_url'] ?? '', FILTER_VALIDATE_URL)) ? $r['activation_url'] : null;
+                    $gu = ($modes['ins'] === 'ai' && filter_var($r['install_guide_url'] ?? '', FILTER_VALIDATE_URL)) ? $r['install_guide_url'] : null;
                     if ($au === null && $gu === null) continue;
-                    $upd->execute([$au, $gu, $r['slug']]);
+                    $upd->execute([$au, $gu, $slug]);
                     if ($upd->rowCount() > 0) $updated++;
                 }
             } else {
@@ -6431,38 +6454,102 @@ elseif ($tab === 'products'):
                     <span id="aiUrlLabel">Auto-fill with AI</span>
                   </button>
                 </h6>
+                <?php
+                  $actMode = ($editing['activation_url_mode'] ?? 'ai') === 'manual' ? 'manual' : 'ai';
+                  $insMode = ($editing['install_url_mode']    ?? 'ai') === 'manual' ? 'manual' : 'ai';
+                ?>
                 <div class="row g-2 mb-3">
                   <div class="col-12">
-                    <label class="form-label small mb-0">Where should the customer go to activate? <span class="badge bg-success ms-1" style="font-size:9px;">used in order email</span></label>
-                    <input class="form-control form-control-sm" name="activation_url" value="<?= esc($editing['activation_url'] ?? '') ?>" placeholder="https://setup.office.com (leave blank → auto Google search per product name)" data-testid="f-activation-url">
-                    <small class="text-muted">Customers see a "Sign in to activate →" button in the order email that opens this URL. Leave blank and we auto-generate a Google search link with the product name so they always land on the right page.</small>
-                    <div class="d-flex gap-1 flex-wrap mt-1">
-                      <?php foreach ([
-                        'Office (setup)'  => 'https://setup.office.com',
-                        'Microsoft Account' => 'https://account.microsoft.com',
-                        'Bitdefender'     => 'https://central.bitdefender.com',
-                        'McAfee'          => 'https://home.mcafee.com',
-                        'Norton'          => 'https://my.norton.com',
-                        'Adobe'           => 'https://account.adobe.com',
-                      ] as $lbl=>$u): ?>
-                        <button type="button" class="btn btn-soft-gray btn-sm py-0 px-2" style="font-size:11px;" onclick="document.querySelector('[name=activation_url]').value='<?= esc($u) ?>';"><?= esc($lbl) ?></button>
-                      <?php endforeach; ?>
+                    <label class="form-label small mb-1 d-flex align-items-center justify-content-between">
+                      <span>Where should the customer go to activate? <span class="badge bg-success ms-1" style="font-size:9px;">used in order email</span></span>
+                    </label>
+                    <div class="form-check form-switch mb-2">
+                      <input class="form-check-input" type="checkbox" role="switch"
+                             id="actAiToggle" name="activation_url_ai" value="1"
+                             data-target="activation-url"
+                             data-testid="activation-ai-toggle"
+                             <?= $actMode === 'ai' ? 'checked' : '' ?>>
+                      <label class="form-check-label small text-muted" for="actAiToggle">
+                        <i class="bi bi-stars text-primary"></i>
+                        <strong>Auto-fill with AI</strong>
+                        <span class="d-block text-muted" style="font-size:11px;">When ON, AI picks the official vendor activation page. Turn OFF to type your own URL.</span>
+                      </label>
+                    </div>
+                    <div class="js-url-manual" data-key="activation-url" style="<?= $actMode === 'ai' ? 'display:none;' : '' ?>">
+                      <input class="form-control form-control-sm" name="activation_url" value="<?= esc($editing['activation_url'] ?? '') ?>" placeholder="https://setup.office.com" data-testid="f-activation-url">
+                      <small class="text-muted">Customers see a "Sign in to activate &rarr;" button in the order email that opens this URL.</small>
+                      <div class="d-flex gap-1 flex-wrap mt-1">
+                        <?php foreach ([
+                          'Office (setup)'  => 'https://setup.office.com',
+                          'Microsoft Account' => 'https://account.microsoft.com',
+                          'Bitdefender'     => 'https://central.bitdefender.com',
+                          'McAfee'          => 'https://home.mcafee.com',
+                          'Norton'          => 'https://my.norton.com',
+                          'Adobe'           => 'https://account.adobe.com',
+                        ] as $lbl=>$u): ?>
+                          <button type="button" class="btn btn-soft-gray btn-sm py-0 px-2" style="font-size:11px;" onclick="document.querySelector('[name=activation_url]').value='<?= esc($u) ?>';"><?= esc($lbl) ?></button>
+                        <?php endforeach; ?>
+                      </div>
+                    </div>
+                    <div class="js-url-ai-state" data-key="activation-url" style="<?= $actMode === 'manual' ? 'display:none;' : '' ?>">
+                      <div class="alert alert-info py-2 px-3 mb-0 d-flex align-items-center gap-2" style="font-size:12px;">
+                        <i class="bi bi-stars text-primary"></i>
+                        <div class="flex-grow-1">
+                          <strong>AI will pick this URL.</strong>
+                          <?php if (!empty($editing['activation_url'])): ?>
+                            <span class="text-muted">Current AI value: <code><?= esc($editing['activation_url']) ?></code></span>
+                          <?php else: ?>
+                            <span class="text-muted">Click <em>Auto-fill with AI</em> above (or run the batch Auto-fill on the products list) to populate.</span>
+                          <?php endif; ?>
+                        </div>
+                      </div>
+                      <input type="hidden" name="activation_url_ai_current" value="<?= esc($editing['activation_url'] ?? '') ?>">
                     </div>
                   </div>
                   <div class="col-12 mt-3">
-                    <label class="form-label small mb-0"><i class="bi bi-book me-1"></i>Installation Guide URL <span class="badge bg-success ms-1" style="font-size:9px;">used in order email</span></label>
-                    <input class="form-control form-control-sm" name="install_guide_url" value="<?= esc($editing['install_guide_url'] ?? '') ?>" placeholder="https://support.microsoft.com/install-office  (optional)" data-testid="f-install-guide-url">
-                    <small class="text-muted">Customers see a "📖 View installation guide →" button in the order email that opens this URL. Use a vendor support page, your own KB article, or a YouTube tutorial — whatever helps them install fastest.</small>
-                    <div class="d-flex gap-1 flex-wrap mt-1">
-                      <?php foreach ([
-                        'MS Office install'  => 'https://support.microsoft.com/office/install',
-                        'Bitdefender install'=> 'https://www.bitdefender.com/consumer/support/answer/2099/',
-                        'McAfee install'     => 'https://service.mcafee.com/?articleId=TS101331',
-                        'Norton install'     => 'https://support.norton.com/sp/en/us/home/current/solutions/v138918432',
-                        'Adobe install'      => 'https://helpx.adobe.com/download-install.html',
-                      ] as $lbl=>$u): ?>
-                        <button type="button" class="btn btn-soft-gray btn-sm py-0 px-2" style="font-size:11px;" onclick="document.querySelector('[name=install_guide_url]').value='<?= esc($u) ?>';"><?= esc($lbl) ?></button>
-                      <?php endforeach; ?>
+                    <label class="form-label small mb-1 d-flex align-items-center justify-content-between">
+                      <span><i class="bi bi-book me-1"></i>Installation Guide URL <span class="badge bg-success ms-1" style="font-size:9px;">used in order email</span></span>
+                    </label>
+                    <div class="form-check form-switch mb-2">
+                      <input class="form-check-input" type="checkbox" role="switch"
+                             id="insAiToggle" name="install_url_ai" value="1"
+                             data-target="install-url"
+                             data-testid="install-ai-toggle"
+                             <?= $insMode === 'ai' ? 'checked' : '' ?>>
+                      <label class="form-check-label small text-muted" for="insAiToggle">
+                        <i class="bi bi-stars text-primary"></i>
+                        <strong>Auto-fill with AI</strong>
+                        <span class="d-block text-muted" style="font-size:11px;">When ON, AI picks the official vendor install guide. Turn OFF to type your own URL.</span>
+                      </label>
+                    </div>
+                    <div class="js-url-manual" data-key="install-url" style="<?= $insMode === 'ai' ? 'display:none;' : '' ?>">
+                      <input class="form-control form-control-sm" name="install_guide_url" value="<?= esc($editing['install_guide_url'] ?? '') ?>" placeholder="https://support.microsoft.com/install-office" data-testid="f-install-guide-url">
+                      <small class="text-muted">Customers see a "View installation guide &rarr;" button in the order email that opens this URL.</small>
+                      <div class="d-flex gap-1 flex-wrap mt-1">
+                        <?php foreach ([
+                          'MS Office install'  => 'https://support.microsoft.com/office/install',
+                          'Bitdefender install'=> 'https://www.bitdefender.com/consumer/support/answer/2099/',
+                          'McAfee install'     => 'https://service.mcafee.com/?articleId=TS101331',
+                          'Norton install'     => 'https://support.norton.com/sp/en/us/home/current/solutions/v138918432',
+                          'Adobe install'      => 'https://helpx.adobe.com/download-install.html',
+                        ] as $lbl=>$u): ?>
+                          <button type="button" class="btn btn-soft-gray btn-sm py-0 px-2" style="font-size:11px;" onclick="document.querySelector('[name=install_guide_url]').value='<?= esc($u) ?>';"><?= esc($lbl) ?></button>
+                        <?php endforeach; ?>
+                      </div>
+                    </div>
+                    <div class="js-url-ai-state" data-key="install-url" style="<?= $insMode === 'manual' ? 'display:none;' : '' ?>">
+                      <div class="alert alert-info py-2 px-3 mb-0 d-flex align-items-center gap-2" style="font-size:12px;">
+                        <i class="bi bi-stars text-primary"></i>
+                        <div class="flex-grow-1">
+                          <strong>AI will pick this URL.</strong>
+                          <?php if (!empty($editing['install_guide_url'])): ?>
+                            <span class="text-muted">Current AI value: <code><?= esc($editing['install_guide_url']) ?></code></span>
+                          <?php else: ?>
+                            <span class="text-muted">Click <em>Auto-fill with AI</em> above (or run the batch Auto-fill on the products list) to populate.</span>
+                          <?php endif; ?>
+                        </div>
+                      </div>
+                      <input type="hidden" name="install_guide_url_ai_current" value="<?= esc($editing['install_guide_url'] ?? '') ?>">
                     </div>
                   </div>
                 </div>
@@ -6690,6 +6777,13 @@ elseif ($tab === 'products'):
         }
         if (json.activation_url    && actInput) { actInput.value = json.activation_url;    }
         if (json.install_guide_url && insInput) { insInput.value = json.install_guide_url; }
+        // Flip both AI toggles back ON — clicking the Auto-fill button is an
+        // explicit "let AI handle this" action, so make sure the saved mode
+        // reflects that (and the manual panels collapse to the AI summary).
+        const actT = document.getElementById('actAiToggle');
+        const insT = document.getElementById('insAiToggle');
+        if (actT && !actT.checked) { actT.checked = true; actT.dispatchEvent(new Event('change')); }
+        if (insT && !insT.checked) { insT.checked = true; insT.dispatchEvent(new Event('change')); }
         label.textContent = 'Filled ✓';
         setTimeout(() => { label.textContent = original; btn.disabled = false; }, 2200);
       } catch (e) {
@@ -6697,6 +6791,31 @@ elseif ($tab === 'products'):
         btn.disabled = false;
         setTimeout(() => { label.textContent = original; }, 3000);
       }
+    });
+  })();
+
+  // ============================================================
+  // Activation / Install URL — "Auto-fill with AI" mode toggles.
+  // When the switch is ON: hide the manual input + quick-pick row,
+  // show the AI summary card. When OFF: reveal the manual input
+  // so the admin can type a custom URL.
+  // ============================================================
+  (function () {
+    const toggles = document.querySelectorAll('input[name="activation_url_ai"], input[name="install_url_ai"]');
+    if (!toggles.length) return;
+    function applyState(toggle) {
+      const key  = toggle.getAttribute('data-target');
+      const root = toggle.closest('form');
+      if (!root || !key) return;
+      const manualBox = root.querySelector('.js-url-manual[data-key="'+key+'"]');
+      const aiBox     = root.querySelector('.js-url-ai-state[data-key="'+key+'"]');
+      const on = toggle.checked;
+      if (manualBox) manualBox.style.display = on ? 'none' : '';
+      if (aiBox)     aiBox.style.display     = on ? ''     : 'none';
+    }
+    toggles.forEach(function (t) {
+      t.addEventListener('change', function () { applyState(t); });
+      applyState(t);
     });
   })();
 

@@ -193,6 +193,14 @@ function ensure_db_schema(): void
             // for each, so the customer's order-delivery email arrives
             // with proper receipt + invoice PDFs.
             "ALTER TABLE email_outbox ADD COLUMN attachments_json TEXT NULL DEFAULT NULL",
+            // products.{activation_url_mode, install_url_mode} — control how
+            // each URL is sourced. 'ai' (default) → AI auto-fill is allowed
+            // to overwrite the value; 'manual' → admin typed the URL and
+            // it must be respected (AI never overwrites). Email rendering
+            // reads activation_url / install_guide_url directly; the *_mode
+            // columns only gate who fills them.
+            "ALTER TABLE products ADD COLUMN activation_url_mode VARCHAR(10) NOT NULL DEFAULT 'ai'",
+            "ALTER TABLE products ADD COLUMN install_url_mode    VARCHAR(10) NOT NULL DEFAULT 'ai'",
             // Persistent log of every "Ask AI" turn on the product page.
             // Lets admins (a) review what customers ask, (b) train the
             // system prompt over time, (c) capture lead intent (the

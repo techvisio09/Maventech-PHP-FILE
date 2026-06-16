@@ -4,6 +4,22 @@ require_once __DIR__ . '/functions.php';
 require_once __DIR__ . '/settings.php';
 
 /**
+ * Normalize an image URL for email rendering. Email clients (Gmail, Outlook,
+ * Apple Mail) require ABSOLUTE URLs — a root-relative path like
+ * /uploads/products/foo.webp renders as a broken icon. This prepends the
+ * configured public host (or site_url() as fallback) when the path is not
+ * already absolute. Returns the original value when empty.
+ */
+function email_absolute_url(string $url): string {
+    $url = trim($url);
+    if ($url === '') return '';
+    if (preg_match('#^(https?:)?//#i', $url)) return $url;
+    if (preg_match('#^(data|cid):#i', $url))  return $url;
+    $publicHost = trim((string)setting_get('site_domain_url', '')) ?: site_url();
+    return rtrim($publicHost, '/') . '/' . ltrim($url, '/');
+}
+
+/**
  * Resolve the activation / sign-in URL for a product.
  * Priority:
  *   1. Per-product `activation_url` configured by admin
@@ -720,7 +736,7 @@ function render_template(string $code, array $vars = []): ?string {
 
     $co = company_info();
     $logoHtml = $co['logo']
-        ? '<img src="' . esc($co['logo']) . '" alt="' . esc($co['name']) . ' logo" style="max-height:48px;max-width:200px;display:inline-block;vertical-align:middle;">'
+        ? '<img src="' . esc(email_absolute_url($co['logo'])) . '" alt="' . esc($co['name']) . ' logo" style="max-height:48px;max-width:200px;display:inline-block;vertical-align:middle;">'
         : '';
 
     $base = [
@@ -793,8 +809,9 @@ function render_template_subject(string $code, array $vars = []): ?string {
 function render_products_block(array $assignments): string {
     $rows = '';
     foreach ($assignments as $a) {
-        $img = $a['image']
-            ? '<img src="' . esc($a['image']) . '" width="68" height="68" alt="" style="border-radius:8px;background:#f8fafc;object-fit:contain;">'
+        $imgSrc = email_absolute_url((string)($a['image'] ?? ''));
+        $img = $imgSrc
+            ? '<img src="' . esc($imgSrc) . '" width="68" height="68" alt="" style="border-radius:8px;background:#f8fafc;object-fit:contain;">'
             : '<div style="width:68px;height:68px;background:#f1f5f9;border-radius:8px;display:inline-block;"></div>';
         // Multi-seat "Valid for N PCs/devices" badge — shown only when qty > 1.
         // Microsoft / Office / Windows products use "PC" terminology; everything
@@ -885,7 +902,7 @@ function build_order_email_html(array $order, array $items, array $assignments, 
 
     $co = company_info();
     $logoHtml = $co['logo']
-        ? '<img src="' . esc($co['logo']) . '" alt="' . esc($co['name']) . ' logo" style="max-height:48px;max-width:200px;display:inline-block;vertical-align:middle;">'
+        ? '<img src="' . esc(email_absolute_url($co['logo'])) . '" alt="' . esc($co['name']) . ' logo" style="max-height:48px;max-width:200px;display:inline-block;vertical-align:middle;">'
         : '';
     $addressHtml = $co['address'] ? nl2br(esc($co['address'])) : '';
 
