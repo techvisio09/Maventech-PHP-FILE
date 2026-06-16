@@ -3262,3 +3262,41 @@ body.has-deal-bar #chat-bubble { bottom: 22px; }
   .trustbar-deal-text { display: none; }
 }
 
+
+
+/* ============================================================
+   DARK-MODE CONTRAST FIX (Feb 2026)
+   The "Ask Maventech Software AI" pill + several hero/CTA cards
+   were rendering with a light translucent background in dark mode
+   so their text disappeared.  These rules force proper contrast.
+   ============================================================ */
+[data-bs-theme="dark"] .ask-ai-pill {
+  background: linear-gradient(90deg, rgba(96, 165, 250, .12), rgba(96, 165, 250, .06)) !important;
+  border: 1px solid rgba(96, 165, 250, .35) !important;
+}
+[data-bs-theme="dark"] .ask-ai-pill .fw-bold,
+[data-bs-theme="dark"] .ask-ai-pill .small,
+[data-bs-theme="dark"] .ask-ai-pill div { color: #E2E8F0 !important; }
+[data-bs-theme="dark"] .ask-ai-pill .text-secondary { color: #94A3B8 !important; }
+
+/* Hero secondary text on dark backgrounds */
+[data-bs-theme="dark"] .hero .text-secondary,
+[data-bs-theme="dark"] .hero p.text-secondary { color: #94A3B8 !important; }
+[data-bs-theme="dark"] .hero ul li { color: #E2E8F0 !important; }
+
+/* "Welcome back" strip + similar small cards in dark mode */
+[data-bs-theme="dark"] [data-testid="welcome-back-strip"] *:not(.btn):not(.badge):not(i):not(.text-warning):not(.text-success) {
+  color: inherit;
+}
+[data-bs-theme="dark"] [data-testid="welcome-back-strip"] .text-secondary { color: #94A3B8 !important; }
+[data-bs-theme="dark"] [data-testid="welcome-back-strip"] .fw-bold { color: #F8FAFC !important; }
+
+/* Section eyebrows + h2 + p in dark mode */
+[data-bs-theme="dark"] section h2,
+[data-bs-theme="dark"] section .h2 { color: #F8FAFC !important; }
+[data-bs-theme="dark"] section p { color: #CBD5E1; }
+[data-bs-theme="dark"] section .text-secondary { color: #94A3B8 !important; }
+
+/* Trust check-mark icons + text in hero list */
+[data-bs-theme="dark"] .hero .bi-check-circle-fill,
+[data-bs-theme="dark"] .hero .bi-patch-check-fill { color: #34D399 !important; }
