@@ -1309,7 +1309,7 @@ function render_product_row(array $p): string
         <div class="flex-grow-1 min-w-0">
           <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
             ' . $badge . '
-            <span class="badge os-badge"><img src="assets/images/os/' . $osIcon . '.svg" alt="" class="os-icon me-1" width="14" height="14">' . esc($p['platform'] ?: 'Windows') . '</span>
+            <span class="badge os-badge"><img src="assets/images/os/' . $osIcon . '.svg" alt="' . esc($p['platform'] ?: 'Windows') . ' platform" class="os-icon me-1" width="14" height="14">' . esc($p['platform'] ?: 'Windows') . '</span>
             ' . $save . '
           </div>
           <a href="product.php?slug=' . esc($p['slug']) . '" class="text-decoration-none text-body fw-bold fs-6 d-block">' . esc($p['name']) . '</a>
@@ -1360,7 +1360,7 @@ function render_product_card(array $p): string
       </a>
       <div class="card-body d-flex flex-column">
         <div class="d-flex align-items-center justify-content-between gap-2 mb-1">
-          <span class="badge os-badge"><img src="assets/images/os/' . $osIcon . '.svg" alt="" class="os-icon me-1" width="14" height="14">' . esc($p['platform'] ?: 'Windows') . '</span>
+          <span class="badge os-badge"><img src="assets/images/os/' . $osIcon . '.svg" alt="' . esc($p['platform'] ?: 'Windows') . ' platform" class="os-icon me-1" width="14" height="14">' . esc($p['platform'] ?: 'Windows') . '</span>
           <span class="small">' . render_stars((float)$p['rating']) . ' <span class="text-secondary">(' . (int)$p['reviews'] . ')</span></span>
         </div>
         <a href="product.php?slug=' . esc($p['slug']) . '" class="text-decoration-none text-body fw-semibold product-title mb-1">' . esc($p['name']) . '</a>
@@ -1529,7 +1529,7 @@ function render_variant_row(string $title, string $testPrefix, array $options, ?
     if (!$options) return '';
     $label = $label ?? fn($o) => $o;
     $osIcon = fn($o) => $testPrefix === 'os'
-        ? '<img src="assets/images/os/' . ($o === 'Mac' ? 'macos' : 'windows') . '.svg" alt="" class="os-icon me-1" width="14" height="14">'
+        ? '<img src="assets/images/os/' . ($o === 'Mac' ? 'macos' : 'windows') . '.svg" alt="' . esc($o) . ' platform" class="os-icon me-1" width="14" height="14">'
         : '';
     $html = '<div class="mb-3" data-testid="' . $testPrefix . '-selector"><small class="text-secondary d-block mb-1">' . esc($title)
           . ': <span class="fw-semibold">' . esc($label($currentValue)) . '</span></small><div class="d-flex flex-wrap gap-2">';

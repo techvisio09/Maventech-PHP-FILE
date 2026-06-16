@@ -1,5 +1,37 @@
 # Changelog
 
+## 2026-02-15 — Audit fixes: favicon, image alts, H1 trim, www canonical redirect
+
+### Audit issues resolved (from external SEO crawler)
+- **Favicon** — added `/favicon.ico` (real ICO container, 32×32 PNG inside, 659 B), `/favicon.svg` (gradient M mark, 475 B), and 16/32/64 PNG fallbacks under `assets/images/favicon/`. Header.php now emits the full `<link rel="icon">` set + `<meta name="theme-color">`.
+- **H1 length** — homepage H1 trimmed from 75 → 50 chars: "Genuine Microsoft Office & Windows 11 License Keys".
+- **Image alt attributes** — replaced every decorative `alt=""` on OS icon images (`os/windows.svg`, `os/macos.svg`) with meaningful alt text. Touched: `category.php`, `shop.php`, `includes/functions.php` (3 render helpers).
+- **www ↔ non-www 301 redirect** — added a canonical-host preference (admin setting `seo_canonical_host_pref`, value `naked` or `www`).
+  - `router.php` enforces the redirect on the PHP built-in server (skips `*.preview.emergentagent.com`, localhost, IPs).
+  - `.htaccess` mirrors the same logic via mod_rewrite for Apache hosting (driven by the `SEO_CANONICAL_HOST` env var).
+  - New admin UI tile under SEO settings lets the operator toggle naked vs www without code edits.
+
+### Files touched
+- `includes/header.php` — favicon `<link>` block + theme-color
+- `includes/functions.php` — meaningful OS-icon alt in `render_product_card()`, `render_product_row_card()`, `render_variant_picker()`
+- `category.php`, `shop.php`, `index.php` — H1 trim + descriptive alts
+- `router.php`, `.htaccess` — canonical-host 301 redirect
+- `admin.php` — canonical-host preference UI + validator
+- **NEW**: `favicon.ico`, `favicon.svg`, `assets/images/favicon/favicon-{16,32,64}.png`
+
+### Audit verification (after fix)
+| Check                    | Result                              |
+| ------------------------ | ----------------------------------- |
+| Title length (50-60)     | ✓ 55 chars                          |
+| Description length (120-160) | ✓ 134 chars                     |
+| H1 length (≤60)          | ✓ 50 chars                          |
+| Favicon SVG + ICO + PNG  | ✓ 3/3 references in `<head>`        |
+| Canonical URL            | ✓                                   |
+| Empty `alt=""` images    | ✓ 0                                 |
+
+---
+
+
 ## 2026-02-15 — SEO meta-tag tightening, E.164 tel:, backlink bootstrap
 
 ### P0 SEO meta-tag overhaul

@@ -89,7 +89,7 @@ include __DIR__ . '/includes/header.php';
         <span class="small fw-bold text-secondary ms-2 me-2">Platform:</span>
         <?php foreach (['' => ['All', null], 'Windows' => ['Windows', 'windows'], 'Mac' => ['Mac', 'macos']] as $val => [$label, $osImg]): ?>
           <a href="?slug=<?= esc($slug) ?>&platform=<?= $val ?>&sort=<?= esc($sort) ?>" class="platform-pill <?= $platform === $val ? 'active' : '' ?>" data-testid="platform-<?= $val ? strtolower($val) : 'all' ?>">
-            <?php if ($osImg): ?><img src="assets/images/os/<?= $osImg ?>.svg" alt="" class="os-icon me-1"><?php endif; ?><?= $label ?>
+            <?php if ($osImg): ?><img src="assets/images/os/<?= $osImg ?>.svg" alt="<?= esc($osImg === 'macos' ? 'macOS platform' : 'Windows platform') ?>" class="os-icon me-1"><?php endif; ?><?= $label ?>
           </a>
         <?php endforeach; ?>
       </div>

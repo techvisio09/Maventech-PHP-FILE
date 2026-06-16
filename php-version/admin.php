@@ -1265,6 +1265,7 @@ if ($tab === 'ai-blogger') {
             'pinterest_site_verification_token' => function ($s) { return (bool)preg_match('/^[A-Za-z0-9_\-]{12,96}$/', $s); },
             'google_merchant_id'                => function ($s) { return (bool)preg_match('/^[0-9]{6,20}$/', $s); },
             'site_domain_url'                   => function ($s) { return (bool)preg_match('~^https?://[A-Za-z0-9.\-]+(?::\d+)?(?:/.*)?$~i', $s); },
+            'seo_canonical_host_pref'           => function ($s) { return in_array($s, ['naked', 'www'], true); },
         ];
         $fields = [
             'google_site_verification_token'    => 'Google Search Console',
@@ -1273,6 +1274,7 @@ if ($tab === 'ai-blogger') {
             'pinterest_site_verification_token' => 'Pinterest',
             'google_merchant_id'                => 'Google Merchant Center',
             'site_domain_url'                   => 'Website Domain',
+            'seo_canonical_host_pref'           => 'Canonical Host Preference',
         ];
         $domainChanged = false;
         $oldDomain     = setting_get('site_domain_url', '');
@@ -4242,6 +4244,8 @@ elseif ($tab === 'ai-blogger'):
     $seoPint    = setting_get('pinterest_site_verification_token', defined('PINTEREST_SITE_VERIFICATION') ? PINTEREST_SITE_VERIFICATION : '');
     $seoGmc     = setting_get('google_merchant_id', '');
     $seoDomain  = setting_get('site_domain_url', rtrim(site_url(), '/'));
+    $seoCanonHost = strtolower((string)setting_get('seo_canonical_host_pref', 'naked'));
+    if (!in_array($seoCanonHost, ['naked', 'www'], true)) $seoCanonHost = 'naked';
     // Count how many are configured
     $seoConfigured = 0;
     if ($seoGsc)    $seoConfigured++;
@@ -4442,6 +4446,22 @@ elseif ($tab === 'ai-blogger'):
               <a href="https://merchants.google.com" target="_blank" class="text-primary text-decoration-none">merchants.google.com <i class="bi bi-box-arrow-up-right" style="font-size:10px;"></i></a>
             </div>
             <div class="text-secondary small mt-1">Shows your products in Google Shopping results with prices.</div>
+          </div>
+        </div>
+
+        <!-- Canonical Host Preference (www vs naked) -->
+        <div class="col-md-6">
+          <div class="p-3 seo-platform-card" style="border-radius:10px;">
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <i class="bi bi-link-45deg" style="font-size:18px;color:#0066CC;"></i>
+              <strong class="platform-name" style="font-size:13px;">Canonical Host (www vs naked)</strong>
+              <span class="badge rounded-pill" style="background:<?= $seoCanonHost === 'www' ? '#dbeafe' : '#d1fae5' ?>;color:<?= $seoCanonHost === 'www' ? '#1e40af' : '#065f46' ?>;font-size:9px;"><?= esc($seoCanonHost === 'www' ? 'www.*' : 'naked' ) ?></span>
+            </div>
+            <select name="seo_canonical_host_pref" class="form-select form-select-sm" style="font-size:12px;" data-testid="canonical-host-pref">
+              <option value="naked" <?= $seoCanonHost === 'naked' ? 'selected' : '' ?>>Naked domain — example.com (recommended)</option>
+              <option value="www" <?= $seoCanonHost === 'www' ? 'selected' : '' ?>>www subdomain — www.example.com</option>
+            </select>
+            <div class="text-secondary small mt-1">Browsers visiting the "wrong" host receive a permanent 301 redirect to your canonical version. Fixes the "www and non-www are not redirected" SEO-audit warning by consolidating PageRank to a single host.</div>
           </div>
         </div>
       </div>

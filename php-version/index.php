@@ -56,7 +56,7 @@ include __DIR__ . '/includes/header.php';
     <div class="row align-items-center g-4 g-lg-5">
       <div class="col-lg-7">
         <span class="hero-badge mb-3"><i class="bi bi-lightning-charge-fill me-1"></i>Instant Digital Delivery</span>
-        <h1 class="display-4">Genuine Microsoft Office &amp; Windows 11 Keys <span class="accent">for Business and Personal Use</span></h1>
+        <h1 class="display-4">Genuine Microsoft Office &amp; <span class="accent">Windows 11 License Keys</span></h1>
         <p class="text-secondary fs-5 mt-3">Trusted by over fifty thousand users across the globe.</p>
         <ul class="list-unstyled d-grid gap-2 my-4">
           <li><i class="bi bi-check-circle-fill text-success me-2"></i>Genuine Microsoft License Keys</li>

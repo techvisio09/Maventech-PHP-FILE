@@ -52,6 +52,14 @@ $ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.sv
   <meta name="keywords" content="<?= esc($pageKeywords) ?>">
   <?php endif; ?>
   <link rel="canonical" href="<?= esc($canonicalUrl) ?>">
+  <!-- Favicon set — modern browsers prefer SVG (crisp at any size); older
+       Bing / Yandex / SEO-audit crawlers explicitly look for /favicon.ico. -->
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/images/favicon/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/assets/images/favicon/favicon-16.png">
+  <link rel="apple-touch-icon" sizes="64x64" href="/assets/images/favicon/favicon-64.png">
+  <link rel="shortcut icon" href="/favicon.ico">
+  <meta name="theme-color" content="#0066CC">
   <?php if (defined('GOOGLE_SITE_VERIFICATION') && GOOGLE_SITE_VERIFICATION !== ''): ?>
   <meta name="google-site-verification" content="<?= esc(GOOGLE_SITE_VERIFICATION) ?>">
   <?php elseif (($__gsc = setting_get('google_site_verification_token', '')) !== ''): ?>

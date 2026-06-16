@@ -7,6 +7,46 @@
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 
 /* ===================================================================
+   SEO: 301-redirect the "www." host to the canonical bare-host version
+   (or the opposite, depending on `seo_canonical_host_pref`).  Until this
+   is done, an external SEO audit reports "www and non-www versions are
+   not redirected to the same site" — which dilutes PageRank because
+   inbound links may target either host.
+
+   Admin choice is read from the `settings` table key
+   `seo_canonical_host_pref` (values: 'naked' | 'www').  Default = 'naked'.
+   When the requested Host header doesn't match the preference, we issue
+   a 301 Permanent Redirect to the canonical equivalent before any other
+   routing fires.
+   =================================================================== */
+$__hostHdr = strtolower(trim((string)($_SERVER['HTTP_HOST'] ?? '')));
+if ($__hostHdr !== '' && !preg_match('/(?:^|\.)preview\.emergentagent\.com$/i', $__hostHdr)
+    && !preg_match('/^(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|$)/i', $__hostHdr)) {
+    // Try to load the canonical-host preference without booting the full app
+    // (settings table not always available on a fresh container).
+    $__pref = 'naked';
+    try {
+        require_once __DIR__ . '/config.php';
+        require_once __DIR__ . '/includes/db.php';
+        if (function_exists('setting_get')) {
+            $__pref = strtolower((string)setting_get('seo_canonical_host_pref', 'naked'));
+            if (!in_array($__pref, ['naked', 'www'], true)) $__pref = 'naked';
+        }
+    } catch (Throwable $e) { /* fall through to default */ }
+
+    $__isWww   = str_starts_with($__hostHdr, 'www.');
+    $__wantWww = ($__pref === 'www');
+    if ($__isWww !== $__wantWww) {
+        $__targetHost = $__wantWww ? ('www.' . preg_replace('/^www\./', '', $__hostHdr))
+                                   : preg_replace('/^www\./', '', $__hostHdr);
+        $__scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        header('Location: ' . $__scheme . '://' . $__targetHost . ($_SERVER['REQUEST_URI'] ?? '/'), true, 301);
+        return true;
+    }
+}
+
+
+/* ===================================================================
    SECURITY: Block direct access to sensitive files & directories.
    PHP's built-in server happily serves any file under the docroot,
    so this router is our deny-list of last resort.  Apache / nginx
