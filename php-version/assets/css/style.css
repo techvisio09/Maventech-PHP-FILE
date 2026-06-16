@@ -3191,7 +3191,7 @@ body .brand-grad,
   white-space: nowrap;
 }
 .mobile-promo-icon { color: #fbbf24; font-size: .9rem; flex-shrink: 0; }
-.mobile-promo-text { color: #fff; }
+.mobile-promo-text { display: none !important; }   /* always hidden on mobile — code + Shop are enough */
 .mobile-promo-code {
   display: inline-flex; align-items: center; gap: .25rem;
   background: rgba(255, 255, 255, .18);
@@ -3224,10 +3224,7 @@ body .brand-grad,
   font-weight: 700;
   font-size: .74rem;
 }
-/* Tighten on very narrow viewports so the row never wraps */
-@media (max-width: 359px) {
-  .mobile-promo-text { display: none; }
-}
+/* Headline text already hidden on mobile via .mobile-promo-text; no narrow-viewport fallback needed */
 
   background: rgba(16, 185, 129, .88);
   border-color: rgba(16, 185, 129, .95);

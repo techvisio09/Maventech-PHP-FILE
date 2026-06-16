@@ -377,7 +377,6 @@ if ($_vibePromo && !empty($_vibePromo['coupon_code']) && (int)$_vibePromo['coupo
 <div class="mobile-promo d-md-none" data-testid="mobile-promo">
   <a href="shop.php" class="mobile-promo-link" data-testid="mobile-promo-link">
     <i class="bi bi-tag-fill mobile-promo-icon"></i>
-    <span class="mobile-promo-text"><?= esc($_dealHeadline ?? 'Save up to 10%') ?></span>
     <span class="mobile-promo-code"
           data-code="<?= esc($_dealCode ?? 'MAVEN20') ?>"
           onclick="event.preventDefault();event.stopPropagation();(function(b){var c=b.getAttribute('data-code');if(!c)return;function done(){var o=b.dataset.orig||b.innerHTML;b.dataset.orig=b.dataset.orig||b.innerHTML;b.innerHTML='<i class=\'bi bi-check2\'></i> Copied';b.classList.add('is-copied');setTimeout(function(){b.innerHTML=o;b.classList.remove('is-copied');},1500);}if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(c).then(done,done);}else{var t=document.createElement('textarea');t.value=c;document.body.appendChild(t);t.select();try{document.execCommand('copy');}catch(_){}t.remove();done();}})(this);return false;"
