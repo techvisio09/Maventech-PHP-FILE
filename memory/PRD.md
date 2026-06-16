@@ -2676,3 +2676,9 @@ Vibrant purple→indigo→blue→cyan gradient ribbon at the TOP of the page wit
 - Email render test: order #MV2606168CE1A produced 3 `<img src=https://indexnow-checker.preview.emergentagent.com/uploads/products/…webp>` — fully absolute, no broken images.
 - Screenshot test: toggle ON shows the blue "AI will pick this URL" card; toggle OFF reveals the manual input + brand quick-pick row.
 
+### Follow-up bug discovered + fixed (same iteration)
+- **Symptom**: user reported that "deactivating AI, typing my own URL, clicking Save" didn't persist — on reopen the toggle reverted to ON and the manual URL was lost.
+- **Root cause**: a nested `<form method="post">` for the "Move to another category" widget was sitting INSIDE the main Edit Product `<form id="prodForm">`. Per HTML5 parsing rules browsers IGNORE the inner `<form>` tag, so the Move form's `<input type="hidden" name="action" value="move_product">` ended up inside the outer form. When the admin clicked Save Changes, the POST body carried `action` twice (`update_product` first, `move_product` second). PHP `$_POST` keeps the LAST value → the request dispatched to `move_product` which only writes `category`. The URL fields and modes were silently dropped.
+- **Fix**: replaced the nested `<form>` with a `<button type="button">` that, on click, builds and submits a brand-new, freshly created `<form>` appended to `document.body` (outside the modal/parent form). Inline `onclick` was rewritten as a standalone `<script>` block so the multi-line JS no longer breaks HTML attribute parsing (which had caused the "Move" button to render its entire onclick source as the visible label).
+- **Verified end-to-end via Playwright**: toggle ON → OFF → fill URLs → click Save Changes → page reloads with `?msg=Saved`; reopen the edit page → toggles still OFF, custom URLs still in the inputs, manual inputs still visible. Toggle round-trip (OFF → ON) also persists.
+

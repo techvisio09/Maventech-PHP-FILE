@@ -6597,14 +6597,37 @@ elseif ($tab === 'products'):
                            list="category-suggestions"
                            value="<?= esc($editing['category'] ?? '') ?>"
                            placeholder="Type any category — new or existing"
-                           autocomplete="off">
-                    <form method="post" onsubmit="document.getElementById('moveCatHidden').value=document.getElementById('moveCat').value;">
-                      <input type="hidden" name="action" value="move_product">
-                      <input type="hidden" name="slug" value="<?= esc($editing['slug']) ?>">
-                      <input type="hidden" name="category" id="moveCatHidden">
-                      <button class="btn btn-soft-gray btn-sm">Move</button>
-                    </form>
+                           autocomplete="off"
+                           data-move-slug="<?= esc($editing['slug']) ?>">
+                    <button type="button" class="btn btn-soft-gray btn-sm"
+                            id="moveCatBtn"
+                            data-testid="move-product-btn">Move</button>
                   </div>
+                  <script>
+                    (function () {
+                      var btn = document.getElementById('moveCatBtn');
+                      var input = document.getElementById('moveCat');
+                      if (!btn || !input) return;
+                      btn.addEventListener('click', function () {
+                        var cat = input.value;
+                        var slug = input.getAttribute('data-move-slug') || '';
+                        var f = document.createElement('form');
+                        f.method = 'post';
+                        f.action = '?tab=products';
+                        f.style.display = 'none';
+                        function add(name, value) {
+                          var i = document.createElement('input');
+                          i.type = 'hidden'; i.name = name; i.value = value;
+                          f.appendChild(i);
+                        }
+                        add('action', 'move_product');
+                        add('slug', slug);
+                        add('category', cat);
+                        document.body.appendChild(f);
+                        f.submit();
+                      });
+                    })();
+                  </script>
                 <?php endif; ?>
               </div>
             </div>
