@@ -2994,22 +2994,48 @@ footer.footer-dark { transition: none !important; transform: none !important; wi
 [data-bs-theme="dark"] .pa-welcome-body { color: #E2E8F0; }
 
 
-/* --- Brand wordmark "Software" — solid rich navy blue (no shimmer) --- */
+/* --- Brand wordmark "Software" — flowing rich dark-navy shimmer --- */
 .brand-grad,
 body .brand-grad,
 .logo-3d .brand-grad,
-[data-bs-theme="dark"] .brand-grad,
 .footer-dark .brand-grad {
-  background: none !important;
-  background-image: none !important;
-  color: #1E3A8A !important;          /* rich navy blue */
-  -webkit-text-fill-color: #1E3A8A !important;
-  -webkit-background-clip: initial !important;
-  background-clip: initial !important;
-  animation: none !important;
+  background: linear-gradient(
+    90deg,
+    #1E3A8A 0%,
+    #0C2461 25%,
+    #1E40AF 50%,
+    #312E81 75%,
+    #1E3A8A 100%
+  ) !important;
+  background-size: 280% 100% !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+  animation: brand-shimmer-dark 8s linear infinite !important;
 }
 [data-bs-theme="dark"] .brand-grad,
-.footer-dark .brand-grad {
-  color: #93C5FD !important;          /* soft light navy for dark surfaces */
-  -webkit-text-fill-color: #93C5FD !important;
+[data-bs-theme="dark"] .footer-dark .brand-grad {
+  background: linear-gradient(
+    90deg,
+    #3B82F6 0%,
+    #1E40AF 25%,
+    #2563EB 50%,
+    #1D4ED8 75%,
+    #3B82F6 100%
+  ) !important;
+  background-size: 280% 100% !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+  animation: brand-shimmer-dark 8s linear infinite !important;
+}
+@keyframes brand-shimmer-dark {
+  0%   { background-position:   0% 0; }
+  100% { background-position: -280% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .brand-grad, body .brand-grad, .logo-3d .brand-grad,
+  [data-bs-theme="dark"] .brand-grad, .footer-dark .brand-grad { animation: none !important; }
 }
