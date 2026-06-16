@@ -2549,6 +2549,10 @@ body {
 
 /* --- BUTTONS — corporate rounded rectangles (NOT pills) --- */
 .btn { border-radius: 8px !important; }
+/* Preserve explicit shape utilities — pill stays pill, circle stays circle */
+.btn.rounded-pill { border-radius: 999px !important; }
+.btn.rounded-circle { border-radius: 50% !important; padding-left: .5rem !important; padding-right: .5rem !important; }
+.btn.rounded-0 { border-radius: 0 !important; }
 
 /* Primary solid blue */
 .btn-primary,
@@ -2866,17 +2870,38 @@ section h3, section .h3, section h6 { color: var(--bs-emphasis-color); }
   border-color: #4285F4 !important;
 }
 [data-bs-theme="dark"] .btn-outline-primary,
+[data-bs-theme="dark"] .btn-outline-secondary,
 [data-bs-theme="dark"] .btn-hero-ghost {
   background: transparent !important;
+  border-color: rgba(148, 163, 184, .55) !important;
+  color: #E2E8F0 !important;
+}
+[data-bs-theme="dark"] .btn-outline-primary {
   border-color: #60A5FA !important;
   color: #60A5FA !important;
 }
 [data-bs-theme="dark"] .btn-outline-primary:hover,
+[data-bs-theme="dark"] .btn-outline-secondary:hover,
 [data-bs-theme="dark"] .btn-hero-ghost:hover {
   background: #1A73E8 !important;
   border-color: #1A73E8 !important;
   color: #fff !important;
 }
+/* Dropdown menus & dropdown items in dark mode */
+[data-bs-theme="dark"] .dropdown-menu { background: #1E293B !important; border: 1px solid rgba(148,163,184,.22) !important; }
+[data-bs-theme="dark"] .dropdown-item { color: #E2E8F0 !important; }
+[data-bs-theme="dark"] .dropdown-item:hover, [data-bs-theme="dark"] .dropdown-item:focus { background: rgba(96,165,250,.12) !important; color: #fff !important; }
+[data-bs-theme="dark"] .dropdown-item.active { background: #1A73E8 !important; color: #fff !important; }
+/* Cart badge in dark mode stays visible */
+
+/* --- Sticky footer pattern: footer stays at the bottom, content fills above --- */
+html, body { min-height: 100vh; }
+body { display: flex; flex-direction: column; }
+body > footer.footer-dark { margin-top: auto !important; }
+/* Disable any unintended growth/parallax: footer never animates its height */
+footer.footer-dark { transition: none !important; transform: none !important; will-change: auto !important; }
+
+[data-bs-theme="dark"] .cart-count-badge { background: #DC3545 !important; color: #fff !important; }
 [data-bs-theme="dark"] .text-primary { color: #60A5FA !important; }
 [data-bs-theme="dark"] .navbar.sticky-top { background: rgba(15, 23, 42, .95) !important; border-bottom-color: var(--theme-border); }
 [data-bs-theme="dark"] .hero { background: linear-gradient(180deg, #0F172A 0%, #1E293B 100%) !important; }

@@ -962,7 +962,7 @@ async function sendChat(ev) {
   if (!bar) return;
   if (sessionStorage.getItem('uc_dealbar_dismissed') === '1') { bar.remove(); return; }
   document.body.classList.add('has-deal-bar');
-  bar.querySelector('.deal-close').addEventListener('click', () => {
+  bar.querySelector('.deal-bar-close-x, .deal-close').addEventListener('click', () => {
     sessionStorage.setItem('uc_dealbar_dismissed', '1');
     bar.remove();
     document.body.classList.remove('has-deal-bar');

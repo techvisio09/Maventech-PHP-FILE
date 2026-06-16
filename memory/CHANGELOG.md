@@ -1,4 +1,23 @@
 # Changelog
+## 2026-02-15 — Dark-mode bug fixes + deal-bar X + sticky footer
+
+### Bugs fixed
+1. **Deal-bar close X not functioning** — JS in `main.js` was binding click to `.deal-close` but HTML used `.deal-bar-close-x`. Selector now matches both, dismisses banner + persists in sessionStorage.
+2. **USD currency button + theme-toggle invisible in dark mode** — `.btn-outline-secondary` had `background: #fff !important` from the corporate light theme; added dark-mode override (`background: transparent`, `border: rgba(148,163,184,.55)`, `color: #E2E8F0`) so those circular/pill buttons render cleanly on dark navbar.
+3. **Product card "View Details" / outline buttons invisible in dark mode** — same fix applies (the `.btn-outline-secondary` dark mode override covers spotlight View Details, side-product-row actions, and any other secondary CTAs).
+4. **Global `.btn { border-radius: 8px !important }` was flattening `.rounded-circle` and `.rounded-pill`** — added preservers so theme-toggle stays circular and Ask AI / cart stay pill-shaped.
+5. **Dropdown menu items invisible in dark mode** — added `[data-bs-theme="dark"] .dropdown-menu`, `.dropdown-item`, and `.dropdown-item.active` styling.
+6. **Footer growth / unstable position** — applied defensive sticky-footer pattern: `html, body { min-height: 100vh }`, `body { display: flex; flex-direction: column }`, `footer.footer-dark { margin-top: auto }`. Also locked `transition: none; transform: none` on footer so it never animates its height during scroll.
+
+### Files touched
+- `/app/php-version/assets/js/main.js` — deal-bar close selector
+- `/app/php-version/assets/css/style.css` — dark-mode button overrides, dropdown-menu items, sticky footer
+
+### Verified visually
+Light + dark mode homepage hero, mega-menu, picked-for-you cards, product detail page, shop filters, footer.
+
+---
+
 ## 2026-02-15 — Corporate Blue Theme v4 (gosoftwarebuy.com reference)
 
 ### Complete theme transformation (no content changes)
