@@ -3039,3 +3039,30 @@ body .brand-grad,
   .brand-grad, body .brand-grad, .logo-3d .brand-grad,
   [data-bs-theme="dark"] .brand-grad, .footer-dark .brand-grad { animation: none !important; }
 }
+
+
+/* --- "AUTHORIZED RESELLER" brand tag — bold, refined, elegant --- */
+.brand-tag {
+  display: inline-block;
+  font-size: .62rem !important;
+  font-weight: 800 !important;
+  letter-spacing: .22em !important;
+  color: #1565C0 !important;
+  text-transform: uppercase;
+  padding: .15rem .5rem;
+  margin-top: .1rem;
+  border-radius: 4px;
+  background: rgba(21, 101, 192, .08);
+  border: 1px solid rgba(21, 101, 192, .22);
+  line-height: 1.2;
+}
+[data-bs-theme="dark"] .brand-tag {
+  color: #93C5FD !important;
+  background: rgba(147, 197, 253, .1);
+  border-color: rgba(147, 197, 253, .28);
+}
+.footer-dark .brand-tag {
+  color: #93C5FD !important;
+  background: rgba(147, 197, 253, .12);
+  border-color: rgba(147, 197, 253, .28);
+}
