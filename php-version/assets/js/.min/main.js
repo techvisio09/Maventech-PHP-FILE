@@ -480,10 +480,11 @@ chatAppend('bot', 'No problem — ask me anything about products, pricing, insta
 function revealChatInputRow() {
 const row = document.getElementById('chat-input-row');
 if (!row) return;
-if (row.classList.contains('d-flex')) return;
 row.classList.remove('d-none');
 row.classList.add('d-flex');
-row.classList.add('is-fade-in');
+row.style.display = 'flex';
+row.style.visibility = 'visible';
+if (!row.classList.contains('is-fade-in')) row.classList.add('is-fade-in');
 const inp = document.getElementById('chat-input');
 if (inp) setTimeout(() => inp.focus(), 60);
 }
@@ -617,11 +618,12 @@ body: JSON.stringify({ action: 'status', token }),
 if (!j || !j.ok || !j.is_proassist) return;
 const card = document.getElementById('pa-sched-card');
 if (card) card.style.display = 'block';
+revealChatInputRow();
 })
 .catch(() => {});
 }
-function paSchedShowPicker() { const c = document.getElementById('pa-sched-card'); if (c) c.style.display = 'block'; }
-function paSchedShowConfirmed() { const c = document.getElementById('pa-sched-card'); if (c) c.style.display = 'block'; }
+function paSchedShowPicker() { const c = document.getElementById('pa-sched-card'); if (c) c.style.display = 'block'; revealChatInputRow(); }
+function paSchedShowConfirmed() { const c = document.getElementById('pa-sched-card'); if (c) c.style.display = 'block'; revealChatInputRow(); }
 function paSchedRenderDates() {}
 function paSchedSelectDate() {}
 function paSchedBackToDates() {}

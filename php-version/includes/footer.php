@@ -37,7 +37,9 @@
               $bnHead  = implode(' ', $bnParts);
             ?>
             <span class="brand-text d-block lh-1 text-white"><?= esc($bnHead) ?><?php if ($bnHead !== ''): ?> <?php endif; ?><span class="brand-grad"><?= esc($bnLast) ?></span></span>
-            <small class="brand-tag">AUTHORIZED RESELLER</small>
+            <?php if (setting_get('show_authorized_reseller_badge', '1') === '1'): ?>
+            <small class="brand-tag" data-testid="brand-tag-authorized-reseller-footer">AUTHORIZED RESELLER</small>
+            <?php endif; ?>
           </span>
         </div>
         <p class="small">Your trusted source for genuine Microsoft Office licenses at competitive prices. Instant delivery, lifetime licenses, and professional support.</p>
@@ -142,7 +144,11 @@
           <img src="assets/images/badges/microsoft-verified.svg" alt="Microsoft Verified" class="trust-badge-img" loading="lazy" decoding="async" width="80" height="40">
           <img src="assets/images/badges/pci-compliant.svg" alt="PCI Compliant" class="trust-badge-img" loading="lazy" decoding="async" width="80" height="40">
         </div>
-        <small><i class="bi bi-award-fill text-warning me-1"></i>Authorized Reseller • 2+ Years</small>
+        <?php if (setting_get('show_authorized_reseller_badge', '1') === '1'): ?>
+        <small data-testid="footer-authorized-reseller-line"><i class="bi bi-award-fill text-warning me-1"></i>Authorized Reseller • 2+ Years</small>
+        <?php else: ?>
+        <small><i class="bi bi-award-fill text-warning me-1"></i>Trusted Software Store • 2+ Years</small>
+        <?php endif; ?>
       </div>
     </div>
 

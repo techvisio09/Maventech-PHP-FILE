@@ -115,6 +115,11 @@ if ($path === '/ai.txt') {
     require __DIR__ . '/ai-txt.php';
     return true;
 }
+if ($path === '/manifest.webmanifest' || $path === '/manifest.json' || $path === '/manifest') {
+    require __DIR__ . '/manifest-webmanifest.php';
+    return true;
+}
+
 if (preg_match('#^/hub/([a-z0-9\-]+)/?$#', $path, $m)) {
     // Topic Cluster Hub — /hub/microsoft-office → ?topic=microsoft-office
     $_GET['topic'] = $m[1];

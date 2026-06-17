@@ -1,0 +1,35 @@
+{
+  "summary": "Iteration 15 — PWA manifest, Authorized-Reseller badge toggle, and chat-widget revealChatInputRow fix all verified. 10/10 pytest cases pass and a Playwright DOM test confirms #chat-input-row becomes visible (display:flex, 238x44.5px) with the 'Type a message…' input present after revealChatInputRow() is called. PHP -l clean on all 6 changed files.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration15_pwa_authorized_reseller.py",
+    "/app/test_reports/pytest/iteration15.xml"
+  ],
+  "action_items": [
+    "Update /app/memory/test_credentials.md — the seeded admin password in the freshly-reseeded DB is Admin@UC2026! (the documented default), NOT Admin@123. The doc still lists Admin@123 which fails on the current DB. Either re-run the seed that downgrades to Admin@123 or update the doc."
+  ],
+  "critical_code_review_comments": [
+    "Manifest endpoint correctly sets Content-Type: application/manifest+json and no-store cache headers — good.",
+    "Authorized-Reseller toggle is consistently wired across header, footer (with copy swap to 'Trusted Software Store • 2+ Years'), and checkout summary — verified.",
+    "revealChatInputRow() defensive pattern (inline style + class) works under simulated lead-skipped state; consider also setting aria-hidden=false for screen readers.",
+    "Note: test_credentials.md drift vs DB — could cause future agents to skip admin-gated tests."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration15_pwa_authorized_reseller.py"
+  ],
+  "success_rate": {"backend": "100% (10/10)", "frontend": "100% (chat widget defensive reveal + head meta + badge count all pass)"},
+  "test_credentials": "admin@maventechsoftware.com / Admin@UC2026!  (Admin@123 from test_credentials.md no longer matches DB hash $2y$10$SyFgzuu… — password_verify confirms only Admin@UC2026! succeeds).",
+  "seed_data_creation": "None. Toggle flipped via MySQL UPDATE settings during OFF-state test and immediately restored to '1'.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Suite /app/backend/tests/test_iteration15_pwa_authorized_reseller.py covers PWA manifest, Authorized-Reseller toggle (ON/OFF/restore) and admin company form. It uses ADMIN_PASSWORD env override and falls back to Admin@UC2026!. Toggle is auto-restored to ON in a try/finally. For the chat widget, use the JS-only path (set localStorage.uc_lead_done='1', add 'open' class to #chat-panel, call window.revealChatInputRow()); do NOT submit the lead form. Preview URL: https://indexnow-checker.preview.emergentagent.com.",
+  "rca of the issue": "No bugs found in this iteration. Only environmental drift: test_credentials.md documents Admin@123 but the reseeded DB row stores a bcrypt hash that only validates against Admin@UC2026!. Adjusted test to use the env-overridable default; flagged for main agent to reconcile."
+}

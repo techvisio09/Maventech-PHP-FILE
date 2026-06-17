@@ -17,7 +17,9 @@ if (!isset($items)) { return; }
   <?= render_logo(36) ?>
   <span>
     <span class="brand-text d-block lh-1">Maventech <span class="brand-grad">Software</span></span>
-    <small class="brand-tag">AUTHORIZED RESELLER</small>
+    <?php if (setting_get('show_authorized_reseller_badge', '1') === '1'): ?>
+    <small class="brand-tag" data-testid="brand-tag-authorized-reseller-checkout">AUTHORIZED RESELLER</small>
+    <?php endif; ?>
   </span>
 </a>
 <small class="text-secondary">Pay <?= SITE_LEGAL ?></small>

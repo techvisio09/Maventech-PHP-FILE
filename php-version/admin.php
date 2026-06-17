@@ -611,6 +611,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         setting_set('company_email',   trim($_POST['company_email']   ?? ''));
         setting_set('company_phone',   trim($_POST['company_phone']   ?? ''));
         setting_set('company_address', trim($_POST['company_address'] ?? ''));
+        // "Authorized Reseller" trust badge — toggleable so brands that haven't
+        // yet finalised an OEM agreement can hide the claim site-wide.
+        setting_set('show_authorized_reseller_badge', !empty($_POST['show_authorized_reseller_badge']) ? '1' : '0');
         // Brand vibe — bundles motion + gradient + corners + font-weight.
         // When the admin picks a vibe we ALSO write its bundled motion so
         // the navbar bounce/spin/pulse/static reflects the chosen vibe.
@@ -5504,6 +5507,22 @@ elseif ($tab === 'company'):
         <div class="col-md-6">
           <label class="form-label small fw-semibold"><i class="bi bi-geo-alt me-1"></i>Company Address</label>
           <textarea class="form-control" name="company_address" rows="2" placeholder="Street, City, State ZIP, Country" data-testid="ci-address-input"><?= esc($co['address']) ?></textarea>
+        </div>
+        <div class="col-12">
+          <?php $showAR = (setting_get('show_authorized_reseller_badge', '1') === '1'); ?>
+          <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 p-3" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;">
+            <div class="flex-grow-1">
+              <label class="form-check-label fw-semibold mb-1" for="ciShowARToggle" style="cursor:pointer;">
+                <i class="bi bi-patch-check-fill me-1 text-primary"></i>Show "Authorized Reseller" badge site-wide
+              </label>
+              <div class="text-secondary small">When enabled, the <strong>AUTHORIZED RESELLER</strong> tag appears next to your logo in the header, footer and checkout — alongside the Microsoft Verified Partner badge. Turn off if your OEM agreement is pending and you'd like to hide the claim across every page in one click.</div>
+            </div>
+            <div class="form-check form-switch mb-0" style="min-width:60px;">
+              <input class="form-check-input" type="checkbox" role="switch" id="ciShowARToggle"
+                     name="show_authorized_reseller_badge" value="1" <?= $showAR ? 'checked' : '' ?>
+                     style="width:48px;height:26px;" data-testid="ci-show-authorized-reseller-toggle">
+            </div>
+          </div>
         </div>
         <div class="col-12">
           <label class="form-label small fw-semibold"><i class="bi bi-palette me-1"></i>Brand Vibe <span class="text-muted fw-normal">— one-click preset that bundles motion, logo gradient, font weight &amp; corner radius across the whole storefront</span></label>

@@ -571,13 +571,17 @@ function skipLead() {
 // Show the "Type a message…" composer.  Hidden by default so customers
 // must first share their contact info via the lead form (or skip it).
 // On reveal, smooth slide-in + auto-focus the input.
+// Defensive: also sets inline `style.display` so a stuck `d-none` class
+// (which sometimes lingers when other JS rewrites the className) cannot
+// keep the composer invisible.
 function revealChatInputRow() {
   const row = document.getElementById('chat-input-row');
   if (!row) return;
-  if (row.classList.contains('d-flex')) return; // already revealed
   row.classList.remove('d-none');
   row.classList.add('d-flex');
-  row.classList.add('is-fade-in');
+  row.style.display = 'flex';
+  row.style.visibility = 'visible';
+  if (!row.classList.contains('is-fade-in')) row.classList.add('is-fade-in');
   const inp = document.getElementById('chat-input');
   if (inp) setTimeout(() => inp.focus(), 60);
 }
@@ -762,17 +766,24 @@ function paSchedInit() {
       if (!j || !j.ok || !j.is_proassist) return;
       // ProAssist customers no longer pick a date/time slot from the
       // chat widget — the operator handles scheduling in conversation.
-      // Just surface the priority-support welcome card.
+      // Just surface the priority-support welcome card, AND make sure
+      // the message composer is visible so they can actually type.
+      // (Previous behaviour: card showed but the input row stayed
+      // collapsed because revealChatInputRow() was never called on
+      // this branch — the customer could see "type your message
+      // below" but had no input box.)
       const card = document.getElementById('pa-sched-card');
       if (card) card.style.display = 'block';
+      revealChatInputRow();
     })
     .catch(() => {});
 }
 
 // Legacy stubs kept so any older test scripts referencing these names
-// don't throw; they now no-op since the calendar UI was removed.
-function paSchedShowPicker()     { const c = document.getElementById('pa-sched-card'); if (c) c.style.display = 'block'; }
-function paSchedShowConfirmed()  { const c = document.getElementById('pa-sched-card'); if (c) c.style.display = 'block'; }
+// don't throw; they now no-op (apart from making the welcome card +
+// composer visible) since the calendar UI was removed.
+function paSchedShowPicker()     { const c = document.getElementById('pa-sched-card'); if (c) c.style.display = 'block'; revealChatInputRow(); }
+function paSchedShowConfirmed()  { const c = document.getElementById('pa-sched-card'); if (c) c.style.display = 'block'; revealChatInputRow(); }
 function paSchedRenderDates()    {}
 function paSchedSelectDate()     {}
 function paSchedBackToDates()    {}

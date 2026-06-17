@@ -60,6 +60,13 @@ $ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.sv
   <link rel="apple-touch-icon" sizes="64x64" href="/assets/images/favicon/favicon-64.png">
   <link rel="shortcut icon" href="/favicon.ico">
   <meta name="theme-color" content="#0066CC">
+  <!-- PWA: lets visitors install the storefront to their home screen on
+       iOS / Android.  Manifest generated dynamically so it always tracks
+       the live Company Info settings (brand name, theme colour, etc). -->
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="<?= esc(preg_replace('/\s+software\s*$/i', '', $brandName)) ?>">
   <?php if (defined('GOOGLE_SITE_VERIFICATION') && GOOGLE_SITE_VERIFICATION !== ''): ?>
   <meta name="google-site-verification" content="<?= esc(GOOGLE_SITE_VERIFICATION) ?>">
   <?php elseif (($__gsc = setting_get('google_site_verification_token', '')) !== ''): ?>
@@ -466,7 +473,9 @@ if ($_vibePromo && !empty($_vibePromo['coupon_code']) && (int)$_vibePromo['coupo
           $bnHead  = implode(' ', $bnParts);
         ?>
         <span class="brand-text d-block lh-1"><?= esc($bnHead) ?><?php if ($bnHead !== ''): ?> <?php endif; ?><span class="brand-grad"><?= esc($bnLast) ?></span></span>
-        <small class="brand-tag">AUTHORIZED RESELLER</small>
+        <?php if (setting_get('show_authorized_reseller_badge', '1') === '1'): ?>
+        <small class="brand-tag" data-testid="brand-tag-authorized-reseller">AUTHORIZED RESELLER</small>
+        <?php endif; ?>
       </span>
     </a>
     <div class="d-flex align-items-center gap-2 d-lg-none ms-auto me-2">
