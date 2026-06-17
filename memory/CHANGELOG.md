@@ -1,5 +1,42 @@
 # Changelog
 
+## 2026-02-15 — Per-product OG cards + Blog posts in /llms.txt + production-host audit
+
+### Feature: Per-product OG image generator (`/og-product.png?slug=<slug>`)
+- New `og-product.php` builds a 1200×630 social card combining the product photo (left, white rounded card) + brand pill + product name (line-wrapped at 20 chars, 44pt Liberation-Sans-Bold) + price ("Reg. $X.YZ" struck through on its own line + bold green sale price) + "GENUINE · LIFETIME · INSTANT DELIVERY" footer.
+- Disk-cached at `/uploads/og/<slug>.png` — first call renders + writes (`X-OG-Source: live`), subsequent calls stream the cached file (`X-OG-Source: cache`). Cache invalidates when the product row's `seo_refreshed_at` is newer than the cached file (or after 7 days).
+- Graceful fallback to `/og-default.png` (302) for unknown slugs or GD-less environments.
+- `product.php` now sets `og:image` to the new URL — shared product links on Twitter / LinkedIn / WhatsApp now show a price card instead of a tiny product photo.
+
+### Feature: Blog posts in `/llms.txt`
+- `llms-txt.php` live-template extended to query every row of `blog_posts`, render a `## Blog & guides (N articles)` section with title, date, region, AI tag, canonical URL and a sentence-boundary excerpt under 280 chars.
+- `_seo_generate_daily_llms_txt()` (AI Auto-Blogger) prompt extended: now feeds a `BLOG_POSTS:` dump to Claude Haiku so the daily AI-generated cache also includes a "Featured blog posts & guides" section. Max length raised 5 000 → 6 500 chars; `max_tokens` 2400 → 3200.
+- Cache (`seo_bot_last_llms_txt_at` setting) invalidated so the next request runs the new template.
+- Result: 59 blog-post URLs surfaced to LLM crawlers; total `/llms.txt` size ~43 KB.
+
+### Production-host readiness audit
+- `site_url()` already auto-detects `HTTP_HOST`; verified by override-test (Host: maventechsoftware.com → canonical, og:url, sitemap entries all rewrite automatically).
+- `robots.txt` declares all four discovery feeds (`sitemap.xml`, `merchant-feed.xml`, `llms.txt`, `agents.json`) with auto-resolved hostnames.
+- `sitemap.xml` includes all 59 blog-post URLs.
+- No DNS / TLS / config change required to switch to the real domain — drop-in deployable.
+
+### Files touched
+- **NEW**: `og-product.php` (per-product OG image generator)
+- `router.php` — added `/og-product.png` → `og-product.php` route
+- `product.php` — `$ogImage` now points to `/og-product.png?slug=...`
+- `llms-txt.php` — new `## Blog & guides` section + cache-invalidate semantics preserved
+- `includes/seo-bot.php` — Auto-Blogger prompt extended with `BLOG_POSTS:` block + larger max_tokens
+
+### Testing — `testing_agent_v3_fork` iteration 17
+- **13/13 PASS** on first run, all features verified end-to-end against the live preview URL.
+- Cache round-trip confirmed (first request live, second request hits disk cache).
+- 302-fallback to /og-default.png on unknown slug confirmed.
+- Host-header override confirmed swapping the canonical / og:url / sitemap host correctly.
+- All prior features (PWA manifest, Authorized Reseller toggle, OG site-wide, chat reveal) verified still GREEN.
+
+---
+
+
 ## 2026-02-15 — OpenGraph site-wide overhaul
 
 ### Why
