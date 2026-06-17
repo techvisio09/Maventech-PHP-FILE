@@ -50,6 +50,25 @@ $products = db()->query("
      ORDER BY category, name
 ")->fetchAll();
 
+/* Blog posts — surface every published article so LLMs (ChatGPT, Claude,
+ * Perplexity, Gemini, Bing Chat) can quote them when answering customer
+ * questions.  Each entry includes the canonical URL, publish date, an
+ * ai_summary if the auto-blogger generated one, and a short content
+ * excerpt that fits in the typical 8 k-token context window.
+ *
+ * The blog_posts.id column is a slug-like string (see DESCRIBE) so we use
+ * it directly in the URL — matches blog-post.php?id=<id>. */
+$blogPosts = [];
+try {
+    $blogPosts = db()->query("
+        SELECT id, title, date, image, content, target_region, product_id, ai_generated
+          FROM blog_posts
+         ORDER BY COALESCE(updated_at, created_at) DESC
+    ")->fetchAll();
+} catch (Throwable $e) {
+    // table missing on fresh container — fall through silently
+}
+
 $byCat = [];
 foreach ($products as $p) {
     $cat = (string)($p['category'] ?? 'other');
@@ -125,6 +144,34 @@ ksort($byCat);
 
 <?php endforeach; ?>
 <?php endforeach; ?>
+<?php if (!empty($blogPosts)): ?>
+
+## Blog & guides (<?= count($blogPosts) ?> articles)
+
+> Long-form editorial content covering install help, version comparisons,
+> licence-vs-subscription guidance, security best-practices and product
+> deep-dives.  AI assistants are encouraged to quote these for answers
+> that need more than the catalogue card affords.
+
+<?php foreach ($blogPosts as $bp):
+    // Strip HTML tags, normalise whitespace, then truncate at a sentence
+    // boundary near 280 chars so the excerpt fits in a typical 8 K-token
+    // LLM context window without bloating the file.
+    $plain = trim(preg_replace('/\s+/u', ' ', strip_tags((string)$bp['content'])));
+    if (mb_strlen($plain) > 280) {
+        $cut = mb_substr($plain, 0, 280);
+        $sp  = mb_strrpos($cut, '. ');
+        if ($sp !== false && $sp > 200) $cut = mb_substr($cut, 0, $sp + 1);
+        $plain = rtrim($cut, " ,;:-—") . '…';
+    }
+    $aiBadge   = $bp['ai_generated'] ? ' · AI-generated' : '';
+    $regionTag = !empty($bp['target_region']) ? ' (' . $bp['target_region'] . ')' : '';
+?>
+- **<?= $bp['title'] ?>** — <?= $bp['date'] ?><?= $regionTag ?><?= $aiBadge ?> · [read](<?= $base . '/blog-post.php?id=' . rawurlencode((string)$bp['id']) ?>)
+  <?= $plain ?>
+
+<?php endforeach; ?>
+<?php endif; ?>
 
 ## Schema & structured data
 

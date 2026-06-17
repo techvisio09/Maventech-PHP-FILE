@@ -123,6 +123,10 @@ if ($path === '/og-default.png' || $path === '/og-default.jpg' || $path === '/og
     require __DIR__ . '/og-default.php';
     return true;
 }
+if ($path === '/og-product.png' || $path === '/og-product.jpg') {
+    require __DIR__ . '/og-product.php';
+    return true;
+}
 
 if (preg_match('#^/hub/([a-z0-9\-]+)/?$#', $path, $m)) {
     // Topic Cluster Hub — /hub/microsoft-office → ?topic=microsoft-office

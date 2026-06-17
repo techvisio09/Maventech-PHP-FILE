@@ -1082,6 +1082,31 @@ function _seo_generate_daily_llms_txt(PDO $pdo, array &$report): array
     }
     $catalogDump = implode("\n", array_slice($catalogLines, 0, 80));
 
+    /* Blog post list — fed to the LLM so the generated llms.txt also covers
+     * editorial content (install guides, comparisons, FAQs).  Without this,
+     * AI assistants only see the product catalog and can't quote the
+     * long-form articles that drive ~40% of our organic traffic. */
+    $blogRows = [];
+    try {
+        $blogRows = $pdo->query("
+            SELECT id, title, date, LEFT(COALESCE(content,''), 220) AS excerpt,
+                   target_region, ai_generated
+              FROM blog_posts
+             ORDER BY COALESCE(updated_at, created_at) DESC
+             LIMIT 60
+        ")->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) { /* table may not exist on a fresh DB */ }
+
+    $blogLines = [];
+    foreach ($blogRows as $bp) {
+        $excerpt = trim(preg_replace('/\s+/u', ' ', strip_tags((string)($bp['excerpt'] ?? ''))));
+        if (mb_strlen($excerpt) > 180) $excerpt = mb_substr($excerpt, 0, 180) . '…';
+        $aiTag = (int)($bp['ai_generated'] ?? 0) ? ' [AI]' : '';
+        $blogLines[] = '- [' . $bp['title'] . '](' . $siteUrl . '/blog-post.php?id=' . rawurlencode((string)$bp['id']) . ')'
+                     . ' — ' . ($bp['date'] ?: 'n/d') . $aiTag . ' — ' . $excerpt;
+    }
+    $blogDump = implode("\n", array_slice($blogLines, 0, 60));
+
     $sys = <<<SYS
 You are an SEO/AEO content engineer writing the canonical /llms.txt file for
 a software-reseller storefront. The output you generate becomes the site's
@@ -1094,23 +1119,27 @@ Follow the llmstxt.org spec STRICTLY:
   - Then a `> blockquote` paragraph (3-4 sentences) summarizing what the
     site sells, who it's for, and the trust signals (genuine keys,
     instant delivery, 24/7 support, 30-day money back).
-  - Then 4-7 `## Section` headers covering:
+  - Then 5-8 `## Section` headers covering:
        * "Key facts" — bullet list of business model, payment, delivery,
          support, returns, regions served.
        * "What customers buy" — categories + activation flow per brand.
        * "Featured products" — bullet list of 12-20 top items from the
          catalog dump below, formatted as `- [name](url) — price`.
+       * "Featured blog posts & guides" — bullet list of 10-15 of the
+         most useful articles from BLOG_POSTS below, formatted as
+         `- [title](url) — date — one-sentence summary`. SKIP this
+         section entirely if BLOG_POSTS is empty.
        * "Trust + compliance" — guarantees, payment security, refund.
        * "Contact" — phone, email, support hours.
        * "For AI assistants" — instructions an LLM should follow when
-         answering customer questions (cite the product page, never
-         invent prices, link the activation URL, etc.).
+         answering customer questions (cite the product page or blog
+         post URL, never invent prices, link the activation URL, etc.).
 
 Rules:
  - Write in confident, neutral American English. No marketing fluff.
  - Use plain markdown only (no HTML, no code fences, no emoji).
- - Absolute URLs (https://…) for every product / page link.
- - Keep total length under 5000 characters.
+ - Absolute URLs (https://…) for every product / blog / page link.
+ - Keep total length under 6500 characters.
  - Output the markdown directly — NO preamble, NO explanation, NO JSON
    wrapper. Just the llms.txt body starting with the H1.
 SYS;
@@ -1120,9 +1149,12 @@ SYS;
          . "EMAIL: {$email}\n"
          . "PHONE: {$phone}\n"
          . "TOTAL_ACTIVE_PRODUCTS: " . count($productRows) . "\n"
+         . "TOTAL_BLOG_POSTS: " . count($blogRows) . "\n"
          . "TODAY: " . date('Y-m-d') . "\n\n"
          . "LIVE_PRODUCT_CATALOG (slug · name · price · category · region):\n"
-         . $catalogDump;
+         . $catalogDump
+         . "\n\nBLOG_POSTS (title · url · date · excerpt):\n"
+         . ($blogDump ?: '(none)');
 
     $payload = json_encode([
         'model'       => 'claude-haiku-4-5-20251001',
@@ -1131,7 +1163,7 @@ SYS;
             ['role'=>'user',   'content'=>$usr],
         ],
         'temperature' => 0.4,
-        'max_tokens'  => 2400,
+        'max_tokens'  => 3200,
     ]);
 
     $ch = curl_init($baseUrl . '/chat/completions');

@@ -1,0 +1,40 @@
+{
+  "summary": "Iteration 17 (backend-only) — per-product OG image generator + llms.txt blog section + production-host readiness. 13/13 pytest cases PASS. All required features verified end-to-end against the live preview URL (and against the direct PHP origin on localhost:3000 for Host-header rewrite checks, since the public ingress 403s on a non-matching Host — per the agent-to-agent note this is the documented approach).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": { "ui_bugs": [], "integration_issues": [], "design_issues": [] },
+  "test_report_links": [
+    "/app/backend/tests/test_seo_og_iter17.py",
+    "/app/test_reports/pytest/iter17_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "og-product.php is well-bounded (182 lines) — disk cache key includes slug only; relies on filemtime() >= product.seo_refreshed_at AND filemtime() > now-7d so cache will naturally rebuild within 7 days. Fine for now; consider invalidating on any product UPDATE (not just SEO refresh) if pricing/image edits don't bump seo_refreshed_at.",
+    "og-product.php uses imagecreatefromwebp/png/jpeg directly — no size cap on $prodLocal. If a product.image points to a multi-MB file, GD will OOM. Add getimagesize() guard or a max-dimension check before allocating the resampled buffer.",
+    "site_url() trusting HTTP_HOST is correct for canonical/og:url rewrite, but ensure the production reverse proxy strips/normalises Host so an attacker can't poison canonicals from a crawler request. Recommend a whitelist of allowed hosts in site_url() when not in dev.",
+    "llms.txt at 30+ KB containing 59 blog URLs is fine, but consider gzip — currently served uncompressed."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_seo_og_iter17.py (NEW — pytest, 13 tests)"
+  ],
+  "success_rate": { "backend": "100%", "frontend": "n/a (backend-only review)" },
+  "test_credentials": "admin@maventechsoftware.com / Admin@123 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Toggled settings.show_authorized_reseller_badge between '1' and '0' via mysql to verify footer/header rendering count (3 vs 0); restored to '1' on teardown.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Pytest suite at /app/backend/tests/test_seo_og_iter17.py covers OG-product image (live + cache + fallback), llms.txt blog section + URL count (>=50 unique blog-post.php?id= URLs), robots.txt (4 Sitemap lines + Host-header rewrite), sitemap.xml (=59 blog-post locs), canonical/og:url Host-header rewrite on /, /shop.php, /product.php, manifest.webmanifest regression, authorized reseller toggle regression (uses correct settings key 'show_authorized_reseller_badge'), admin?tab=ai-blogger contains twitter-site-handle-input + facebook-app-id-input. Host-header tests hit http://localhost:3000 directly because the public ingress 403s on non-matching Host (agent note explicitly authorises this). PHP -l clean on all 5 files in scope. Live X-LLMs-Source header observed = 'live-template' (cache invalidation worked). First og-product call: X-OG-Source=live, 25 KB PNG written to /app/php-version/uploads/og/<slug>.png; second call: X-OG-Source=cache, identical bytes.",
+  "verified_evidence": {
+    "og_product_live_bytes": "first call X-OG-Source=live, ~25 KB PNG; cache file written to /app/php-version/uploads/og/microsoft-office-2024-professional-plus-windows.png",
+    "og_product_cache_bytes": "second call X-OG-Source=cache, bytes identical to first call",
+    "og_product_unknown_slug": "HTTP 302 → /og-default.png",
+    "product_page_og_image": "<meta property=\"og:image\" content=\".../og-product.png?slug=microsoft-office-2024-professional-plus-windows\">",
+    "llms_txt_source": "X-LLMs-Source: live-template (cache invalidated as intended)",
+    "llms_txt_blog_urls_unique": ">=50 unique 'blog-post.php?id=' URLs present",
+    "robots_sitemaps": "all 4 Sitemap: lines present (/sitemap.xml, /merchant-feed.xml, /llms.txt, /agents.json)",
+    "robots_host_rewrite": "Host: maventechsoftware.com → all Sitemap: lines contain maventechsoftware.com",
+    "sitemap_blog_post_locs": "exactly 59",
+    "canonical_host_rewrite": "/, /shop.php, /product.php?slug=... all emit <link rel=canonical> + og:url containing maventechsoftware.com when Host header is overridden",
+    "manifest": "start_url ends with ?source=pwa, icons array non-empty",
+    "reseller_toggle": "ON → 3 occurrences of 'Authorized Reseller' on /, OFF → 0",
+    "admin_ai_blogger_inputs": "twitter-site-handle-input and facebook-app-id-input both present"
+  }
+}
