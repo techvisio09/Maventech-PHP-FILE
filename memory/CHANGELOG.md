@@ -1,5 +1,47 @@
 # Changelog
 
+## 2026-02-15 — OpenGraph site-wide overhaul
+
+### Why
+The pre-existing `<meta property="og:image">` pointed at a **40×80 SVG**.  Facebook, WhatsApp and LinkedIn all reject SVG for share previews, and the same image rendered on every page (no per-product / per-post differentiation).  Result: shared links looked blank or fell back to the favicon.
+
+### What
+1. **New `/og-default.png`** generator (`og-default.php`, registered in `router.php`).  Built on-demand via PHP-GD as a 1200×630 PNG with the brand mark, tagline ("Genuine Microsoft / Office & Windows 11 / License Keys") and a green CTA pill.  Uses LiberationSans-Bold (Debian default — no extra deps).  24h CDN-cache headers.
+
+2. **Rewrote the OG block in `includes/header.php`** — per-page overrides supported:
+   - `$ogImage`, `$ogImageAlt`, `$ogImageWidth`, `$ogImageHeight`, `$ogType`, `$ogLocale`, `$twitterCard`
+   - `$articlePublishedTime`, `$articleModifiedTime`, `$articleAuthor`, `$articleSection`, `$articleTags` (for `og:type=article`)
+   - `$productPriceAmount`, `$productPriceCurrency`, `$productAvailability`, `$productCondition`, `$productBrand` (for `og:type=product`)
+   - Auto-promotes relative URLs to absolute (social bots require absolute)
+   - Emits the full required set: `og:locale`, `og:image:secure_url`, `og:image:type`, `og:image:width/height/alt`, plus the matching Twitter `twitter:image:alt`
+
+3. **Per-page rich OG** wired on:
+   - `product.php` → `og:type=product` + `product:price:amount/currency/availability/condition/brand`
+   - `blog-post.php` → `og:type=article` + `article:published_time/modified_time/author/section/tag`
+   - `category.php`, `brand.php`, `hub.php` → first-product image as `og:image` so each page previews a real product card
+
+4. **Admin SEO settings** — two new inputs under Search Engine Visibility:
+   - `twitter_site_handle` (validated `@handle`) → emits `twitter:site` + `twitter:creator`
+   - `facebook_app_id` (validated 6-20 digit) → emits `fb:app_id`
+   - Both tags only render when the setting is non-empty + valid; cleared values produce no stray tags.
+
+### Files touched
+- **NEW**: `og-default.php`
+- `router.php` (route registration for /og-default.png + aliases)
+- `includes/header.php` (OG defaults block + full output block)
+- `product.php`, `blog-post.php`, `category.php`, `brand.php`, `hub.php`
+- `admin.php` (validators + UI for twitter/fb settings)
+
+### Testing — `testing_agent_v3_fork` iteration 16
+- **11/11 PASS** on first run.
+- `/og-default.png` verified as a real PNG (magic bytes + >5 KB body); aliases `/og-default.jpg` + `/og-image.png` also resolve.
+- Per-page OG verified on product, blog post, category (office-pc), hub (microsoft-office).
+- Admin save flow round-trips `twitter:site` and `fb:app_id`; empty values emit no tags.
+- All prior features (PWA manifest, Authorized Reseller toggle, chat reveal) verified unchanged.
+
+---
+
+
 ## 2026-02-15 — PWA manifest + Authorized Reseller toggle + Chat composer bug fix
 
 ### Feature: Installable PWA
