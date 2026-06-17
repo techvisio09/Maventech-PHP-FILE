@@ -95,6 +95,12 @@ if ($products) {
 
 $pageTitle       = $brandLabel . ' Software Keys & Guides | ' . SITE_BRAND;
 $pageDescription = 'Shop genuine ' . $brandLabel . ' software keys at ' . SITE_BRAND . ' — ' . count($products) . ' products, ' . count($articles) . ' guides, instant delivery.';
+/* Pick the first product image as the social-share preview so links to
+ * /brand/?b=office show an actual Office box instead of the generic banner. */
+if (!empty($products[0]['image'])) {
+    $ogImage    = $products[0]['image'];
+    $ogImageAlt = $brandLabel . ' — featured product on ' . SITE_BRAND;
+}
 $pageKeywords    = $brandLabel . ' licenses, buy ' . $brandLabel . ', ' . $brandLabel . ' software, ' . $brandLabel . ' deals';
 $canonicalUrl    = site_url() . '/brand.php?slug=' . rawurlencode($slug);
 $ogType          = 'website';

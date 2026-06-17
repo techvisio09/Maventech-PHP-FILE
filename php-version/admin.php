@@ -1269,6 +1269,8 @@ if ($tab === 'ai-blogger') {
             'google_merchant_id'                => function ($s) { return (bool)preg_match('/^[0-9]{6,20}$/', $s); },
             'site_domain_url'                   => function ($s) { return (bool)preg_match('~^https?://[A-Za-z0-9.\-]+(?::\d+)?(?:/.*)?$~i', $s); },
             'seo_canonical_host_pref'           => function ($s) { return in_array($s, ['naked', 'www'], true); },
+            'twitter_site_handle'               => function ($s) { return (bool)preg_match('/^@?[A-Za-z0-9_]{1,15}$/', $s); },
+            'facebook_app_id'                   => function ($s) { return (bool)preg_match('/^[0-9]{6,20}$/', $s); },
         ];
         $fields = [
             'google_site_verification_token'    => 'Google Search Console',
@@ -1278,6 +1280,8 @@ if ($tab === 'ai-blogger') {
             'google_merchant_id'                => 'Google Merchant Center',
             'site_domain_url'                   => 'Website Domain',
             'seo_canonical_host_pref'           => 'Canonical Host Preference',
+            'twitter_site_handle'               => 'X / Twitter handle',
+            'facebook_app_id'                   => 'Facebook App ID',
         ];
         $domainChanged = false;
         $oldDomain     = setting_get('site_domain_url', '');
@@ -4249,6 +4253,8 @@ elseif ($tab === 'ai-blogger'):
     $seoDomain  = setting_get('site_domain_url', rtrim(site_url(), '/'));
     $seoCanonHost = strtolower((string)setting_get('seo_canonical_host_pref', 'naked'));
     if (!in_array($seoCanonHost, ['naked', 'www'], true)) $seoCanonHost = 'naked';
+    $seoTwitter = (string)setting_get('twitter_site_handle', '');
+    $seoFbApp   = (string)setting_get('facebook_app_id', '');
     // Count how many are configured
     $seoConfigured = 0;
     if ($seoGsc)    $seoConfigured++;
@@ -4465,6 +4471,32 @@ elseif ($tab === 'ai-blogger'):
               <option value="www" <?= $seoCanonHost === 'www' ? 'selected' : '' ?>>www subdomain — www.example.com</option>
             </select>
             <div class="text-secondary small mt-1">Browsers visiting the "wrong" host receive a permanent 301 redirect to your canonical version. Fixes the "www and non-www are not redirected" SEO-audit warning by consolidating PageRank to a single host.</div>
+          </div>
+        </div>
+
+        <!-- Twitter / X handle -->
+        <div class="col-md-6">
+          <div class="p-3 seo-platform-card" style="border-radius:10px;">
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <i class="bi bi-twitter-x" style="font-size:18px;color:#0b1220;"></i>
+              <strong class="platform-name" style="font-size:13px;">X / Twitter handle</strong>
+              <?php if ($seoTwitter !== ''): ?><span class="badge rounded-pill" style="background:#d1fae5;color:#065f46;font-size:9px;">CONNECTED</span><?php endif; ?>
+            </div>
+            <input type="text" name="twitter_site_handle" class="form-control form-control-sm" placeholder="<?= $seoTwitter !== '' ? esc($seoTwitter) : '@yourcompany' ?>" style="font-size:12px;" data-testid="twitter-site-handle-input">
+            <div class="text-secondary small mt-1">Drives the <code>twitter:site</code> and <code>twitter:creator</code> meta tags so X displays your brand handle on every shared link card.</div>
+          </div>
+        </div>
+
+        <!-- Facebook App ID -->
+        <div class="col-md-6">
+          <div class="p-3 seo-platform-card" style="border-radius:10px;">
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <i class="bi bi-facebook" style="font-size:18px;color:#1877f2;"></i>
+              <strong class="platform-name" style="font-size:13px;">Facebook App ID</strong>
+              <?php if ($seoFbApp !== ''): ?><span class="badge rounded-pill" style="background:#d1fae5;color:#065f46;font-size:9px;">CONNECTED</span><?php endif; ?>
+            </div>
+            <input type="text" name="facebook_app_id" class="form-control form-control-sm" placeholder="<?= $seoFbApp !== '' ? esc($seoFbApp) : 'Numeric Facebook App ID' ?>" style="font-size:12px;" data-testid="facebook-app-id-input">
+            <div class="text-secondary small mt-1">Used as the <code>fb:app_id</code> meta tag so Facebook Insights attributes traffic from share-button clicks to your app/domain.</div>
           </div>
         </div>
       </div>

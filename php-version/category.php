@@ -33,6 +33,13 @@ $pageKeywords    = category_long_tail_keywords($title, $platform);
 
 $products = get_products($cats, $platform, $sort);
 
+/* Use the first product's image as the per-category OG image so social
+ * previews don't all collapse to the generic brand banner. */
+if (!empty($products[0]['image'])) {
+    $ogImage    = $products[0]['image'];
+    $ogImageAlt = $title . ' — featured product on ' . SITE_BRAND;
+}
+
 /* ----- Structured data ----- */
 $jsonLdBreadcrumb = category_breadcrumb_jsonld($slug, $title);
 $jsonLdItemList   = category_itemlist_jsonld($products, $title);

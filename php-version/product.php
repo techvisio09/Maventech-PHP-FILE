@@ -34,8 +34,17 @@ if (!empty($product['meta_description'])) {
         . ($discountFlag ? ' (was ' . format_price((float)$product['original_price']) . ')' : '')
         . '. Instant email delivery, official download and 24/7 support from ' . SITE_BRAND . '.';
 }
-$ogImage = $product['image'];
-$ogType = 'product';
+$ogImage     = $product['image'];
+$ogImageAlt  = $product['name'] . ' — official product image';
+$ogType      = 'product';
+/* Product-specific OG (Facebook product pin, WhatsApp price chip) */
+$productPriceAmount   = number_format((float)$product['price'], 2, '.', '');
+$_cc = current_currency();
+$productPriceCurrency = strtoupper((string)($_cc['code'] ?? 'USD'));
+$productAvailability  = ((int)($product['stock'] ?? 0) > 0 || ($product['stock'] ?? null) === null)
+                        ? 'in stock' : 'out of stock';
+$productCondition     = 'new';
+$productBrand         = $product['brand'] ?? null; // refined a few lines below once detected
 
 // Brand auto-detection — match product name against the same catalog we use
 // for installation_steps_for() so Bitdefender products show "Bitdefender",

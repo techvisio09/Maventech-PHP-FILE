@@ -1,0 +1,31 @@
+{
+  "summary": "Iteration 16 — OpenGraph site-wide overhaul fully verified. 11/11 pytest cases PASS. /og-default.png returns a real 1200x630 PNG (>5 KB, PNG magic bytes valid) with aliases /og-default.jpg + /og-image.png also serving. Home <head> emits the full OG/Twitter set (og:locale=en_US, og:image:width/height=1200/630, og:image:type=image/png, og:image:secure_url, twitter:card=summary_large_image, og:image:alt, twitter:image:alt). Per-page OG overrides verified on product (og:type=product + product:price:amount/currency/availability/condition/brand), blog post (og:type=article + article:published_time/modified_time/author/section, post-image not og-default), category office-pc (first product webp), and hub microsoft-office (real content image). Admin SEO inputs twitter-site-handle-input + facebook-app-id-input visible, save_seo_tokens persists, twitter:site/fb:app_id correctly emitted on home, and (critically) NOT rendered when cleared. PHP -l clean on all 9 changed files. Toggle + admin settings restored to pre-test state.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iteration16_opengraph.py",
+    "/app/test_reports/pytest/iteration16.xml"
+  ],
+  "action_items": [
+    "Optional: prior iteration left show_authorized_reseller_badge='0' in DB despite claiming a try/finally restore — current iter restored to '0' (the actual pre-test state). If business default should be '1', main agent should either (a) re-seed the setting or (b) update the SEED migration so fresh installs default to '1'.",
+    "Optional: review test_credentials.md — Admin@123 worked this iteration (DB hash matches), but iter 15 reported only Admin@UC2026! worked. Slight password drift between iterations may confuse future agents."
+  ],
+  "critical_code_review_comments": [
+    "og-default.php correctly enforces Content-Type image/png and no-store headers — good for social-network refetch behavior.",
+    "header.php OG block conditionally renders twitter:site/fb:app_id only when non-empty, so empty admin values don't pollute markup — verified.",
+    "Per-page $ogImage overrides cascade correctly: product → product.webp, blog post → post.image, category/brand → first product webp, hub → first content image with post fallback. og:image always normalised to absolute HTTPS URL.",
+    "Admin vMap validators (twitter handle regex /^@?[A-Za-z0-9_]{1,15}$/ and fb_app_id /^[0-9]{6,20}$/) properly reject garbage; empty values explicitly clear, matching the 'don't render when blank' contract.",
+    "article:published_time / modified_time emitted with full ISO-8601 + timezone (e.g. 2026-06-17T…+00:00) — Facebook + LinkedIn happy with this format.",
+    "Minor: og:image fallback chain is consistent across page types but consider adding an automated visual regression that fetches og:image and confirms HTTP 200 + image/* content-type — would catch broken uploads in future."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration16_opengraph.py"
+  ],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "N/A (backend-only iteration)"},
+  "test_credentials": "admin@maventechsoftware.com / Admin@123 — verified working against current DB this iteration via /login.php POST.",
+  "seed_data_creation": "None. Test set show_authorized_reseller_badge to '1' then '0' then restored to original ('0'). Test set twitter_site_handle='@maventechsw' and facebook_app_id='1234567890' via admin POST, then cleared both back to empty in try/finally — confirmed cleared.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Suite /app/backend/tests/test_iteration16_opengraph.py is the authoritative OG-tag regression. It uses _meta_map() with a multi-line tolerant regex (do NOT rely on line-based grep — meta tags span multiple lines in header.php). Known good seeds: product slug 'bitdefender-antivirus-for-mac-1-mac-1-year', blog id 'ai-trends-20260617-microsoft-office-2021-home-business-mac', category 'office-pc', hub 'microsoft-office'. settings table schema: columns are k/v (not key/value or name/value). Authorized-reseller renders 2 occurrences on / (header+footer); the 3rd occurrence is in checkout-summary-partial.php — only included on /cart and /checkout. Admin login currently works with Admin@123 (test_credentials.md value), but the test file rotates through [env ADMIN_PASSWORD, Admin@UC2026!, Admin@123] just in case the seed is regenerated.",
+  "rca of the issue": "No production bugs found. Two test-script self-corrections during the run: (1) initial regression asserted exactly 3 'AUTHORIZED RESELLER' occurrences on / per the playbook, but only header+footer (=2) render on home — the 3rd lives in checkout-summary-partial.php which is only included on /cart and /checkout; adjusted assertion to >=2 on / and also covers /cart.php. (2) prior agent left show_authorized_reseller_badge='0' in DB so the original 'default ON' assumption was wrong; new test flips ON→verify→OFF→verify→restore-original, which is the more robust pattern."
+}

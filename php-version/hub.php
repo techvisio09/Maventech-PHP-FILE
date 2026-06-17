@@ -159,6 +159,16 @@ if ($mentionsArr) {
     $jsonLd['mentions'] = $mentionsArr;
 }
 
+/* Per-hub OG image: pick the first product or post image so social shares
+ * of /hub/microsoft-office, /hub/windows etc. preview a real product card. */
+if (!empty($hubProducts[0]['image'])) {
+    $ogImage    = $hubProducts[0]['image'];
+    $ogImageAlt = strip_tags($topic['title']) . ' — featured product';
+} elseif (!empty($hubPosts[0]['image'])) {
+    $ogImage    = $hubPosts[0]['image'];
+    $ogImageAlt = strip_tags($topic['title']) . ' — featured guide';
+}
+
 include __DIR__ . '/includes/header.php';
 ?>
 <div class="container py-4 py-lg-5">

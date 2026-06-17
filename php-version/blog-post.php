@@ -14,7 +14,10 @@ if ($post) {
     $pageDescription = trim(mb_substr(strip_tags($post['content']), 0, 155)) . '…';
     $ogType = 'article';
     $canonicalUrl = site_url() . '/blog-post.php?id=' . rawurlencode((string)$post['id']);
-    if (!empty($post['image'])) $ogImage = $post['image'];
+    if (!empty($post['image'])) {
+        $ogImage    = $post['image'];
+        $ogImageAlt = $post['title'];
+    }
 
     // Article JSON-LD — lets Gemini, ChatGPT, Copilot, Perplexity and other
     // AI engines extract a clean Article schema and cite the post directly.
@@ -135,6 +138,14 @@ if ($post) {
     // BreadcrumbList JSON-LD — mirrors the visible breadcrumb so search
     // engines and AI engines parse the same hierarchy that users see.
     $jsonLdBreadcrumb = blog_post_breadcrumb_jsonld($post);
+
+    /* Surface article-specific OG values so header.php emits
+     * <meta property="article:published_time"> etc. — drives the rich
+     * preview LinkedIn / WhatsApp / Discord show for shared posts. */
+    $articlePublishedTime = $articleDate ?: date('c');
+    $articleModifiedTime  = $modifiedDate;
+    $articleAuthor        = $authorName;
+    $articleTags          = !empty($post['tags']) ? array_filter(array_map('trim', explode(',', (string)$post['tags']))) : [];
 } else {
     http_response_code(404);
     $noIndex = true;

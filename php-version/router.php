@@ -119,6 +119,10 @@ if ($path === '/manifest.webmanifest' || $path === '/manifest.json' || $path ===
     require __DIR__ . '/manifest-webmanifest.php';
     return true;
 }
+if ($path === '/og-default.png' || $path === '/og-default.jpg' || $path === '/og-image.png') {
+    require __DIR__ . '/og-default.php';
+    return true;
+}
 
 if (preg_match('#^/hub/([a-z0-9\-]+)/?$#', $path, $m)) {
     // Topic Cluster Hub — /hub/microsoft-office → ?topic=microsoft-office

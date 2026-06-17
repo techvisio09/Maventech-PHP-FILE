@@ -34,7 +34,33 @@ if (!isset($canonicalUrl)) {
     $canonicalSlug = isset($_GET['slug']) && $_GET['slug'] !== '' ? '?slug=' . urlencode($_GET['slug']) : '';
     $canonicalUrl = site_url() . $canonicalPath . $canonicalSlug;
 }
-$ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.svg';
+/* ===== Open Graph / Twitter / social card resolution ===========================
+ * Per-page overrides (set BEFORE including this header):
+ *   $ogImage         absolute or relative URL of the share image
+ *   $ogImageAlt      alt text for screen-readers + LinkedIn
+ *   $ogImageWidth    pixel width (default 1200)
+ *   $ogImageHeight   pixel height (default 630)
+ *   $ogType          'website' (default) | 'article' | 'product' | 'profile'
+ *   $ogLocale        e.g. 'en_US' (default)
+ *   $articlePublishedTime / $articleModifiedTime / $articleAuthor / $articleSection
+ *   $productPriceAmount / $productPriceCurrency / $productAvailability
+ *   $twitterCard     'summary_large_image' (default) | 'summary' | 'app' | 'player'
+ * Defaults below produce a 1200×630 generated brand card that's social-bot
+ * friendly out of the box — no SVG (Facebook & WhatsApp ignore SVG OGs).
+ * ============================================================================== */
+$_defaultOgImg   = site_url() . '/og-default.png';
+$ogImage         = $ogImage         ?? $_defaultOgImg;
+// Normalise relative paths → absolute (social bots require absolute URLs).
+if (!preg_match('~^https?://~i', $ogImage)) {
+    $ogImage = rtrim(site_url(), '/') . '/' . ltrim($ogImage, '/');
+}
+$ogImageAlt      = $ogImageAlt      ?? $pageTitle;
+$ogImageWidth    = $ogImageWidth    ?? 1200;
+$ogImageHeight   = $ogImageHeight   ?? 630;
+$ogLocale        = $ogLocale        ?? 'en_US';
+$twitterCard     = $twitterCard     ?? 'summary_large_image';
+$twitterSite     = setting_get('twitter_site_handle', '');     // optional, e.g. "@maventechsw"
+$fbAppId         = setting_get('facebook_app_id', '');         // optional, all-digits
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -90,17 +116,71 @@ $ogImage = $ogImage ?? site_url() . '/assets/images/badges/microsoft-verified.sv
   <?php if (defined('BAIDU_SITE_VERIFICATION') && BAIDU_SITE_VERIFICATION !== ''): ?>
   <meta name="baidu-site-verification" content="<?= esc(BAIDU_SITE_VERIFICATION) ?>">
   <?php endif; ?>
-  <!-- Open Graph / Twitter -->
-  <meta property="og:site_name" content="<?= esc($brandName) ?>">
-  <meta property="og:type" content="<?= isset($ogType) ? esc($ogType) : 'website' ?>">
-  <meta property="og:title" content="<?= esc($pageTitle) ?>">
+  <!-- ====================== Open Graph / Twitter / LinkedIn ====================== -->
+  <meta property="og:site_name"   content="<?= esc($brandName) ?>">
+  <meta property="og:type"        content="<?= esc($ogType ?? 'website') ?>">
+  <meta property="og:title"       content="<?= esc($pageTitle) ?>">
   <meta property="og:description" content="<?= esc($pageDescription) ?>">
-  <meta property="og:url" content="<?= esc($canonicalUrl) ?>">
-  <meta property="og:image" content="<?= esc($ogImage) ?>">
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="<?= esc($pageTitle) ?>">
+  <meta property="og:url"         content="<?= esc($canonicalUrl) ?>">
+  <meta property="og:locale"      content="<?= esc($ogLocale) ?>">
+  <meta property="og:image"        content="<?= esc($ogImage) ?>">
+  <meta property="og:image:secure_url" content="<?= esc($ogImage) ?>">
+  <meta property="og:image:alt"    content="<?= esc($ogImageAlt) ?>">
+  <meta property="og:image:width"  content="<?= (int)$ogImageWidth ?>">
+  <meta property="og:image:height" content="<?= (int)$ogImageHeight ?>">
+  <meta property="og:image:type"   content="<?= str_ends_with(strtolower($ogImage), '.png') ? 'image/png' : (str_ends_with(strtolower($ogImage), '.webp') ? 'image/webp' : 'image/jpeg') ?>">
+  <?php if (!empty($fbAppId) && ctype_digit((string)$fbAppId)): ?>
+  <meta property="fb:app_id"       content="<?= esc($fbAppId) ?>">
+  <?php endif; ?>
+
+  <?php /* Article-specific OG (blog posts) */
+  if (($ogType ?? '') === 'article'): ?>
+    <?php if (!empty($articlePublishedTime)): ?>
+    <meta property="article:published_time" content="<?= esc($articlePublishedTime) ?>">
+    <?php endif; ?>
+    <?php if (!empty($articleModifiedTime)): ?>
+    <meta property="article:modified_time"  content="<?= esc($articleModifiedTime) ?>">
+    <?php endif; ?>
+    <?php if (!empty($articleAuthor)): ?>
+    <meta property="article:author"  content="<?= esc($articleAuthor) ?>">
+    <?php endif; ?>
+    <?php if (!empty($articleSection)): ?>
+    <meta property="article:section" content="<?= esc($articleSection) ?>">
+    <?php endif; ?>
+    <?php foreach ((array)($articleTags ?? []) as $_atag): ?>
+    <meta property="article:tag"     content="<?= esc($_atag) ?>">
+    <?php endforeach; ?>
+  <?php endif; ?>
+
+  <?php /* Product-specific OG (product pages) */
+  if (($ogType ?? '') === 'product'): ?>
+    <?php if (!empty($productPriceAmount)): ?>
+    <meta property="product:price:amount"   content="<?= esc((string)$productPriceAmount) ?>">
+    <meta property="product:price:currency" content="<?= esc($productPriceCurrency ?? 'USD') ?>">
+    <?php endif; ?>
+    <?php if (!empty($productAvailability)): ?>
+    <meta property="product:availability" content="<?= esc($productAvailability) ?>">
+    <?php endif; ?>
+    <?php if (!empty($productCondition)): ?>
+    <meta property="product:condition"    content="<?= esc($productCondition) ?>">
+    <?php endif; ?>
+    <?php if (!empty($productBrand)): ?>
+    <meta property="product:brand"        content="<?= esc($productBrand) ?>">
+    <?php endif; ?>
+  <?php endif; ?>
+
+  <meta name="twitter:card"        content="<?= esc($twitterCard) ?>">
+  <meta name="twitter:title"       content="<?= esc($pageTitle) ?>">
   <meta name="twitter:description" content="<?= esc($pageDescription) ?>">
-  <meta name="twitter:image" content="<?= esc($ogImage) ?>">
+  <meta name="twitter:image"       content="<?= esc($ogImage) ?>">
+  <meta name="twitter:image:alt"   content="<?= esc($ogImageAlt) ?>">
+  <?php if (!empty($twitterSite)): ?>
+  <meta name="twitter:site"        content="<?= esc($twitterSite) ?>">
+  <meta name="twitter:creator"     content="<?= esc($twitterSite) ?>">
+  <?php endif; ?>
+  <!-- LinkedIn / Discord respect Open Graph above; Slack and iMessage prefer
+       the Twitter set, so all major chat surfaces get a rich preview. -->
+  <!-- ===================== /Open Graph / Twitter / LinkedIn ===================== -->
   <!-- Structured data: Organization + WebSite + (optional) LocalBusiness for AEO/GEO -->
   <script type="application/ld+json"><?php
     // Pull aggregate rating from customer_reviews so the org/site schema
