@@ -194,21 +194,40 @@ class TestHubJsonLd:
         blocks = _extract_jsonld_blocks(html)
         assert all(isinstance(b, (dict, list)) for b in blocks)
 
+    @staticmethod
+    def _find_collection_page(blocks):
+        """Return the first CollectionPage JSON-LD block, or None."""
+        for b in blocks:
+            if isinstance(b, dict) and b.get("@type") == "CollectionPage":
+                return b
+        return None
+
+    @staticmethod
+    def _assert_collectionpage_envelope(slug, cp):
+        assert str(cp.get("@id", "")).endswith("#cluster")
+        assert cp.get("dateModified")
+        assert cp.get("keywords")
+
+    @staticmethod
+    def _assert_collectionpage_audience(cp):
+        audience = cp.get("audience")
+        assert isinstance(audience, dict)
+        assert audience.get("audienceType")
+
+    @staticmethod
+    def _assert_collectionpage_mentions(slug, cp):
+        mentions = cp.get("mentions")
+        assert isinstance(mentions, list) and mentions, f"/hub/{slug} CollectionPage.mentions empty"
+        types = {m.get("@type") for m in mentions if isinstance(m, dict)}
+        assert "Product" in types, "mentions should contain Products"
+
     def test_jsonld_collectionpage_present(self, hub_html):
         slug, html = hub_html
-        blocks = _extract_jsonld_blocks(html)
-        cp = [b for b in blocks if isinstance(b, dict)
-              and b.get("@type") == "CollectionPage"]
-        assert cp, f"/hub/{slug} missing CollectionPage block"
-        c = cp[0]
-        assert str(c.get("@id", "")).endswith("#cluster")
-        assert "mentions" in c and isinstance(c["mentions"], list) and c["mentions"]
-        types = {m.get("@type") for m in c["mentions"] if isinstance(m, dict)}
-        assert "Product" in types, "mentions should contain Products"
-        assert isinstance(c.get("audience"), dict)
-        assert c["audience"].get("audienceType")
-        assert c.get("keywords")
-        assert c.get("dateModified")
+        cp = self._find_collection_page(_extract_jsonld_blocks(html))
+        assert cp is not None, f"/hub/{slug} missing CollectionPage block"
+        self._assert_collectionpage_envelope(slug, cp)
+        self._assert_collectionpage_mentions(slug, cp)
+        self._assert_collectionpage_audience(cp)
 
     def test_jsonld_breadcrumb_present(self, hub_html):
         slug, html = hub_html

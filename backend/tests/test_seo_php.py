@@ -95,55 +95,75 @@ class TestProductSEO:
         for tid in ("product-seo-copy", "product-review-snippets", "product-deep-cluster"):
             assert f'data-testid="{tid}"' in product_html, f"Missing data-testid={tid}"
 
-    def test_product_jsonld_seven_blocks_valid(self, product_html):
-        blocks = _extract_jsonld_blocks(product_html)
-        assert len(blocks) == 7, f"Expected 7 JSON-LD blocks (Organization, Product, BreadcrumbList, FAQPage, HowTo, Article AI-summary, FAQPage People-Also-Ask), found {len(blocks)}"
+    @staticmethod
+    def _parse_blocks_or_fail(blocks):
         parsed = []
         for i, b in enumerate(blocks):
             try:
                 parsed.append(json.loads(b))
             except json.JSONDecodeError as e:
                 pytest.fail(f"JSON-LD block #{i} invalid JSON: {e}\n---\n{b[:400]}")
-        # Identify schema types
-        types_found = set()
+        return parsed
+
+    @staticmethod
+    def _all_schema_types(parsed):
+        """Flatten every `@type` value (incl. those nested under `@graph`)."""
+        types = set()
         for p in parsed:
-            if isinstance(p, dict):
-                t = p.get("@type")
-                if isinstance(t, list):
-                    types_found.update(t)
-                elif t:
-                    types_found.add(t)
-                if "@graph" in p:
-                    for g in p["@graph"]:
-                        gt = g.get("@type")
-                        if isinstance(gt, list):
-                            types_found.update(gt)
-                        elif gt:
-                            types_found.add(gt)
+            if not isinstance(p, dict):
+                continue
+            t = p.get("@type")
+            if isinstance(t, list):
+                types.update(t)
+            elif t:
+                types.add(t)
+            for g in p.get("@graph", []) or []:
+                gt = g.get("@type")
+                if isinstance(gt, list):
+                    types.update(gt)
+                elif gt:
+                    types.add(gt)
+        return types
+
+    @staticmethod
+    def _find_product_block(parsed):
+        for p in parsed:
+            if isinstance(p, dict) and p.get("@type") == "Product":
+                return p
+        return None
+
+    def test_product_jsonld_seven_blocks_valid(self, product_html):
+        blocks = _extract_jsonld_blocks(product_html)
+        assert len(blocks) == 7, (
+            f"Expected 7 JSON-LD blocks (Organization, Product, BreadcrumbList, "
+            f"FAQPage, HowTo, Article AI-summary, FAQPage People-Also-Ask), "
+            f"found {len(blocks)}"
+        )
+        parsed = self._parse_blocks_or_fail(blocks)
+        types_found = self._all_schema_types(parsed)
         for expected in ("Product", "BreadcrumbList", "FAQPage", "HowTo"):
             assert expected in types_found, f"Missing schema type: {expected}. Found: {types_found}"
 
-    def test_product_schema_seller_not_empty_and_reviews(self, product_html):
-        blocks = _extract_jsonld_blocks(product_html)
-        product_obj = None
-        for b in blocks:
-            try:
-                obj = json.loads(b)
-            except Exception:
-                continue
-            if isinstance(obj, dict) and obj.get("@type") == "Product":
-                product_obj = obj
-                break
+    def test_product_schema_seller_not_empty(self, product_html):
+        parsed = self._parse_blocks_or_fail(_extract_jsonld_blocks(product_html))
+        product_obj = self._find_product_block(parsed)
         assert product_obj is not None, "No Product JSON-LD found"
         offers = product_obj.get("offers") or {}
         if isinstance(offers, list):
             offers = offers[0]
         seller = offers.get("seller") or {}
         assert seller.get("name"), f"Product seller.name must not be empty (got {seller!r})"
-        # Reviews
+
+    def test_product_schema_reviews_count(self, product_html):
+        parsed = self._parse_blocks_or_fail(_extract_jsonld_blocks(product_html))
+        product_obj = self._find_product_block(parsed)
+        assert product_obj is not None, "No Product JSON-LD found"
         reviews = product_obj.get("review") or []
         assert isinstance(reviews, list), "Product.review must be a list"
         assert 1 <= len(reviews) <= 5, f"Expected 1-5 reviews, got {len(reviews)}"
+
+    # Backward-compat shim for any external runner that still calls the old name.
+    test_product_schema_seller_not_empty_and_reviews = test_product_schema_seller_not_empty
 
     def test_product_hero_fetchpriority_and_preload(self, product_html):
         assert re.search(

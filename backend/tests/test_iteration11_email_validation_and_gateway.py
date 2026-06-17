@@ -48,7 +48,7 @@ class TestEmailValidationLead:
                                 timeout=20)
         assert r.status_code == 400, f"expected 400 got {r.status_code} body={r.text[:200]}"
         body = r.json()
-        assert body.get("ok") == False
+        assert not (body.get("ok"))
         err = (body.get("error") or "").lower()
         assert "yaho" in err and ("yahoo" in err or "did" in err or "mean" in err), f"err msg: {body}"
 
@@ -59,7 +59,7 @@ class TestEmailValidationLead:
                                 timeout=30)
         assert r.status_code == 400, f"expected 400 got {r.status_code} body={r.text[:200]}"
         body = r.json()
-        assert body.get("ok") == False
+        assert not (body.get("ok"))
         err = (body.get("error") or "").lower()
         assert ("mx" in err or "no mx" in err or "undeliverable" in err or "a record" in err), f"err: {body}"
 
@@ -71,7 +71,7 @@ class TestEmailValidationLead:
                                 timeout=30)
         assert r.status_code == 200, f"expected 200 got {r.status_code} body={r.text[:200]}"
         body = r.json()
-        assert body.get("ok") == True, body
+        assert (body.get("ok")), body
         assert "lead_id" in body and isinstance(body["lead_id"], int) and body["lead_id"] > 0
 
 
@@ -109,7 +109,7 @@ class TestEmailValidationNotifyStock:
                                 timeout=30)
         assert r.status_code == 400, f"expected 400 got {r.status_code} body={r.text[:200]}"
         body = r.json()
-        assert body.get("ok") == False
+        assert not (body.get("ok"))
         err = (body.get("error") or body.get("hint") or "").lower()
         assert "mx" in err or "undeliverable" in err or "a record" in err, body
 
@@ -119,33 +119,46 @@ class TestEmailValidationNotifyStock:
 # ---------------------------------------------------------------------------
 
 class TestEmailOutboxQueued:
+    # Admin panel paths that may render the Email Activity / Outbox table.
+    _OUTBOX_TAB_PATHS = ("/admin.php?tab=emails",
+                         "/admin.php?tab=email-activity",
+                         "/admin.php?tab=outbox")
+    # Substrings that signal we landed on the right admin tab.
+    _OUTBOX_MARKERS  = ("Email Activity", "email_outbox", "Outbox", "Pending delivery")
+    # Substrings that prove the row is queued (NOT prematurely "sent").
+    _QUEUED_MARKERS  = ("Pending delivery", "configure SMTP", "queued")
+
+    @classmethod
+    def _trigger_forgot_password(cls, public_session, email):
+        r = public_session.post(f"{BASE}/forgot-password.php",
+                                data={"email": email},
+                                timeout=20, allow_redirects=False)
+        assert r.status_code in (200, 302), f"forgot-password returned {r.status_code}"
+        time.sleep(1)  # let the worker enqueue
+
+    @classmethod
+    def _find_outbox_html(cls, admin_session):
+        for path in cls._OUTBOX_TAB_PATHS:
+            r = admin_session.get(f"{BASE}{path}", timeout=20)
+            if r.status_code == 200 and any(m in r.text for m in cls._OUTBOX_MARKERS):
+                return r.text
+        return ""
+
+    @classmethod
+    def _has_queued_marker(cls, html):
+        low = html.lower()
+        return any(m in html for m in cls._QUEUED_MARKERS[:-1]) or "queued" in low
+
     def test_forgot_password_creates_queued_row_not_sent(self, admin_session, public_session):
         # Trigger a send by submitting forgot-password.php with the company
         # email (only that one is dispatched per /memory/test_credentials.md).
-        co_email = "services@maventechsoftware.com"
-        r = public_session.post(f"{BASE}/forgot-password.php",
-                                data={"email": co_email},
-                                timeout=20, allow_redirects=False)
-        assert r.status_code in (200, 302), f"forgot-password returned {r.status_code}"
-        # Give the worker a sec
-        time.sleep(1)
-        # Read Email Activity table via admin (admin.php?tab=emails or similar).
-        # Try the known admin email outbox endpoint route.
-        for path in ("/admin.php?tab=emails", "/admin.php?tab=email-activity", "/admin.php?tab=outbox"):
-            r2 = admin_session.get(f"{BASE}{path}", timeout=20)
-            if r2.status_code == 200 and ("Email Activity" in r2.text or "email_outbox" in r2.text or "Outbox" in r2.text or "Pending delivery" in r2.text):
-                txt = r2.text
-                break
-        else:
-            txt = ""
-        # Whatever page we landed on, the most recent outbox row for the company
-        # email should NOT say "sent" in dev mode — should be queued / pending.
-        # Best signal: the new note string we wired in includes/email.php.
-        if "Pending delivery" not in txt and "configure SMTP" not in txt and "queued" not in txt.lower():
-            # Not conclusive via HTML scrape — log and pass softly.
+        self._trigger_forgot_password(public_session, "services@maventechsoftware.com")
+        txt = self._find_outbox_html(admin_session)
+        if not self._has_queued_marker(txt):
             pytest.skip("Could not locate the Email Activity panel HTML to assert queued state — "
-                        "manual DB check required (email_outbox.status='queued' / note LIKE '%Pending delivery%').")
-        assert ("Pending delivery" in txt) or ("configure SMTP" in txt) or ("queued" in txt.lower()), \
+                        "manual DB check required (email_outbox.status='queued' / "
+                        "note LIKE '%Pending delivery%').")
+        assert self._has_queued_marker(txt), \
             "Expected new queued-row note string in admin Email Activity panel"
 
 
@@ -196,7 +209,7 @@ class TestLeadsOnline:
         r = admin_session.get(f"{BASE}/ajax/leads-online.php", timeout=20)
         assert r.status_code == 200, r.text[:200]
         data = r.json()
-        assert data.get("ok") == True, data
+        assert (data.get("ok")), data
         # New required keys
         for k in ("now", "online_ids", "total", "install_pending", "latest"):
             assert k in data, f"missing key {k}"
@@ -231,7 +244,7 @@ class TestGatewayKeyValidation:
                                timeout=15)
         assert r.status_code == 200
         body = r.json()
-        assert body["ok"] == False
+        assert not (body["ok"])
         assert "paste a key" in body["message"].lower()
 
     def test_stripe_live_key_in_test_slot(self, admin_session):
@@ -241,7 +254,7 @@ class TestGatewayKeyValidation:
                                timeout=15)
         assert r.status_code == 200
         body = r.json()
-        assert body["ok"] == False
+        assert not (body["ok"])
         msg = body["message"].lower()
         assert "live key" in msg and ("live slot" in msg or "live" in msg)
 
@@ -252,7 +265,7 @@ class TestGatewayKeyValidation:
                                timeout=30)
         assert r.status_code == 200
         body = r.json()
-        assert body["ok"] == False, body
+        assert not (body["ok"]), body
         msg = body["message"].lower()
         # Either Stripe HTTP 401 reached or network blocked the call. Accept both.
         acceptable = ("stripe rejected" in msg) or ("stripe call failed" in msg) or ("invalid api key" in msg)
@@ -265,7 +278,7 @@ class TestGatewayKeyValidation:
                                timeout=30)
         assert r.status_code == 200
         body = r.json()
-        assert body["ok"] == False, body
+        assert not (body["ok"]), body
         msg = body["message"].lower()
         assert ("paypal rejected" in msg) or ("paypal call failed" in msg) or ("invalid_client" in msg), \
             f"Unexpected message: {body['message']}"

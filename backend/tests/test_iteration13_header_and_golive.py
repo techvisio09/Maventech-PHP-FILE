@@ -45,7 +45,7 @@ class TestGoLiveEndpoint:
         r = anon_session.get(f"{BASE_URL}/ajax/go-live-check.php", timeout=15)
         assert r.status_code == 403, f"Expected 403, got {r.status_code} body={r.text[:200]}"
         body = r.json()
-        assert body.get("ok") == False
+        assert not (body.get("ok"))
         assert "admin" in (body.get("error") or "").lower()
 
     def test_admin_returns_200_with_8_checks(self, admin_session):

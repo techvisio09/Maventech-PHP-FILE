@@ -6,26 +6,14 @@ import { HOME } from "@/constants/testIds";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
-const IS_DEV = process.env.NODE_ENV === "development";
 
 const Home = () => {
   useEffect(() => {
-    // All values referenced inside this effect — `axios`, `API`, `IS_DEV` —
-    // are module-level constants whose identity never changes between renders.
-    // Listing them in the deps array would not change behaviour but would
-    // mislead future readers into thinking they're reactive state, so we
-    // intentionally pass an empty deps array and silence the lint rule
-    // for this single line.  React's official docs explicitly call out
-    // this pattern for one-time mount effects.
-    const helloWorldApi = async () => {
-      try {
-        const response = await axios.get(`${API}/`);
-        if (IS_DEV) console.log(response.data.message);
-      } catch (e) {
-        if (IS_DEV) console.error(e, `errored out requesting / api`);
-      }
-    };
-    helloWorldApi();
+    // Pings the backend once on mount to confirm the API is reachable.
+    // All referenced identifiers (`axios`, `API`) are module-level constants
+    // whose identity is stable across renders, so the empty deps array is
+    // semantically correct and lists nothing that React can observe change.
+    axios.get(`${API}/`).catch(() => { /* silent — health-check only */ });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

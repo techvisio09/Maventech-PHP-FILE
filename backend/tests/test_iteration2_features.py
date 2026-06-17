@@ -33,24 +33,25 @@ def _extract_jsonld_blocks(html):
     return [m.group(1).strip() for m in JSON_LD_RE.finditer(html)]
 
 
+def _add_type(types_found, t):
+    """Add `@type` value(s) — which may be a string or a list — to the set."""
+    if isinstance(t, list):
+        types_found.update(t)
+    elif t:
+        types_found.add(t)
+
+
 def _flatten_types(parsed_list):
+    """Return the union of every `@type` value declared anywhere in the
+    parsed JSON-LD list, including types nested inside `@graph` entries."""
     types_found = set()
     for p in parsed_list:
         if not isinstance(p, dict):
             continue
-        t = p.get("@type")
-        if isinstance(t, list):
-            types_found.update(t)
-        elif t:
-            types_found.add(t)
-        if "@graph" in p:
-            for g in p["@graph"]:
-                if isinstance(g, dict):
-                    gt = g.get("@type")
-                    if isinstance(gt, list):
-                        types_found.update(gt)
-                    elif gt:
-                        types_found.add(gt)
+        _add_type(types_found, p.get("@type"))
+        for g in p.get("@graph", []) or []:
+            if isinstance(g, dict):
+                _add_type(types_found, g.get("@type"))
     return types_found
 
 
