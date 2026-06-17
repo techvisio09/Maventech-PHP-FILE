@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 import requests
+from conftest import ADMIN_EMAIL, ADMIN_PASSWORD
 
 BASE = "https://indexnow-checker.preview.emergentagent.com"
 
@@ -10,7 +11,7 @@ def test_admin_loads_flatpickr_css_and_js():
     s = requests.Session()
     s.post(
         f"{BASE}/login.php",
-        data={"email": "admin@maventechsoftware.com", "password": "Admin@123"},
+        data={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
         allow_redirects=True,
         timeout=15,
     )
@@ -27,7 +28,7 @@ def test_admin_has_datetime_inputs_on_company_tab():
     s = requests.Session()
     s.post(
         f"{BASE}/login.php",
-        data={"email": "admin@maventechsoftware.com", "password": "Admin@123"},
+        data={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
         allow_redirects=True,
         timeout=15,
     )
@@ -42,7 +43,7 @@ def test_dark_mode_flatpickr_css_present():
     s = requests.Session()
     s.post(
         f"{BASE}/login.php",
-        data={"email": "admin@maventechsoftware.com", "password": "Admin@123"},
+        data={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
         allow_redirects=True,
         timeout=15,
     )

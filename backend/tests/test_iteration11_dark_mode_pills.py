@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 import requests
+from conftest import ADMIN_EMAIL, ADMIN_PASSWORD
 
 BASE = "https://indexnow-checker.preview.emergentagent.com"
 
@@ -16,7 +17,7 @@ def test_admin_shell_email_card_dark_overrides():
     s = requests.Session()
     s.post(
         f"{BASE}/login.php",
-        data={"email": "admin@maventechsoftware.com", "password": "Admin@123"},
+        data={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
         allow_redirects=True,
         timeout=15,
     )

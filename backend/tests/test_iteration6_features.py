@@ -16,13 +16,11 @@ from urllib.parse import urlparse
 
 import pytest
 import requests
+from conftest import ADMIN_EMAIL, ADMIN_PASSWORD as ADMIN_PASS
 
 BASE_URL = (os.environ.get("PHP_BASE_URL")
             or os.environ.get("REACT_APP_BACKEND_URL")
             or "https://indexnow-checker.preview.emergentagent.com").rstrip("/")
-
-ADMIN_EMAIL = "admin@maventechsoftware.com"
-ADMIN_PASS = "Admin@123"
 
 TOPICS = ["microsoft-office", "windows", "antivirus"]
 

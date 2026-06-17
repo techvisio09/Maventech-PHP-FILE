@@ -6,18 +6,21 @@ import { HOME } from "@/constants/testIds";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
+const IS_DEV = process.env.NODE_ENV === "development";
 
 const Home = () => {
-  const helloWorldApi = async () => {
-    try {
-      const response = await axios.get(`${API}/`);
-      console.log(response.data.message);
-    } catch (e) {
-      console.error(e, `errored out requesting / api`);
-    }
-  };
-
   useEffect(() => {
+    // Defined inside the effect so it doesn't need to be in the dependency
+    // array — fixes the "missing dependency: helloWorldApi" warning without
+    // recreating the function on every render.
+    const helloWorldApi = async () => {
+      try {
+        const response = await axios.get(`${API}/`);
+        if (IS_DEV) console.log(response.data.message);
+      } catch (e) {
+        if (IS_DEV) console.error(e, `errored out requesting / api`);
+      }
+    };
     helloWorldApi();
   }, []);
 

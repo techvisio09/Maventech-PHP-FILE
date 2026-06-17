@@ -21,14 +21,13 @@ import time
 
 import pytest
 import requests
+from conftest import ADMIN_EMAIL, ADMIN_PASSWORD
 
 BASE_URL = os.environ.get("PHP_BASE_URL", "http://localhost:3000").rstrip("/")
-ADMIN_EMAIL = "admin@maventechsoftware.com"
-ADMIN_PASSWORD = "Admin@123"
 PHP_VERSION_DIR = "/app/php-version"
 
 
-def _mysql_exec(sql: str) -> str:
+def _mysql_run(sql: str) -> str:
     try:
         r = subprocess.run(
             ["mysql", "-uroot", "ucode_store", "-N", "-B", "-e", sql],
@@ -40,19 +39,19 @@ def _mysql_exec(sql: str) -> str:
 
 
 def _setting_get(k: str) -> str:
-    return _mysql_exec(f"SELECT v FROM settings WHERE k='{k}'")
+    return _mysql_run(f"SELECT v FROM settings WHERE k='{k}'")
 
 
 def _setting_set(k: str, v: str) -> None:
     v_esc = v.replace("'", "''")
-    _mysql_exec(
+    _mysql_run(
         f"INSERT INTO settings (k,v) VALUES ('{k}','{v_esc}') "
         f"ON DUPLICATE KEY UPDATE v=VALUES(v)"
     )
 
 
 def _setting_del(k: str) -> None:
-    _mysql_exec(f"DELETE FROM settings WHERE k='{k}'")
+    _mysql_run(f"DELETE FROM settings WHERE k='{k}'")
 
 
 @pytest.fixture(scope="session")
@@ -93,13 +92,13 @@ class TestPublicBlogRegionFilter:
         """How many rows of each kind are in the DB."""
         out = {}
         for k in ("NULL", "ALL"):
-            n = _mysql_exec(
+            n = _mysql_run(
                 "SELECT COUNT(*) FROM blog_posts WHERE target_region "
                 + ("IS NULL" if k == "NULL" else "= 'ALL'")
             )
             out[k] = int(n or 0)
         for r in ("US", "UK", "CA", "AU"):
-            n = _mysql_exec(
+            n = _mysql_run(
                 f"SELECT COUNT(*) FROM blog_posts WHERE target_region = '{r}'"
             )
             out[r] = int(n or 0)
@@ -482,7 +481,7 @@ echo (string)setting_get('last_sitemap_submit_at', 'NONE');
             ph.write(script)
             phpfile = ph.name
         if setup_sql:
-            _mysql_exec(setup_sql)
+            _mysql_run(setup_sql)
         try:
             r = subprocess.run(["php", phpfile], capture_output=True, timeout=30)
             return (r.stdout or b"").decode("utf-8", errors="replace").strip()

@@ -18,6 +18,7 @@ import re
 
 import pytest
 import requests
+from conftest import ADMIN_EMAIL, ADMIN_PASSWORD
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://indexnow-checker.preview.emergentagent.com").rstrip("/")
 TIMEOUT = 30
@@ -198,7 +199,7 @@ class TestAdminSeoBot:
         s.get(f"{BASE_URL}/login.php", timeout=TIMEOUT)
         r = s.post(
             f"{BASE_URL}/login.php",
-            data={"email": "admin@maventechsoftware.com", "password": "Admin@123"},
+            data={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
             timeout=TIMEOUT,
             allow_redirects=True,
         )

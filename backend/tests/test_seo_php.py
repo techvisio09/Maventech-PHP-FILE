@@ -11,11 +11,9 @@ import os
 import re
 import pytest
 import requests
+from conftest import ADMIN_EMAIL, ADMIN_PASSWORD
 
 BASE_URL = os.environ.get("PHP_BASE_URL", "https://indexnow-checker.preview.emergentagent.com").rstrip("/")
-ADMIN_EMAIL = "admin@maventechsoftware.com"
-ADMIN_PASSWORD = "Admin@123"
-
 JSON_LD_RE = re.compile(
     r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
     re.DOTALL | re.IGNORECASE,

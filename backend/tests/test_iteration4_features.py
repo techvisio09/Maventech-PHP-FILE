@@ -24,10 +24,9 @@ import subprocess
 
 import pytest
 import requests
+from conftest import ADMIN_EMAIL, ADMIN_PASSWORD
 
 BASE_URL = os.environ.get("PHP_BASE_URL", "http://localhost:3000").rstrip("/")
-ADMIN_EMAIL = "admin@maventechsoftware.com"
-ADMIN_PASSWORD = "Admin@123"
 ADMIN_PHP = "/app/php-version/admin.php"
 SEO_BOT_PHP = "/app/php-version/includes/seo-bot.php"
 

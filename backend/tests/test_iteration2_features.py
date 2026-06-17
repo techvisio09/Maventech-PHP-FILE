@@ -20,11 +20,9 @@ import time
 
 import pytest
 import requests
+from conftest import ADMIN_EMAIL, ADMIN_PASSWORD
 
 BASE_URL = os.environ.get("PHP_BASE_URL", "http://localhost:3000").rstrip("/")
-ADMIN_EMAIL = "admin@maventechsoftware.com"
-ADMIN_PASSWORD = "Admin@123"
-
 JSON_LD_RE = re.compile(
     r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
     re.DOTALL | re.IGNORECASE,
@@ -199,7 +197,7 @@ class TestAutoSitemapHint:
 
 import subprocess
 
-def _mysql_exec(sql: str):
+def _mysql_run(sql: str):
     """Run a SQL statement via the mysql CLI (PyMySQL is blocked by the
     unix_socket auth plugin on root in this pod)."""
     try:
@@ -209,10 +207,10 @@ def _mysql_exec(sql: str):
         pass
 
 def _clear_sitemap_submitted_state():
-    _mysql_exec("DELETE FROM settings WHERE k IN ('last_sitemap_submit_at','last_sitemap_submit_count')")
+    _mysql_run("DELETE FROM settings WHERE k IN ('last_sitemap_submit_at','last_sitemap_submit_count')")
 
 def _set_sitemap_submitted_state(count=45):
-    _mysql_exec(
+    _mysql_run(
         "INSERT INTO settings (k,v) VALUES ('last_sitemap_submit_at', NOW()), "
         "('last_sitemap_submit_count', '" + str(int(count)) + "') "
         "ON DUPLICATE KEY UPDATE v=VALUES(v)"

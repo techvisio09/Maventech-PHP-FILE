@@ -135,6 +135,10 @@ function toast({
 function useToast() {
   const [state, setState] = React.useState(memoryState)
 
+  // Subscribe to the toast store once on mount and unsubscribe on unmount.
+  // We deliberately omit `state` from the deps — `setState` is a stable
+  // React-provided reference and the `listeners` array is module-level,
+  // so re-subscribing on every state change would only churn the array.
   React.useEffect(() => {
     listeners.push(setState)
     return () => {
@@ -143,7 +147,7 @@ function useToast() {
         listeners.splice(index, 1)
       }
     };
-  }, [state])
+  }, [])
 
   return {
     ...state,

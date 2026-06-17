@@ -8,12 +8,9 @@ from __future__ import annotations
 import subprocess
 import pytest
 import requests
+from conftest import ADMIN_EMAIL, ADMIN_PASSWORD
 
 BASE = "https://indexnow-checker.preview.emergentagent.com"
-ADMIN_EMAIL = "admin@maventechsoftware.com"
-ADMIN_PASSWORD = "Admin@123"
-
-
 def _mysql(sql: str) -> str:
     out = subprocess.check_output(["mysql", "-uroot", "ucode_store", "-N", "-e", sql])
     return out.decode("utf-8").strip()

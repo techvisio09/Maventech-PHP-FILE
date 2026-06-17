@@ -11,9 +11,10 @@ from __future__ import annotations
 import subprocess
 import requests
 import pytest
+from conftest import ADMIN_EMAIL, ADMIN_PASSWORD
 
 BASE = "https://indexnow-checker.preview.emergentagent.com"
-ADMIN = ("admin@maventechsoftware.com", "Admin@123")
+ADMIN = (ADMIN_EMAIL, ADMIN_PASSWORD)
 
 
 def _mysql(sql: str) -> str:

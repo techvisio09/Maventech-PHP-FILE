@@ -2,6 +2,7 @@
 import subprocess
 import requests
 import pytest
+from conftest import ADMIN_PASSWORD
 
 BASE = "https://indexnow-checker.preview.emergentagent.com"
 ADMIN_EMAIL = "admin@maventechsoftware.com"
@@ -102,7 +103,7 @@ def test_reset_flow_updates_password():
         "php", "-r",
         "require_once '/app/php-version/includes/functions.php'; "
         "db()->prepare('UPDATE users SET password_hash=? WHERE email=?')->execute(["
-        "password_hash('Admin@123', PASSWORD_BCRYPT), '" + ADMIN_EMAIL + "']);"
+        "password_hash('" + ADMIN_PASSWORD + "', PASSWORD_BCRYPT), '" + ADMIN_EMAIL + "']);"
     ])
 
 

@@ -14,12 +14,9 @@ import time
 import json
 import requests
 import pytest
+from conftest import ADMIN_EMAIL, ADMIN_PASSWORD
 
 BASE = os.environ.get("REACT_APP_BACKEND_URL", "https://indexnow-checker.preview.emergentagent.com").rstrip("/")
-ADMIN_EMAIL = "admin@maventechsoftware.com"
-ADMIN_PASSWORD = "Admin@123"
-
-
 @pytest.fixture(scope="module")
 def public_session():
     return requests.Session()
@@ -51,7 +48,7 @@ class TestEmailValidationLead:
                                 timeout=20)
         assert r.status_code == 400, f"expected 400 got {r.status_code} body={r.text[:200]}"
         body = r.json()
-        assert body.get("ok") is False
+        assert body.get("ok") == False
         err = (body.get("error") or "").lower()
         assert "yaho" in err and ("yahoo" in err or "did" in err or "mean" in err), f"err msg: {body}"
 
@@ -62,7 +59,7 @@ class TestEmailValidationLead:
                                 timeout=30)
         assert r.status_code == 400, f"expected 400 got {r.status_code} body={r.text[:200]}"
         body = r.json()
-        assert body.get("ok") is False
+        assert body.get("ok") == False
         err = (body.get("error") or "").lower()
         assert ("mx" in err or "no mx" in err or "undeliverable" in err or "a record" in err), f"err: {body}"
 
@@ -74,7 +71,7 @@ class TestEmailValidationLead:
                                 timeout=30)
         assert r.status_code == 200, f"expected 200 got {r.status_code} body={r.text[:200]}"
         body = r.json()
-        assert body.get("ok") is True, body
+        assert body.get("ok") == True, body
         assert "lead_id" in body and isinstance(body["lead_id"], int) and body["lead_id"] > 0
 
 
@@ -112,7 +109,7 @@ class TestEmailValidationNotifyStock:
                                 timeout=30)
         assert r.status_code == 400, f"expected 400 got {r.status_code} body={r.text[:200]}"
         body = r.json()
-        assert body.get("ok") is False
+        assert body.get("ok") == False
         err = (body.get("error") or body.get("hint") or "").lower()
         assert "mx" in err or "undeliverable" in err or "a record" in err, body
 
@@ -199,7 +196,7 @@ class TestLeadsOnline:
         r = admin_session.get(f"{BASE}/ajax/leads-online.php", timeout=20)
         assert r.status_code == 200, r.text[:200]
         data = r.json()
-        assert data.get("ok") is True, data
+        assert data.get("ok") == True, data
         # New required keys
         for k in ("now", "online_ids", "total", "install_pending", "latest"):
             assert k in data, f"missing key {k}"
@@ -222,7 +219,7 @@ class TestGatewayKeyValidation:
         if r.status_code == 200:
             try:
                 body = r.json()
-                assert body.get("ok") is not True, f"Public got ok:true: {body}"
+                assert body.get("ok") != True, f"Public got ok:true: {body}"
             except ValueError:
                 pass
         else:
@@ -234,7 +231,7 @@ class TestGatewayKeyValidation:
                                timeout=15)
         assert r.status_code == 200
         body = r.json()
-        assert body["ok"] is False
+        assert body["ok"] == False
         assert "paste a key" in body["message"].lower()
 
     def test_stripe_live_key_in_test_slot(self, admin_session):
@@ -244,7 +241,7 @@ class TestGatewayKeyValidation:
                                timeout=15)
         assert r.status_code == 200
         body = r.json()
-        assert body["ok"] is False
+        assert body["ok"] == False
         msg = body["message"].lower()
         assert "live key" in msg and ("live slot" in msg or "live" in msg)
 
@@ -255,7 +252,7 @@ class TestGatewayKeyValidation:
                                timeout=30)
         assert r.status_code == 200
         body = r.json()
-        assert body["ok"] is False, body
+        assert body["ok"] == False, body
         msg = body["message"].lower()
         # Either Stripe HTTP 401 reached or network blocked the call. Accept both.
         acceptable = ("stripe rejected" in msg) or ("stripe call failed" in msg) or ("invalid api key" in msg)
@@ -268,7 +265,7 @@ class TestGatewayKeyValidation:
                                timeout=30)
         assert r.status_code == 200
         body = r.json()
-        assert body["ok"] is False, body
+        assert body["ok"] == False, body
         msg = body["message"].lower()
         assert ("paypal rejected" in msg) or ("paypal call failed" in msg) or ("invalid_client" in msg), \
             f"Unexpected message: {body['message']}"

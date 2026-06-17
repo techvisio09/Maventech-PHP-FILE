@@ -1,9 +1,10 @@
 """Iteration 15 — Big Save button at the bottom + Copy code button on banner."""
 import subprocess
 import requests
+from conftest import ADMIN_EMAIL, ADMIN_PASSWORD
 
 BASE = "https://indexnow-checker.preview.emergentagent.com"
-ADMIN = ("admin@maventechsoftware.com", "Admin@123")
+ADMIN = (ADMIN_EMAIL, ADMIN_PASSWORD)
 
 
 def _mysql(sql: str) -> str:

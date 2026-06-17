@@ -15,11 +15,9 @@ import time
 import pytest
 
 from playwright.sync_api import sync_playwright
+from conftest import ADMIN_EMAIL, ADMIN_PASSWORD
 
 BASE_URL = os.environ.get("PHP_BASE_URL", "http://localhost:3000").rstrip("/")
-ADMIN_EMAIL    = "admin@maventechsoftware.com"
-ADMIN_PASSWORD = "Admin@123"
-
 # Section IDs every admin <details> block must carry so the preserver can
 # remember which were expanded.  Keep in sync with admin.php.
 EXPECTED_SECTION_IDS = [
