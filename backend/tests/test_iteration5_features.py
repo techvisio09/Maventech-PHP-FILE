@@ -87,27 +87,36 @@ class TestContactPageSchema:
         about_id = about.get("@id") if isinstance(about, dict) else about
         assert str(about_id).endswith("#organization")
 
-    def test_contactpage_contactpoint_array(self):
-        cp = _find_type(self.blocks, "ContactPage")
-        # Gather contactPoints from ContactPage directly OR from its about/mainEntity
-        # Organization OR from the top-level Organization @graph entry.
-        candidates = []
-        def _grab(node):
+    @staticmethod
+    def _collect_contact_points(blocks):
+        """Walk every JSON-LD block (incl. nested @graph) and return every
+        contactPoint array we find."""
+        found = []
+        def visit(node):
             if isinstance(node, dict):
                 cps = node.get("contactPoint")
                 if isinstance(cps, list):
-                    candidates.extend(cps)
+                    found.extend(cps)
                 for v in node.values():
                     if isinstance(v, (dict, list)):
-                        _grab(v)
+                        visit(v)
             elif isinstance(node, list):
                 for it in node:
-                    _grab(it)
-        for b in self.blocks:
-            _grab(b)
+                    visit(it)
+        for b in blocks:
+            visit(b)
+        return found
+
+    def test_contactpage_contactpoint_array(self):
+        # Gather contactPoints from ContactPage directly OR from its about/
+        # mainEntity Organization OR from the top-level Organization @graph
+        # entry.  Walked by the static `_collect_contact_points` helper so
+        # this test stays a flat list of assertions.
+        candidates = self._collect_contact_points(self.blocks)
         assert candidates, "no contactPoint anywhere in Contact JSON-LD"
         types = [str(c.get("contactType", "")).lower() for c in candidates]
-        assert any("customer" in t or "support" in t or "service" in t for t in types), f"missing customer-support contactPoint: {types}"
+        assert any(("customer" in t) or ("support" in t) or ("service" in t) for t in types), \
+            f"missing customer-support contactPoint: {types}"
         assert any("sales" in t for t in types), f"missing sales contactPoint: {types}"
 
 

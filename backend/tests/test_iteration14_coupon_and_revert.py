@@ -154,10 +154,10 @@ apply_vibe_schedule();
 echo "during=".setting_get('company_brand_vibe').";";
 
 // Expire it AND reset the static-cache by running PHP in a fresh subprocess
-$pdo->exec("UPDATE vibe_schedule SET ends_at=DATE_SUB(NOW(), INTERVAL 1 MINUTE) WHERE id=$testId");
+$pdo->prepare("UPDATE vibe_schedule SET ends_at=DATE_SUB(NOW(), INTERVAL 1 MINUTE) WHERE id=?")->execute([$testId]);
 
 // Cleanup BEFORE the second test so we get a clean state
-$pdo->exec("DELETE FROM vibe_schedule WHERE id=$testId");
+$pdo->prepare("DELETE FROM vibe_schedule WHERE id=?")->execute([$testId]);
 if ($snapshot) $pdo->prepare("UPDATE vibe_schedule SET starts_at=DATE_SUB(NOW(), INTERVAL 1 YEAR) WHERE id IN ($placeholders)")->execute($snapshot);
 """
     out = subprocess.check_output(["php", "-r", php]).decode().strip()

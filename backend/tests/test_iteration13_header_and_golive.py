@@ -49,22 +49,38 @@ class TestGoLiveEndpoint:
         assert "admin" in (body.get("error") or "").lower()
 
     def test_admin_returns_200_with_8_checks(self, admin_session):
+        # Decomposed into focused helper-asserts so each failure points at one
+        # concrete contract violation instead of a 20-line megastep.
         r = admin_session.get(f"{BASE_URL}/ajax/go-live-check.php", timeout=30)
         assert r.status_code == 200, f"http={r.status_code} body={r.text[:300]}"
-        j = r.json()
-        # Shape
-        assert "ok" in j and isinstance(j["ok"], bool)
-        assert "score" in j and isinstance(j["score"], dict)
+        body = r.json()
+        self._assert_envelope_shape(body)
+        self._assert_score_shape(body["score"])
+        self._assert_check_ids(body["checks"])
+        self._assert_each_check_shape(body["checks"])
+
+    @staticmethod
+    def _assert_envelope_shape(body):
+        assert "ok" in body and isinstance(body["ok"], bool)
+        assert "score" in body and isinstance(body["score"], dict)
+        assert "ts" in body and "site" in body
+        assert "checks" in body and isinstance(body["checks"], list)
+        assert len(body["checks"]) == 8, f"expected 8 checks got {len(body['checks'])}"
+
+    @staticmethod
+    def _assert_score_shape(score):
         for k in ("green", "amber", "red", "total"):
-            assert k in j["score"], f"score missing key {k}"
-        assert "ts" in j and "site" in j
-        assert "checks" in j and isinstance(j["checks"], list)
-        assert len(j["checks"]) == 8, f"expected 8 checks got {len(j['checks'])}"
-        expected_ids = {"ai_key", "smtp", "stripe", "paypal", "gsc", "bing", "seo_endpoints", "indexnow"}
-        got_ids = {c["id"] for c in j["checks"]}
-        assert got_ids == expected_ids, f"missing: {expected_ids - got_ids}, extra: {got_ids - expected_ids}"
-        # Each check has required fields
-        for c in j["checks"]:
+            assert k in score, f"score missing key {k}"
+
+    @staticmethod
+    def _assert_check_ids(checks):
+        expected = {"ai_key", "smtp", "stripe", "paypal", "gsc", "bing", "seo_endpoints", "indexnow"}
+        got = {c["id"] for c in checks}
+        assert got == expected, f"missing: {expected - got}, extra: {got - expected}"
+
+    @staticmethod
+    def _assert_each_check_shape(checks):
+        for c in checks:
             assert c["status"] in {"green", "amber", "red"}
             assert "name" in c and "detail" in c and "action" in c
 

@@ -326,24 +326,30 @@ class TestProductSixBlocks:
         faqpage_count = sum(1 for p in parsed if isinstance(p, dict) and p.get("@type") == "FAQPage")
         assert faqpage_count >= 2, f"Expected at least 2 FAQPage entities (product FAQ + People-Also-Ask), got {faqpage_count}"
 
-    def test_article_ai_summary_shape(self, product_html):
-        blocks = _extract_jsonld_blocks(product_html)
-        article = None
+    @staticmethod
+    def _find_article_block(blocks):
+        """Return the first JSON-LD block whose @type is 'Article', or None."""
         for b in blocks:
             try:
                 obj = json.loads(b)
             except Exception:
                 continue
             if isinstance(obj, dict) and obj.get("@type") == "Article":
-                article = obj
-                break
-        assert article is not None, "Article JSON-LD block not found"
-        # AI-friendly summary required fields
-        about = article.get("about")
-        assert about, "Article.about missing"
+                return obj
+        return None
+
+    @staticmethod
+    def _resolve_about_entity(about):
+        """Article.about can be a single dict or a list — normalise to dict."""
         if isinstance(about, list):
-            about = about[0]
-        assert isinstance(about, dict) and about.get("@type") == "Product", (
+            return about[0] if about else None
+        return about
+
+    def test_article_ai_summary_shape(self, product_html):
+        article = self._find_article_block(_extract_jsonld_blocks(product_html))
+        assert article is not None, "Article JSON-LD block not found"
+        about = self._resolve_about_entity(article.get("about"))
+        assert about and isinstance(about, dict) and about.get("@type") == "Product", (
             f"Article.about must link to a Product entity, got {about!r}"
         )
         audience = article.get("audience") or {}

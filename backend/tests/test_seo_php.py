@@ -203,44 +203,55 @@ CATEGORY_SLUGS = [
 
 
 class TestCategorySEO:
-    @pytest.mark.parametrize("slug", CATEGORY_SLUGS)
-    def test_category_renders_and_jsonld(self, slug):
-        r = requests.get(f"{BASE_URL}/category.php", params={"slug": slug}, timeout=20)
-        assert r.status_code == 200, f"category {slug} status={r.status_code}"
-        html = r.text
-        for tid in (
-            "category-intro-copy",
-            "category-seo-copy",
-            "category-faq",
-            "category-deep-cluster",
-        ):
-            assert f'data-testid="{tid}"' in html, f"[{slug}] missing testid {tid}"
-        # FAQ buttons 0..4
-        for i in range(5):
-            assert f'data-testid="cat-faq-q-{i}"' in html, f"[{slug}] missing cat-faq-q-{i}"
-        blocks = _extract_jsonld_blocks(html)
-        assert len(blocks) == 5, f"[{slug}] expected 5 JSON-LD blocks, got {len(blocks)}"
+    @staticmethod
+    def _collect_schema_types(parsed_blocks):
+        """Walk every parsed JSON-LD block (incl. @graph) and return the
+        union of `@type` values it declares.  Keeps the main test body
+        flat instead of 6-deep nested."""
+        types = set()
+        for p in parsed_blocks:
+            if not isinstance(p, dict):
+                continue
+            t = p.get("@type")
+            if isinstance(t, list):
+                types.update(t)
+            elif t:
+                types.add(t)
+            for g in p.get("@graph", []) or []:
+                gt = g.get("@type")
+                if isinstance(gt, list):
+                    types.update(gt)
+                elif gt:
+                    types.add(gt)
+        return types
+
+    @staticmethod
+    def _parse_jsonld_blocks(slug, blocks):
         parsed = []
         for i, b in enumerate(blocks):
             try:
                 parsed.append(json.loads(b))
             except json.JSONDecodeError as e:
                 pytest.fail(f"[{slug}] JSON-LD #{i} invalid: {e}")
-        types_found = set()
-        for p in parsed:
-            if isinstance(p, dict):
-                t = p.get("@type")
-                if isinstance(t, list):
-                    types_found.update(t)
-                elif t:
-                    types_found.add(t)
-                if "@graph" in p:
-                    for g in p["@graph"]:
-                        gt = g.get("@type")
-                        if isinstance(gt, list):
-                            types_found.update(gt)
-                        elif gt:
-                            types_found.add(gt)
+        return parsed
+
+    @pytest.mark.parametrize("slug", CATEGORY_SLUGS)
+    def test_category_renders_and_jsonld(self, slug):
+        r = requests.get(f"{BASE_URL}/category.php", params={"slug": slug}, timeout=20)
+        assert r.status_code == 200, f"category {slug} status={r.status_code}"
+        html = r.text
+        # 1) Required test-ids
+        for tid in ("category-intro-copy", "category-seo-copy",
+                    "category-faq", "category-deep-cluster"):
+            assert f'data-testid="{tid}"' in html, f"[{slug}] missing testid {tid}"
+        # 2) FAQ buttons 0..4
+        for i in range(5):
+            assert f'data-testid="cat-faq-q-{i}"' in html, f"[{slug}] missing cat-faq-q-{i}"
+        # 3) JSON-LD blocks parse & contain the expected @types
+        blocks = _extract_jsonld_blocks(html)
+        assert len(blocks) == 5, f"[{slug}] expected 5 JSON-LD blocks, got {len(blocks)}"
+        parsed = self._parse_jsonld_blocks(slug, blocks)
+        types_found = self._collect_schema_types(parsed)
         for expected in ("CollectionPage", "BreadcrumbList", "FAQPage", "ItemList"):
             assert expected in types_found, f"[{slug}] missing schema {expected} (found {types_found})"
 
