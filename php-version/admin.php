@@ -258,6 +258,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->prepare('UPDATE products SET category=? WHERE slug=?')->execute([$categorySlug, $_POST['slug']]);
         header('Location: admin.php?tab=products&msg=Moved'); exit;
 
+    } elseif ($action === 'save_sub_plan') {
+        // Update a subscription plan's price + active toggle from the
+        // Subscription → Plans admin view.
+        $slug   = trim((string)($_POST['slug'] ?? ''));
+        $price  = (float)($_POST['price'] ?? 0);
+        $active = isset($_POST['active']) ? 1 : 0;
+        if ($slug !== '') {
+            $pdo->prepare('UPDATE subscription_plans SET price=?, active=? WHERE slug=?')
+                ->execute([max(0, $price), $active, $slug]);
+        }
+        header('Location: admin.php?tab=subscription&sub=plans&msg=Plan+saved'); exit;
+
     } elseif ($action === 'update_gw_mode') {
         // Switch the global payment-gateway mode between 'test' and 'live'.
         // Stored in the settings table so checkout.php + the webhook
@@ -3397,6 +3409,187 @@ if ($tab === 'dashboard'):
     .vis-chip { background:var(--bg); border:1px solid var(--border); padding:3px 9px; border-radius:999px; font-size:11.5px; color:var(--text); }
     [data-bs-theme="dark"] .vis-chip { background:#0f1729; }
   </style>
+
+<?php
+// ============================================================================
+// SUBSCRIPTION — set plan prices + manage customer subscriptions.
+// Two views: ?sub=plans (default) and ?sub=subscribers.
+// ============================================================================
+elseif ($tab === 'subscription'):
+    $subView = ($_GET['sub'] ?? 'plans') === 'subscribers' ? 'subscribers' : 'plans';
+    $plans   = sub_plans(false);
+    $baseUrl = rtrim(site_url(), '/');
+
+    // Subscriber filters
+    $fq      = trim($_GET['q'] ?? '');
+    $fplan   = trim($_GET['plan'] ?? '');
+    $fstatus = trim($_GET['status'] ?? '');
+    $subs = [];
+    if ($subView === 'subscribers') {
+        $where = []; $params = [];
+        if ($fq !== '')      { $where[] = '(customer_name LIKE ? OR email LIKE ? OR phone LIKE ? OR customer_id LIKE ? OR order_number LIKE ?)'; $lk = '%'.$fq.'%'; array_push($params,$lk,$lk,$lk,$lk,$lk); }
+        if ($fplan !== '')   { $where[] = 'plan_slug = ?';  $params[] = $fplan; }
+        if ($fstatus !== '') { $where[] = 'status = ?';     $params[] = $fstatus; }
+        $wsql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
+        try { $st = $pdo->prepare("SELECT * FROM customer_subscriptions $wsql ORDER BY id DESC LIMIT 500"); $st->execute($params); $subs = $st->fetchAll(PDO::FETCH_ASSOC); }
+        catch (Throwable $e) { $subs = []; }
+    }
+    // Detail modal target
+    $viewSub = null; $viewPlan = null;
+    if (!empty($_GET['view'])) {
+        try { $vs = $pdo->prepare("SELECT * FROM customer_subscriptions WHERE id=?"); $vs->execute([(int)$_GET['view']]); $viewSub = $vs->fetch(PDO::FETCH_ASSOC) ?: null; }
+        catch (Throwable $e) { $viewSub = null; }
+        if ($viewSub) $viewPlan = sub_plan_get((string)$viewSub['plan_slug']);
+    }
+    $subCount = (int)($pdo->query("SELECT COUNT(*) FROM customer_subscriptions")->fetchColumn() ?? 0);
+?>
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+  <div>
+    <h4 class="fw-bold mb-1" data-testid="subscription-title"><i class="bi bi-stars text-primary me-2"></i>Subscription</h4>
+    <div class="small text-secondary">Set plan pricing and manage everyone who has subscribed.</div>
+  </div>
+  <ul class="nav nav-pills" role="tablist">
+    <li class="nav-item"><a class="nav-link <?= $subView==='plans'?'active':'' ?>" href="?tab=subscription&sub=plans" data-testid="sub-tab-plans"><i class="bi bi-card-checklist me-1"></i>Plans</a></li>
+    <li class="nav-item"><a class="nav-link <?= $subView==='subscribers'?'active':'' ?>" href="?tab=subscription&sub=subscribers" data-testid="sub-tab-subscribers"><i class="bi bi-people me-1"></i>Subscribers <span class="badge bg-secondary ms-1"><?= $subCount ?></span></a></li>
+  </ul>
+</div>
+<?php if (!empty($flash)): ?><div class="alert alert-success py-2" data-testid="sub-flash"><?= esc($flash) ?></div><?php endif; ?>
+
+<?php if ($subView === 'plans'): ?>
+  <div class="row g-3" data-testid="sub-plans-grid">
+    <?php foreach ($plans as $p): $link = $baseUrl . '/subscribe.php?plan=' . urlencode($p['slug']); ?>
+      <div class="col-md-6 col-xl-3">
+        <div class="card-e h-100 p-3" style="background:var(--card-bg);border:1px solid var(--border);border-radius:14px;display:flex;flex-direction:column;" data-testid="sub-plan-<?= esc($p['slug']) ?>">
+          <div class="d-flex align-items-center justify-content-between">
+            <h6 class="fw-bold mb-0"><?= esc($p['name']) ?></h6>
+            <span class="badge <?= $p['active']?'bg-success':'bg-secondary' ?>"><?= $p['active']?'Active':'Off' ?></span>
+          </div>
+          <div class="small text-secondary mb-2"><?= esc($p['tagline']) ?></div>
+          <div class="small mb-2"><i class="bi bi-clock-history me-1 text-primary"></i><?= esc($p['tenure_label']) ?> &middot; <i class="bi bi-pc-display me-1 text-primary"></i><?= esc($p['devices']) ?></div>
+          <form method="post" class="mt-auto">
+            <input type="hidden" name="action" value="save_sub_plan">
+            <input type="hidden" name="slug" value="<?= esc($p['slug']) ?>">
+            <label class="form-label small mb-1">Price (USD)</label>
+            <div class="input-group input-group-sm mb-2">
+              <span class="input-group-text">$</span>
+              <input type="number" step="0.01" min="0" name="price" value="<?= esc(number_format((float)$p['price'],2,'.','')) ?>" class="form-control" data-testid="sub-price-<?= esc($p['slug']) ?>">
+            </div>
+            <div class="form-check form-switch mb-2">
+              <input type="checkbox" class="form-check-input" name="active" id="act-<?= esc($p['slug']) ?>" <?= $p['active']?'checked':'' ?> data-testid="sub-active-<?= esc($p['slug']) ?>">
+              <label class="form-check-label small" for="act-<?= esc($p['slug']) ?>">Available for purchase</label>
+            </div>
+            <button class="btn btn-primary btn-sm w-100" data-testid="sub-save-<?= esc($p['slug']) ?>"><i class="bi bi-check2 me-1"></i>Save</button>
+          </form>
+          <div class="mt-2 pt-2 border-top">
+            <label class="form-label small mb-1"><i class="bi bi-link-45deg me-1"></i>Shareable payment link</label>
+            <div class="input-group input-group-sm">
+              <input type="text" readonly class="form-control" value="<?= esc($link) ?>" id="lnk-<?= esc($p['slug']) ?>" data-testid="sub-link-<?= esc($p['slug']) ?>" style="font-size:11px;">
+              <button type="button" class="btn btn-outline-secondary" onclick="navigator.clipboard&&navigator.clipboard.writeText(document.getElementById('lnk-<?= esc($p['slug']) ?>').value);this.innerHTML='<i class=\'bi bi-check2\'></i>';" title="Copy link"><i class="bi bi-clipboard"></i></button>
+              <a class="btn btn-outline-primary" href="<?= esc($link) ?>" target="_blank" title="Open"><i class="bi bi-box-arrow-up-right"></i></a>
+            </div>
+          </div>
+        </div>
+      </div>
+    <?php endforeach; ?>
+  </div>
+  <p class="small text-secondary mt-3"><i class="bi bi-info-circle me-1"></i>Set a price above $0 and keep the plan Active so customers can purchase via the shareable link. Prices are stored in USD and shown in each region's currency at checkout.</p>
+
+<?php else: /* subscribers view */ ?>
+  <form method="get" class="row g-2 align-items-end mb-3" data-testid="sub-filters">
+    <input type="hidden" name="tab" value="subscription"><input type="hidden" name="sub" value="subscribers">
+    <div class="col-md-4"><label class="form-label small mb-1">Search</label>
+      <input type="text" name="q" value="<?= esc($fq) ?>" class="form-control form-control-sm" placeholder="Name, email, phone, customer ID, order #" data-testid="sub-search"></div>
+    <div class="col-md-3"><label class="form-label small mb-1">Plan</label>
+      <select name="plan" class="form-select form-select-sm" data-testid="sub-filter-plan"><option value="">All plans</option>
+        <?php foreach ($plans as $p): ?><option value="<?= esc($p['slug']) ?>" <?= $fplan===$p['slug']?'selected':'' ?>><?= esc($p['name']) ?></option><?php endforeach; ?>
+      </select></div>
+    <div class="col-md-3"><label class="form-label small mb-1">Status</label>
+      <select name="status" class="form-select form-select-sm" data-testid="sub-filter-status"><option value="">All statuses</option>
+        <?php foreach (['active','expired','cancelled'] as $s): ?><option value="<?= $s ?>" <?= $fstatus===$s?'selected':'' ?>><?= ucfirst($s) ?></option><?php endforeach; ?>
+      </select></div>
+    <div class="col-md-2 d-flex gap-2">
+      <button class="btn btn-primary btn-sm flex-fill" data-testid="sub-filter-apply"><i class="bi bi-funnel me-1"></i>Filter</button>
+      <a href="?tab=subscription&sub=subscribers" class="btn btn-outline-secondary btn-sm" title="Reset"><i class="bi bi-x-lg"></i></a>
+    </div>
+  </form>
+  <?php if (!$subs): ?>
+    <div class="text-center text-secondary py-5" data-testid="sub-empty"><i class="bi bi-people" style="font-size:36px;opacity:.35;"></i><div class="mt-2">No subscriptions found.</div></div>
+  <?php else: ?>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle" data-testid="sub-table">
+        <thead><tr style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#94a3b8;">
+          <th>Customer ID</th><th>Customer</th><th>Plan</th><th>Amount</th><th>Tenure</th><th>Status</th><th>Created</th><th class="text-end">View</th>
+        </tr></thead>
+        <tbody>
+        <?php foreach ($subs as $s): ?>
+          <tr data-testid="sub-row-<?= (int)$s['id'] ?>">
+            <td><code style="font-size:11.5px;"><?= esc($s['customer_id']) ?></code></td>
+            <td><div class="fw-semibold" style="font-size:12.5px;"><?= esc($s['customer_name'] ?: '—') ?></div>
+                <div class="small text-secondary" style="font-size:11px;"><?= esc($s['email']) ?><?= $s['phone']?' · '.esc($s['phone']):'' ?></div></td>
+            <td style="font-size:12px;"><?= esc($s['plan_name']) ?></td>
+            <td style="font-size:12px;"><?= esc($s['currency']) ?> <?= number_format((float)$s['amount'],2) ?></td>
+            <td style="font-size:11.5px;"><?= $s['start_date']?esc(date('M j, Y', strtotime($s['start_date']))):'—' ?><?= $s['end_date']?' → '.esc(date('M j, Y', strtotime($s['end_date']))):' (one-time)' ?></td>
+            <td><span class="badge <?= $s['status']==='active'?'bg-success':($s['status']==='cancelled'?'bg-danger':'bg-secondary') ?>"><?= esc(ucfirst($s['status'])) ?></span></td>
+            <td style="font-size:11.5px;"><?= esc(date('M j, Y', strtotime($s['created_at']))) ?></td>
+            <td class="text-end"><a href="?tab=subscription&sub=subscribers&view=<?= (int)$s['id'] ?><?= $fq?'&q='.urlencode($fq):'' ?><?= $fplan?'&plan='.urlencode($fplan):'' ?><?= $fstatus?'&status='.urlencode($fstatus):'' ?>" class="btn btn-sm btn-outline-primary" title="View subscription" data-testid="sub-view-<?= (int)$s['id'] ?>"><i class="bi bi-eye"></i></a></td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+  <?php endif; ?>
+
+  <?php if ($viewSub): ?>
+    <div class="modal d-block" style="background:rgba(0,0,0,.55);" tabindex="-1" data-testid="sub-detail-modal">
+      <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content card-e" style="background:var(--card-bg);">
+          <div class="modal-header" style="border-color:var(--border);">
+            <h5 class="modal-title"><i class="bi bi-stars text-primary me-2"></i><?= esc($viewSub['plan_name']) ?> — <code><?= esc($viewSub['customer_id']) ?></code></h5>
+            <a href="?tab=subscription&sub=subscribers<?= $fq?'&q='.urlencode($fq):'' ?><?= $fplan?'&plan='.urlencode($fplan):'' ?><?= $fstatus?'&status='.urlencode($fstatus):'' ?>" class="btn-close" data-testid="sub-detail-close"></a>
+          </div>
+          <div class="modal-body">
+            <div class="row g-3">
+              <div class="col-md-6">
+                <div class="small text-secondary text-uppercase mb-1" style="letter-spacing:.05em;">Customer</div>
+                <div class="fw-semibold"><?= esc($viewSub['customer_name'] ?: '—') ?></div>
+                <div class="small"><i class="bi bi-envelope me-1"></i><?= esc($viewSub['email']) ?></div>
+                <?php if ($viewSub['phone']): ?><div class="small"><i class="bi bi-telephone me-1"></i><?= esc($viewSub['phone']) ?></div><?php endif; ?>
+                <div class="small"><i class="bi bi-geo me-1"></i>Country: <?= esc($viewSub['country']) ?></div>
+              </div>
+              <div class="col-md-6">
+                <div class="small text-secondary text-uppercase mb-1" style="letter-spacing:.05em;">Subscription</div>
+                <table class="table table-sm mb-0" style="font-size:12.5px;">
+                  <tr><td class="text-secondary">Customer ID</td><td class="fw-bold"><?= esc($viewSub['customer_id']) ?></td></tr>
+                  <tr><td class="text-secondary">Plan</td><td><?= esc($viewSub['plan_name']) ?><?= $viewPlan?' ('.esc($viewPlan['devices']).')':'' ?></td></tr>
+                  <tr><td class="text-secondary">Tenure</td><td><?= $viewPlan?esc($viewPlan['tenure_label']):'' ?></td></tr>
+                  <tr><td class="text-secondary">Start → End</td><td><?= $viewSub['start_date']?esc(date('M j, Y', strtotime($viewSub['start_date']))):'—' ?><?= $viewSub['end_date']?' → '.esc(date('M j, Y', strtotime($viewSub['end_date']))):' (one-time)' ?></td></tr>
+                  <tr><td class="text-secondary">Amount paid</td><td class="fw-bold"><?= esc($viewSub['currency']) ?> <?= number_format((float)$viewSub['amount'],2) ?></td></tr>
+                  <tr><td class="text-secondary">Gateway</td><td><?= esc(ucfirst($viewSub['gateway'] ?: '—')) ?></td></tr>
+                  <tr><td class="text-secondary">Order #</td><td><?= esc($viewSub['order_number'] ?: '—') ?></td></tr>
+                  <tr><td class="text-secondary">Status</td><td><span class="badge <?= $viewSub['status']==='active'?'bg-success':'bg-secondary' ?>"><?= esc(ucfirst($viewSub['status'])) ?></span></td></tr>
+                </table>
+              </div>
+              <?php if ($viewPlan && !empty($viewPlan['features'])): ?>
+              <div class="col-12">
+                <div class="small text-secondary text-uppercase mb-1" style="letter-spacing:.05em;">Included in this subscription</div>
+                <div class="row">
+                  <?php foreach ($viewPlan['features'] as $f): ?>
+                    <div class="col-md-6 small"><i class="bi bi-check2 text-success me-1"></i><?= esc($f) ?></div>
+                  <?php endforeach; ?>
+                </div>
+              </div>
+              <?php endif; ?>
+            </div>
+          </div>
+          <div class="modal-footer" style="border-color:var(--border);">
+            <?php if ($viewSub['order_number']): ?><a href="admin.php?tab=orders&q=<?= urlencode($viewSub['order_number']) ?>" class="btn btn-sm btn-outline-primary"><i class="bi bi-receipt me-1"></i>View order</a><?php endif; ?>
+            <a href="?tab=subscription&sub=subscribers" class="btn btn-sm btn-secondary">Close</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  <?php endif; ?>
+<?php endif; ?>
 
 <?php
 // ============================================================================

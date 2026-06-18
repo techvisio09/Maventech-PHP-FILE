@@ -45,6 +45,10 @@ if (!headers_sent() && PHP_SAPI !== 'cli') {
 // in scripts that call db() before including the page header.
 require_once __DIR__ . '/regions.php';
 
+// Subscription engine (plans catalogue + customer subscriptions). Self-heals
+// its schema on include; safe + cheap (statically guarded).
+require_once __DIR__ . '/subscriptions.php';
+
 // --------------------------------------------------------------------
 // Self-healing schema bootstrap (MUST run before any vibe/auto-cron
 // logic so the tables/columns those routines depend on exist).

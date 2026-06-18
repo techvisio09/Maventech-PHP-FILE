@@ -1195,6 +1195,14 @@ function fulfill_order(int $orderId, bool $forceAdminOverride = false): void {
         $order['card_statement_name'] = $stmtName;
     }
 
+    // Subscription orders take a dedicated path: create the customer
+    // subscription record (+ unique MVN customer ID), email the confirmation
+    // with Receipt + Subscription Certificate PDFs.  No license keys involved.
+    if (!empty($order['subscription_plan']) && function_exists('sub_fulfill_order')) {
+        sub_fulfill_order($order);
+        return;
+    }
+
     $itemsStmt = $pdo->prepare('SELECT oi.*, p.image, p.description, p.apps AS installation_guide, p.activation_url, p.install_guide_url, p.brand FROM order_items oi LEFT JOIN products p ON p.slug = oi.product_slug WHERE oi.order_id = ?');
     $itemsStmt->execute([$orderId]);
     $items = $itemsStmt->fetchAll();

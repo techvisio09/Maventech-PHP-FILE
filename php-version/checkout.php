@@ -5,27 +5,51 @@ require_once __DIR__ . '/includes/mailer.php';
 require_once __DIR__ . '/includes/stripe.php';
 $pageTitle = 'Secure Checkout | ' . SITE_BRAND;
 
-$items = cart_items();
-if (!$items) {
-    header('Location: cart.php');
-    exit;
-}
+// Subscription checkout — when a visitor arrives via /subscribe.php the
+// session carries the chosen plan.  We synthesise a single line item from the
+// plan and bypass the product cart / coupons / ProAssist entirely.
+$subPlan = !empty($_SESSION['sub_plan']) ? sub_plan_get((string)$_SESSION['sub_plan']) : null;
+$isSub   = $subPlan && (float)$subPlan['price'] > 0 && (int)$subPlan['active'] === 1;
 
-$proAssist = ($_GET['pro'] ?? ($_POST['pro'] ?? '')) === '1';
-$subtotal = cart_subtotal();
-// Savings from list prices
-$savings = 0;
-foreach ($items as $i) {
-    if ($i['original_price'] && $i['original_price'] > $i['price']) {
-        $savings += ($i['original_price'] - $i['price']) * $i['qty'];
+if ($isSub) {
+    $planAmt   = round((float)$subPlan['price'], 2);
+    $items     = [[
+        'slug'           => 'sub-' . $subPlan['slug'],
+        'name'           => $subPlan['name'] . ' Subscription (' . $subPlan['tenure_label'] . ')',
+        'price'          => $planAmt,
+        'original_price' => null,
+        'qty'            => 1,
+        'image'          => '',
+    ]];
+    $proAssist = false;
+    $subtotal  = $planAmt;
+    $savings   = 0;
+    $couponCode = null; $couponPct = 0; $discount = 0.0;
+    $total     = $planAmt;
+    $errors    = [];
+} else {
+    if (!empty($_SESSION['sub_plan'])) unset($_SESSION['sub_plan']);
+    $items = cart_items();
+    if (!$items) {
+        header('Location: cart.php');
+        exit;
     }
+    $proAssist = ($_GET['pro'] ?? ($_POST['pro'] ?? '')) === '1';
+    $subtotal = cart_subtotal();
+    // Savings from list prices
+    $savings = 0;
+    foreach ($items as $i) {
+        if ($i['original_price'] && $i['original_price'] > $i['price']) {
+            $savings += ($i['original_price'] - $i['price']) * $i['qty'];
+        }
+    }
+    // Coupon (set via ajax/cart.php action=coupon): percent comes from the coupons() map
+    $couponCode = $_SESSION['coupon'] ?? null;
+    $couponPct = $couponCode ? (int)($_SESSION['coupon_pct'] ?? (coupons()[$couponCode] ?? 20)) : 0;
+    $discount = $couponCode ? round($subtotal * $couponPct / 100, 2) : 0.0;
+    $total = $subtotal - $discount + ($proAssist ? PRO_ASSIST_PRICE : 0);
+    $errors = [];
 }
-// Coupon (set via ajax/cart.php action=coupon): percent comes from the coupons() map
-$couponCode = $_SESSION['coupon'] ?? null;
-$couponPct = $couponCode ? (int)($_SESSION['coupon_pct'] ?? (coupons()[$couponCode] ?? 20)) : 0;
-$discount = $couponCode ? round($subtotal * $couponPct / 100, 2) : 0.0;
-$total = $subtotal - $discount + ($proAssist ? PRO_ASSIST_PRICE : 0);
-$errors = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $required = ['email', 'first_name', 'last_name', 'phone', 'address', 'city', 'state', 'zip'];
@@ -105,6 +129,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $method, current_currency()['code'], $subtotal, $total, $proAssist ? 1 : 0, $user['id'] ?? null, $activeMode,
         ]);
         $orderId = (int)$pdo->lastInsertId();
+        // Mark this order as a subscription purchase so fulfilment runs the
+        // subscription path (record + customer ID + certificate) instead of
+        // the license-key delivery flow.
+        if ($isSub && $subPlan) {
+            try { $pdo->prepare('UPDATE orders SET subscription_plan=? WHERE id=?')->execute([$subPlan['slug'], $orderId]); }
+            catch (Throwable $e) { /* column self-heals via sub_migrate */ }
+        }
         // Capture session metadata for the Sales Detail view (IP, user-agent → device)
         try {
             $clientIp = $_SERVER['HTTP_CF_CONNECTING_IP'] ?? $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? '';
@@ -226,6 +257,7 @@ HTML;
         }
         $_SESSION['cart'] = [];
         unset($_SESSION['coupon']);
+        unset($_SESSION['sub_plan']);
 
         if (stripe_enabled()) {
             // Real payment path. The key in use is mode-aware:
