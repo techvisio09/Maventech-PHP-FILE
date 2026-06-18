@@ -233,6 +233,31 @@ function sub_tenure_text(array $sub, array $plan): string
  * Generate the Receipt + Subscription Certificate PDFs for a subscription
  * order and return their file paths (for email attachment).
  */
+/** "What's included" description block appended to the subscription receipt PDF. */
+function sub_receipt_extra_html(array $sub, array $plan): string
+{
+    $feat = '';
+    foreach (($plan['features'] ?? []) as $f) {
+        $feat .= '<tr><td style="padding:2px 0;color:#047857;width:16px;">&#10003;</td><td style="padding:2px 0;color:#334155;">'
+               . htmlspecialchars((string)$f, ENT_QUOTES, 'UTF-8') . '</td></tr>';
+    }
+    $tenure = htmlspecialchars(sub_tenure_text($sub, $plan), ENT_QUOTES, 'UTF-8');
+    $custId = htmlspecialchars((string)($sub['customer_id'] ?? ''), ENT_QUOTES, 'UTF-8');
+    $devices= htmlspecialchars((string)($plan['devices'] ?? ''), ENT_QUOTES, 'UTF-8');
+    $tag    = htmlspecialchars((string)($plan['tagline'] ?? ''), ENT_QUOTES, 'UTF-8');
+    return '<div style="margin-top:18px;padding-top:12px;border-top:1px solid #e2e8f0;">'
+         . '<div style="font-weight:700;color:#0f172a;font-size:11pt;margin-bottom:4px;">Your subscription</div>'
+         . '<div style="font-size:9.5pt;color:#475569;margin-bottom:4px;">' . $tag . '</div>'
+         . '<table style="width:100%;border-collapse:collapse;font-size:9.5pt;margin-bottom:8px;">'
+         . '<tr><td style="color:#64748b;width:130px;padding:2px 0;">Customer ID</td><td style="font-weight:700;padding:2px 0;">' . $custId . '</td></tr>'
+         . '<tr><td style="color:#64748b;padding:2px 0;">Coverage</td><td style="padding:2px 0;">' . $devices . '</td></tr>'
+         . '<tr><td style="color:#64748b;padding:2px 0;">Tenure</td><td style="padding:2px 0;">' . $tenure . '</td></tr>'
+         . '</table>'
+         . '<div style="font-weight:700;color:#0f172a;font-size:10pt;margin-bottom:2px;">What\'s included</div>'
+         . '<table style="width:100%;border-collapse:collapse;font-size:9pt;">' . $feat . '</table>'
+         . '</div>';
+}
+
 function sub_pdf_paths(array $order, array $sub, array $plan): array
 {
     require_once __DIR__ . '/pdf.php';
@@ -240,25 +265,33 @@ function sub_pdf_paths(array $order, array $sub, array $plan): array
     if (!is_dir($dir)) @mkdir($dir, 0775, true);
     $paths = [];
 
-    // 1) Receipt — reuse the standard branded receipt with the plan as the line item.
+    $items = [[
+        'name'       => $plan['name'] . ' Subscription (' . $plan['tenure_label'] . ')',
+        'unit_price' => (float)($sub['amount'] ?? $plan['price']),
+        'quantity'   => 1,
+        'price'      => (float)($sub['amount'] ?? $plan['price']),
+        'qty'        => 1,
+    ]];
+
+    // 1) Receipt — standard branded receipt + the full plan description block.
     try {
-        $items = [[
-            'name'       => $plan['name'] . ' Subscription (' . $plan['tenure_label'] . ')',
-            'unit_price' => (float)($sub['amount'] ?? $plan['price']),
-            'quantity'   => 1,
-            'price'      => (float)($sub['amount'] ?? $plan['price']),
-            'qty'        => 1,
-        ]];
         $payment = [
             'method' => ucfirst((string)($sub['gateway'] ?: 'card')),
             'date'   => date('F j, Y', strtotime((string)($order['created_at'] ?? 'now'))),
         ];
         $rPath = $dir . '/Receipt-' . (string)($order['order_number'] ?? 'SUB') . '.pdf';
-        @file_put_contents($rPath, generate_receipt_pdf($order, $items, $payment));
+        @file_put_contents($rPath, generate_receipt_pdf($order, $items, $payment, sub_receipt_extra_html($sub, $plan)));
         if (is_file($rPath)) $paths[] = $rPath;
     } catch (Throwable $e) { @error_log('[sub receipt pdf] ' . $e->getMessage()); }
 
-    // 2) Subscription certificate.
+    // 2) Invoice — itemised tax invoice for the subscription.
+    try {
+        $iPath = $dir . '/Invoice-' . (string)($order['order_number'] ?? 'SUB') . '.pdf';
+        @file_put_contents($iPath, generate_invoice_pdf($order, $items));
+        if (is_file($iPath)) $paths[] = $iPath;
+    } catch (Throwable $e) { @error_log('[sub invoice pdf] ' . $e->getMessage()); }
+
+    // 3) Subscription certificate.
     try {
         $cPath = $dir . '/Subscription-' . (string)($sub['customer_id'] ?? 'MVN') . '.pdf';
         @file_put_contents($cPath, sub_generate_certificate_pdf($order, $sub, $plan));

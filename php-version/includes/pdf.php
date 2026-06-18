@@ -503,7 +503,7 @@ HTML;
  * Generate a Receipt PDF (paid orders).  Returns the binary PDF string.
  * Throws on rendering failure.
  */
-function generate_receipt_pdf(array $order, array $items, ?array $payment = null): string
+function generate_receipt_pdf(array $order, array $items, ?array $payment = null, string $extraBodyHtml = ''): string
 {
     $co  = function_exists('company_info') ? company_info() : ['name' => 'Maventech Software'];
     $cur = (string)($order['currency'] ?? 'USD');
@@ -570,7 +570,8 @@ function generate_receipt_pdf(array $order, array $items, ?array $payment = null
                  </table>'
               . '<div class="statement"><span class="lbl">Bank statement note:</span> This charge will appear as <strong>' . htmlspecialchars($stmtName, ENT_QUOTES, 'UTF-8') . '</strong> on your card statement.</div>'
               . ($payRow ? '<div style="font-weight:700;color:#0f172a;margin:18px 0 6px;font-size:11pt;">Payment history</div>
-                            <table class="payhist"><thead><tr><th>Payment method</th><th>Date</th><th class="num">Amount paid</th><th class="num">Receipt number</th></tr></thead><tbody>' . $payRow . '</tbody></table>' : '');
+                            <table class="payhist"><thead><tr><th>Payment method</th><th>Date</th><th class="num">Amount paid</th><th class="num">Receipt number</th></tr></thead><tbody>' . $payRow . '</tbody></table>' : '')
+              . $extraBodyHtml;
 
     $html = _pdf_shell([
         'co'              => $co,

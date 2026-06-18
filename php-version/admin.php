@@ -10,6 +10,54 @@ $pdo = db();
 try { smtp_process_queue(3); } catch (Throwable $e) { /* never block the UI */ }
 $tab = $_GET['tab'] ?? 'dashboard';
 
+// ---------------------------------------------------------------------------
+// Subscription document viewer — streams the EXACT Receipt / Invoice /
+// Subscription Certificate PDF a customer received, for admin preview from
+// the Subscribers detail panel.  ?tab=subscription&doc=receipt|invoice|certificate&id=<subId>
+// ---------------------------------------------------------------------------
+if ($tab === 'subscription' && isset($_GET['doc'])) {
+    require_once __DIR__ . '/includes/pdf.php';
+    $sid = (int)($_GET['id'] ?? 0);
+    $st = $pdo->prepare("SELECT * FROM customer_subscriptions WHERE id=?");
+    $st->execute([$sid]);
+    $sub = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$sub) { http_response_code(404); exit('Subscription not found.'); }
+    $ord = $pdo->prepare("SELECT * FROM orders WHERE id=?");
+    $ord->execute([(int)$sub['order_id']]);
+    $order = $ord->fetch(PDO::FETCH_ASSOC) ?: [
+        'order_number' => $sub['order_number'], 'email' => $sub['email'],
+        'first_name' => $sub['customer_name'], 'last_name' => '', 'currency' => $sub['currency'],
+        'total' => $sub['amount'], 'created_at' => $sub['created_at'], 'payment_method' => $sub['gateway'],
+    ];
+    $plan = sub_plan_get((string)$sub['plan_slug']) ?: ['name'=>$sub['plan_name'],'tenure_label'=>'','features'=>[],'devices'=>'','tagline'=>'','duration_months'=>0];
+    $items = [[
+        'name' => $sub['plan_name'] . ' Subscription' . (!empty($plan['tenure_label']) ? ' (' . $plan['tenure_label'] . ')' : ''),
+        'unit_price' => (float)$sub['amount'], 'quantity' => 1, 'price' => (float)$sub['amount'], 'qty' => 1,
+    ]];
+    $kind = $_GET['doc'];
+    try {
+        if ($kind === 'receipt') {
+            $payment = ['method' => ucfirst((string)($sub['gateway'] ?: 'card')), 'date' => date('F j, Y', strtotime((string)$sub['created_at']))];
+            $bin = generate_receipt_pdf($order, $items, $payment, sub_receipt_extra_html($sub, $plan));
+            $fn  = 'Receipt-' . $sub['order_number'] . '.pdf';
+        } elseif ($kind === 'invoice') {
+            $bin = generate_invoice_pdf($order, $items);
+            $fn  = 'Invoice-' . $sub['order_number'] . '.pdf';
+        } elseif ($kind === 'certificate') {
+            $bin = sub_generate_certificate_pdf($order, $sub, $plan);
+            $fn  = 'Subscription-' . $sub['customer_id'] . '.pdf';
+        } else { http_response_code(400); exit('Unknown document.'); }
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: ' . (isset($_GET['dl']) ? 'attachment' : 'inline') . '; filename="' . $fn . '"');
+        header('Content-Length: ' . strlen($bin));
+        header('Cache-Control: private, no-store');
+        echo $bin; exit;
+    } catch (Throwable $e) {
+        error_log('[admin sub doc] ' . $e->getMessage());
+        http_response_code(500); exit('PDF generation failed.');
+    }
+}
+
 /**
  * Normalise a typed-in category value and make sure a matching row exists
  * in the `categories` table so the new category surfaces everywhere on
@@ -3441,6 +3489,15 @@ elseif ($tab === 'subscription'):
         catch (Throwable $e) { $viewSub = null; }
         if ($viewSub) $viewPlan = sub_plan_get((string)$viewSub['plan_slug']);
     }
+    // The exact confirmation email the customer received (for admin preview).
+    $viewEmailId = 0;
+    if ($viewSub) {
+        try {
+            $eq = $pdo->prepare("SELECT id FROM email_outbox WHERE template_code='subscription_confirm' AND (order_id=? OR recipient=?) ORDER BY id DESC LIMIT 1");
+            $eq->execute([(int)$viewSub['order_id'], (string)$viewSub['email']]);
+            $viewEmailId = (int)$eq->fetchColumn();
+        } catch (Throwable $e) { $viewEmailId = 0; }
+    }
     $subCount = (int)($pdo->query("SELECT COUNT(*) FROM customer_subscriptions")->fetchColumn() ?? 0);
 ?>
 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
@@ -3579,6 +3636,20 @@ elseif ($tab === 'subscription'):
                 </div>
               </div>
               <?php endif; ?>
+            </div>
+            <div class="mt-3 pt-3" style="border-top:1px solid var(--border);">
+              <div class="small text-secondary text-uppercase mb-2" style="letter-spacing:.05em;"><i class="bi bi-paperclip me-1"></i>Documents sent to the customer</div>
+              <div class="d-flex flex-wrap gap-2" data-testid="sub-docs">
+                <a href="admin.php?tab=subscription&doc=receipt&id=<?= (int)$viewSub['id'] ?>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary" data-testid="sub-doc-receipt"><i class="bi bi-receipt me-1"></i>View Receipt</a>
+                <a href="admin.php?tab=subscription&doc=invoice&id=<?= (int)$viewSub['id'] ?>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary" data-testid="sub-doc-invoice"><i class="bi bi-file-earmark-text me-1"></i>View Invoice</a>
+                <a href="admin.php?tab=subscription&doc=certificate&id=<?= (int)$viewSub['id'] ?>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-success" data-testid="sub-doc-certificate"><i class="bi bi-patch-check me-1"></i>View Subscription Certificate</a>
+                <?php if ($viewEmailId): ?>
+                  <a href="email-view.php?id=<?= (int)$viewEmailId ?>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary" data-testid="sub-doc-email"><i class="bi bi-envelope-open me-1"></i>View Email Sent</a>
+                <?php else: ?>
+                  <span class="btn btn-sm btn-outline-secondary disabled" title="No confirmation email on record"><i class="bi bi-envelope me-1"></i>Email not found</span>
+                <?php endif; ?>
+              </div>
+              <div class="small text-secondary mt-2" style="font-size:11px;"><i class="bi bi-info-circle me-1"></i>These open the exact Receipt, Invoice, Certificate and email the customer received. Append <code>&amp;dl=1</code> to a document link to download it.</div>
             </div>
           </div>
           <div class="modal-footer" style="border-color:var(--border);">
