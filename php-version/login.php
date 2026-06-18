@@ -7,26 +7,41 @@ $next = preg_replace('/[^a-z0-9.\-]/i', '', $_GET['next'] ?? ($_POST['next'] ?? 
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $email = strtolower(trim($_POST['email'] ?? ''));
+    $login = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
     $_SESSION['login_attempts'] = ($_SESSION['login_attempts'] ?? 0);
     if ($_SESSION['login_attempts'] >= 8) {
         $error = 'Too many failed attempts. Please try again later.';
     } else {
-        $stmt = db()->prepare('SELECT * FROM users WHERE email = ?');
-        $stmt->execute([$email]);
+        // Match by email (customers + super admin) OR username (staff).
+        $stmt = db()->prepare('SELECT * FROM users WHERE email = ? OR username = ? LIMIT 1');
+        $stmt->execute([strtolower($login), $login]);
         $user = $stmt->fetch();
         if ($user && password_verify($password, $user['password_hash'])) {
-            $_SESSION['user_id'] = $user['id'];
-            unset($_SESSION['login_attempts']);
-            // Admin → admin dashboard; everyone else → account page.
-            $defaultLanding = ($user['role'] === 'admin') ? 'admin.php?tab=dashboard' : 'account.php';
-            $dest = (!empty($_GET['next']) || !empty($_POST['next'])) ? ($next ?: $defaultLanding) : $defaultLanding;
-            header('Location: ' . $dest);
-            exit;
+            // Block deactivated staff accounts.
+            if (in_array(($user['role'] ?? ''), ['staff'], true) && (int)($user['active'] ?? 1) === 0) {
+                $_SESSION['login_attempts']++;
+                $error = 'This account has been deactivated. Please contact your administrator.';
+            } else {
+                $_SESSION['user_id'] = $user['id'];
+                unset($_SESSION['login_attempts']);
+                // Super admin → dashboard; staff → their first allowed panel;
+                // customers → account page.
+                if (($user['role'] ?? '') === 'admin') {
+                    $defaultLanding = 'admin.php?tab=dashboard';
+                } elseif (($user['role'] ?? '') === 'staff') {
+                    $defaultLanding = admin_first_allowed($user);
+                } else {
+                    $defaultLanding = 'account.php';
+                }
+                $dest = (!empty($_GET['next']) || !empty($_POST['next'])) ? ($next ?: $defaultLanding) : $defaultLanding;
+                header('Location: ' . $dest);
+                exit;
+            }
+        } else {
+            $_SESSION['login_attempts']++;
+            $error = 'Invalid username/email or password.';
         }
-        $_SESSION['login_attempts']++;
-        $error = 'Invalid email or password.';
     }
 }
 
@@ -371,10 +386,10 @@ $brandLogo = $co['logo']  ?? '';
       <div class="ml-field">
         <input
           name="email"
-          type="email"
+          type="text"
           required
           class="ml-input"
-          placeholder="Email address"
+          placeholder="Email or username"
           autocomplete="username"
           autofocus
           data-testid="login-email">

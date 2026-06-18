@@ -495,6 +495,7 @@ function format_price(float $usd): string
 /* ---------------- Auth ---------------- */
 function ensure_admin(): void
 {
+    admin_staff_migrate();
     $stmt = db()->prepare('SELECT id FROM users WHERE email = ?');
     $stmt->execute([strtolower(ADMIN_EMAIL)]);
     if (!$stmt->fetch()) {
@@ -503,18 +504,104 @@ function ensure_admin(): void
     }
 }
 
+/** Self-healing schema for staff accounts (runs once, flag-guarded). */
+function admin_staff_migrate(): void
+{
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    try {
+        if (setting_get('staff_schema_v1', '') === '1') return;
+        $pdo = db();
+        $pdo->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(60) DEFAULT NULL");
+        $pdo->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS department VARCHAR(40) NOT NULL DEFAULT ''");
+        $pdo->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions TEXT DEFAULT NULL");
+        $pdo->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS active TINYINT(1) NOT NULL DEFAULT 1");
+        try { $pdo->exec("ALTER TABLE users MODIFY email VARCHAR(255) NULL"); } catch (Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE users ADD UNIQUE KEY uniq_username (username)"); } catch (Throwable $e) {}
+        setting_set('staff_schema_v1', '1');
+    } catch (Throwable $e) { /* retry next boot */ }
+}
+
 function current_user(): ?array
 {
     if (empty($_SESSION['user_id'])) return null;
-    $stmt = db()->prepare('SELECT id, email, name, role FROM users WHERE id = ?');
+    $stmt = db()->prepare('SELECT id, email, name, role, username, department, permissions, active FROM users WHERE id = ?');
     $stmt->execute([$_SESSION['user_id']]);
     return $stmt->fetch() ?: null;
+}
+
+// ---------------------------------------------------------------------------
+// Staff / RBAC — admin panels each map to a permission key. The super admin
+// (role='admin') always has every permission; staff (role='staff') only have
+// the keys stored in users.permissions (JSON array).
+// ---------------------------------------------------------------------------
+function admin_panels(): array
+{
+    // permission key => [label, href, bootstrap-icon]
+    return [
+        'dashboard'   => ['Dashboard',                'admin.php?tab=dashboard',        'bi-speedometer2'],
+        'users'       => ['Users',                    'admin.php?tab=users',            'bi-people-fill'],
+        'subscription'=> ['Subscription',             'admin.php?tab=subscription',     'bi-stars'],
+        'ai-blogger'  => ['AI Auto-Blogger',          'admin.php?tab=ai-blogger',       'bi-robot'],
+        'company'     => ['Company Info',             'admin.php?tab=company',          'bi-building'],
+        'inventory'   => ['Inventory Mgmt',           'inventory.php',                  'bi-boxes'],
+        'products'    => ['Products / Key Inventory', 'admin.php?tab=products',         'bi-box-seam'],
+        'orders'      => ['Orders',                   'admin.php?tab=orders',           'bi-receipt'],
+        'sales'       => ['Sales Detail',             'admin.php?tab=sales',            'bi-graph-up-arrow'],
+        'leads'       => ['Lead Management',          'admin.php?tab=leads',            'bi-person-lines-fill'],
+        'schedule'    => ['Install Schedule',         'admin.php?tab=schedule',         'bi-calendar-check'],
+        'emails'      => ['Email Activity',           'admin.php?tab=emails',           'bi-envelope'],
+        'reviews'     => ['Customer Reviews',         'admin.php?tab=reviews',          'bi-star'],
+        'templates'   => ['Email Templates',          'admin.php?tab=templates',        'bi-file-earmark-richtext'],
+        'gateways'    => ['API / Payment Gateway',    'admin.php?tab=api&gw=toggles',   'bi-credit-card-2-front'],
+        'smtp'        => ['SMTP / Mail Server',        'admin.php?tab=smtp',             'bi-envelope-paper-heart'],
+        'regions'     => ['Regions',                  'admin.php?tab=regions',          'bi-globe'],
+    ];
+}
+function admin_is_super(?array $u = null): bool
+{
+    $u = $u ?? current_user();
+    return $u && (($u['role'] ?? '') === 'admin');
+}
+function admin_permissions(?array $u = null): array
+{
+    $u = $u ?? current_user();
+    if (!$u) return [];
+    if (($u['role'] ?? '') === 'admin') return array_keys(admin_panels());
+    $p = json_decode((string)($u['permissions'] ?? ''), true);
+    return is_array($p) ? array_values(array_intersect($p, array_keys(admin_panels()))) : [];
+}
+function admin_can(string $key, ?array $u = null): bool
+{
+    if (admin_is_super($u)) return true;
+    return in_array($key, admin_permissions($u), true);
+}
+/** Map an admin.php ?tab value to its permission key. */
+function admin_tab_perm(string $tab): string
+{
+    $map = ['api' => 'gateways', 'keys' => 'products', 'install-schedule' => 'schedule', 'settings' => 'company'];
+    return $map[$tab] ?? $tab;
+}
+/** First panel href the user is allowed to land on (for redirects). */
+function admin_first_allowed(?array $u = null): string
+{
+    $panels = admin_panels();
+    foreach ($panels as $key => $meta) {
+        if (admin_can($key, $u)) return $meta[1];
+    }
+    return 'login.php';
 }
 
 function require_admin(): array
 {
     $user = current_user();
-    if (!$user || $user['role'] !== 'admin') {
+    $ok = $user && in_array($user['role'] ?? '', ['admin', 'staff'], true) && (int)($user['active'] ?? 1) === 1;
+    if (!$ok) {
+        if ($user && (($user['role'] ?? '') === 'staff') && (int)($user['active'] ?? 1) === 0) {
+            // Deactivated staff — drop the session so they can't keep poking.
+            unset($_SESSION['user_id']);
+        }
         header('Location: login.php?next=admin.php');
         exit;
     }
@@ -533,7 +620,8 @@ function require_admin(): array
 function require_admin_json(): array
 {
     $user = current_user();
-    if (!$user || ($user['role'] ?? '') !== 'admin') {
+    $ok = $user && in_array($user['role'] ?? '', ['admin', 'staff'], true) && (int)($user['active'] ?? 1) === 1;
+    if (!$ok) {
         http_response_code(403);
         if (!headers_sent()) {
             header('Content-Type: application/json; charset=utf-8');

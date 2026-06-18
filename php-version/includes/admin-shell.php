@@ -31,6 +31,7 @@ if (!function_exists('current_admin')) {
 }
 $navItems = [
     'dashboard'   => ['icon' => 'bi-speedometer2',       'label' => 'Dashboard',          'href' => 'admin.php?tab=dashboard'],
+    'users'       => ['icon' => 'bi-people-fill',        'label' => 'Users',              'href' => 'admin.php?tab=users'],
     'subscription'=> ['icon' => 'bi-stars',               'label' => 'Subscription',       'href' => 'admin.php?tab=subscription'],
     'ai-blogger'  => ['icon' => 'bi-robot',              'label' => 'AI Auto-Blogger',    'href' => 'admin.php?tab=ai-blogger'],
     'company'     => ['icon' => 'bi-building',           'label' => 'Company Info',       'href' => 'admin.php?tab=company'],
@@ -1419,50 +1420,206 @@ hr { border-color: var(--border); opacity:.5; }
 
 <div class="adm-shell">
   <aside class="adm-sidebar" data-testid="adm-sidebar">
-    <div class="side-section">Overview</div>
-    <?php foreach (['dashboard','subscription','ai-blogger','company','regions','inventory'] as $k): $i = $navItems[$k]; ?>
-      <a class="item <?= $adminActive===$k?'active':'' ?>" href="<?= esc($i['href']) ?>" data-testid="adm-nav-<?= $k ?>">
-        <i class="bi <?= esc($i['icon']) ?>"></i><?= esc($i['label']) ?>
-        <?php if ($k === 'ai-blogger'): ?>
-          <span class="adm-nav-badge" style="background:#7c3aed;box-shadow:none;animation:none;letter-spacing:.4px;">AUTO</span>
-        <?php endif; ?>
-      </a>
-    <?php endforeach; ?>
-    <div class="side-section">Catalog</div>
-    <?php foreach (['products'] as $k): $i = $navItems[$k]; ?>
-      <a class="item <?= $adminActive===$k?'active':'' ?>" href="<?= esc($i['href']) ?>" data-testid="adm-nav-<?= $k ?>">
-        <i class="bi <?= esc($i['icon']) ?>"></i><?= esc($i['label']) ?>
-      </a>
-    <?php endforeach; ?>
-    <div class="side-section">Commerce</div>
-    <?php foreach (['orders','sales','leads','schedule'] as $k): $i = $navItems[$k]; ?>
-      <a class="item <?= $adminActive===$k?'active':'' ?>" href="<?= esc($i['href']) ?>" data-testid="adm-nav-<?= $k ?>">
-        <i class="bi <?= esc($i['icon']) ?>"></i><?= esc($i['label']) ?>
-        <?php if ($k==='leads' && $chatUnread > 0): ?>
-          <span class="adm-nav-badge" id="navChatBadge" data-testid="adm-nav-leads-badge"><?= $chatUnread > 99 ? '99+' : $chatUnread ?></span>
-        <?php elseif ($k==='leads'): ?>
-          <span class="adm-nav-badge" id="navChatBadge" data-testid="adm-nav-leads-badge" style="display:none;">0</span>
-        <?php elseif ($k==='schedule' && $installPending > 0): ?>
-          <span class="adm-nav-badge" id="navInstallBadge" data-testid="adm-nav-schedule-badge"><?= $installPending > 99 ? '99+' : $installPending ?></span>
-        <?php elseif ($k==='schedule'): ?>
-          <span class="adm-nav-badge" id="navInstallBadge" data-testid="adm-nav-schedule-badge" style="display:none;">0</span>
-        <?php endif; ?>
-      </a>
-    <?php endforeach; ?>
-    <div class="side-section">Communication</div>
-    <?php foreach (['emails','reviews','templates'] as $k): $i = $navItems[$k]; ?>
-      <a class="item <?= $adminActive===$k?'active':'' ?>" href="<?= esc($i['href']) ?>" data-testid="adm-nav-<?= $k ?>">
-        <i class="bi <?= esc($i['icon']) ?>"></i><?= esc($i['label']) ?>
-      </a>
-    <?php endforeach; ?>
-    <div class="side-section">System</div>
-    <?php foreach (['gateways','smtp'] as $k): $i = $navItems[$k]; ?>
-      <a class="item <?= $adminActive===$k?'active':'' ?>" href="<?= esc($i['href']) ?>" data-testid="adm-nav-<?= $k ?>">
-        <i class="bi <?= esc($i['icon']) ?>"></i><?= esc($i['label']) ?>
-      </a>
+    <?php
+      // Sidebar respects per-user permissions — staff only see panels they
+      // have been granted (the super admin sees everything).
+      $navGroups = [
+        'Overview'      => ['dashboard','users','subscription','ai-blogger','company','regions','inventory'],
+        'Catalog'       => ['products'],
+        'Commerce'      => ['orders','sales','leads','schedule'],
+        'Communication' => ['emails','reviews','templates'],
+        'System'        => ['gateways','smtp'],
+      ];
+    ?>
+    <?php foreach ($navGroups as $secName => $secKeys): ?>
+      <?php $allowed = array_values(array_filter($secKeys, fn($k) => admin_can($k))); if (!$allowed) continue; ?>
+      <div class="side-section"><?= esc($secName) ?></div>
+      <?php foreach ($allowed as $k): $i = $navItems[$k]; ?>
+        <a class="item <?= $adminActive===$k?'active':'' ?>" href="<?= esc($i['href']) ?>" data-testid="adm-nav-<?= $k ?>">
+          <i class="bi <?= esc($i['icon']) ?>"></i><?= esc($i['label']) ?>
+          <?php if ($k === 'ai-blogger'): ?>
+            <span class="adm-nav-badge" style="background:#7c3aed;box-shadow:none;animation:none;letter-spacing:.4px;">AUTO</span>
+          <?php elseif ($k==='leads' && $chatUnread > 0): ?>
+            <span class="adm-nav-badge" id="navChatBadge" data-testid="adm-nav-leads-badge"><?= $chatUnread > 99 ? '99+' : $chatUnread ?></span>
+          <?php elseif ($k==='leads'): ?>
+            <span class="adm-nav-badge" id="navChatBadge" data-testid="adm-nav-leads-badge" style="display:none;">0</span>
+          <?php elseif ($k==='schedule' && $installPending > 0): ?>
+            <span class="adm-nav-badge" id="navInstallBadge" data-testid="adm-nav-schedule-badge"><?= $installPending > 99 ? '99+' : $installPending ?></span>
+          <?php elseif ($k==='schedule'): ?>
+            <span class="adm-nav-badge" id="navInstallBadge" data-testid="adm-nav-schedule-badge" style="display:none;">0</span>
+          <?php endif; ?>
+        </a>
+      <?php endforeach; ?>
     <?php endforeach; ?>
   </aside>
   <div class="adm-sidebar-overlay" onclick="document.querySelector('.adm-sidebar').classList.remove('open')"></div>
+
+  <!-- ===================== STAFF CONSOLE WIDGET ===================== -->
+  <style>
+    .staff-chat-btn { position:fixed; right:20px; bottom:20px; z-index:3000; width:54px; height:54px; border-radius:50%;
+      border:0; background:linear-gradient(135deg,#1d4ed8,#06b6d4); color:#fff; font-size:22px; cursor:pointer;
+      box-shadow:0 10px 28px rgba(29,78,216,.45); display:inline-flex; align-items:center; justify-content:center; transition:transform .15s ease; }
+    .staff-chat-btn:hover { transform:scale(1.06); }
+    .staff-chat-badge { position:absolute; top:-3px; right:-3px; min-width:20px; height:20px; padding:0 5px; border-radius:999px;
+      background:#ef4444; color:#fff; font-size:11px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; box-shadow:0 0 0 2px #fff; }
+    .staff-chat-panel { position:fixed; right:20px; bottom:84px; z-index:3000; width:360px; max-width:calc(100vw - 32px); height:520px; max-height:calc(100vh - 120px);
+      background:var(--card-bg,#fff); border:1px solid var(--border,#e2e8f0); border-radius:16px; box-shadow:0 18px 48px rgba(2,6,23,.3);
+      display:none; flex-direction:column; overflow:hidden; }
+    .staff-chat-panel.open { display:flex; }
+    .scp-head { background:linear-gradient(135deg,#0f172a,#1e3a8a); color:#fff; padding:12px 14px; display:flex; align-items:center; justify-content:space-between; }
+    .scp-title { font-weight:700; font-size:14px; }
+    .scp-x { background:transparent; border:0; color:#fff; font-size:16px; cursor:pointer; opacity:.85; }
+    .scp-tabs { display:flex; border-bottom:1px solid var(--border,#e2e8f0); }
+    .scp-tab { flex:1; background:transparent; border:0; padding:9px 8px; font-size:12.5px; font-weight:600; color:var(--text-soft,#64748b); cursor:pointer; border-bottom:2px solid transparent; }
+    .scp-tab.active { color:#1d4ed8; border-bottom-color:#1d4ed8; }
+    .scp-count { background:#e2e8f0; color:#334155; border-radius:999px; font-size:10px; padding:1px 6px; margin-left:3px; }
+    .scp-body { flex:1; overflow:hidden; display:flex; flex-direction:column; }
+    .scp-list { flex:1; overflow-y:auto; padding:6px; }
+    .scp-item { display:flex; gap:8px; padding:9px 8px; border-radius:10px; cursor:pointer; align-items:flex-start; }
+    .scp-item:hover { background:var(--bg,#f1f5f9); }
+    .scp-ava { width:32px; height:32px; border-radius:50%; background:#dbeafe; color:#1e3a8a; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; font-size:14px; }
+    .scp-item-body { flex:1; min-width:0; }
+    .scp-item-name { font-size:12.5px; font-weight:700; color:var(--text,#0f172a); display:flex; align-items:center; gap:5px; }
+    .scp-item-msg { font-size:11.5px; color:var(--text-soft,#64748b); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .scp-unread { background:#ef4444; color:#fff; border-radius:999px; font-size:10px; font-weight:700; padding:1px 6px; }
+    .scp-dot { width:8px; height:8px; border-radius:50%; background:#22c55e; display:inline-block; }
+    .scp-empty { text-align:center; color:var(--text-soft,#94a3b8); font-size:12px; padding:30px 10px; }
+    .scp-thread { position:absolute; inset:0; top:96px; background:var(--card-bg,#fff); display:none; flex-direction:column; }
+    .scp-thread.open { display:flex; }
+    .scp-thread-head { display:flex; align-items:center; gap:8px; padding:8px 10px; border-bottom:1px solid var(--border,#e2e8f0); }
+    .scp-back { background:transparent; border:0; font-size:16px; color:#1d4ed8; cursor:pointer; }
+    .scp-thread-name { font-weight:700; font-size:13px; }
+    .scp-thread-msgs { flex:1; overflow-y:auto; padding:10px; display:flex; flex-direction:column; gap:6px; background:var(--bg,#f8fafc); }
+    .scp-msg { max-width:80%; padding:7px 10px; border-radius:12px; font-size:12.5px; line-height:1.4; word-wrap:break-word; }
+    .scp-msg.customer { align-self:flex-start; background:#e2e8f0; color:#0f172a; border-bottom-left-radius:4px; }
+    .scp-msg.admin { align-self:flex-end; background:linear-gradient(135deg,#1d4ed8,#06b6d4); color:#fff; border-bottom-right-radius:4px; }
+    .scp-thread-form { display:flex; gap:6px; padding:8px; border-top:1px solid var(--border,#e2e8f0); }
+    .scp-thread-input { flex:1; border:1px solid var(--border,#cbd5e1); border-radius:999px; padding:7px 12px; font-size:12.5px; background:var(--bg,#fff); color:var(--text,#0f172a); outline:none; }
+    .scp-send { width:36px; height:36px; border-radius:50%; border:0; background:linear-gradient(135deg,#1d4ed8,#06b6d4); color:#fff; cursor:pointer; flex-shrink:0; }
+  </style>
+  <button id="staffChatBtn" class="staff-chat-btn" onclick="staffChatToggle()" data-testid="staff-chat-btn" aria-label="Open staff console" title="Leads & installs">
+    <i class="bi bi-headset"></i><span id="staffChatBadge" class="staff-chat-badge" style="display:none;">0</span>
+  </button>
+  <div id="staffChatPanel" class="staff-chat-panel" data-testid="staff-chat-panel">
+    <div class="scp-head"><div class="scp-title"><i class="bi bi-headset me-1"></i>Staff Console</div>
+      <button class="scp-x" onclick="staffChatToggle()" aria-label="Close"><i class="bi bi-x-lg"></i></button></div>
+    <div class="scp-tabs">
+      <button class="scp-tab active" data-tab="leads" onclick="staffChatTab('leads')" data-testid="scp-tab-leads">Leads <span id="scpLeadsCount" class="scp-count">0</span></button>
+      <button class="scp-tab" data-tab="installs" onclick="staffChatTab('installs')" data-testid="scp-tab-installs">Installs <span id="scpInstallsCount" class="scp-count">0</span></button>
+    </div>
+    <div class="scp-body" style="position:relative;">
+      <div id="scpLeadsList" class="scp-list" data-testid="scp-leads-list"></div>
+      <div id="scpInstallsList" class="scp-list" style="display:none;" data-testid="scp-installs-list"></div>
+      <div id="scpThread" class="scp-thread" data-testid="scp-thread">
+        <div class="scp-thread-head"><button class="scp-back" onclick="staffChatBack()"><i class="bi bi-chevron-left"></i></button>
+          <span id="scpThreadName" class="scp-thread-name"></span></div>
+        <div id="scpThreadMsgs" class="scp-thread-msgs"></div>
+        <form class="scp-thread-form" onsubmit="return staffChatSend(event)">
+          <input id="scpThreadInput" class="scp-thread-input" placeholder="Type a reply…" autocomplete="off" data-testid="scp-thread-input">
+          <button class="scp-send" type="submit" data-testid="scp-thread-send"><i class="bi bi-send-fill"></i></button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <script>
+  (function(){
+    var API = (window.MAVEN_BASE||'/') + 'ajax/chat-admin.php';
+    var openState=false, curLead=0, pollTimer=null;
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+    window.staffChatToggle=function(){
+      var p=document.getElementById('staffChatPanel'); if(!p) return;
+      openState=!p.classList.contains('open'); p.classList.toggle('open', openState);
+      if(openState){ staffChatBack(); staffChatLoad(); }
+    };
+    window.staffChatTab=function(t){
+      document.querySelectorAll('.scp-tab').forEach(function(b){ b.classList.toggle('active', b.dataset.tab===t); });
+      document.getElementById('scpLeadsList').style.display = t==='leads'?'block':'none';
+      document.getElementById('scpInstallsList').style.display = t==='installs'?'block':'none';
+    };
+    window.staffChatBack=function(){
+      curLead=0; var th=document.getElementById('scpThread'); if(th) th.classList.remove('open');
+    };
+    function renderLeads(leads){
+      var el=document.getElementById('scpLeadsList'); if(!el) return;
+      document.getElementById('scpLeadsCount').textContent=leads.length;
+      if(!leads.length){ el.innerHTML='<div class="scp-empty"><i class="bi bi-inbox" style="font-size:26px;opacity:.4;"></i><div class="mt-2">No leads yet.</div></div>'; return; }
+      el.innerHTML=leads.map(function(l){
+        var initial=(l.name||l.email||'?').trim().charAt(0).toUpperCase();
+        var sub = l.last_message ? esc(l.last_message) : (l.requested_product? esc(l.requested_product) : esc(l.email||''));
+        return '<div class="scp-item" onclick="staffChatOpenLead('+l.id+',\''+esc((l.name||l.email||'Lead')).replace(/'/g,"\\'")+'\')" data-testid="scp-lead-'+l.id+'">'
+          + '<span class="scp-ava">'+esc(initial)+'</span>'
+          + '<div class="scp-item-body"><div class="scp-item-name">'+esc(l.name||l.email||'Lead')
+          + (l.online?' <span class="scp-dot" title="online"></span>':'')+(l.unread>0?' <span class="scp-unread">'+l.unread+'</span>':'')+'</div>'
+          + '<div class="scp-item-msg">'+sub+'</div></div></div>';
+      }).join('');
+    }
+    function renderInstalls(items){
+      var el=document.getElementById('scpInstallsList'); if(!el) return;
+      document.getElementById('scpInstallsCount').textContent=items.length;
+      if(!items.length){ el.innerHTML='<div class="scp-empty"><i class="bi bi-calendar-check" style="font-size:26px;opacity:.4;"></i><div class="mt-2">No upcoming installs.</div></div>'; return; }
+      el.innerHTML=items.map(function(it){
+        return '<div class="scp-item" data-testid="scp-install-'+it.id+'">'
+          + '<span class="scp-ava" style="background:#fef3c7;color:#92400e;"><i class="bi bi-tools"></i></span>'
+          + '<div class="scp-item-body"><div class="scp-item-name">'+esc(it.name||'Customer')+' <span class="scp-count">'+esc(it.status)+'</span></div>'
+          + '<div class="scp-item-msg">'+esc(it.when||'')+(it.phone?' · '+esc(it.phone):'')+'</div>'
+          + (it.order?'<div class="scp-item-msg">Order #'+esc(it.order)+'</div>':'')+'</div></div>';
+      }).join('');
+    }
+    function updateBadge(n){
+      var b=document.getElementById('staffChatBadge'); if(!b) return;
+      if(n>0){ b.style.display='inline-flex'; b.textContent=n>99?'99+':n; } else { b.style.display='none'; }
+    }
+    window.staffChatLoad=function(){
+      fetch(API+'?action=widget',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'widget'}),credentials:'same-origin'})
+        .then(function(r){return r.json();}).then(function(j){
+          if(!j||!j.ok) return;
+          updateBadge(j.unread||0);
+          if(openState && !curLead){ renderLeads(j.leads||[]); renderInstalls(j.installs||[]); }
+        }).catch(function(){});
+    };
+    window.staffChatOpenLead=function(id,name){
+      curLead=id;
+      document.getElementById('scpThreadName').textContent=name;
+      document.getElementById('scpThread').classList.add('open');
+      loadThread();
+    };
+    function loadThread(){
+      if(!curLead) return;
+      fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'thread',lead_id:curLead}),credentials:'same-origin'})
+        .then(function(r){return r.json();}).then(function(j){
+          if(!j||!j.ok) return;
+          var box=document.getElementById('scpThreadMsgs');
+          box.innerHTML=(j.messages||[]).map(function(m){
+            var body = m.attachment_url
+              ? (m.attachment_type==='image' ? '<a href="'+esc(m.attachment_url)+'" target="_blank"><img src="'+esc(m.attachment_url)+'" style="max-width:140px;border-radius:8px;"></a>'
+                 : (m.attachment_type==='audio' ? '<audio controls src="'+esc(m.attachment_url)+'" style="max-width:180px;"></audio>'
+                 : '<a href="'+esc(m.attachment_url)+'" target="_blank">'+esc(m.attachment_name||'attachment')+'</a>'))
+              : esc(m.message);
+            return '<div class="scp-msg '+(m.sender==='admin'?'admin':'customer')+'">'+body+'</div>';
+          }).join('');
+          box.scrollTop=box.scrollHeight;
+        }).catch(function(){});
+    }
+    window.staffChatSend=function(e){
+      e.preventDefault();
+      var inp=document.getElementById('scpThreadInput'); var msg=(inp.value||'').trim();
+      if(!msg||!curLead) return false;
+      inp.value='';
+      fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'send',lead_id:curLead,message:msg}),credentials:'same-origin'})
+        .then(function(r){return r.json();}).then(function(){ loadThread(); }).catch(function(){});
+      return false;
+    };
+    // Poll: thread if open, else the widget feed (keeps badge fresh).
+    pollTimer=setInterval(function(){
+      if(openState && curLead) loadThread();
+      else staffChatLoad();
+    }, 7000);
+    // Prime the badge on load.
+    setTimeout(staffChatLoad, 1200);
+  })();
+  </script>
+  <!-- =================== /STAFF CONSOLE WIDGET ===================== -->
+
 
   <main class="adm-content">
 

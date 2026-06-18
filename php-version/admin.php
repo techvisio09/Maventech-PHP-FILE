@@ -16,6 +16,7 @@ $tab = $_GET['tab'] ?? 'dashboard';
 // the Subscribers detail panel.  ?tab=subscription&doc=receipt|invoice|certificate&id=<subId>
 // ---------------------------------------------------------------------------
 if ($tab === 'subscription' && isset($_GET['doc'])) {
+    if (!admin_can('subscription', $admin)) { http_response_code(403); exit('Forbidden.'); }
     require_once __DIR__ . '/includes/pdf.php';
     $sid = (int)($_GET['id'] ?? 0);
     $st = $pdo->prepare("SELECT * FROM customer_subscriptions WHERE id=?");
@@ -366,6 +367,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $msg = 'Invalid+email';
         }
         header('Location: admin.php?tab=subscription&sub=subscribers' . ($keep !== '' ? $keep : '') . '&msg=' . $msg); exit;
+
+    } elseif (in_array($action, ['create_staff','update_staff','toggle_staff','delete_staff'], true)) {
+        // Staff/user management — super admin only.
+        if (!admin_is_super($admin)) { header('Location: admin.php'); exit; }
+        $validDepts = ['Tech','Sales','Support','Management'];
+        $allPerms   = array_keys(admin_panels());
+        $msg = '';
+
+        if ($action === 'create_staff') {
+            $name = trim((string)($_POST['name'] ?? ''));
+            $username = strtolower(preg_replace('/[^a-z0-9._-]/', '', (string)($_POST['username'] ?? '')));
+            $pass = (string)($_POST['password'] ?? '');
+            $dept = in_array($_POST['department'] ?? '', $validDepts, true) ? $_POST['department'] : 'Tech';
+            $perms = array_values(array_intersect((array)($_POST['perms'] ?? []), $allPerms));
+            if ($name === '' || $username === '' || strlen($pass) < 6) {
+                $msg = 'Name,+username+and+a+6%2B+char+password+are+required';
+            } else {
+                $chk = $pdo->prepare('SELECT COUNT(*) FROM users WHERE username=?');
+                $chk->execute([$username]);
+                if ((int)$chk->fetchColumn() > 0) {
+                    $msg = 'That+username+is+already+taken';
+                } else {
+                    $pdo->prepare('INSERT INTO users (name, username, email, password_hash, role, department, permissions, active) VALUES (?,?,NULL,?,?,?,?,1)')
+                        ->execute([$name, $username, password_hash($pass, PASSWORD_DEFAULT), 'staff', $dept, json_encode($perms)]);
+                    $msg = 'User+created';
+                }
+            }
+        } elseif ($action === 'update_staff') {
+            $uid = (int)($_POST['id'] ?? 0);
+            $row = $pdo->prepare('SELECT * FROM users WHERE id=?'); $row->execute([$uid]); $u = $row->fetch(PDO::FETCH_ASSOC);
+            if ($u && ($u['role'] ?? '') === 'staff') {
+                $name = trim((string)($_POST['name'] ?? $u['name']));
+                $dept = in_array($_POST['department'] ?? '', $validDepts, true) ? $_POST['department'] : ($u['department'] ?: 'Tech');
+                $perms = array_values(array_intersect((array)($_POST['perms'] ?? []), $allPerms));
+                $active = isset($_POST['active']) ? 1 : 0;
+                $pdo->prepare('UPDATE users SET name=?, department=?, permissions=?, active=? WHERE id=?')
+                    ->execute([$name, $dept, json_encode($perms), $active, $uid]);
+                $newPass = (string)($_POST['password'] ?? '');
+                if ($newPass !== '') {
+                    if (strlen($newPass) >= 6) { $pdo->prepare('UPDATE users SET password_hash=? WHERE id=?')->execute([password_hash($newPass, PASSWORD_DEFAULT), $uid]); }
+                    else { $msg = 'Saved+(password+too+short,+not+changed)'; }
+                }
+                if ($msg === '') $msg = 'User+updated';
+            } else { $msg = 'User+not+found'; }
+        } elseif ($action === 'toggle_staff') {
+            $uid = (int)($_POST['id'] ?? 0);
+            $pdo->prepare("UPDATE users SET active = 1 - active WHERE id=? AND role='staff'")->execute([$uid]);
+            $msg = 'Status+updated';
+        } elseif ($action === 'delete_staff') {
+            $uid = (int)($_POST['id'] ?? 0);
+            $pdo->prepare("DELETE FROM users WHERE id=? AND role='staff'")->execute([$uid]);
+            $msg = 'User+deleted';
+        }
+        header('Location: admin.php?tab=users&msg=' . $msg); exit;
 
     } elseif ($action === 'update_gw_mode') {
         // Switch the global payment-gateway mode between 'test' and 'live'.
@@ -2143,6 +2198,19 @@ if ($tab === 'ai-blogger') {
     }
 }
 
+// ---------------------------------------------------------------------------
+// RBAC gate — staff may only open admin panels they have been granted.
+// The super admin bypasses. Runs before any chrome/output is emitted.
+// ---------------------------------------------------------------------------
+if (!admin_is_super($admin)) {
+    $permKey = admin_tab_perm($tab);
+    if (!admin_can($permKey, $admin)) {
+        $dest = admin_first_allowed($admin);
+        if ($dest === 'login.php') { unset($_SESSION['user_id']); header('Location: login.php'); exit; }
+        header('Location: ' . $dest); exit;
+    }
+}
+
 include __DIR__ . '/includes/admin-shell.php';
 ?>
 
@@ -3506,6 +3574,168 @@ if ($tab === 'dashboard'):
     .vis-chip { background:var(--bg); border:1px solid var(--border); padding:3px 9px; border-radius:999px; font-size:11.5px; color:var(--text); }
     [data-bs-theme="dark"] .vis-chip { background:#0f1729; }
   </style>
+
+<?php
+// ============================================================================
+// USERS — staff accounts, departments, per-panel permissions (super admin).
+// ============================================================================
+elseif ($tab === 'users'):
+    $allPanels = admin_panels();
+    $depts = ['Tech','Sales','Support','Management'];
+    // Super admin row(s) + staff list.
+    try { $superRows = $pdo->query("SELECT * FROM users WHERE role='admin' ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC); }
+    catch (Throwable $e) { $superRows = []; }
+    try { $staffRows = $pdo->query("SELECT * FROM users WHERE role='staff' ORDER BY id DESC")->fetchAll(PDO::FETCH_ASSOC); }
+    catch (Throwable $e) { $staffRows = []; }
+    $editUser = null;
+    if (!empty($_GET['edit'])) {
+        $eu = $pdo->prepare("SELECT * FROM users WHERE id=? AND role='staff'");
+        $eu->execute([(int)$_GET['edit']]);
+        $editUser = $eu->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+    $editPerms = $editUser ? (json_decode((string)$editUser['permissions'], true) ?: []) : [];
+?>
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+  <div>
+    <h4 class="fw-bold mb-1" data-testid="users-title"><i class="bi bi-people-fill text-primary me-2"></i>Users</h4>
+    <div class="small text-secondary">Create staff accounts by department and grant access to specific admin panels.</div>
+  </div>
+</div>
+<?php if (!empty($flash)): ?><div class="alert alert-success py-2" data-testid="users-flash"><?= esc(str_replace('+',' ',$flash)) ?></div><?php endif; ?>
+
+<div class="row g-3">
+  <!-- Create user -->
+  <div class="col-lg-5">
+    <div class="card-e p-3" style="background:var(--card-bg);border:1px solid var(--border);border-radius:14px;">
+      <h6 class="fw-bold mb-3"><i class="bi bi-person-plus me-2 text-success"></i>Create a user</h6>
+      <form method="post" data-testid="create-user-form">
+        <input type="hidden" name="action" value="create_staff">
+        <div class="mb-2"><label class="form-label small mb-1">Full name</label>
+          <input type="text" name="name" class="form-control form-control-sm" required data-testid="cu-name"></div>
+        <div class="row g-2 mb-2">
+          <div class="col-7"><label class="form-label small mb-1">Username (for login)</label>
+            <input type="text" name="username" class="form-control form-control-sm" required placeholder="e.g. tech.john" data-testid="cu-username"></div>
+          <div class="col-5"><label class="form-label small mb-1">Department</label>
+            <select name="department" class="form-select form-select-sm" data-testid="cu-department">
+              <?php foreach ($depts as $d): ?><option value="<?= $d ?>"><?= $d ?></option><?php endforeach; ?>
+            </select></div>
+        </div>
+        <div class="mb-2"><label class="form-label small mb-1">Password</label>
+          <input type="text" name="password" class="form-control form-control-sm" required minlength="6" placeholder="Min 6 characters" data-testid="cu-password"></div>
+        <label class="form-label small mb-1 d-flex justify-content-between align-items-center">
+          <span>Panel permissions</span>
+          <span><a href="#" class="small text-decoration-none" onclick="document.querySelectorAll('#cu-perms input').forEach(c=>c.checked=true);return false;">All</a> · <a href="#" class="small text-decoration-none" onclick="document.querySelectorAll('#cu-perms input').forEach(c=>c.checked=false);return false;">None</a></span>
+        </label>
+        <div id="cu-perms" class="border rounded p-2 mb-3" style="max-height:260px;overflow:auto;border-color:var(--border)!important;">
+          <?php foreach ($allPanels as $pk => $meta): ?>
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="perms[]" value="<?= esc($pk) ?>" id="cu-perm-<?= esc($pk) ?>" data-testid="cu-perm-<?= esc($pk) ?>">
+              <label class="form-check-label small" for="cu-perm-<?= esc($pk) ?>"><i class="bi <?= esc($meta[2]) ?> me-1 text-secondary"></i><?= esc($meta[0]) ?></label>
+            </div>
+          <?php endforeach; ?>
+        </div>
+        <button class="btn btn-primary btn-sm w-100" data-testid="cu-submit"><i class="bi bi-check2 me-1"></i>Create user</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- User list -->
+  <div class="col-lg-7">
+    <div class="card-e p-3" style="background:var(--card-bg);border:1px solid var(--border);border-radius:14px;">
+      <h6 class="fw-bold mb-3"><i class="bi bi-people me-2 text-primary"></i>Accounts</h6>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle" data-testid="users-table">
+          <thead><tr style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#94a3b8;">
+            <th>Name</th><th>Login</th><th>Department</th><th>Access</th><th>Status</th><th class="text-end">Actions</th>
+          </tr></thead>
+          <tbody>
+            <?php foreach ($superRows as $su): ?>
+              <tr data-testid="super-row-<?= (int)$su['id'] ?>">
+                <td style="font-size:12.5px;"><?= esc($su['name'] ?: 'Admin') ?> <span class="badge bg-primary ms-1">Super Admin</span></td>
+                <td style="font-size:11.5px;"><?= esc($su['email']) ?></td>
+                <td style="font-size:12px;">—</td>
+                <td style="font-size:11px;">All panels</td>
+                <td><span class="badge bg-success">Active</span></td>
+                <td class="text-end small text-secondary" style="font-size:11px;">Protected</td>
+              </tr>
+            <?php endforeach; ?>
+            <?php if (!$staffRows): ?>
+              <tr><td colspan="6" class="text-center text-secondary py-3" data-testid="users-empty">No staff users yet — create one on the left.</td></tr>
+            <?php endif; ?>
+            <?php foreach ($staffRows as $u): $up = json_decode((string)$u['permissions'], true) ?: []; ?>
+              <tr data-testid="staff-row-<?= (int)$u['id'] ?>">
+                <td style="font-size:12.5px;"><?= esc($u['name']) ?></td>
+                <td style="font-size:11.5px;"><code><?= esc($u['username']) ?></code></td>
+                <td style="font-size:12px;"><span class="badge bg-secondary"><?= esc($u['department'] ?: '—') ?></span></td>
+                <td style="font-size:11px;"><?= count($up) ?> panel<?= count($up)===1?'':'s' ?></td>
+                <td><span class="badge <?= (int)$u['active']===1?'bg-success':'bg-secondary' ?>"><?= (int)$u['active']===1?'Active':'Inactive' ?></span></td>
+                <td class="text-end" style="white-space:nowrap;">
+                  <a href="?tab=users&edit=<?= (int)$u['id'] ?>" class="btn btn-sm btn-outline-primary" title="Edit" data-testid="staff-edit-<?= (int)$u['id'] ?>"><i class="bi bi-pencil-square"></i></a>
+                  <form method="post" class="d-inline" onsubmit="return confirm('<?= (int)$u['active']===1?'Deactivate':'Activate' ?> this user?');">
+                    <input type="hidden" name="action" value="toggle_staff"><input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
+                    <button class="btn btn-sm <?= (int)$u['active']===1?'btn-outline-warning':'btn-outline-success' ?>" title="<?= (int)$u['active']===1?'Deactivate':'Activate' ?>" data-testid="staff-toggle-<?= (int)$u['id'] ?>"><i class="bi <?= (int)$u['active']===1?'bi-pause-circle':'bi-play-circle' ?>"></i></button>
+                  </form>
+                  <form method="post" class="d-inline" onsubmit="return confirm('Delete this user permanently?');">
+                    <input type="hidden" name="action" value="delete_staff"><input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
+                    <button class="btn btn-sm btn-outline-danger" title="Delete" data-testid="staff-delete-<?= (int)$u['id'] ?>"><i class="bi bi-trash"></i></button>
+                  </form>
+                </td>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<?php if ($editUser): ?>
+  <div class="modal d-block" style="background:rgba(0,0,0,.55);" tabindex="-1" data-testid="staff-edit-modal">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content card-e" style="background:var(--card-bg);">
+        <form method="post">
+          <input type="hidden" name="action" value="update_staff">
+          <input type="hidden" name="id" value="<?= (int)$editUser['id'] ?>">
+          <div class="modal-header" style="border-color:var(--border);">
+            <h5 class="modal-title"><i class="bi bi-pencil-square text-primary me-2"></i>Edit user — <code><?= esc($editUser['username']) ?></code></h5>
+            <a href="?tab=users" class="btn-close" data-testid="staff-edit-close"></a>
+          </div>
+          <div class="modal-body">
+            <div class="row g-2 mb-2">
+              <div class="col-md-6"><label class="form-label small mb-1">Full name</label>
+                <input type="text" name="name" value="<?= esc($editUser['name']) ?>" class="form-control form-control-sm" data-testid="eu-name"></div>
+              <div class="col-md-3"><label class="form-label small mb-1">Department</label>
+                <select name="department" class="form-select form-select-sm" data-testid="eu-department">
+                  <?php foreach ($depts as $d): ?><option value="<?= $d ?>" <?= $editUser['department']===$d?'selected':'' ?>><?= $d ?></option><?php endforeach; ?>
+                </select></div>
+              <div class="col-md-3 d-flex align-items-end"><div class="form-check form-switch mb-1">
+                <input type="checkbox" class="form-check-input" name="active" id="eu-active" <?= (int)$editUser['active']===1?'checked':'' ?> data-testid="eu-active">
+                <label class="form-check-label small" for="eu-active">Active</label></div></div>
+            </div>
+            <div class="mb-2"><label class="form-label small mb-1">Reset password <span class="text-secondary">(leave blank to keep)</span></label>
+              <input type="text" name="password" class="form-control form-control-sm" placeholder="New password (min 6 chars)" data-testid="eu-password"></div>
+            <label class="form-label small mb-1 d-flex justify-content-between align-items-center">
+              <span>Panel permissions</span>
+              <span><a href="#" class="small text-decoration-none" onclick="document.querySelectorAll('#eu-perms input').forEach(c=>c.checked=true);return false;">All</a> · <a href="#" class="small text-decoration-none" onclick="document.querySelectorAll('#eu-perms input').forEach(c=>c.checked=false);return false;">None</a></span>
+            </label>
+            <div id="eu-perms" class="row g-1 border rounded p-2" style="border-color:var(--border)!important;">
+              <?php foreach ($allPanels as $pk => $meta): ?>
+                <div class="col-md-6"><div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="perms[]" value="<?= esc($pk) ?>" id="eu-perm-<?= esc($pk) ?>" <?= in_array($pk,$editPerms,true)?'checked':'' ?> data-testid="eu-perm-<?= esc($pk) ?>">
+                  <label class="form-check-label small" for="eu-perm-<?= esc($pk) ?>"><i class="bi <?= esc($meta[2]) ?> me-1 text-secondary"></i><?= esc($meta[0]) ?></label>
+                </div></div>
+              <?php endforeach; ?>
+            </div>
+          </div>
+          <div class="modal-footer" style="border-color:var(--border);">
+            <button type="submit" class="btn btn-sm btn-primary" data-testid="eu-save"><i class="bi bi-check2 me-1"></i>Save changes</button>
+            <a href="?tab=users" class="btn btn-sm btn-secondary">Cancel</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+<?php endif; ?>
 
 <?php
 // ============================================================================

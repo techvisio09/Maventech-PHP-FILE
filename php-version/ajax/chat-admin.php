@@ -76,6 +76,54 @@ if ($action === 'unread') {
     exit;
 }
 
+if ($action === 'widget') {
+    // Compact feed for the floating staff chat widget: recent leads (with
+    // last message + unread count) and upcoming/pending install schedules.
+    $leads = $pdo->query("
+        SELECT l.id, l.name, l.email, l.phone, l.last_seen, l.requested_product,
+          (SELECT m.message FROM chat_messages m WHERE m.lead_id=l.id ORDER BY m.id DESC LIMIT 1) AS last_message,
+          (SELECT m.sent_at FROM chat_messages m WHERE m.lead_id=l.id ORDER BY m.id DESC LIMIT 1) AS last_at,
+          (SELECT COUNT(*) FROM chat_messages m WHERE m.lead_id=l.id AND m.sender='customer' AND m.read_at IS NULL) AS unread
+        FROM chat_leads l
+        WHERE EXISTS (SELECT 1 FROM chat_messages m WHERE m.lead_id=l.id)
+           OR l.callback_requested=1
+        ORDER BY COALESCE((SELECT MAX(m.id) FROM chat_messages m WHERE m.lead_id=l.id),0) DESC, l.id DESC
+        LIMIT 40
+    ")->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($leads as &$ld) {
+        $ld['id'] = (int)$ld['id'];
+        $ld['unread'] = (int)$ld['unread'];
+        $ld['online'] = _is_online($ld['last_seen']);
+    }
+    unset($ld);
+
+    $installs = [];
+    try {
+        $rows = $pdo->query("SELECT id, customer_name, customer_phone, order_number, scheduled_utc, status
+                             FROM proassist_schedules
+                             WHERE status IN ('pending','confirmed')
+                               AND scheduled_utc >= DATE_SUB(NOW(), INTERVAL 1 DAY)
+                             ORDER BY scheduled_utc ASC LIMIT 25")->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rows as $r) {
+            $ist = '';
+            try { $u = new DateTime((string)$r['scheduled_utc'], new DateTimeZone('UTC')); $u->setTimezone(new DateTimeZone('Asia/Kolkata')); $ist = $u->format('D, M j · g:i A') . ' IST'; }
+            catch (Throwable $e) {}
+            $installs[] = [
+                'id' => (int)$r['id'], 'name' => $r['customer_name'], 'phone' => $r['customer_phone'],
+                'order' => $r['order_number'], 'when' => $ist, 'status' => $r['status'],
+            ];
+        }
+    } catch (Throwable $e) { $installs = []; }
+
+    $totalUnread = (int)$pdo->query("
+        SELECT COUNT(*) FROM chat_leads l
+        WHERE EXISTS (SELECT 1 FROM chat_messages m WHERE m.lead_id=l.id AND m.sender='customer' AND m.read_at IS NULL)
+           OR (l.callback_requested=1 AND l.admin_seen_at IS NULL)
+    ")->fetchColumn();
+    echo json_encode(['ok'=>true, 'leads'=>$leads, 'installs'=>$installs, 'unread'=>$totalUnread]);
+    exit;
+}
+
 // thread (default)
 $leadId = (int)($in['lead_id'] ?? 0);
 if (!$leadId) { echo json_encode(['ok'=>false,'error'=>'lead_id required']); exit; }

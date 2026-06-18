@@ -40,6 +40,13 @@ mysql -uroot ucode_store -e "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS 
 mysql -uroot ucode_store -e "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255) DEFAULT NULL" 2>/dev/null || true
 # chat_leads admin_seen_at — drives the "needs attention" red badge for new callback/ProAssist leads
 mysql -uroot ucode_store -e "ALTER TABLE chat_leads ADD COLUMN IF NOT EXISTS admin_seen_at DATETIME DEFAULT NULL" 2>/dev/null || true
+# Staff accounts (RBAC) — username login, department, per-panel permissions, active flag
+mysql -uroot ucode_store -e "ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(60) DEFAULT NULL" 2>/dev/null || true
+mysql -uroot ucode_store -e "ALTER TABLE users ADD COLUMN IF NOT EXISTS department VARCHAR(40) NOT NULL DEFAULT ''" 2>/dev/null || true
+mysql -uroot ucode_store -e "ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions TEXT DEFAULT NULL" 2>/dev/null || true
+mysql -uroot ucode_store -e "ALTER TABLE users ADD COLUMN IF NOT EXISTS active TINYINT(1) NOT NULL DEFAULT 1" 2>/dev/null || true
+mysql -uroot ucode_store -e "ALTER TABLE users MODIFY email VARCHAR(255) NULL" 2>/dev/null || true
+mysql -uroot ucode_store -e "ALTER TABLE users ADD UNIQUE KEY uniq_username (username)" 2>/dev/null || true
 # stripe_events — audit + idempotency table for the /stripe-webhook.php endpoint
 mysql -uroot ucode_store -e "CREATE TABLE IF NOT EXISTS stripe_events (
     id INT AUTO_INCREMENT PRIMARY KEY,
