@@ -65,12 +65,62 @@ function _pa_schedule_for_lead(PDO $pdo, int $leadId): ?array
     return $row ?: null;
 }
 
+// Customer-selectable timezones (value => friendly label).  Slots are
+// rendered + booked in the timezone the customer picks here; the admin
+// panel always re-displays the booking converted to IST.
+function _pa_timezones(): array
+{
+    return [
+        'America/New_York'    => 'Eastern Time (US & Canada)',
+        'America/Chicago'     => 'Central Time (US & Canada)',
+        'America/Denver'      => 'Mountain Time (US & Canada)',
+        'America/Phoenix'     => 'Arizona (MST)',
+        'America/Los_Angeles' => 'Pacific Time (US & Canada)',
+        'America/Anchorage'   => 'Alaska Time',
+        'Pacific/Honolulu'    => 'Hawaii Time',
+        'America/Toronto'     => 'Toronto',
+        'America/Vancouver'   => 'Vancouver',
+        'Europe/London'       => 'London (GMT/BST)',
+        'Europe/Berlin'       => 'Central Europe (CET)',
+        'Asia/Dubai'          => 'Dubai (GST)',
+        'Asia/Kolkata'        => 'India (IST)',
+        'Asia/Singapore'      => 'Singapore',
+        'Australia/Sydney'    => 'Sydney',
+        'UTC'                 => 'UTC',
+    ];
+}
+// Normalise a requested timezone to one of the allowed values (defaults
+// to US Eastern when the value is missing or unrecognised).
+function _pa_valid_tz(string $tz): string
+{
+    $all = _pa_timezones();
+    return isset($all[$tz]) ? $tz : 'America/New_York';
+}
+
 // ============================================================
 // STATUS — chat widget polls this on open to decide whether to
 // render the calendar card or the "you're scheduled" confirmation.
 // ============================================================
 if ($action === 'status') {
     $sched = _pa_schedule_for_lead($pdo, $leadId);
+    $schedOut = null;
+    if ($sched) {
+        $stz = _pa_valid_tz((string)$sched['tz']);
+        try {
+            $utc = new DateTime((string)$sched['scheduled_utc'], new DateTimeZone('UTC'));
+            $loc = (clone $utc)->setTimezone(new DateTimeZone($stz));
+            $pretty = $loc->format('l, M j · g:i A') . ' ' . $loc->format('T');
+        } catch (Throwable $e) {
+            $pretty = date('l, M j · g:i A', strtotime((string)$sched['scheduled_at'])) . ' EST';
+        }
+        $schedOut = [
+            'id'           => (int)$sched['id'],
+            'scheduled_at' => $sched['scheduled_at'],
+            'tz'           => $stz,
+            'status'       => $sched['status'],
+            'pretty'       => $pretty,
+        ];
+    }
     echo json_encode([
         'ok'           => true,
         'is_proassist' => $isPro,
@@ -80,69 +130,63 @@ if ($action === 'status') {
             'email' => $lead['email'],
             'phone' => $lead['phone'],
         ],
-        'schedule'     => $sched ? [
-            'id'           => (int)$sched['id'],
-            'scheduled_at' => $sched['scheduled_at'],
-            'tz'           => $sched['tz'],
-            'status'       => $sched['status'],
-            'pretty'       => date('l, M j · g:i A', strtotime($sched['scheduled_at'])) . ' EST',
-        ] : null,
+        'timezones'    => _pa_timezones(),
+        'schedule'     => $schedOut,
     ]);
     exit;
 }
 
 // ============================================================
-// SLOTS — returns the 30-min slot grid for a given date, with
-// each slot flagged as taken (already booked) or past (in the past).
-// 9:00 AM - 5:30 PM EST, 30-min steps.  Sundays return empty.
+// SLOTS — returns the 9:00 AM–6:00 PM slot grid (30-min steps) for a
+// chosen date, in the customer's selected timezone.  Each slot is flagged
+// taken (already booked by someone else, compared in UTC) or past.
+// Any future date is bookable (weekends included).
 // ============================================================
 if ($action === 'slots') {
     $date = trim((string)($in['date'] ?? ''));
+    $tzName = _pa_valid_tz(trim((string)($in['tz'] ?? '')));
     if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
         echo json_encode(['ok' => false, 'error' => 'Invalid date']);
         exit;
     }
-    $tz = new DateTimeZone('America/New_York');
+    $tz = new DateTimeZone($tzName);
+    $utcTz = new DateTimeZone('UTC');
     try {
         $dayStart = new DateTime($date . ' 09:00:00', $tz);
     } catch (Throwable $e) {
         echo json_encode(['ok' => false, 'error' => 'Invalid date']);
         exit;
     }
-    // Sundays closed.
-    if ((int)$dayStart->format('N') === 7) {
-        echo json_encode(['ok' => true, 'slots' => [], 'closed' => true, 'reason' => 'Sundays — office closed']);
-        exit;
-    }
-    // Booked slots for that date (any lead, status != cancelled).
-    $booked = [];
+    // Booked slots across ALL leads (status != cancelled), compared in UTC
+    // so bookings made in different timezones still collide correctly.
+    $bookedUtc = [];
     try {
-        $b = $pdo->prepare("SELECT scheduled_at FROM proassist_schedules
-                            WHERE DATE(scheduled_at) = ? AND status <> 'cancelled' AND lead_id <> ?");
-        $b->execute([$date, $leadId]);
+        $b = $pdo->prepare("SELECT scheduled_utc FROM proassist_schedules
+                            WHERE status <> 'cancelled' AND lead_id <> ?");
+        $b->execute([$leadId]);
         foreach ($b->fetchAll(PDO::FETCH_COLUMN) as $ts) {
-            $booked[date('H:i', strtotime($ts))] = true;
+            $bookedUtc[date('Y-m-d H:i', strtotime($ts . ' UTC'))] = true;
         }
     } catch (Throwable $e) { /* non-fatal */ }
-    // Build slots 09:00 → 17:30 every 30 min.
-    $nowEst   = new DateTime('now', $tz);
-    $todayKey = $nowEst->format('Y-m-d');
+    // Build slots 09:00 → 17:30 every 30 min in the customer's timezone.
+    $nowLocal = new DateTime('now', $tz);
     $slots = [];
     $cursor = clone $dayStart;
     $end    = (clone $dayStart)->setTime(17, 30);
     while ($cursor <= $end) {
-        $hm   = $cursor->format('H:i');
-        $lab  = $cursor->format('g:i A');
-        $past = ($date === $todayKey && $cursor <= $nowEst);
+        $hm    = $cursor->format('H:i');
+        $lab   = $cursor->format('g:i A');
+        $utcK  = (clone $cursor)->setTimezone($utcTz)->format('Y-m-d H:i');
+        $past  = ($cursor <= $nowLocal);
         $slots[] = [
-            'time'    => $hm,
-            'label'   => $lab,
-            'taken'   => !empty($booked[$hm]),
-            'past'    => $past,
+            'time'  => $hm,
+            'label' => $lab,
+            'taken' => !empty($bookedUtc[$utcK]),
+            'past'  => $past,
         ];
         $cursor->modify('+30 minutes');
     }
-    echo json_encode(['ok' => true, 'slots' => $slots, 'closed' => false]);
+    echo json_encode(['ok' => true, 'slots' => $slots, 'closed' => false, 'tz' => $tzName]);
     exit;
 }
 
@@ -158,24 +202,22 @@ if ($action === 'book') {
     }
     $date = trim((string)($in['date'] ?? ''));
     $time = trim((string)($in['time'] ?? ''));
+    $tzName = _pa_valid_tz(trim((string)($in['tz'] ?? '')));
     if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) || !preg_match('/^\d{2}:\d{2}$/', $time)) {
         echo json_encode(['ok' => false, 'error' => 'Invalid date or time']);
         exit;
     }
-    $tzNY = new DateTimeZone('America/New_York');
+    $tzCust = new DateTimeZone($tzName);
     $tzUTC = new DateTimeZone('UTC');
     try {
-        $local = new DateTime($date . ' ' . $time . ':00', $tzNY);
+        $local = new DateTime($date . ' ' . $time . ':00', $tzCust);
     } catch (Throwable $e) {
         echo json_encode(['ok' => false, 'error' => 'Invalid date/time']);
         exit;
     }
-    // Reject past slots + Sundays + outside 9-17:30 window.
-    if ((int)$local->format('N') === 7) {
-        echo json_encode(['ok' => false, 'error' => 'Sundays are closed — please pick another day']);
-        exit;
-    }
-    $now = new DateTime('now', $tzNY);
+    // Reject past slots + enforce the 9:00 AM–6:00 PM window in the
+    // customer's own timezone (any future date is allowed, weekends too).
+    $now = new DateTime('now', $tzCust);
     if ($local <= $now) {
         echo json_encode(['ok' => false, 'error' => 'That slot has already passed — please pick another time']);
         exit;
@@ -183,25 +225,25 @@ if ($action === 'book') {
     $hour = (int)$local->format('H');
     $min  = (int)$local->format('i');
     if ($hour < 9 || ($hour > 17 || ($hour === 17 && $min > 30))) {
-        echo json_encode(['ok' => false, 'error' => 'Office hours are 9:00 AM – 6:00 PM EST']);
+        echo json_encode(['ok' => false, 'error' => 'Office hours are 9:00 AM – 6:00 PM']);
         exit;
     }
     if (!in_array($min, [0, 30], true)) {
         echo json_encode(['ok' => false, 'error' => 'Slots are in 30-minute increments']);
         exit;
     }
-    // Slot collision check (someone else already booked it).
     $localStr = $local->format('Y-m-d H:i:s');
+    $utc = (clone $local)->setTimezone($tzUTC);
+    $utcStr = $utc->format('Y-m-d H:i:s');
+
+    // Slot collision check in UTC (someone else already booked this instant).
     $coll = $pdo->prepare("SELECT id FROM proassist_schedules
-                           WHERE scheduled_at = ? AND status <> 'cancelled' AND lead_id <> ?");
-    $coll->execute([$localStr, $leadId]);
+                           WHERE scheduled_utc = ? AND status <> 'cancelled' AND lead_id <> ?");
+    $coll->execute([$utcStr, $leadId]);
     if ($coll->fetch()) {
         echo json_encode(['ok' => false, 'error' => 'That slot was just taken — please choose another time']);
         exit;
     }
-
-    $utc = (clone $local)->setTimezone($tzUTC);
-    $utcStr = $utc->format('Y-m-d H:i:s');
 
     // Upsert: one schedule per lead.  If a row already exists, update it
     // (reschedule), otherwise insert.
@@ -210,7 +252,7 @@ if ($action === 'book') {
         $up = $pdo->prepare("UPDATE proassist_schedules SET
                               scheduled_at=?, scheduled_utc=?, tz=?, status='pending'
                             WHERE id=?");
-        $up->execute([$localStr, $utcStr, 'America/New_York', (int)$existing['id']]);
+        $up->execute([$localStr, $utcStr, $tzName, (int)$existing['id']]);
         $scheduleId = (int)$existing['id'];
         $wasReschedule = true;
     } else {
@@ -225,15 +267,21 @@ if ($action === 'book') {
             (string)$lead['name'],
             (string)$lead['email'],
             (string)$lead['phone'],
-            $localStr, $utcStr, 'America/New_York',
+            $localStr, $utcStr, $tzName,
         ]);
         $scheduleId = (int)$pdo->lastInsertId();
         $wasReschedule = false;
     }
 
+    // Customer-facing "pretty" string is in THEIR timezone; the admin-facing
+    // one is converted to IST (Asia/Kolkata) per the install team's request.
+    $tzAbbr  = $local->format('T');
+    $pretty  = $local->format('l, F j') . ' at ' . $local->format('g:i A') . ' ' . $tzAbbr;
+    $istDt    = (clone $utc)->setTimezone(new DateTimeZone('Asia/Kolkata'));
+    $prettyIST = $istDt->format('l, F j') . ' at ' . $istDt->format('g:i A') . ' IST';
+
     // Append a confirmation message to the chat thread so the customer
     // sees an instant acknowledgement (and the admin gets a record).
-    $pretty = $local->format('l, F j') . ' at ' . $local->format('g:i A') . ' EST';
     $confirm = ($wasReschedule
                     ? "✅ Rescheduled — your install call is now booked for "
                     : "✅ Confirmed — your install call is booked for ")
@@ -260,7 +308,8 @@ if ($action === 'book') {
         admin_notify(
             'install',
             'Install pending — ' . $cName,
-            $cName . ' ' . $verb . ' a ProAssist install call for ' . $pretty
+            $cName . ' ' . $verb . ' a ProAssist install call for ' . $prettyIST
+                . ' (customer local: ' . $pretty . ')'
                 . ($cEml ? ' · ' . $cEml : '')
                 . ($orderNumber !== '' ? ' · Order #' . $orderNumber : ''),
             '/admin.php?tab=install-schedule&open=' . $scheduleId
@@ -291,7 +340,9 @@ if ($action === 'book') {
             $orderTxt  = $orderNumber !== '' ? htmlspecialchars($orderNumber, ENT_QUOTES, 'UTF-8') : '(no linked order)';
             $verb      = $wasReschedule ? 'rescheduled' : 'booked';
             $subject   = ($wasReschedule ? '[Rescheduled] ' : '[New] ')
-                       . 'ProAssist install call — ' . $pretty . ' — ' . ($lead['name'] ?: $lead['email']);
+                       . 'ProAssist install call — ' . $prettyIST . ' — ' . ($lead['name'] ?: $lead['email']);
+            $prettyISTEsc  = htmlspecialchars($prettyIST, ENT_QUOTES, 'UTF-8');
+            $prettyLocalEsc = htmlspecialchars($pretty, ENT_QUOTES, 'UTF-8');
             $html = <<<HTML
 <div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;max-width:620px;margin:0 auto;color:#0f172a">
   <div style="background:#0f172a;color:#fbbf24;padding:18px 22px;border-radius:10px 10px 0 0;">
@@ -301,7 +352,8 @@ if ($action === 'book') {
   <div style="background:#fff;border:1px solid #e2e8f0;border-top:0;border-radius:0 0 10px 10px;padding:24px;line-height:1.55;">
     <p style="margin:0 0 14px 0;font-size:14px;">A customer just <strong>{$verb}</strong> a ProAssist Premium Installation slot.  Please add the call to the specialist's calendar and confirm with the customer ahead of the scheduled time.</p>
     <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:13px;margin:6px 0 18px 0;">
-      <tr><td style="padding:7px 0;color:#64748b;width:140px;">Scheduled slot</td><td style="padding:7px 0;font-weight:700;color:#0f172a;">{$pretty}</td></tr>
+      <tr><td style="padding:7px 0;color:#64748b;width:140px;">Scheduled (IST)</td><td style="padding:7px 0;font-weight:700;color:#0f172a;">{$prettyISTEsc}</td></tr>
+      <tr><td style="padding:7px 0;color:#64748b;">Customer's local time</td><td style="padding:7px 0;">{$prettyLocalEsc}</td></tr>
       <tr><td style="padding:7px 0;color:#64748b;">Customer name</td><td style="padding:7px 0;">{$cName}</td></tr>
       <tr><td style="padding:7px 0;color:#64748b;">Email</td><td style="padding:7px 0;"><a href="mailto:{$cEmail}" style="color:#2563eb;text-decoration:none;">{$cEmail}</a></td></tr>
       <tr><td style="padding:7px 0;color:#64748b;">Phone</td><td style="padding:7px 0;"><a href="tel:{$cPhone}" style="color:#2563eb;text-decoration:none;">{$cPhone}</a></td></tr>
@@ -322,7 +374,7 @@ HTML;
         'schedule' => [
             'id'           => $scheduleId,
             'scheduled_at' => $localStr,
-            'tz'           => 'America/New_York',
+            'tz'           => $tzName,
             'status'       => 'pending',
             'pretty'       => $pretty,
         ],

@@ -8693,13 +8693,31 @@ elseif ($tab === 'schedule'):
 <?php else: ?>
   <div data-testid="schedule-list">
     <?php foreach ($schedules as $s):
-        $sLocal = strtotime($s['scheduled_at']);
+        // Admin always sees the booking converted to IST (Asia/Kolkata),
+        // computed from the stored UTC instant.  The customer's own local
+        // time is shown as a secondary reference line.
+        $istWhen = '—'; $custWhen = '';
+        try {
+            $utcDt = new DateTime((string)$s['scheduled_utc'], new DateTimeZone('UTC'));
+            $istDt = (clone $utcDt)->setTimezone(new DateTimeZone('Asia/Kolkata'));
+            $istWhen = $istDt->format('D, M j') . ' · ' . $istDt->format('g:i A');
+            $custTz  = (string)($s['tz'] ?: 'America/New_York');
+            try {
+                $custDt  = (clone $utcDt)->setTimezone(new DateTimeZone($custTz));
+                $custWhen = $custDt->format('D, M j · g:i A') . ' ' . $custDt->format('T');
+            } catch (Throwable $e) { /* unknown tz — skip secondary line */ }
+        } catch (Throwable $e) {
+            $istWhen = date('D, M j · g:i A', strtotime((string)$s['scheduled_at']));
+        }
         $statusClass = 'is-' . $s['status'];
     ?>
       <div class="sched-card" data-testid="sched-card-<?= (int)$s['id'] ?>" data-schedule-id="<?= (int)$s['id'] ?>">
         <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
           <div>
-            <div class="sched-when"><?= esc(date('D, M j', $sLocal)) ?> · <?= esc(date('g:i A', $sLocal)) ?><span class="sched-tz">EST</span></div>
+            <div class="sched-when"><?= esc($istWhen) ?><span class="sched-tz">IST</span></div>
+            <?php if ($custWhen): ?>
+              <div class="small text-secondary" style="font-size:.72rem;margin-top:1px;"><i class="bi bi-person me-1"></i>Customer's time: <?= esc($custWhen) ?></div>
+            <?php endif; ?>
             <div class="sched-cust-line mt-1">
               <strong><?= esc($s['customer_name'] ?: 'ProAssist customer') ?></strong>
               <?php if ($s['order_number']): ?>

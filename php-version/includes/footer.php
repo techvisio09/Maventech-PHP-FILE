@@ -202,15 +202,25 @@
 <div id="chat-panel" data-testid="chat-panel">
   <div id="chat-head" class="d-flex justify-content-between align-items-center">
     <div class="d-flex align-items-center gap-2">
-      <span class="chat-avatar"><i class="bi bi-headset"></i></span>
+      <span class="chat-avatar chat-avatar-photo"><img src="https://images.pexels.com/photos/7709255/pexels-photo-7709255.jpeg?auto=compress&cs=tinysrgb&w=160&h=160&fit=crop" alt="Addie" loading="lazy" decoding="async"></span>
       <div class="lh-sm">
-        <div class="chat-head-name">Customer Support</div>
-        <small class="chat-head-sub"><span class="chat-online-dot"></span>We're here · usually reply in a few minutes</small>
+        <div class="chat-head-name" data-testid="chat-head-name">Addie</div>
+        <small class="chat-head-sub"><span class="chat-online-dot"></span>The team can also help · usually reply in a few minutes</small>
       </div>
     </div>
     <button class="btn btn-sm btn-link p-0 text-white" onclick="toggleChat()" aria-label="Close chat" data-testid="chat-close"><i class="bi bi-x-lg"></i></button>
   </div>
   <div id="chat-body">
+    <!-- Addie greeting — always shown at the top of the thread.  Mirrors the
+         friendly first-touch message; the 3-field contact form sits right
+         below it on first open. -->
+    <div class="chat-addie-greeting" id="chat-addie-greeting" data-testid="chat-addie-greeting">
+      <div class="chat-msg bot chat-addie-bubble">
+        <strong>Hi, I'm Addie 👋</strong><br>
+        Here to assist you with anything related to your <?= esc($brandName) ?> account!
+      </div>
+      <div class="chat-addie-meta">Addie • Just now</div>
+    </div>
     <!-- AI welcome + quick chips kept in markup for ProAssist auto-open flows
          but hidden by default until JS detects the customer is already
          identified (proLeadId, returning lead, etc.). -->
@@ -255,24 +265,34 @@
            [data-testid=lead-chat-btn] still trigger submitLead('chat'). -->
       <button type="button" class="d-none" onclick="submitLead('chat')" data-testid="lead-chat-btn"></button>
     </div>
-    <!-- ProAssist welcome card (shown when JS detects a ProAssist lead — no calendar/time picker, just a clear instruction). -->
-    <div id="pa-sched-card" class="pa-sched-card pa-sched-welcome" style="display:none;" data-testid="pa-sched-card">
+    <!-- ProAssist install-call scheduler — shown when JS detects a ProAssist
+         purchaser with no booking yet.  Customer picks timezone → date → time.
+         Bookings convert to IST in the admin panel. -->
+    <div id="pa-sched-card" class="pa-sched-card" style="display:none;" data-testid="pa-sched-card">
       <div class="pa-sched-header">
-        <i class="bi bi-headset"></i>
+        <i class="bi bi-calendar-check"></i>
         <div>
-          <div class="pa-sched-title" data-testid="pa-sched-title">Pro Assistance</div>
-          <div class="pa-sched-sub" data-testid="pa-sched-sub">Connected · priority support</div>
+          <div class="pa-sched-title" data-testid="pa-sched-title">Schedule your install call</div>
+          <div class="pa-sched-sub" data-testid="pa-sched-sub">Pick a time that works for you</div>
         </div>
       </div>
-      <div class="pa-welcome-body">
-        <p class="mb-2">For Pro Assistance, please type your message below to connect with an agent — or call our toll-free number.</p>
-        <a href="tel:<?= esc(tel_e164($brandPhone)) ?>" class="pa-welcome-phone" data-testid="pa-welcome-phone">
-          <i class="bi bi-telephone-fill"></i><?= esc($brandPhone) ?>
-        </a>
+      <div class="pa-sched-step">
+        <div class="pa-sched-step-label">Your time zone</div>
+        <select id="pa-sched-tz" class="pa-sched-tz-select" data-testid="pa-sched-tz-select" aria-label="Time zone"></select>
       </div>
+      <div class="pa-sched-step">
+        <div class="pa-sched-step-label">Select a date</div>
+        <div class="pa-sched-dates" id="pa-sched-dates" data-testid="pa-sched-dates"></div>
+      </div>
+      <div class="pa-sched-step" id="pa-sched-times-step" style="display:none;">
+        <div class="pa-sched-step-label">Available times <span class="pa-sched-tz" id="pa-sched-times-tz"></span></div>
+        <div class="pa-sched-times" id="pa-sched-times" data-testid="pa-sched-times"></div>
+        <button type="button" class="pa-sched-back" onclick="paSchedBackToDates()" data-testid="pa-sched-back">&larr; Back to dates</button>
+      </div>
+      <div class="pa-sched-error" id="pa-sched-error" style="display:none;" data-testid="pa-sched-error"></div>
     </div>
-    <!-- (Calendar / time picker removed per Pro Assistance flow update.) -->
-    <div id="pa-sched-confirm" style="display:none;" data-testid="pa-sched-confirm" hidden></div>
+    <!-- Confirmed-booking card (shown after a successful book / on reopen). -->
+    <div id="pa-sched-confirm" class="pa-sched-confirm" style="display:none;" data-testid="pa-sched-confirm"></div>
   </div>
   <div id="chat-typing" class="chat-typing" style="display:none;" data-testid="chat-admin-typing">
     <div class="chat-typing-bubble">

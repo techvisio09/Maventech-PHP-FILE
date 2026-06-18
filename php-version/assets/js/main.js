@@ -559,6 +559,10 @@ async function submitLead(callback) {
                  + 'Please type your message below — let us know exactly what you\'re looking for.';
   const bubble = chatAppend('bot', greeting);
   if (bubble) bubble.classList.add('agent-greeting');
+  // If this lead turns out to be a ProAssist purchaser, surface the
+  // install-call scheduler right away.
+  _paSchedInitDone = false;
+  setTimeout(paSchedInit, 200);
 }
 
 function skipLead() {
@@ -750,6 +754,21 @@ if (typeof window !== 'undefined' && localStorage.getItem('uc_chat_token')) {
 // =====================================================================
 let _paSchedSelectedDate = null;
 let _paSchedInitDone     = false;
+let _paSchedTz           = 'America/New_York';
+let _paSchedTzList       = null;
+
+// Guess the visitor's IANA timezone (falls back to US Eastern).
+function _paGuessTz() {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York'; }
+  catch (e) { return 'America/New_York'; }
+}
+function _paSchedEl(id) { return document.getElementById(id); }
+function _paSchedError(msg) {
+  const e = _paSchedEl('pa-sched-error');
+  if (!e) return;
+  if (msg) { e.textContent = msg; e.style.display = 'block'; }
+  else { e.style.display = 'none'; e.textContent = ''; }
+}
 
 function paSchedInit() {
   if (_paSchedInitDone) return;
@@ -764,31 +783,171 @@ function paSchedInit() {
     .then(r => r.json())
     .then(j => {
       if (!j || !j.ok || !j.is_proassist) return;
-      // ProAssist customers no longer pick a date/time slot from the
-      // chat widget — the operator handles scheduling in conversation.
-      // Just surface the priority-support welcome card, AND make sure
-      // the message composer is visible so they can actually type.
-      // (Previous behaviour: card showed but the input row stayed
-      // collapsed because revealChatInputRow() was never called on
-      // this branch — the customer could see "type your message
-      // below" but had no input box.)
-      const card = document.getElementById('pa-sched-card');
-      if (card) card.style.display = 'block';
+      _paSchedTzList = j.timezones || {};
+      // Known ProAssist customer → hide the lead form, reveal the composer
+      // so they can still type, and show either the picker or (if they've
+      // already booked) the confirmation card.
+      const lf = document.getElementById('chat-lead-form');
+      if (lf) lf.style.display = 'none';
       revealChatInputRow();
+      if (j.schedule && j.schedule.status && j.schedule.status !== 'cancelled') {
+        paSchedShowConfirmed(j.schedule);
+      } else {
+        paSchedShowPicker();
+      }
     })
     .catch(() => {});
 }
 
-// Legacy stubs kept so any older test scripts referencing these names
-// don't throw; they now no-op (apart from making the welcome card +
-// composer visible) since the calendar UI was removed.
-function paSchedShowPicker()     { const c = document.getElementById('pa-sched-card'); if (c) c.style.display = 'block'; revealChatInputRow(); }
-function paSchedShowConfirmed()  { const c = document.getElementById('pa-sched-card'); if (c) c.style.display = 'block'; revealChatInputRow(); }
-function paSchedRenderDates()    {}
-function paSchedSelectDate()     {}
-function paSchedBackToDates()    {}
-function paSchedBook()           {}
-function paSchedReschedule()     { paSchedShowPicker(); }
+// Populate the timezone dropdown (once) + select the best default.
+function _paSchedRenderTzSelect() {
+  const sel = _paSchedEl('pa-sched-tz');
+  if (!sel || !_paSchedTzList) return;
+  if (sel.options.length === 0) {
+    Object.keys(_paSchedTzList).forEach(function (value) {
+      const opt = document.createElement('option');
+      opt.value = value;
+      opt.textContent = _paSchedTzList[value];
+      sel.appendChild(opt);
+    });
+    const guess = _paGuessTz();
+    _paSchedTz = (_paSchedTzList[guess]) ? guess : 'America/New_York';
+    sel.value = _paSchedTz;
+    sel.addEventListener('change', function () {
+      _paSchedTz = sel.value || 'America/New_York';
+      if (_paSchedSelectedDate) paSchedLoadSlots(_paSchedSelectedDate);
+    });
+  } else {
+    sel.value = _paSchedTz;
+  }
+}
+
+function paSchedShowPicker() {
+  const card = _paSchedEl('pa-sched-card');
+  const conf = _paSchedEl('pa-sched-confirm');
+  if (conf) conf.style.display = 'none';
+  if (card) card.style.display = 'block';
+  _paSchedError('');
+  _paSchedRenderTzSelect();
+  paSchedRenderDates();
+  const step = _paSchedEl('pa-sched-times-step');
+  if (step) step.style.display = 'none';
+  _paSchedSelectedDate = null;
+  revealChatInputRow();
+}
+
+// Render the next 21 selectable dates (any future date, weekends included).
+function paSchedRenderDates() {
+  const wrap = _paSchedEl('pa-sched-dates');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  const dows = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const mons = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const today = new Date();
+  for (let i = 0; i < 21; i++) {
+    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + i);
+    const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'pa-sched-date';
+    btn.dataset.date = iso;
+    btn.setAttribute('data-testid', 'pa-sched-date-' + iso);
+    btn.innerHTML = '<span class="pa-sched-date-dow">' + (i === 0 ? 'Today' : dows[d.getDay()]) + '</span>'
+                  + '<span class="pa-sched-date-day">' + d.getDate() + '</span>'
+                  + '<span class="pa-sched-date-mon">' + mons[d.getMonth()] + '</span>';
+    btn.addEventListener('click', function () { paSchedSelectDate(iso, btn); });
+    wrap.appendChild(btn);
+  }
+}
+
+function paSchedSelectDate(iso, btn) {
+  _paSchedSelectedDate = iso;
+  document.querySelectorAll('#pa-sched-dates .pa-sched-date').forEach(function (b) {
+    b.classList.toggle('is-selected', b === btn);
+  });
+  paSchedLoadSlots(iso);
+}
+
+function paSchedBackToDates() {
+  const step = _paSchedEl('pa-sched-times-step');
+  if (step) step.style.display = 'none';
+  _paSchedSelectedDate = null;
+  document.querySelectorAll('#pa-sched-dates .pa-sched-date').forEach(b => b.classList.remove('is-selected'));
+}
+
+function paSchedLoadSlots(date) {
+  _paSchedError('');
+  const step  = _paSchedEl('pa-sched-times-step');
+  const times = _paSchedEl('pa-sched-times');
+  const tzLab = _paSchedEl('pa-sched-times-tz');
+  if (!step || !times) return;
+  step.style.display = 'block';
+  times.innerHTML = '<div class="pa-sched-empty">Loading…</div>';
+  if (tzLab && _paSchedTzList) tzLab.textContent = '(' + (_paSchedTzList[_paSchedTz] || _paSchedTz) + ')';
+  const token = localStorage.getItem('uc_chat_token');
+  fetch('ajax/proassist-schedule.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'slots', token, date, tz: _paSchedTz }),
+  })
+    .then(r => r.json())
+    .then(j => {
+      if (!j || !j.ok) { times.innerHTML = '<div class="pa-sched-empty">Could not load times.</div>'; return; }
+      times.innerHTML = '';
+      const avail = (j.slots || []).filter(s => !s.past && !s.taken);
+      if (avail.length === 0) {
+        times.innerHTML = '<div class="pa-sched-empty">No times left on this day — try another date.</div>';
+        return;
+      }
+      (j.slots || []).forEach(function (s) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'pa-sched-time' + (s.taken ? ' is-taken' : '') + (s.past ? ' is-past' : '');
+        b.textContent = s.label;
+        b.setAttribute('data-testid', 'pa-sched-time-' + s.time);
+        if (!s.taken && !s.past) {
+          b.addEventListener('click', function () { paSchedBook(date, s.time); });
+        }
+        times.appendChild(b);
+      });
+    })
+    .catch(() => { times.innerHTML = '<div class="pa-sched-empty">Network error — please retry.</div>'; });
+}
+
+function paSchedBook(date, time) {
+  _paSchedError('');
+  const token = localStorage.getItem('uc_chat_token');
+  fetch('ajax/proassist-schedule.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'book', token, date, time, tz: _paSchedTz }),
+  })
+    .then(r => r.json())
+    .then(j => {
+      if (!j || !j.ok) { _paSchedError((j && j.error) || 'Could not book that slot — please try another.'); return; }
+      paSchedShowConfirmed(j.schedule, j.rescheduled);
+      const verb = j.rescheduled ? 'Rescheduled' : 'Confirmed';
+      chatAppend('bot', '✅ ' + verb + ' — your install call is booked for ' + ((j.schedule && j.schedule.pretty) || '') + '.');
+    })
+    .catch(() => _paSchedError('Network error — please retry.'));
+}
+
+function paSchedShowConfirmed(sched, rescheduled) {
+  const card = _paSchedEl('pa-sched-card');
+  const conf = _paSchedEl('pa-sched-confirm');
+  if (card) card.style.display = 'none';
+  if (!conf) return;
+  const pretty = (sched && sched.pretty) || 'your selected time';
+  conf.innerHTML =
+      '<div class="pa-sched-confirm-icon"><i class="bi bi-check-circle-fill"></i></div>'
+    + '<div class="pa-sched-confirm-title">Install call ' + (rescheduled ? 'rescheduled' : 'scheduled') + '!</div>'
+    + '<div class="pa-sched-confirm-when">' + pretty + '</div>'
+    + '<button type="button" class="pa-sched-reschedule" onclick="paSchedReschedule()" data-testid="pa-sched-reschedule">Reschedule</button>';
+  conf.style.display = 'block';
+  revealChatInputRow();
+}
+
+function paSchedReschedule() { paSchedShowPicker(); }
 
 // Hook into the chat toggle so paSchedInit runs every time the panel
 // opens (cheap — internally guarded by _paSchedInitDone).
