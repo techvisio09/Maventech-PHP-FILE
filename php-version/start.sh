@@ -47,6 +47,10 @@ mysql -uroot ucode_store -e "ALTER TABLE users ADD COLUMN IF NOT EXISTS permissi
 mysql -uroot ucode_store -e "ALTER TABLE users ADD COLUMN IF NOT EXISTS active TINYINT(1) NOT NULL DEFAULT 1" 2>/dev/null || true
 mysql -uroot ucode_store -e "ALTER TABLE users MODIFY email VARCHAR(255) NULL" 2>/dev/null || true
 mysql -uroot ucode_store -e "ALTER TABLE users ADD UNIQUE KEY uniq_username (username)" 2>/dev/null || true
+# customer_subscriptions assignment + notes (department / handler / track record)
+mysql -uroot ucode_store -e "ALTER TABLE customer_subscriptions ADD COLUMN IF NOT EXISTS assigned_department VARCHAR(40) NOT NULL DEFAULT ''" 2>/dev/null || true
+mysql -uroot ucode_store -e "ALTER TABLE customer_subscriptions ADD COLUMN IF NOT EXISTS assigned_user_id INT DEFAULT NULL" 2>/dev/null || true
+mysql -uroot ucode_store -e "CREATE TABLE IF NOT EXISTS subscription_notes (id INT AUTO_INCREMENT PRIMARY KEY, subscription_id INT NOT NULL, department VARCHAR(40) NOT NULL DEFAULT '', author_user_id INT DEFAULT NULL, author_name VARCHAR(120) NOT NULL DEFAULT '', note TEXT NOT NULL, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, KEY idx_sub (subscription_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci" 2>/dev/null || true
 # stripe_events — audit + idempotency table for the /stripe-webhook.php endpoint
 mysql -uroot ucode_store -e "CREATE TABLE IF NOT EXISTS stripe_events (
     id INT AUTO_INCREMENT PRIMARY KEY,

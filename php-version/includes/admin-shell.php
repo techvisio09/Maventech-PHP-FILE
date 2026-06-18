@@ -636,6 +636,17 @@ body[data-brand-motion="static"] .adm-top .brand-center .m-logo-img {
   font-size:10px;letter-spacing:1.5px;color: var(--muted);
   text-transform:uppercase; font-weight:700;
 }
+/* Collapsible section toggle */
+.adm-sidebar .side-toggle {
+  width:100%; background:transparent; border:0; cursor:pointer;
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
+  text-align:left; transition:color .12s ease;
+}
+.adm-sidebar .side-toggle:hover { color: var(--text); }
+.adm-sidebar .side-toggle .side-caret { font-size:11px; transition:transform .18s ease; opacity:.7; }
+.adm-sidebar .side-toggle.collapsed .side-caret { transform:rotate(-90deg); }
+.adm-sidebar .side-group { overflow:hidden; transition:max-height .2s ease; }
+.adm-sidebar .side-group.collapsed { display:none; }
 .adm-sidebar .item {
   display:flex; align-items:center; gap:11px;
   padding:9px 18px;
@@ -1430,28 +1441,60 @@ hr { border-color: var(--border); opacity:.5; }
         'Communication' => ['emails','reviews','templates'],
         'System'        => ['gateways','smtp'],
       ];
+      // Which section contains the currently-active panel (kept open on load).
+      $activeSectionId = '';
+      foreach ($navGroups as $secName => $ks) {
+        if (in_array($adminActive, $ks, true)) { $activeSectionId = preg_replace('/[^a-z0-9]+/', '-', strtolower($secName)); break; }
+      }
     ?>
     <?php foreach ($navGroups as $secName => $secKeys): ?>
       <?php $allowed = array_values(array_filter($secKeys, fn($k) => admin_can($k))); if (!$allowed) continue; ?>
-      <div class="side-section"><?= esc($secName) ?></div>
-      <?php foreach ($allowed as $k): $i = $navItems[$k]; ?>
-        <a class="item <?= $adminActive===$k?'active':'' ?>" href="<?= esc($i['href']) ?>" data-testid="adm-nav-<?= $k ?>">
-          <i class="bi <?= esc($i['icon']) ?>"></i><?= esc($i['label']) ?>
-          <?php if ($k === 'ai-blogger'): ?>
-            <span class="adm-nav-badge" style="background:#7c3aed;box-shadow:none;animation:none;letter-spacing:.4px;">AUTO</span>
-          <?php elseif ($k==='leads' && $chatUnread > 0): ?>
-            <span class="adm-nav-badge" id="navChatBadge" data-testid="adm-nav-leads-badge"><?= $chatUnread > 99 ? '99+' : $chatUnread ?></span>
-          <?php elseif ($k==='leads'): ?>
-            <span class="adm-nav-badge" id="navChatBadge" data-testid="adm-nav-leads-badge" style="display:none;">0</span>
-          <?php elseif ($k==='schedule' && $installPending > 0): ?>
-            <span class="adm-nav-badge" id="navInstallBadge" data-testid="adm-nav-schedule-badge"><?= $installPending > 99 ? '99+' : $installPending ?></span>
-          <?php elseif ($k==='schedule'): ?>
-            <span class="adm-nav-badge" id="navInstallBadge" data-testid="adm-nav-schedule-badge" style="display:none;">0</span>
-          <?php endif; ?>
-        </a>
-      <?php endforeach; ?>
+      <?php $secId = preg_replace('/[^a-z0-9]+/', '-', strtolower($secName)); ?>
+      <button type="button" class="side-section side-toggle" data-section="<?= esc($secId) ?>" data-testid="side-section-<?= esc($secId) ?>" aria-expanded="true" onclick="admToggleSection('<?= esc($secId) ?>')">
+        <span><?= esc($secName) ?></span><i class="bi bi-chevron-down side-caret"></i>
+      </button>
+      <div class="side-group" id="side-group-<?= esc($secId) ?>" data-section-items="<?= esc($secId) ?>">
+        <?php foreach ($allowed as $k): $i = $navItems[$k]; ?>
+          <a class="item <?= $adminActive===$k?'active':'' ?>" href="<?= esc($i['href']) ?>" data-testid="adm-nav-<?= $k ?>">
+            <i class="bi <?= esc($i['icon']) ?>"></i><?= esc($i['label']) ?>
+            <?php if ($k === 'ai-blogger'): ?>
+              <span class="adm-nav-badge" style="background:#7c3aed;box-shadow:none;animation:none;letter-spacing:.4px;">AUTO</span>
+            <?php elseif ($k==='leads' && $chatUnread > 0): ?>
+              <span class="adm-nav-badge" id="navChatBadge" data-testid="adm-nav-leads-badge"><?= $chatUnread > 99 ? '99+' : $chatUnread ?></span>
+            <?php elseif ($k==='leads'): ?>
+              <span class="adm-nav-badge" id="navChatBadge" data-testid="adm-nav-leads-badge" style="display:none;">0</span>
+            <?php elseif ($k==='schedule' && $installPending > 0): ?>
+              <span class="adm-nav-badge" id="navInstallBadge" data-testid="adm-nav-schedule-badge"><?= $installPending > 99 ? '99+' : $installPending ?></span>
+            <?php elseif ($k==='schedule'): ?>
+              <span class="adm-nav-badge" id="navInstallBadge" data-testid="adm-nav-schedule-badge" style="display:none;">0</span>
+            <?php endif; ?>
+          </a>
+        <?php endforeach; ?>
+      </div>
     <?php endforeach; ?>
   </aside>
+  <script>
+  // Collapsible sidebar sections — state persisted per section in localStorage.
+  function admToggleSection(id){
+    var g=document.getElementById('side-group-'+id);
+    var b=document.querySelector('.side-toggle[data-section="'+id+'"]');
+    if(!g||!b) return;
+    var collapsed=g.classList.toggle('collapsed');
+    b.classList.toggle('collapsed', collapsed);
+    b.setAttribute('aria-expanded', collapsed?'false':'true');
+    try{ var s=JSON.parse(localStorage.getItem('adm_nav_collapsed')||'{}'); s[id]=collapsed; localStorage.setItem('adm_nav_collapsed', JSON.stringify(s)); }catch(e){}
+  }
+  (function(){
+    var activeSection = <?= json_encode($activeSectionId) ?>;
+    var s={}; try{ s=JSON.parse(localStorage.getItem('adm_nav_collapsed')||'{}'); }catch(e){}
+    Object.keys(s).forEach(function(id){
+      if(s[id] && id!==activeSection){
+        var g=document.getElementById('side-group-'+id), b=document.querySelector('.side-toggle[data-section="'+id+'"]');
+        if(g) g.classList.add('collapsed'); if(b){ b.classList.add('collapsed'); b.setAttribute('aria-expanded','false'); }
+      }
+    });
+  })();
+  </script>
   <div class="adm-sidebar-overlay" onclick="document.querySelector('.adm-sidebar').classList.remove('open')"></div>
 
   <!-- ===================== STAFF CONSOLE WIDGET ===================== -->

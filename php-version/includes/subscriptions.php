@@ -62,6 +62,20 @@ function sub_migrate(): void
         try { $pdo->exec("ALTER TABLE orders ADD COLUMN subscription_plan VARCHAR(64) DEFAULT NULL"); }
         catch (Throwable $e) { /* already exists */ }
 
+        // Assignment + notes (department / handler / running note log).
+        try { $pdo->exec("ALTER TABLE customer_subscriptions ADD COLUMN assigned_department VARCHAR(40) NOT NULL DEFAULT ''"); } catch (Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE customer_subscriptions ADD COLUMN assigned_user_id INT DEFAULT NULL"); } catch (Throwable $e) {}
+        $pdo->exec("CREATE TABLE IF NOT EXISTS subscription_notes (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            subscription_id INT NOT NULL,
+            department VARCHAR(40) NOT NULL DEFAULT '',
+            author_user_id INT DEFAULT NULL,
+            author_name VARCHAR(120) NOT NULL DEFAULT '',
+            note TEXT NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            KEY idx_sub (subscription_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
         // Seed the four plans once (prices left at 0.00 for the admin to set).
         $cnt = (int)$pdo->query("SELECT COUNT(*) FROM subscription_plans")->fetchColumn();
         if ($cnt === 0) {

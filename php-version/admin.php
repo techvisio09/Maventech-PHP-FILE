@@ -368,6 +368,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         header('Location: admin.php?tab=subscription&sub=subscribers' . ($keep !== '' ? $keep : '') . '&msg=' . $msg); exit;
 
+    } elseif ($action === 'sub_add_note') {
+        // Assign a department + handler to a subscription and/or append a note
+        // to its running track record.
+        $sid  = (int)($_POST['id'] ?? 0);
+        $dept = in_array($_POST['department'] ?? '', ['Tech','Sales','Support','Management'], true) ? $_POST['department'] : '';
+        $assignee = (int)($_POST['assigned_user_id'] ?? 0) ?: null;
+        $note = trim((string)($_POST['note'] ?? ''));
+        $keep = (string)($_POST['keep'] ?? '');
+        if ($sid) {
+            try {
+                $pdo->prepare('UPDATE customer_subscriptions SET assigned_department=?, assigned_user_id=? WHERE id=?')
+                    ->execute([$dept, $assignee, $sid]);
+                if ($note !== '') {
+                    $author = trim((string)($admin['name'] ?? '')) ?: (string)($admin['username'] ?? $admin['email'] ?? 'Admin');
+                    $pdo->prepare('INSERT INTO subscription_notes (subscription_id, department, author_user_id, author_name, note) VALUES (?,?,?,?,?)')
+                        ->execute([$sid, $dept, (int)($admin['id'] ?? 0), $author, mb_substr($note, 0, 2000, 'UTF-8')]);
+                }
+            } catch (Throwable $e) { @error_log('[sub_add_note] ' . $e->getMessage()); }
+        }
+        header('Location: admin.php?tab=subscription&sub=subscribers&view=' . $sid . $keep); exit;
+
     } elseif (in_array($action, ['create_staff','update_staff','toggle_staff','delete_staff'], true)) {
         // Staff/user management — super admin only.
         if (!admin_is_super($admin)) { header('Location: admin.php'); exit; }
@@ -3796,6 +3817,14 @@ elseif ($tab === 'subscription'):
             $viewEmailId = (int)$eq->fetchColumn();
         } catch (Throwable $e) { $viewEmailId = 0; }
     }
+    // Notes log + assignment data + staff list for the handler dropdown.
+    $viewNotes = []; $staffList = [];
+    if ($viewSub) {
+        try { $nq = $pdo->prepare("SELECT * FROM subscription_notes WHERE subscription_id=? ORDER BY id DESC LIMIT 100"); $nq->execute([(int)$viewSub['id']]); $viewNotes = $nq->fetchAll(PDO::FETCH_ASSOC); }
+        catch (Throwable $e) { $viewNotes = []; }
+        try { $staffList = $pdo->query("SELECT id, name, username, department FROM users WHERE role='staff' AND active=1 ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC); }
+        catch (Throwable $e) { $staffList = []; }
+    }
     $subCount = (int)($pdo->query("SELECT COUNT(*) FROM customer_subscriptions")->fetchColumn() ?? 0);
 ?>
 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
@@ -3949,6 +3978,49 @@ elseif ($tab === 'subscription'):
                   <?php endforeach; ?>
                 </div>
               </div>
+              <?php endif; ?>
+            </div>
+            <div class="mt-3 pt-3" style="border-top:1px solid var(--border);">
+              <div class="small text-secondary text-uppercase mb-2" style="letter-spacing:.05em;"><i class="bi bi-clipboard-check me-1"></i>Department, handler &amp; notes</div>
+              <form method="post" class="mb-2" data-testid="sub-note-form">
+                <input type="hidden" name="action" value="sub_add_note">
+                <input type="hidden" name="id" value="<?= (int)$viewSub['id'] ?>">
+                <input type="hidden" name="keep" value="<?= esc($keep) ?>">
+                <div class="row g-2 mb-2">
+                  <div class="col-md-6"><label class="form-label small mb-1">Handling department</label>
+                    <select name="department" class="form-select form-select-sm" data-testid="sub-note-dept">
+                      <option value="">— Unassigned —</option>
+                      <?php foreach (['Tech','Sales','Support','Management'] as $d): ?>
+                        <option value="<?= $d ?>" <?= ($viewSub['assigned_department'] ?? '')===$d?'selected':'' ?>><?= $d ?></option>
+                      <?php endforeach; ?>
+                    </select></div>
+                  <div class="col-md-6"><label class="form-label small mb-1">Assigned user</label>
+                    <select name="assigned_user_id" class="form-select form-select-sm" data-testid="sub-note-user">
+                      <option value="">— None —</option>
+                      <?php foreach ($staffList as $stf): ?>
+                        <option value="<?= (int)$stf['id'] ?>" <?= (int)($viewSub['assigned_user_id'] ?? 0)===(int)$stf['id']?'selected':'' ?>><?= esc($stf['name']) ?> (<?= esc($stf['department'] ?: 'Staff') ?>)</option>
+                      <?php endforeach; ?>
+                    </select></div>
+                </div>
+                <label class="form-label small mb-1">Add a note <span class="text-secondary">(track record for this customer)</span></label>
+                <textarea name="note" rows="2" class="form-control form-control-sm mb-2" placeholder="e.g. Called customer, scheduled remote install for Tuesday…" data-testid="sub-note-text"></textarea>
+                <button class="btn btn-sm btn-primary" data-testid="sub-note-save"><i class="bi bi-save me-1"></i>Save assignment &amp; note</button>
+              </form>
+              <?php if ($viewNotes): ?>
+                <div class="border rounded p-2" style="max-height:220px;overflow:auto;border-color:var(--border)!important;" data-testid="sub-note-log">
+                  <?php foreach ($viewNotes as $n): ?>
+                    <div class="mb-2 pb-2 border-bottom" style="border-color:var(--border)!important;">
+                      <div class="small" style="white-space:pre-wrap;"><?= esc($n['note']) ?></div>
+                      <div class="text-secondary" style="font-size:10.5px;">
+                        <i class="bi bi-person me-1"></i><?= esc($n['author_name'] ?: 'Admin') ?>
+                        <?php if (!empty($n['department'])): ?> · <span class="badge bg-secondary" style="font-size:9px;"><?= esc($n['department']) ?></span><?php endif; ?>
+                        · <?= esc(date('M j, Y g:i A', strtotime($n['created_at']))) ?>
+                      </div>
+                    </div>
+                  <?php endforeach; ?>
+                </div>
+              <?php else: ?>
+                <div class="small text-secondary"><i class="bi bi-info-circle me-1"></i>No notes yet — add the first one above.</div>
               <?php endif; ?>
             </div>
             <div class="mt-3 pt-3" style="border-top:1px solid var(--border);">
