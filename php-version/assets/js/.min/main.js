@@ -964,7 +964,17 @@ _chatRec.start();
 if (micBtn) micBtn.classList.add('is-recording');
 _chatStartVoiceTimer();
 } catch (e) {
-_chatAttachStatus('Microphone access was denied.', true);
+let msg = 'Could not start recording.';
+const n = (e && e.name) || '';
+if (n === 'NotAllowedError' || n === 'SecurityError' || n === 'PermissionDeniedError') {
+msg = 'Microphone is blocked. Click the lock/mic icon in your browser address bar → allow Microphone, then try again.';
+if (window.self !== window.top) msg += ' If it stays blocked, open the site in its own browser tab.';
+} else if (n === 'NotFoundError' || n === 'DevicesNotFoundError') {
+msg = 'No microphone was found on this device.';
+} else if (n === 'NotReadableError') {
+msg = 'Your microphone is being used by another app. Close it and try again.';
+}
+_chatAttachStatus(msg, true);
 }
 }
 function _chatStartVoiceTimer() {

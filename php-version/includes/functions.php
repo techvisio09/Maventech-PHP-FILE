@@ -29,7 +29,9 @@ if (!headers_sent() && PHP_SAPI !== 'cli') {
     header('X-Content-Type-Options: nosniff');
     header('X-Frame-Options: SAMEORIGIN');
     header('Referrer-Policy: strict-origin-when-cross-origin');
-    header('Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()');
+    // microphone=(self) lets the support-chat voice-note recorder work on our
+    // own pages; camera/geolocation stay disabled since we never use them.
+    header('Permissions-Policy: camera=(), microphone=(self), geolocation=(), interest-cohort=()');
     $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
             || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https')
             || (($_SERVER['SERVER_PORT'] ?? '') === '443');

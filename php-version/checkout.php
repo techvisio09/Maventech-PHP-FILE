@@ -181,6 +181,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['lead_id']   = $proLeadId;
                 $_SESSION['chat_token'] = $proToken;
             } catch (Throwable $e) { /* lead-creation is best-effort */ }
+
+            // Email the company's registered address the moment a customer
+            // OPTS IN to ProAssist at checkout (separate from the later
+            // "install scheduled" alert).  Recipient resolves from Company
+            // Info → support/company email, then ADMIN_EMAIL fallback.
+            try {
+                $toEmail = trim((string)setting_get('company_support_email', ''));
+                if ($toEmail === '') $toEmail = trim((string)setting_get('company_email', ''));
+                if ($toEmail === '' && defined('ADMIN_EMAIL')) $toEmail = (string)ADMIN_EMAIL;
+                if ($toEmail !== '') {
+                    $brand    = defined('SITE_BRAND') ? SITE_BRAND : 'Maventech Software';
+                    $siteUrl  = function_exists('site_url') ? rtrim(site_url(), '/') : '';
+                    $cName    = htmlspecialchars($proName ?: 'Customer', ENT_QUOTES, 'UTF-8');
+                    $cEmail   = htmlspecialchars(trim($_POST['email'] ?? ''), ENT_QUOTES, 'UTF-8');
+                    $cPhone   = htmlspecialchars($phoneFull ?? '', ENT_QUOTES, 'UTF-8') ?: '(no phone)';
+                    $ordTxt   = htmlspecialchars($orderNumber, ENT_QUOTES, 'UTF-8');
+                    $totTxt   = htmlspecialchars(current_currency()['code'] . ' ' . number_format($total, 2), ENT_QUOTES, 'UTF-8');
+                    $adminLnk = $siteUrl . '/admin.php?tab=leads&id=' . (int)($proLeadId ?? 0);
+                    $subject  = '[ProAssist] New install request — Order ' . $orderNumber . ' — ' . ($proName ?: $cEmail);
+                    $html = <<<HTML
+<div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;max-width:620px;margin:0 auto;color:#0f172a">
+  <div style="background:#0f172a;padding:18px 22px;border-radius:10px 10px 0 0;">
+    <div style="font-size:11px;letter-spacing:.12em;font-weight:800;text-transform:uppercase;color:#fcd34d;">{$brand} — ProAssist</div>
+    <div style="font-size:20px;font-weight:800;color:#fff;margin-top:4px;">New ProAssist install request — action needed</div>
+  </div>
+  <div style="background:#fff;border:1px solid #e2e8f0;border-top:0;border-radius:0 0 10px 10px;padding:24px;line-height:1.55;">
+    <p style="margin:0 0 14px 0;font-size:14px;">A customer just <strong>opted into ProAssist Premium Installation</strong> at checkout. Reach out within one business hour to schedule the install call.</p>
+    <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:13px;margin:6px 0 18px 0;">
+      <tr><td style="padding:7px 0;color:#64748b;width:140px;">Order</td><td style="padding:7px 0;font-weight:700;">#{$ordTxt}</td></tr>
+      <tr><td style="padding:7px 0;color:#64748b;">Order total</td><td style="padding:7px 0;">{$totTxt}</td></tr>
+      <tr><td style="padding:7px 0;color:#64748b;">Customer</td><td style="padding:7px 0;">{$cName}</td></tr>
+      <tr><td style="padding:7px 0;color:#64748b;">Email</td><td style="padding:7px 0;"><a href="mailto:{$cEmail}" style="color:#2563eb;text-decoration:none;">{$cEmail}</a></td></tr>
+      <tr><td style="padding:7px 0;color:#64748b;">Phone</td><td style="padding:7px 0;"><a href="tel:{$cPhone}" style="color:#2563eb;text-decoration:none;">{$cPhone}</a></td></tr>
+    </table>
+    <a href="{$adminLnk}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:11px 22px;border-radius:8px;font-weight:700;font-size:14px;">Open in admin &rsaquo;</a>
+    <p style="margin:22px 0 0 0;font-size:12px;color:#64748b;">Automated notification from {$brand}. Update the recipient in Admin → Company Info.</p>
+  </div>
+</div>
+HTML;
+                    send_email($toEmail, $subject, $html, null, 'proassist_optin', 0);
+                }
+            } catch (Throwable $e) { @error_log('[checkout proassist optin email] ' . $e->getMessage()); }
         }
         $_SESSION['cart'] = [];
         unset($_SESSION['coupon']);

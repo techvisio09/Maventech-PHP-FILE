@@ -1351,9 +1351,16 @@ hr { border-color: var(--border); opacity:.5; }
             WHERE status IN ('failed','bounced')
               AND template_code IN ('order_delivery','order_confirmation','order_pending','refund_confirm')")->fetchColumn();
     } catch (Throwable $e) { $failedCount = 0; }
-    // Compute unread customer chat messages (drives the Lead Management sidebar badge + bell)
+    // Lead Management sidebar badge — counts leads that NEED ATTENTION so a
+    // tiny red sign appears the moment anyone inquires: any lead with unread
+    // customer messages, OR a brand-new callback/ProAssist lead the admin
+    // hasn't opened yet (admin_seen_at IS NULL).
     try {
-        $chatUnread = (int)db()->query("SELECT COUNT(*) FROM chat_messages WHERE sender='customer' AND read_at IS NULL")->fetchColumn();
+        $chatUnread = (int)db()->query("
+            SELECT COUNT(*) FROM chat_leads l
+            WHERE EXISTS (SELECT 1 FROM chat_messages m WHERE m.lead_id=l.id AND m.sender='customer' AND m.read_at IS NULL)
+               OR (l.callback_requested=1 AND l.admin_seen_at IS NULL)
+        ")->fetchColumn();
     } catch (Throwable $e) { $chatUnread = 0; }
     // Unhappy-customer alerts — reviews of 3 stars or less that the admin
     // hasn't acknowledged yet.  Drives the star-shaped notification bell.
@@ -1435,9 +1442,9 @@ hr { border-color: var(--border); opacity:.5; }
         <?php elseif ($k==='leads'): ?>
           <span class="adm-nav-badge" id="navChatBadge" data-testid="adm-nav-leads-badge" style="display:none;">0</span>
         <?php elseif ($k==='schedule' && $installPending > 0): ?>
-          <span class="adm-nav-badge" id="navInstallBadge" data-testid="adm-nav-schedule-badge" style="background:#f59e0b;box-shadow:0 0 0 3px rgba(245,158,11,.22);"><?= $installPending > 99 ? '99+' : $installPending ?></span>
+          <span class="adm-nav-badge" id="navInstallBadge" data-testid="adm-nav-schedule-badge"><?= $installPending > 99 ? '99+' : $installPending ?></span>
         <?php elseif ($k==='schedule'): ?>
-          <span class="adm-nav-badge" id="navInstallBadge" data-testid="adm-nav-schedule-badge" style="display:none;background:#f59e0b;box-shadow:0 0 0 3px rgba(245,158,11,.22);">0</span>
+          <span class="adm-nav-badge" id="navInstallBadge" data-testid="adm-nav-schedule-badge" style="display:none;">0</span>
         <?php endif; ?>
       </a>
     <?php endforeach; ?>

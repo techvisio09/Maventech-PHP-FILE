@@ -38,6 +38,8 @@ mysql -uroot ucode_store -e "ALTER TABLE orders ADD COLUMN IF NOT EXISTS gw_mode
 mysql -uroot ucode_store -e "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS attachment_url  VARCHAR(500) DEFAULT NULL" 2>/dev/null || true
 mysql -uroot ucode_store -e "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS attachment_type VARCHAR(20)  DEFAULT NULL" 2>/dev/null || true
 mysql -uroot ucode_store -e "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255) DEFAULT NULL" 2>/dev/null || true
+# chat_leads admin_seen_at — drives the "needs attention" red badge for new callback/ProAssist leads
+mysql -uroot ucode_store -e "ALTER TABLE chat_leads ADD COLUMN IF NOT EXISTS admin_seen_at DATETIME DEFAULT NULL" 2>/dev/null || true
 # stripe_events — audit + idempotency table for the /stripe-webhook.php endpoint
 mysql -uroot ucode_store -e "CREATE TABLE IF NOT EXISTS stripe_events (
     id INT AUTO_INCREMENT PRIMARY KEY,

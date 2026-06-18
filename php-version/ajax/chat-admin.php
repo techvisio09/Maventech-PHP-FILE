@@ -60,7 +60,13 @@ if ($action === 'presence') {
 }
 
 if ($action === 'unread') {
-    $r = $pdo->query("SELECT COUNT(*) FROM chat_messages WHERE sender='customer' AND read_at IS NULL")->fetchColumn();
+    // Leads needing attention — mirrors the sidebar badge: unread customer
+    // messages OR brand-new callback/ProAssist leads not yet opened.
+    $r = $pdo->query("
+        SELECT COUNT(*) FROM chat_leads l
+        WHERE EXISTS (SELECT 1 FROM chat_messages m WHERE m.lead_id=l.id AND m.sender='customer' AND m.read_at IS NULL)
+           OR (l.callback_requested=1 AND l.admin_seen_at IS NULL)
+    ")->fetchColumn();
     // Get last unread message's lead+name for toast
     $latest = $pdo->query("SELECT cm.lead_id, cm.message, cl.name
                             FROM chat_messages cm LEFT JOIN chat_leads cl ON cl.id=cm.lead_id
@@ -80,6 +86,9 @@ $msgs = $pdo->prepare('SELECT id, sender, message, attachment_url, attachment_ty
 $msgs->execute([$leadId]);
 // Mark customer messages as read
 $pdo->prepare("UPDATE chat_messages SET read_at=NOW() WHERE lead_id=? AND sender='customer' AND read_at IS NULL")->execute([$leadId]);
+// Mark the lead as seen by an admin so it drops off the "needs attention"
+// sidebar badge (covers new callback/ProAssist leads with no message yet).
+$pdo->prepare("UPDATE chat_leads SET admin_seen_at=NOW() WHERE id=? AND admin_seen_at IS NULL")->execute([$leadId]);
 // Surface the customer's typing state so the admin chat panel can show
 // "● Customer is typing…" within one polling tick.
 $customerIsTyping = $leadRow['typing_customer_at']
