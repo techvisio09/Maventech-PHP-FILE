@@ -133,5 +133,5 @@ User-agent: Andibot
 Allow: /
 
 # ----- Sitemaps -----
-Sitemap: https://indexnow-checker.preview.emergentagent.com/sitemap.xml
-Sitemap: https://indexnow-checker.preview.emergentagent.com/merchant-feed.xml
+Sitemap: https://stage-show-2.preview.emergentagent.com/sitemap.xml
+Sitemap: https://stage-show-2.preview.emergentagent.com/merchant-feed.xml

@@ -15,7 +15,7 @@ import time
 import pytest
 import requests
 
-BASE = os.environ.get("REACT_APP_BACKEND_URL", "https://indexnow-checker.preview.emergentagent.com").rstrip("/")
+BASE = os.environ.get("REACT_APP_BACKEND_URL", "https://stage-show-2.preview.emergentagent.com").rstrip("/")
 ADMIN_EMAIL = "admin@maventechsoftware.com"
 ADMIN_PASS_CANDIDATES = [os.environ.get("ADMIN_PASSWORD") or "Admin@123", "Admin@UC2026!", "Admin@123"]
 

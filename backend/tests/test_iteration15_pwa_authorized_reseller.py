@@ -12,7 +12,7 @@ import pytest
 import requests
 import subprocess
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://indexnow-checker.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://stage-show-2.preview.emergentagent.com").rstrip("/")
 ADMIN_EMAIL = "admin@maventechsoftware.com"
 ADMIN_PASS = os.environ.get("ADMIN_PASSWORD", "Admin@UC2026!")  # DB reseed swapped the seeded value
 

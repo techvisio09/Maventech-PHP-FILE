@@ -13,7 +13,7 @@ import requests
 import pytest
 from conftest import ADMIN_EMAIL, ADMIN_PASSWORD
 
-BASE = "https://indexnow-checker.preview.emergentagent.com"
+BASE = "https://stage-show-2.preview.emergentagent.com"
 ADMIN = (ADMIN_EMAIL, ADMIN_PASSWORD)
 
 

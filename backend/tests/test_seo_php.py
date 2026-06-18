@@ -13,7 +13,7 @@ import pytest
 import requests
 from conftest import ADMIN_EMAIL, ADMIN_PASSWORD
 
-BASE_URL = os.environ.get("PHP_BASE_URL", "https://indexnow-checker.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("PHP_BASE_URL", "https://stage-show-2.preview.emergentagent.com").rstrip("/")
 JSON_LD_RE = re.compile(
     r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
     re.DOTALL | re.IGNORECASE,

@@ -11,7 +11,7 @@ import pytest
 import requests
 from conftest import ADMIN_EMAIL, ADMIN_PASSWORD
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://indexnow-checker.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://stage-show-2.preview.emergentagent.com").rstrip("/")
 # --- Fixtures ---------------------------------------------------------------
 
 @pytest.fixture(scope="module")

@@ -40,7 +40,7 @@
     "existing_hubs_200": {"microsoft-office": 200, "windows": 200, "antivirus": 200},
     "gsc_drop_zone_present_with_copy": true,
     "gsc_csv_paste_import_succeeds": true,
-    "ai_blogger_cron_url": "https://indexnow-checker.preview.emergentagent.com/cron/seo-daily.php?token=...",
+    "ai_blogger_cron_url": "https://stage-show-2.preview.emergentagent.com/cron/seo-daily.php?token=...",
     "smtp_cron_url_is_https": true,
     "category_office_mac_single_breadcrumb": true,
     "public_seo_endpoints_200": {

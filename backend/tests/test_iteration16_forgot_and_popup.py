@@ -4,7 +4,7 @@ import requests
 import pytest
 from conftest import ADMIN_PASSWORD
 
-BASE = "https://indexnow-checker.preview.emergentagent.com"
+BASE = "https://stage-show-2.preview.emergentagent.com"
 ADMIN_EMAIL = "admin@maventechsoftware.com"
 
 

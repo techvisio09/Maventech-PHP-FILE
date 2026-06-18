@@ -4,7 +4,7 @@ from __future__ import annotations
 import requests
 from conftest import ADMIN_EMAIL, ADMIN_PASSWORD
 
-BASE = "https://indexnow-checker.preview.emergentagent.com"
+BASE = "https://stage-show-2.preview.emergentagent.com"
 
 
 def test_admin_loads_flatpickr_css_and_js():

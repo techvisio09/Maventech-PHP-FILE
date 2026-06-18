@@ -628,7 +628,7 @@ Footer of the panel has direct buttons to **Google Search Console, Bing Webmaste
 
 ### Verified end-to-end
 - All seven modified PHP files lint-clean.
-- `curl /robots.txt` → "Sitemap: https://indexnow-checker.preview.emergentagent.com/sitemap.xml" (auto-resolves; will swap on live).
+- `curl /robots.txt` → "Sitemap: https://stage-show-2.preview.emergentagent.com/sitemap.xml" (auto-resolves; will swap on live).
 - `curl /ai.txt` → "Auto-generated from <site_url> at <timestamp>" + dynamic Sitemap + ProductFeed + Contact lines.
 - Go-Live Checklist renders 11 rows, scoring 7/11 (64%) in PREVIEW MODE — the 4 amber items are exactly the 4 user-action items (live domain + 3 webmaster tokens).
 - Latest AI blog post has 35 internal anchor links (up from 5), AI Editorial Team byline visible, Featured Product card + Related Products + More Articles all render. The product page for the featured product shows the reverse-linking widget.
@@ -1670,7 +1670,7 @@ Pointing at the SEO/AI Auto-Blogger settings field labelled `AI Key (Emergent / 
 ### Verification
 - `php -l` clean on all 3 edited files.
 - Playwright end-to-end:
-  - **Verify GSC**: clicked the new Verify pill on the GSC card → green banner *"✓ Google Search Console token verified live — the meta tag matches the saved value on https://indexnow-checker.preview.emergentagent.com."*
+  - **Verify GSC**: clicked the new Verify pill on the GSC card → green banner *"✓ Google Search Console token verified live — the meta tag matches the saved value on https://stage-show-2.preview.emergentagent.com."*
   - **Auto-gen hubs**: hit `?autogen_topic_hubs=1` → green banner *"✓ Already up to date — all 11 busy categories have a topic hub: bitdefender, office-2021-pc, office-2024-pc, …"*
   - **CSV import**: pasted an 8-row GSC sample into the unified textarea → clicked Submit → green banner *"✓ Imported 8 Search Console queries from pasted text. Top clusters by impressions are ready below — click 'Create hub' …"* → 8 cluster cards appeared with impressions / clicks / sample queries / "+ Create hub" buttons.
   - **Daily tick**: CLI ran `seo_bot_weekly_sitemap_tick()` → submitted 45 URLs to IndexNow, `last_sitemap_submit_kind=auto_daily`.
@@ -2174,7 +2174,7 @@ Screenshot of homepage confirms:
 ### Verification (Playwright end-to-end after fixes)
 | Fix | Verification |
 |---|---|
-| 1. View Sitemap | `[data-testid="view-sitemap-btn"]` href = `https://indexnow-checker.preview.emergentagent.com/sitemap.xml`, direct fetch returns **HTTP 200** |
+| 1. View Sitemap | `[data-testid="view-sitemap-btn"]` href = `https://stage-show-2.preview.emergentagent.com/sitemap.xml`, direct fetch returns **HTTP 200** |
 | 2. Vibe logo  | `<img data-testid="vibe-sched-logo-*">` src = public preview URL, `naturalWidth=52, loaded=true` |
 | 3. New product category | Hidden `#f_cat` value on `/admin.php?tab=products&add=1` = **empty string `''`** (was `'bitdefender'`) |
 | 4. Regenerate image | Click `#aiRegenBtn` on `/admin.php?tab=products&edit=windows-11-pro` → POST returns `{ok:true, image:"/uploads/products/windows-11-pro.webp"}`, label updates to `'Generated ✓'`, hint updates to `'New image saved...'`. File on disk = 10.7 KB WebP. |
@@ -2665,7 +2665,7 @@ Vibrant purple→indigo→blue→cyan gradient ribbon at the TOP of the page wit
 2. "Under Activation Sign-in URL and Installation Guide URL — give two options: auto-fill with AI or update manually. By default AI; if I want to change, I uncheck AI and type my own URL."
 
 ### Completed
-- **Email images now absolute** — added `email_absolute_url()` helper in `/app/php-version/includes/email.php`. Every `<img>` in `render_products_block()` (product art) and the company logo blocks in `render_template()` + `build_order_email_html()` prepend the configured public host (`site_domain_url` setting → falls back to `site_url()`) when the path is root-relative. Verified: a fresh test order email now renders `<img src="https://indexnow-checker.preview.emergentagent.com/uploads/products/microsoft-office-2024-…webp">` instead of the broken `/uploads/products/…webp` relative path. Empty / `data:` / already-absolute URLs are passed through untouched.
+- **Email images now absolute** — added `email_absolute_url()` helper in `/app/php-version/includes/email.php`. Every `<img>` in `render_products_block()` (product art) and the company logo blocks in `render_template()` + `build_order_email_html()` prepend the configured public host (`site_domain_url` setting → falls back to `site_url()`) when the path is root-relative. Verified: a fresh test order email now renders `<img src="https://stage-show-2.preview.emergentagent.com/uploads/products/microsoft-office-2024-…webp">` instead of the broken `/uploads/products/…webp` relative path. Empty / `data:` / already-absolute URLs are passed through untouched.
 - **Per-product AI vs manual URL mode** — admin product editor now has two `iOS-style switches` ("Auto-fill with AI", default ON) above each URL field.
   - **ON**: manual input + brand quick-pick row collapse; an info card surfaces the current AI-resolved URL ("AI will pick this URL. Current AI value: …"). Save persists `activation_url_mode='ai'` / `install_url_mode='ai'`.
   - **OFF**: the input + quick-pick row reveal so admin can paste any custom URL (vendor portal, KB article, internal page). Save persists mode = `manual`.
@@ -2682,7 +2682,7 @@ Vibrant purple→indigo→blue→cyan gradient ribbon at the TOP of the page wit
 - Direct DB check after curl POSTs:
   - `activation_url_ai=1` + `install_url_ai=1` → modes = `ai`, URLs saved
   - Without flags → modes = `manual`, URLs saved exactly as typed
-- Email render test: order #MV2606168CE1A produced 3 `<img src=https://indexnow-checker.preview.emergentagent.com/uploads/products/…webp>` — fully absolute, no broken images.
+- Email render test: order #MV2606168CE1A produced 3 `<img src=https://stage-show-2.preview.emergentagent.com/uploads/products/…webp>` — fully absolute, no broken images.
 - Screenshot test: toggle ON shows the blue "AI will pick this URL" card; toggle OFF reveals the manual input + brand quick-pick row.
 
 ### Follow-up bug discovered + fixed (same iteration)

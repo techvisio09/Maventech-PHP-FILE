@@ -19,7 +19,7 @@ import os
 # `PHP_BASE_URL=https://stage.example.com`.
 BASE_URL = os.environ.get(
     "PHP_BASE_URL",
-    "https://indexnow-checker.preview.emergentagent.com",
+    "https://stage-show-2.preview.emergentagent.com",
 ).rstrip("/")
 
 # Admin login.  Override per environment with the two `TEST_ADMIN_*` vars.

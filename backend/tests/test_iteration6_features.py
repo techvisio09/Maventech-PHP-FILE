@@ -20,7 +20,7 @@ from conftest import ADMIN_EMAIL, ADMIN_PASSWORD as ADMIN_PASS
 
 BASE_URL = (os.environ.get("PHP_BASE_URL")
             or os.environ.get("REACT_APP_BACKEND_URL")
-            or "https://indexnow-checker.preview.emergentagent.com").rstrip("/")
+            or "https://stage-show-2.preview.emergentagent.com").rstrip("/")
 
 TOPICS = ["microsoft-office", "windows", "antivirus"]
 

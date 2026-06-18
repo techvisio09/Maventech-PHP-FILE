@@ -22,7 +22,7 @@ import pytest
 import requests
 from conftest import ADMIN_EMAIL, ADMIN_PASSWORD
 
-BASE = "https://indexnow-checker.preview.emergentagent.com"
+BASE = "https://stage-show-2.preview.emergentagent.com"
 def _mysql(sql: str) -> str:
     out = subprocess.check_output(
         ["mysql", "-uroot", "ucode_store", "-N", "-e", sql],
