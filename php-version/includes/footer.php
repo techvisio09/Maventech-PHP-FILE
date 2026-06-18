@@ -141,17 +141,6 @@
         <div class="small">5,519+ verified reviews</div>
         <a href="reviews.php" class="small text-info" data-testid="footer-see-reviews">See all reviews →</a>
       </div>
-      <div class="col-md-4 text-md-end">
-        <div class="d-flex gap-2 justify-content-center justify-content-md-end mb-2" data-testid="footer-trust-badges">
-          <img src="assets/images/badges/microsoft-verified.svg" alt="Microsoft Verified" class="trust-badge-img" loading="lazy" decoding="async" width="80" height="40">
-          <img src="assets/images/badges/pci-compliant.svg" alt="PCI Compliant" class="trust-badge-img" loading="lazy" decoding="async" width="80" height="40">
-        </div>
-        <?php if (setting_get('show_authorized_reseller_badge', '1') === '1'): ?>
-        <small data-testid="footer-authorized-reseller-line"><i class="bi bi-award-fill text-warning me-1"></i>Authorized Reseller • 2+ Years</small>
-        <?php else: ?>
-        <small><i class="bi bi-award-fill text-warning me-1"></i>Trusted Software Store • 2+ Years</small>
-        <?php endif; ?>
-      </div>
     </div>
 
     <!-- Trademark + legal -->
