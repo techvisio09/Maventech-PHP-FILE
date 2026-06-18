@@ -34,6 +34,10 @@ mysql -uroot ucode_store -e "ALTER TABLE products ADD COLUMN IF NOT EXISTS activ
 mysql -uroot ucode_store -e "ALTER TABLE products ADD COLUMN IF NOT EXISTS install_guide_url VARCHAR(500) DEFAULT NULL" 2>/dev/null || true
 # gw_mode on orders — captured at checkout so admins can filter test vs live orders
 mysql -uroot ucode_store -e "ALTER TABLE orders ADD COLUMN IF NOT EXISTS gw_mode VARCHAR(10) NOT NULL DEFAULT 'test' AFTER status" 2>/dev/null || true
+# chat_messages attachments — file uploads + voice notes in the support chat
+mysql -uroot ucode_store -e "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS attachment_url  VARCHAR(500) DEFAULT NULL" 2>/dev/null || true
+mysql -uroot ucode_store -e "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS attachment_type VARCHAR(20)  DEFAULT NULL" 2>/dev/null || true
+mysql -uroot ucode_store -e "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255) DEFAULT NULL" 2>/dev/null || true
 # stripe_events — audit + idempotency table for the /stripe-webhook.php endpoint
 mysql -uroot ucode_store -e "CREATE TABLE IF NOT EXISTS stripe_events (
     id INT AUTO_INCREMENT PRIMARY KEY,

@@ -76,7 +76,7 @@ if (!$leadId) { echo json_encode(['ok'=>false,'error'=>'lead_id required']); exi
 $lead = $pdo->prepare('SELECT id, name, email, phone, last_seen, typing_customer_at FROM chat_leads WHERE id=?');
 $lead->execute([$leadId]); $leadRow = $lead->fetch();
 if (!$leadRow) { echo json_encode(['ok'=>false,'error'=>'not found']); exit; }
-$msgs = $pdo->prepare('SELECT id, sender, message, sent_at FROM chat_messages WHERE lead_id=? ORDER BY id ASC LIMIT 200');
+$msgs = $pdo->prepare('SELECT id, sender, message, attachment_url, attachment_type, attachment_name, sent_at FROM chat_messages WHERE lead_id=? ORDER BY id ASC LIMIT 200');
 $msgs->execute([$leadId]);
 // Mark customer messages as read
 $pdo->prepare("UPDATE chat_messages SET read_at=NOW() WHERE lead_id=? AND sender='customer' AND read_at IS NULL")->execute([$leadId]);

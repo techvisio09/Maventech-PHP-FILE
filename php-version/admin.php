@@ -8109,6 +8109,10 @@ elseif ($tab === 'leads'):
     .adm-msg.admin { align-self:flex-start; background: linear-gradient(135deg, #1d4ed8, #06b6d4); color:#fff; border:1px solid rgba(29,78,216,.30); border-bottom-left-radius:5px; box-shadow:0 4px 14px rgba(29,78,216,.18); }
     .adm-msg.admin .ts { color:rgba(255,255,255,.85); }
     [data-bs-theme="dark"] .adm-msg.admin { background: linear-gradient(135deg, #1e40af, #0e7490); }
+    .adm-msg-img { max-width:200px; max-height:200px; border-radius:10px; display:block; cursor:pointer; }
+    .adm-msg-audio { width:220px; max-width:100%; height:38px; display:block; }
+    .adm-msg-file { display:inline-flex; align-items:center; gap:6px; color:inherit; text-decoration:underline; font-weight:600; word-break:break-all; }
+
 
     .adm-chat-day { align-self:center; font-size:10.5px; color:#94a3b8; margin:4px 0; background:rgba(148,163,184,.15); padding:2px 10px; border-radius:999px; }
 
@@ -8166,7 +8170,21 @@ elseif ($tab === 'leads'):
           html += '<div class="adm-chat-day">'+esc(lbl)+'</div>';
           lastDay = dayKey;
         }
-        html += '<div class="adm-msg '+(m.sender==='admin'?'admin':'customer')+'">'+esc(m.message)+'<span class="ts">'+fmtTime(m.sent_at)+'</span></div>';
+        let _body;
+        if (m.attachment_url) {
+          const _u = esc(m.attachment_url);
+          const _n = esc(m.attachment_name || 'attachment');
+          if (m.attachment_type === 'image') {
+            _body = '<a href="'+_u+'" target="_blank" rel="noopener"><img src="'+_u+'" alt="'+_n+'" class="adm-msg-img"></a>';
+          } else if (m.attachment_type === 'audio') {
+            _body = '<audio controls preload="metadata" src="'+_u+'" class="adm-msg-audio"></audio>';
+          } else {
+            _body = '<a href="'+_u+'" target="_blank" rel="noopener" download class="adm-msg-file"><i class="bi bi-paperclip"></i> '+_n+'</a>';
+          }
+        } else {
+          _body = esc(m.message);
+        }
+        html += '<div class="adm-msg '+(m.sender==='admin'?'admin':'customer')+'">'+_body+'<span class="ts">'+fmtTime(m.sent_at)+'</span></div>';
       });
       const wasAtBottom = ($body.scrollHeight - $body.scrollTop - $body.clientHeight) < 80;
       $body.innerHTML = html;

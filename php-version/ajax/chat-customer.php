@@ -139,7 +139,7 @@ HTML;
 }
 
 $since = (int)($in['since'] ?? 0);
-$st = $pdo->prepare('SELECT id, sender, message, sent_at FROM chat_messages
+$st = $pdo->prepare('SELECT id, sender, message, attachment_url, attachment_type, attachment_name, sent_at FROM chat_messages
                      WHERE lead_id=? AND sender=\'admin\' AND id > ? ORDER BY id ASC LIMIT 50');
 $st->execute([$leadId, $since]);
 $rows = $st->fetchAll();

@@ -202,13 +202,17 @@
 <div id="chat-panel" data-testid="chat-panel">
   <div id="chat-head" class="d-flex justify-content-between align-items-center">
     <div class="d-flex align-items-center gap-2">
+      <button type="button" class="chat-head-btn chat-head-back" onclick="toggleChat()" aria-label="Minimize chat" data-testid="chat-back"><i class="bi bi-chevron-left"></i></button>
       <span class="chat-avatar chat-avatar-photo"><img src="https://images.pexels.com/photos/7709255/pexels-photo-7709255.jpeg?auto=compress&cs=tinysrgb&w=160&h=160&fit=crop" alt="Addie" loading="lazy" decoding="async"></span>
       <div class="lh-sm">
         <div class="chat-head-name" data-testid="chat-head-name">Addie</div>
-        <small class="chat-head-sub"><span class="chat-online-dot"></span>The team can also help · usually reply in a few minutes</small>
+        <small class="chat-head-sub">The team can also help</small>
       </div>
     </div>
-    <button class="btn btn-sm btn-link p-0 text-white" onclick="toggleChat()" aria-label="Close chat" data-testid="chat-close"><i class="bi bi-x-lg"></i></button>
+    <div class="d-flex align-items-center gap-1">
+      <button type="button" class="chat-head-btn" onclick="toggleChat()" aria-label="More options" data-testid="chat-menu"><i class="bi bi-three-dots"></i></button>
+      <button type="button" class="chat-head-btn" onclick="toggleChat()" aria-label="Close chat" data-testid="chat-close"><i class="bi bi-x-lg"></i></button>
+    </div>
   </div>
   <div id="chat-body">
     <!-- Addie greeting — always shown at the top of the thread.  Mirrors the
@@ -302,14 +306,25 @@
       <span class="chat-typing-text">Live agent is typing…</span>
     </div>
   </div>
-  <form id="chat-input-row" class="chat-input-row d-none align-items-center gap-2 p-2" onsubmit="sendChat(event)" data-testid="chat-input-row">
-    <input id="chat-input" class="form-control form-control-sm chat-input" placeholder="Type a message…" autocomplete="off" data-testid="chat-input">
-    <button class="btn chat-send-btn" type="submit" aria-label="Send" data-testid="chat-send"><i class="bi bi-send-fill"></i></button>
+  <form id="chat-input-row" class="chat-input-row d-none p-2" onsubmit="sendChat(event)" data-testid="chat-input-row">
+    <div class="chat-composer">
+      <input id="chat-input" class="chat-input" placeholder="Ask a question…" autocomplete="off" data-testid="chat-input">
+      <div class="chat-composer-tools">
+        <button type="button" class="chat-tool-btn" id="chat-attach-btn" onclick="chatAttachClick()" aria-label="Attach a file" title="Attach a file" data-testid="chat-attach-btn"><i class="bi bi-paperclip"></i></button>
+        <button type="button" class="chat-tool-btn" id="chat-mic-btn" onclick="chatToggleVoice()" aria-label="Record a voice message" title="Record a voice message" data-testid="chat-mic-btn"><i class="bi bi-mic-fill"></i></button>
+        <button type="button" class="chat-tool-btn" id="chat-emoji-btn" onclick="chatToggleEmoji(event)" aria-label="Insert emoji" title="Insert emoji" data-testid="chat-emoji-btn"><i class="bi bi-emoji-smile"></i></button>
+        <span class="chat-voice-timer" id="chat-voice-timer" style="display:none;" data-testid="chat-voice-timer"><span class="chat-voice-rec-dot"></span><span id="chat-voice-time">0:00</span></span>
+        <button class="chat-send-btn ms-auto" type="submit" aria-label="Send" data-testid="chat-send"><i class="bi bi-arrow-up"></i></button>
+      </div>
+    </div>
+    <input type="file" id="chat-file-input" class="d-none" data-testid="chat-file-input" accept="image/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip">
+    <div class="chat-emoji-panel" id="chat-emoji-panel" style="display:none;" data-testid="chat-emoji-panel"></div>
+    <div class="chat-attach-status" id="chat-attach-status" style="display:none;" data-testid="chat-attach-status"></div>
   </form>
   <div class="chat-talk-band" data-testid="chat-talk-band">Prefer to talk?<a href="tel:<?= esc(tel_e164($brandPhone)) ?>" class="chat-talk-phone" data-testid="chat-talk-phone"><i class="bi bi-telephone-fill chat-talk-phone-ring"></i><?= esc($brandPhone) ?></a></div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<script src="assets/js/main.js"></script>
+<script src="assets/js/main.js?v=<?= esc(@filemtime(__DIR__ . '/../assets/js/main.js')) ?>"></script>
 </body>
 </html>

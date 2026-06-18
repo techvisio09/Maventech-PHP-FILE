@@ -522,7 +522,7 @@ if (j && j.ok && Array.isArray(j.messages) && j.messages.length) {
 const panel = document.getElementById('chat-panel');
 const panelOpen = panel && panel.classList.contains('open');
 for (const m of j.messages) {
-chatAppend('bot', m.message);
+if (m.attachment_url) { chatAppendAttachment('bot', m); } else { chatAppend('bot', m.message); }
 if (m.id > _adminLastMsgId) _adminLastMsgId = m.id;
 }
 if (!panelOpen) {
@@ -841,6 +841,147 @@ typing.textContent = data.reply;
 typing.classList.remove('typing');
 typing.textContent = 'Sorry, something went wrong. Call us at ' + (window.SITE_PHONE || '1-888-632-9902') + ' or email us.';
 }
+}
+function chatAttachClick() {
+const inp = document.getElementById('chat-file-input');
+if (inp) inp.click();
+}
+document.addEventListener('DOMContentLoaded', function () {
+const inp = document.getElementById('chat-file-input');
+if (inp) {
+inp.addEventListener('change', function () {
+if (inp.files && inp.files[0]) { chatUploadFile(inp.files[0], 'file'); inp.value = ''; }
+});
+}
+});
+function _chatAttachStatus(msg, isErr) {
+const s = document.getElementById('chat-attach-status');
+if (!s) return;
+if (!msg) { s.style.display = 'none'; s.textContent = ''; return; }
+s.textContent = msg;
+s.style.display = 'block';
+s.style.color = isErr ? '#dc2626' : 'var(--chat-text-soft,#64748b)';
+}
+function _chatEsc(s) {
+return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+function renderAttachmentHTML(att) {
+const url = _chatEsc(att.attachment_url);
+const name = _chatEsc(att.attachment_name || 'attachment');
+if (att.attachment_type === 'image') {
+return '<a href="' + url + '" target="_blank" rel="noopener"><img src="' + url + '" alt="' + name + '" class="chat-msg-img"></a>';
+}
+if (att.attachment_type === 'audio') {
+return '<audio controls preload="metadata" src="' + url + '" class="chat-msg-audio"></audio>';
+}
+return '<a href="' + url + '" target="_blank" rel="noopener" download class="chat-msg-file"><i class="bi bi-paperclip"></i> ' + name + '</a>';
+}
+function chatAppendAttachment(role, att) {
+const body = document.getElementById('chat-body');
+if (!body) return null;
+const div = document.createElement('div');
+div.className = 'chat-msg ' + role + ' chat-msg-attach';
+div.innerHTML = renderAttachmentHTML(att);
+body.appendChild(div);
+body.scrollTop = body.scrollHeight;
+return div;
+}
+async function chatUploadFile(file, kind) {
+const token = localStorage.getItem('uc_chat_token');
+if (!token) {
+_chatAttachStatus('Please share your contact details first, then you can attach files.', true);
+const form = document.getElementById('chat-lead-form');
+if (form) form.style.display = 'block';
+return;
+}
+_chatAttachStatus(kind === 'voice' ? 'Sending voice message…' : 'Uploading…', false);
+const fd = new FormData();
+fd.append('file', file, file.name || (kind === 'voice' ? 'voice.webm' : 'file'));
+fd.append('token', token);
+fd.append('kind', kind || 'file');
+try {
+const r = await fetch('ajax/chat-upload.php', { method: 'POST', body: fd });
+const j = await r.json().catch(() => ({}));
+if (!j || !j.ok) { _chatAttachStatus((j && j.error) || 'Upload failed — please try again.', true); return; }
+_chatAttachStatus('', false);
+chatAppendAttachment('user', j.message);
+} catch (e) {
+_chatAttachStatus('Network error — please retry.', true);
+}
+}
+const _CHAT_EMOJIS = ['😀','😃','😁','😉','😊','😍','😘','😎','🤔','🙂','🙏','👍','👎','👌','👏','🙌','💪','🎉','🔥','✨','❤️','💙','💚','💜','😢','😅','😂','🤣','😭','😡','😱','🤝','💻','📎','📧','📞','✅','❌','⭐','💯'];
+function chatToggleEmoji(ev) {
+if (ev) ev.stopPropagation();
+const panel = document.getElementById('chat-emoji-panel');
+if (!panel) return;
+if (panel.style.display === 'grid') { panel.style.display = 'none'; return; }
+if (!panel.dataset.built) {
+_CHAT_EMOJIS.forEach(function (e) {
+const b = document.createElement('button');
+b.type = 'button';
+b.className = 'chat-emoji-item';
+b.textContent = e;
+b.addEventListener('click', function () {
+const inp = document.getElementById('chat-input');
+if (inp) { inp.value += e; inp.focus(); }
+});
+panel.appendChild(b);
+});
+panel.dataset.built = '1';
+}
+panel.style.display = 'grid';
+}
+document.addEventListener('click', function (e) {
+const panel = document.getElementById('chat-emoji-panel');
+const btn = document.getElementById('chat-emoji-btn');
+if (!panel || panel.style.display !== 'grid') return;
+if (panel.contains(e.target) || (btn && btn.contains(e.target))) return;
+panel.style.display = 'none';
+});
+let _chatRec = null, _chatRecChunks = [], _chatRecTimer = null, _chatRecStart = 0;
+async function chatToggleVoice() {
+const micBtn = document.getElementById('chat-mic-btn');
+if (_chatRec && _chatRec.state === 'recording') { _chatRec.stop(); return; }
+if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
+_chatAttachStatus('Voice recording is not supported on this browser.', true);
+return;
+}
+try {
+const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+_chatRecChunks = [];
+let mime = 'audio/webm';
+if (!MediaRecorder.isTypeSupported(mime)) mime = '';
+_chatRec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+_chatRec.ondataavailable = function (e) { if (e.data && e.data.size) _chatRecChunks.push(e.data); };
+_chatRec.onstop = function () {
+stream.getTracks().forEach(t => t.stop());
+if (micBtn) micBtn.classList.remove('is-recording');
+_chatStopVoiceTimer();
+const blob = new Blob(_chatRecChunks, { type: (_chatRec && _chatRec.mimeType) || 'audio/webm' });
+if (blob.size > 0) chatUploadFile(new File([blob], 'voice-' + Date.now() + '.webm', { type: blob.type }), 'voice');
+};
+_chatRec.start();
+if (micBtn) micBtn.classList.add('is-recording');
+_chatStartVoiceTimer();
+} catch (e) {
+_chatAttachStatus('Microphone access was denied.', true);
+}
+}
+function _chatStartVoiceTimer() {
+const t = document.getElementById('chat-voice-timer');
+const tm = document.getElementById('chat-voice-time');
+if (t) t.style.display = 'inline-flex';
+_chatRecStart = Date.now();
+_chatRecTimer = setInterval(function () {
+const s = Math.floor((Date.now() - _chatRecStart) / 1000);
+if (tm) tm.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+if (s >= 120 && _chatRec && _chatRec.state === 'recording') _chatRec.stop();
+}, 250);
+}
+function _chatStopVoiceTimer() {
+if (_chatRecTimer) { clearInterval(_chatRecTimer); _chatRecTimer = null; }
+const t = document.getElementById('chat-voice-timer');
+if (t) t.style.display = 'none';
 }
 (() => {
 if (!('IntersectionObserver' in window) ||
