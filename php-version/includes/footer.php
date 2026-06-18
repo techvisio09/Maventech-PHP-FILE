@@ -118,6 +118,7 @@
           <?php endforeach; ?>
           <li><a href="affiliate.php">Affiliate Program</a></li>
           <li><a href="press-kit" data-testid="footer-press-kit">Press Kit &amp; Embeds</a></li>
+          <li><a href="sitemap.php" data-testid="footer-company-sitemap">Site Map</a></li>
         </ul>
       </div>
     </div>

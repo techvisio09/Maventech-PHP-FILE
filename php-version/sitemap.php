@@ -6,14 +6,23 @@ include __DIR__ . '/includes/header.php';
 // Link to the product page when the slug exists, otherwise to the category listing
 $r = fn(string $slug, string $fallback) => get_product($slug) ? 'product.php?slug=' . $slug : $fallback;
 
+// Subscription plan links (dynamic — active plans only).
+$subLinks = [['Compare all subscription plans', 'subscriptions.php']];
+foreach (sub_plans(true) as $sp) {
+    $subLinks[] = [$sp['name'] . ' — ' . $sp['tenure_label'], 'subscribe.php?plan=' . $sp['slug']];
+}
+
 $groups = [
     ['icon' => 'bi-house-fill', 'title' => 'Main Pages', 'links' => [
         ['Home', 'index.php'],
         ['Shop All Products', 'shop.php'],
+        ['Subscription Plans', 'subscriptions.php'],
         ['Antivirus Software', 'category.php?slug=antivirus'],
+        ['Blog', 'blog.php'],
         ['About Us', 'about-us.php'],
         ['FAQ', 'page.php?slug=faqs'],
         ['Contact Us', 'contact.php'],
+        ['Track Order & Receipts', 'track-order.php'],
         ['Shopping Cart', 'cart.php'],
     ]],
     ['icon' => 'bi-windows', 'title' => 'Microsoft Office for PC', 'links' => [
@@ -50,6 +59,33 @@ $groups = [
     ['icon' => 'bi-bug-fill', 'title' => 'Antivirus Software', 'links' => [
         ['All McAfee Products', 'category.php?slug=mcafee'],
         ['All Bitdefender Products', 'category.php?slug=bitdefender'],
+    ]],
+    ['icon' => 'bi-stars', 'title' => 'Subscription Plans', 'links' => $subLinks],
+    ['icon' => 'bi-life-preserver', 'title' => 'Support & Help', 'links' => [
+        ['Support Center', 'support.php'],
+        ['Help Center', 'page.php?slug=help-center'],
+        ['Installation Guide', 'page.php?slug=installation-guide'],
+        ['Activation Help', 'page.php?slug=activation-help'],
+        ['FAQs', 'page.php?slug=faqs'],
+        ['Track Order & Receipts', 'track-order.php'],
+        ['Returns & Refunds', 'returns.php'],
+        ['Contact Us', 'contact.php'],
+    ]],
+    ['icon' => 'bi-person-circle', 'title' => 'Your Account', 'links' => [
+        ['My Account', 'account.php'],
+        ['Sign In', 'login.php'],
+        ['Create Account', 'register.php'],
+        ['Order History', 'order-history.php'],
+        ['Track Your Order', 'track-order.php'],
+    ]],
+    ['icon' => 'bi-building', 'title' => 'Company', 'links' => [
+        ['About Us', 'about-us.php'],
+        ['Why Choose Us', 'page.php?slug=why-choose-us'],
+        ['Customer Reviews', 'reviews.php'],
+        ['Blog', 'blog.php'],
+        ['Affiliate Program', 'affiliate.php'],
+        ['Press Kit & Embeds', 'press-kit'],
+        ['Request a Quote', 'contact.php'],
     ]],
     ['icon' => 'bi-file-text-fill', 'title' => 'Legal & Policies', 'links' => [
         ['Privacy Policy', 'page.php?slug=privacy-policy'],
