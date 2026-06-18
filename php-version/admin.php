@@ -318,6 +318,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         header('Location: admin.php?tab=subscription&sub=plans&msg=Plan+saved'); exit;
 
+    } elseif ($action === 'sub_update') {
+        // Edit a subscriber's contact details / status, and optionally re-send
+        // the subscription confirmation email (with Receipt + Invoice +
+        // Subscription Details PDFs) to the (possibly corrected) email.
+        $sid   = (int)($_POST['id'] ?? 0);
+        $email = trim((string)($_POST['email'] ?? ''));
+        $name  = trim((string)($_POST['customer_name'] ?? ''));
+        $phone = trim((string)($_POST['phone'] ?? ''));
+        $status= trim((string)($_POST['status'] ?? 'active'));
+        if (!in_array($status, ['active','expired','cancelled'], true)) $status = 'active';
+        $keep  = (string)($_POST['keep'] ?? '');
+        $msg   = 'Subscription+updated';
+        $st = $pdo->prepare('SELECT * FROM customer_subscriptions WHERE id=?');
+        $st->execute([$sid]);
+        $sub = $st->fetch(PDO::FETCH_ASSOC);
+        if ($sub && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $pdo->prepare('UPDATE customer_subscriptions SET email=?, customer_name=?, phone=?, status=? WHERE id=?')
+                ->execute([$email, $name, $phone, $status, $sid]);
+            if (!empty($_POST['resend'])) {
+                // Re-fetch the updated subscription + plan, build/borrow the
+                // order, and resend the confirmation to the new email.
+                $st->execute([$sid]); $sub = $st->fetch(PDO::FETCH_ASSOC);
+                $plan = sub_plan_get((string)$sub['plan_slug']);
+                $order = [];
+                if (!empty($sub['order_id'])) {
+                    $os = $pdo->prepare('SELECT * FROM orders WHERE id=?');
+                    $os->execute([(int)$sub['order_id']]);
+                    $order = $os->fetch(PDO::FETCH_ASSOC) ?: [];
+                }
+                $nameParts = preg_split('/\s+/', $name, 2);
+                $order = array_merge([
+                    'id' => (int)$sub['order_id'], 'order_number' => $sub['order_number'],
+                    'currency' => $sub['currency'], 'total' => $sub['amount'],
+                    'created_at' => $sub['created_at'], 'payment_method' => $sub['gateway'],
+                ], $order, [
+                    'email' => $email,
+                    'first_name' => $nameParts[0] ?? '',
+                    'last_name'  => $nameParts[1] ?? '',
+                ]);
+                if ($plan) {
+                    try { sub_send_confirmation($order, $sub, $plan); $msg = 'Details+resent+to+' . urlencode($email); }
+                    catch (Throwable $e) { @error_log('[sub resend] ' . $e->getMessage()); $msg = 'Saved+but+email+failed'; }
+                }
+            }
+        } else {
+            $msg = 'Invalid+email';
+        }
+        header('Location: admin.php?tab=subscription&sub=subscribers' . ($keep !== '' ? $keep : '') . '&msg=' . $msg); exit;
+
     } elseif ($action === 'update_gw_mode') {
         // Switch the global payment-gateway mode between 'test' and 'live'.
         // Stored in the settings table so checkout.php + the webhook
@@ -3469,15 +3518,27 @@ elseif ($tab === 'subscription'):
     $baseUrl = rtrim(site_url(), '/');
 
     // Subscriber filters
-    $fq      = trim($_GET['q'] ?? '');
-    $fplan   = trim($_GET['plan'] ?? '');
-    $fstatus = trim($_GET['status'] ?? '');
+    $fq       = trim($_GET['q'] ?? '');
+    $fqf      = trim($_GET['qf'] ?? '');        // which field to search
+    $fcountry = trim($_GET['country'] ?? '');
+    $fplan    = trim($_GET['plan'] ?? '');
+    $fstatus  = trim($_GET['status'] ?? '');
+    // Preserve active filters across view/edit links + modal close.
+    $keepParams = [];
+    foreach (['q'=>$fq,'qf'=>$fqf,'country'=>$fcountry,'plan'=>$fplan,'status'=>$fstatus] as $kk=>$vv) { if ($vv !== '') $keepParams[$kk] = $vv; }
+    $keep = $keepParams ? '&' . http_build_query($keepParams) : '';
     $subs = [];
     if ($subView === 'subscribers') {
         $where = []; $params = [];
-        if ($fq !== '')      { $where[] = '(customer_name LIKE ? OR email LIKE ? OR phone LIKE ? OR customer_id LIKE ? OR order_number LIKE ?)'; $lk = '%'.$fq.'%'; array_push($params,$lk,$lk,$lk,$lk,$lk); }
-        if ($fplan !== '')   { $where[] = 'plan_slug = ?';  $params[] = $fplan; }
-        if ($fstatus !== '') { $where[] = 'status = ?';     $params[] = $fstatus; }
+        if ($fq !== '') {
+            $lk = '%' . $fq . '%';
+            $fieldMap = ['name'=>'customer_name','email'=>'email','phone'=>'phone','customer_id'=>'customer_id','order'=>'order_number'];
+            if (isset($fieldMap[$fqf])) { $where[] = $fieldMap[$fqf] . ' LIKE ?'; $params[] = $lk; }
+            else { $where[] = '(customer_name LIKE ? OR email LIKE ? OR phone LIKE ? OR customer_id LIKE ? OR order_number LIKE ?)'; array_push($params,$lk,$lk,$lk,$lk,$lk); }
+        }
+        if ($fcountry !== '') { $where[] = 'country = ?';   $params[] = $fcountry; }
+        if ($fplan !== '')    { $where[] = 'plan_slug = ?'; $params[] = $fplan; }
+        if ($fstatus !== '')  { $where[] = 'status = ?';    $params[] = $fstatus; }
         $wsql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
         try { $st = $pdo->prepare("SELECT * FROM customer_subscriptions $wsql ORDER BY id DESC LIMIT 500"); $st->execute($params); $subs = $st->fetchAll(PDO::FETCH_ASSOC); }
         catch (Throwable $e) { $subs = []; }
@@ -3488,6 +3549,13 @@ elseif ($tab === 'subscription'):
         try { $vs = $pdo->prepare("SELECT * FROM customer_subscriptions WHERE id=?"); $vs->execute([(int)$_GET['view']]); $viewSub = $vs->fetch(PDO::FETCH_ASSOC) ?: null; }
         catch (Throwable $e) { $viewSub = null; }
         if ($viewSub) $viewPlan = sub_plan_get((string)$viewSub['plan_slug']);
+    }
+    // Edit modal target
+    $editSub = null; $editPlan = null;
+    if (!empty($_GET['edit'])) {
+        try { $es = $pdo->prepare("SELECT * FROM customer_subscriptions WHERE id=?"); $es->execute([(int)$_GET['edit']]); $editSub = $es->fetch(PDO::FETCH_ASSOC) ?: null; }
+        catch (Throwable $e) { $editSub = null; }
+        if ($editSub) $editPlan = sub_plan_get((string)$editSub['plan_slug']);
     }
     // The exact confirmation email the customer received (for admin preview).
     $viewEmailId = 0;
@@ -3554,18 +3622,30 @@ elseif ($tab === 'subscription'):
 <?php else: /* subscribers view */ ?>
   <form method="get" class="row g-2 align-items-end mb-3" data-testid="sub-filters">
     <input type="hidden" name="tab" value="subscription"><input type="hidden" name="sub" value="subscribers">
-    <div class="col-md-4"><label class="form-label small mb-1">Search</label>
-      <input type="text" name="q" value="<?= esc($fq) ?>" class="form-control form-control-sm" placeholder="Name, email, phone, customer ID, order #" data-testid="sub-search"></div>
-    <div class="col-md-3"><label class="form-label small mb-1">Plan</label>
+    <div class="col-md-2"><label class="form-label small mb-1">Search by</label>
+      <select name="qf" class="form-select form-select-sm" data-testid="sub-search-field">
+        <?php foreach (['' => 'All fields','name'=>'Name','email'=>'Email','phone'=>'Phone','customer_id'=>'Customer ID','order'=>'Order number'] as $kv=>$lbl): ?>
+          <option value="<?= $kv ?>" <?= $fqf===$kv?'selected':'' ?>><?= $lbl ?></option>
+        <?php endforeach; ?>
+      </select></div>
+    <div class="col-md-3"><label class="form-label small mb-1">Search</label>
+      <input type="text" name="q" value="<?= esc($fq) ?>" class="form-control form-control-sm" placeholder="Type to search…" data-testid="sub-search"></div>
+    <div class="col-md-2"><label class="form-label small mb-1">Country</label>
+      <select name="country" class="form-select form-select-sm" data-testid="sub-filter-country"><option value="">All countries</option>
+        <?php foreach (['US'=>'United States (US)','CA'=>'Canada (CA)','UK'=>'United Kingdom (UK)','AU'=>'Australia (AU)','EU'=>'Europe (EU)'] as $cc=>$cn): ?>
+          <option value="<?= $cc ?>" <?= $fcountry===$cc?'selected':'' ?>><?= $cn ?></option>
+        <?php endforeach; ?>
+      </select></div>
+    <div class="col-md-2"><label class="form-label small mb-1">Plan</label>
       <select name="plan" class="form-select form-select-sm" data-testid="sub-filter-plan"><option value="">All plans</option>
         <?php foreach ($plans as $p): ?><option value="<?= esc($p['slug']) ?>" <?= $fplan===$p['slug']?'selected':'' ?>><?= esc($p['name']) ?></option><?php endforeach; ?>
       </select></div>
-    <div class="col-md-3"><label class="form-label small mb-1">Status</label>
+    <div class="col-md-2"><label class="form-label small mb-1">Status</label>
       <select name="status" class="form-select form-select-sm" data-testid="sub-filter-status"><option value="">All statuses</option>
         <?php foreach (['active','expired','cancelled'] as $s): ?><option value="<?= $s ?>" <?= $fstatus===$s?'selected':'' ?>><?= ucfirst($s) ?></option><?php endforeach; ?>
       </select></div>
-    <div class="col-md-2 d-flex gap-2">
-      <button class="btn btn-primary btn-sm flex-fill" data-testid="sub-filter-apply"><i class="bi bi-funnel me-1"></i>Filter</button>
+    <div class="col-md-1 d-flex gap-1">
+      <button class="btn btn-primary btn-sm flex-fill" data-testid="sub-filter-apply" title="Apply filters"><i class="bi bi-funnel"></i></button>
       <a href="?tab=subscription&sub=subscribers" class="btn btn-outline-secondary btn-sm" title="Reset"><i class="bi bi-x-lg"></i></a>
     </div>
   </form>
@@ -3575,20 +3655,24 @@ elseif ($tab === 'subscription'):
     <div class="table-responsive">
       <table class="table table-sm align-middle" data-testid="sub-table">
         <thead><tr style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#94a3b8;">
-          <th>Customer ID</th><th>Customer</th><th>Plan</th><th>Amount</th><th>Tenure</th><th>Status</th><th>Created</th><th class="text-end">View</th>
+          <th>Customer ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Plan</th><th>Amount</th><th>Tenure</th><th>Status</th><th>Created</th><th class="text-end">Actions</th>
         </tr></thead>
         <tbody>
         <?php foreach ($subs as $s): ?>
           <tr data-testid="sub-row-<?= (int)$s['id'] ?>">
             <td><code style="font-size:11.5px;"><?= esc($s['customer_id']) ?></code></td>
-            <td><div class="fw-semibold" style="font-size:12.5px;"><?= esc($s['customer_name'] ?: '—') ?></div>
-                <div class="small text-secondary" style="font-size:11px;"><?= esc($s['email']) ?><?= $s['phone']?' · '.esc($s['phone']):'' ?></div></td>
+            <td style="font-size:12px;"><?= esc($s['customer_name'] ?: '—') ?></td>
+            <td style="font-size:11.5px;"><?= esc($s['email'] ?: '—') ?></td>
+            <td style="font-size:11.5px;"><?= esc($s['phone'] ?: '—') ?></td>
             <td style="font-size:12px;"><?= esc($s['plan_name']) ?></td>
-            <td style="font-size:12px;"><?= esc($s['currency']) ?> <?= number_format((float)$s['amount'],2) ?></td>
-            <td style="font-size:11.5px;"><?= $s['start_date']?esc(date('M j, Y', strtotime($s['start_date']))):'—' ?><?= $s['end_date']?' → '.esc(date('M j, Y', strtotime($s['end_date']))):' (one-time)' ?></td>
+            <td style="font-size:12px;white-space:nowrap;"><?= esc($s['currency']) ?> <?= number_format((float)$s['amount'],2) ?></td>
+            <td style="font-size:11px;white-space:nowrap;"><?= $s['start_date']?esc(date('M j, Y', strtotime($s['start_date']))):'—' ?><?= $s['end_date']?'<br>→ '.esc(date('M j, Y', strtotime($s['end_date']))):'<br>(one-time)' ?></td>
             <td><span class="badge <?= $s['status']==='active'?'bg-success':($s['status']==='cancelled'?'bg-danger':'bg-secondary') ?>"><?= esc(ucfirst($s['status'])) ?></span></td>
-            <td style="font-size:11.5px;"><?= esc(date('M j, Y', strtotime($s['created_at']))) ?></td>
-            <td class="text-end"><a href="?tab=subscription&sub=subscribers&view=<?= (int)$s['id'] ?><?= $fq?'&q='.urlencode($fq):'' ?><?= $fplan?'&plan='.urlencode($fplan):'' ?><?= $fstatus?'&status='.urlencode($fstatus):'' ?>" class="btn btn-sm btn-outline-primary" title="View subscription" data-testid="sub-view-<?= (int)$s['id'] ?>"><i class="bi bi-eye"></i></a></td>
+            <td style="font-size:11.5px;white-space:nowrap;"><?= esc(date('M j, Y', strtotime($s['created_at']))) ?></td>
+            <td class="text-end" style="white-space:nowrap;">
+              <a href="?tab=subscription&sub=subscribers&view=<?= (int)$s['id'] ?><?= $keep ?>" class="btn btn-sm btn-outline-primary" title="View subscription" data-testid="sub-view-<?= (int)$s['id'] ?>"><i class="bi bi-eye"></i></a>
+              <a href="?tab=subscription&sub=subscribers&edit=<?= (int)$s['id'] ?><?= $keep ?>" class="btn btn-sm btn-outline-secondary" title="Edit / resend details" data-testid="sub-edit-<?= (int)$s['id'] ?>"><i class="bi bi-pencil-square"></i></a>
+            </td>
           </tr>
         <?php endforeach; ?>
         </tbody>
@@ -3602,7 +3686,7 @@ elseif ($tab === 'subscription'):
         <div class="modal-content card-e" style="background:var(--card-bg);">
           <div class="modal-header" style="border-color:var(--border);">
             <h5 class="modal-title"><i class="bi bi-stars text-primary me-2"></i><?= esc($viewSub['plan_name']) ?> — <code><?= esc($viewSub['customer_id']) ?></code></h5>
-            <a href="?tab=subscription&sub=subscribers<?= $fq?'&q='.urlencode($fq):'' ?><?= $fplan?'&plan='.urlencode($fplan):'' ?><?= $fstatus?'&status='.urlencode($fstatus):'' ?>" class="btn-close" data-testid="sub-detail-close"></a>
+            <a href="?tab=subscription&sub=subscribers<?= $keep ?>" class="btn-close" data-testid="sub-detail-close"></a>
           </div>
           <div class="modal-body">
             <div class="row g-3">
@@ -3656,6 +3740,49 @@ elseif ($tab === 'subscription'):
             <?php if ($viewSub['order_number']): ?><a href="admin.php?tab=orders&q=<?= urlencode($viewSub['order_number']) ?>" class="btn btn-sm btn-outline-primary"><i class="bi bi-receipt me-1"></i>View order</a><?php endif; ?>
             <a href="?tab=subscription&sub=subscribers" class="btn btn-sm btn-secondary">Close</a>
           </div>
+        </div>
+      </div>
+    </div>
+  <?php endif; ?>
+
+  <?php if ($editSub): ?>
+    <div class="modal d-block" style="background:rgba(0,0,0,.55);" tabindex="-1" data-testid="sub-edit-modal">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content card-e" style="background:var(--card-bg);">
+          <form method="post">
+            <input type="hidden" name="action" value="sub_update">
+            <input type="hidden" name="id" value="<?= (int)$editSub['id'] ?>">
+            <input type="hidden" name="keep" value="<?= esc($keep) ?>">
+            <div class="modal-header" style="border-color:var(--border);">
+              <h5 class="modal-title"><i class="bi bi-pencil-square text-primary me-2"></i>Edit / Resend — <code><?= esc($editSub['customer_id']) ?></code></h5>
+              <a href="?tab=subscription&sub=subscribers<?= $keep ?>" class="btn-close" data-testid="sub-edit-close"></a>
+            </div>
+            <div class="modal-body">
+              <div class="alert alert-light border small mb-3" style="background:var(--bg);">
+                <i class="bi bi-info-circle me-1"></i><strong><?= esc($editSub['plan_name']) ?></strong> · <?= $editPlan?esc($editPlan['tenure_label']):'' ?> · <?= esc($editSub['currency']) ?> <?= number_format((float)$editSub['amount'],2) ?>
+              </div>
+              <div class="row g-2">
+                <div class="col-12">
+                  <label class="form-label small mb-1">Customer email <span class="text-secondary">(the subscription details email is sent here)</span></label>
+                  <input type="email" name="email" value="<?= esc($editSub['email']) ?>" class="form-control form-control-sm" required data-testid="sub-edit-email">
+                </div>
+                <div class="col-md-6"><label class="form-label small mb-1">Full name</label>
+                  <input type="text" name="customer_name" value="<?= esc($editSub['customer_name']) ?>" class="form-control form-control-sm" data-testid="sub-edit-name"></div>
+                <div class="col-md-6"><label class="form-label small mb-1">Phone</label>
+                  <input type="text" name="phone" value="<?= esc($editSub['phone']) ?>" class="form-control form-control-sm" data-testid="sub-edit-phone"></div>
+                <div class="col-md-6"><label class="form-label small mb-1">Status</label>
+                  <select name="status" class="form-select form-select-sm" data-testid="sub-edit-status">
+                    <?php foreach (['active','expired','cancelled'] as $s): ?><option value="<?= $s ?>" <?= $editSub['status']===$s?'selected':'' ?>><?= ucfirst($s) ?></option><?php endforeach; ?>
+                  </select></div>
+              </div>
+              <div class="form-text mt-2"><i class="bi bi-envelope me-1"></i>"Save &amp; resend" emails the customer their confirmation again with the Receipt, Invoice and Subscription Details PDFs attached.</div>
+            </div>
+            <div class="modal-footer" style="border-color:var(--border);">
+              <button type="submit" name="resend" value="1" class="btn btn-sm btn-success" data-testid="sub-edit-resend"><i class="bi bi-send me-1"></i>Save &amp; resend details</button>
+              <button type="submit" class="btn btn-sm btn-primary" data-testid="sub-edit-save"><i class="bi bi-check2 me-1"></i>Save changes</button>
+              <a href="?tab=subscription&sub=subscribers<?= $keep ?>" class="btn btn-sm btn-secondary">Cancel</a>
+            </div>
+          </form>
         </div>
       </div>
     </div>
