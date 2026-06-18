@@ -789,6 +789,52 @@ function nav_antivirus(): array
     return $cache = ['brands' => $brands, 'all' => $allLink];
 }
 
+/**
+ * Header mega-menu — "Others" dropdown.
+ *
+ * Lists categories filed under category_group = 'standalone' (surfaced to
+ * shoppers as the "Others" group) that have at least one ACTIVE product.
+ * Returns an empty array when there is nothing to show, so the header can
+ * hide the whole "Others" tab and never render an empty menu.
+ *
+ * Shape (mirrors nav_antivirus):
+ *   ['brands' => ['Some Category' => 'some-slug', ...],
+ *    'all'    => ['others', 'All Others']]   // 'all' is null when no parent slug
+ */
+function nav_others(): array
+{
+    static $cache = null;
+    if ($cache !== null) return $cache;
+
+    $items   = [];
+    $allLink = null;
+    try {
+        // Only categories that actually have a live product attached — keeps
+        // the dropdown clean and matches the "show tab only when populated"
+        // requirement.
+        $rows = db()->query(
+            "SELECT c.slug, c.name, c.sort_order
+             FROM categories c
+             WHERE c.category_group = 'standalone' AND c.slug <> ''
+               AND EXISTS (
+                 SELECT 1 FROM products p
+                 WHERE p.category = c.slug AND p.is_active = 1
+               )
+             ORDER BY c.sort_order ASC, c.name ASC"
+        )->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        foreach ($rows as $r) {
+            if ((int)$r['sort_order'] >= 99) {
+                $allLink = [(string)$r['slug'], 'All ' . (string)$r['name']];
+            } else {
+                $items[(string)$r['name']] = (string)$r['slug'];
+            }
+        }
+    } catch (Throwable $e) { /* fresh install — leave empty (tab hidden) */ }
+
+    return $cache = ['brands' => $items, 'all' => $allLink];
+}
+
+
 // Brand Vibe — bundles motion + gradient + font-weight + corner-radius.
 // Admin selects one of these in Company Info → "Brand Vibe"; the chosen
 // preset cascades across the entire storefront (navbar, admin topbar,

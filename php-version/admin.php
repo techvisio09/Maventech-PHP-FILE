@@ -119,26 +119,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'add_product') {
         $categorySlug = ensure_category((string)($_POST['category'] ?? ''));
         // Persist the parent-group + nav-heading the admin picked in the
-        // inline "+ Add Category" flow.  Only applies when the chip the
-        // admin just selected is a freshly-created one (a row that
-        // doesn't yet exist in `categories` is INSERT-ed below; existing
-        // rows are left untouched so we don't overwrite an admin's later
-        // re-organisation).
+        // inline "+ Add" flow.  `ensure_category()` above has already
+        // INSERT-IGNORE-ed the row (defaulting category_group='standalone'),
+        // so here we UPDATE the group/heading — but ONLY for a category that
+        // has no products attached yet (i.e. a brand-new one the admin just
+        // created).  Established categories already wired to products
+        // (office-2024-pc, bitdefender, …) are left untouched, so a stale
+        // hidden value can never silently move them between header groups.
         $catNewGroup   = strtolower(trim((string)($_POST['cat_new_group'] ?? '')));
         $catNewHeading = strtoupper(trim((string)($_POST['cat_new_heading'] ?? '')));
         if ($categorySlug !== '' && in_array($catNewGroup, ['microsoft', 'antivirus', 'standalone'], true)) {
             try {
-                $exists = (int)$pdo->prepare('SELECT COUNT(*) FROM categories WHERE slug=?');
-                $check  = $pdo->prepare('SELECT COUNT(*) FROM categories WHERE slug=?');
-                $check->execute([$categorySlug]);
-                if ((int)$check->fetchColumn() === 0) {
-                    // First time we see this slug — create it with the
-                    // group + heading the admin chose.
-                    $prettyName = ucwords(str_replace(['-', '_'], ' ', $categorySlug));
+                $pc = $pdo->prepare('SELECT COUNT(*) FROM products WHERE category=?');
+                $pc->execute([$categorySlug]);
+                if ((int)$pc->fetchColumn() === 0) {
                     $pdo->prepare(
-                        "INSERT INTO categories (slug, name, category_group, nav_heading, sort_order)
-                         VALUES (?, ?, ?, ?, 50)"
-                    )->execute([$categorySlug, $prettyName, $catNewGroup, $catNewHeading]);
+                        "UPDATE categories
+                            SET category_group = ?, nav_heading = ?,
+                                sort_order = IF(sort_order >= 100, 50, sort_order)
+                          WHERE slug = ?"
+                    )->execute([$catNewGroup, $catNewHeading, $categorySlug]);
                 }
             } catch (Throwable $e) { /* non-fatal — product still saves below */ }
         }
@@ -6625,7 +6625,7 @@ elseif ($tab === 'products'):
                   <div class="col-8">
                     <label class="form-label small mb-0 d-flex justify-content-between align-items-center">
                       <span>Category</span>
-                      <small class="text-muted" style="font-size:10.5px;"><i class="bi bi-info-circle me-1"></i>Click a chip to pick, or use <strong>Add Category +</strong> to create a new one</small>
+                      <small class="text-muted" style="font-size:10.5px;"><i class="bi bi-info-circle me-1"></i>Pick a category under its group, or use <strong>+ Add</strong> to create a new one in that group</small>
                     </label>
                     <input type="hidden" id="f_cat" name="category" value="<?= esc($editing['category'] ?? '') ?>" data-testid="f-category">
                     <!-- Hidden: which header mega-menu group a NEWLY-created
@@ -6635,32 +6635,64 @@ elseif ($tab === 'products'):
                          one of the parent-group buttons. -->
                     <input type="hidden" id="f_cat_new_group"   name="cat_new_group"   value="" data-testid="f-cat-new-group">
                     <input type="hidden" id="f_cat_new_heading" name="cat_new_heading" value="" data-testid="f-cat-new-heading">
-                    <div class="cat-chip-picker d-flex flex-wrap align-items-center gap-1 p-2"
+                    <?php
+                      $currentCat = (string)($editing['category'] ?? '');
+                      $allCats = $cats; // already sorted DISTINCT product categories
+                      if ($currentCat !== '' && !in_array($currentCat, $allCats, true)) $allCats[] = $currentCat;
+                      // Map each category slug -> its storefront header group
+                      // (microsoft | antivirus | standalone[=Others]) so the
+                      // chips can be grouped under the three navbar sections.
+                      $catGroupMap = [];
+                      try {
+                        foreach ($pdo->query("SELECT slug, category_group FROM categories")->fetchAll(PDO::FETCH_ASSOC) as $cr) {
+                          $catGroupMap[(string)$cr['slug']] = (string)($cr['category_group'] ?: 'standalone');
+                        }
+                      } catch (Throwable $e) { /* fresh install */ }
+                      $catGroups = ['microsoft' => [], 'antivirus' => [], 'standalone' => []];
+                      foreach ($allCats as $c) {
+                        $g = $catGroupMap[$c] ?? 'standalone';
+                        if (!isset($catGroups[$g])) $g = 'standalone';
+                        $catGroups[$g][] = $c;
+                      }
+                      $groupMeta = [
+                        'microsoft'  => ['label' => 'Microsoft Products', 'icon' => 'bi-microsoft',    'color' => '#0078d4'],
+                        'antivirus'  => ['label' => 'Antivirus',          'icon' => 'bi-shield-check', 'color' => '#16a34a'],
+                        'standalone' => ['label' => 'Others',             'icon' => 'bi-three-dots',   'color' => '#8b5cf6'],
+                      ];
+                    ?>
+                    <div class="cat-chip-picker p-2"
                          data-testid="category-chip-picker"
-                         style="border:1px solid var(--border,#cbd5e1);border-radius:.5rem;background:var(--bg,#0f172a);min-height:42px;">
-                      <?php
-                        $currentCat = (string)($editing['category'] ?? '');
-                        $allCats = $cats; // already sorted DISTINCT list
-                        if ($currentCat !== '' && !in_array($currentCat, $allCats, true)) $allCats[] = $currentCat;
-                      ?>
-                      <?php foreach ($allCats as $c): $isActive = ($c === $currentCat); ?>
-                        <button type="button"
-                                class="cat-chip <?= $isActive ? 'active' : '' ?>"
-                                data-cat="<?= esc($c) ?>"
-                                data-testid="cat-chip-<?= esc($c) ?>"
-                                style="font-size:11.5px;font-weight:600;padding:4px 12px;border-radius:999px;border:1px solid <?= $isActive ? '#3b82f6' : 'var(--border,#cbd5e1)' ?>;background:<?= $isActive ? '#3b82f6' : 'transparent' ?>;color:<?= $isActive ? '#ffffff' : 'var(--text,#cbd5e1)' ?>;cursor:pointer;transition:all .12s ease;">
-                          <?= esc($c) ?>
-                        </button>
+                         style="border:1px solid var(--border,#cbd5e1);border-radius:.5rem;background:var(--bg,#0f172a);">
+                      <?php foreach ($groupMeta as $gKey => $gMeta): $needHeading = ($gKey === 'microsoft') ? '1' : '0'; ?>
+                        <div class="cat-group-block mb-2" data-group="<?= $gKey ?>">
+                          <div class="d-flex align-items-center gap-1 mb-1" style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:<?= $gMeta['color'] ?>;">
+                            <i class="bi <?= $gMeta['icon'] ?>"></i><span><?= esc($gMeta['label']) ?></span>
+                          </div>
+                          <div class="cat-group-chips d-flex flex-wrap align-items-center gap-1">
+                            <?php foreach ($catGroups[$gKey] as $c): $isActive = ($c === $currentCat); ?>
+                              <button type="button"
+                                      class="cat-chip <?= $isActive ? 'active' : '' ?>"
+                                      data-cat="<?= esc($c) ?>"
+                                      data-group="<?= $gKey ?>"
+                                      data-testid="cat-chip-<?= esc($c) ?>"
+                                      style="font-size:11.5px;font-weight:600;padding:4px 12px;border-radius:999px;border:1px solid <?= $isActive ? '#3b82f6' : 'var(--border,#cbd5e1)' ?>;background:<?= $isActive ? '#3b82f6' : 'transparent' ?>;color:<?= $isActive ? '#ffffff' : 'var(--text,#cbd5e1)' ?>;cursor:pointer;transition:all .12s ease;">
+                                <?= esc($c) ?>
+                              </button>
+                            <?php endforeach; ?>
+                            <button type="button" class="cat-chip-add"
+                                    data-group="<?= $gKey ?>"
+                                    data-need-heading="<?= $needHeading ?>"
+                                    data-testid="cat-chip-add-<?= $gKey ?>"
+                                    style="font-size:11.5px;font-weight:700;padding:4px 12px;border-radius:999px;border:1px dashed <?= $gMeta['color'] ?>;background:<?= $gMeta['color'] ?>14;color:<?= $gMeta['color'] ?>;cursor:pointer;">
+                              <i class="bi bi-plus-lg"></i> Add
+                            </button>
+                          </div>
+                        </div>
                       <?php endforeach; ?>
-                      <button type="button" class="cat-chip-add"
-                              data-testid="cat-chip-add-btn"
-                              style="font-size:11.5px;font-weight:700;padding:4px 12px;border-radius:999px;border:1px dashed #10b981;background:rgba(16,185,129,.08);color:#10b981;cursor:pointer;">
-                        <i class="bi bi-plus-lg"></i> Add Category
-                      </button>
                       <input type="text" class="cat-chip-new form-control form-control-sm d-none"
                              data-testid="cat-chip-new-input"
                              placeholder="Type new category name & press Enter"
-                             style="width:240px;display:inline-block!important;font-size:12px;">
+                             style="width:240px;display:inline-block!important;font-size:12px;margin-top:2px;">
                     </div>
                     <!-- Parent-group picker — appears AFTER admin presses
                          Enter inside the "+ Add Category" input.  Lets the
@@ -6681,12 +6713,12 @@ elseif ($tab === 'products'):
                         <i class="bi bi-signpost-2 me-1"></i>Where should <code class="cat-group-name" style="font-size:11px;padding:1px 6px;background:rgba(16,185,129,.15);border-radius:4px;color:#10b981;">new-category</code> appear in the storefront header?
                       </div>
                       <div class="row g-2">
-                        <div class="col-md-6">
+                        <div class="col-md-6 cat-group-select-wrap">
                           <label class="form-label small mb-1" style="font-size:11px;">Header group</label>
                           <select class="form-select form-select-sm cat-group-select" data-testid="cat-group-select">
                             <option value="microsoft">Microsoft Products (mega-menu)</option>
                             <option value="antivirus">Antivirus (dropdown)</option>
-                            <option value="standalone" selected>Standalone — back-office only (no header link)</option>
+                            <option value="standalone" selected>Others (Others tab)</option>
                           </select>
                         </div>
                         <div class="col-md-6 cat-group-heading-wrap d-none">
@@ -7223,8 +7255,10 @@ elseif ($tab === 'products'):
     const picker = document.querySelector('[data-testid="category-chip-picker"]');
     if (!picker) return;
     const hidden = document.getElementById('f_cat');
-    const addBtn = picker.querySelector('.cat-chip-add');
+    const addBtns = Array.from(picker.querySelectorAll('.cat-chip-add'));
     const newInp = picker.querySelector('.cat-chip-new');
+    const newGroupIn = document.getElementById('f_cat_new_group');
+    const newHeadIn  = document.getElementById('f_cat_new_heading');
 
     function slugify(s) {
       return (s || '').toString().toLowerCase()
@@ -7244,21 +7278,61 @@ elseif ($tab === 'products'):
       });
     }
 
+    // Locate the chips container + add button for a given group block.
+    function groupEls(group) {
+      const block = picker.querySelector('.cat-group-block[data-group="' + group + '"]');
+      if (!block) return null;
+      return { chips: block.querySelector('.cat-group-chips'), addBtn: block.querySelector('.cat-chip-add') };
+    }
+
+    // Create + select a new chip under the right group block.  Also records
+    // the group + heading on the hidden inputs so the server files the
+    // brand-new category into the categories table correctly.
+    function createChip(slug, label, group, heading) {
+      newGroupIn.value = group;
+      newHeadIn.value  = heading || '';
+      const els = groupEls(group);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'cat-chip';
+      btn.dataset.cat = slug;
+      btn.dataset.group = group;
+      btn.dataset.testid = 'cat-chip-' + slug;
+      btn.textContent = slug;
+      btn.setAttribute('style',
+        'font-size:11.5px;font-weight:600;padding:4px 12px;border-radius:999px;'
+        + 'border:1px solid var(--border,#cbd5e1);background:transparent;'
+        + 'color:var(--text,#cbd5e1);cursor:pointer;transition:all .12s ease;'
+      );
+      if (els && els.addBtn) els.chips.insertBefore(btn, els.addBtn);
+      else picker.appendChild(btn);
+      selectChip(slug);
+    }
+
     // Existing chip click → select
     picker.addEventListener('click', function (e) {
       const chip = e.target.closest('.cat-chip');
-      if (chip) { selectChip(chip.dataset.cat); return; }
+      if (chip) { selectChip(chip.dataset.cat); }
     });
 
-    // "+ Add Category" button → reveal inline input.
-    addBtn.addEventListener('click', function () {
-      newInp.classList.remove('d-none');
-      newInp.focus();
+    let pendingGroup = 'standalone';
+    let pendingNeedHeading = false;
+
+    // Each group's "+ Add" button reveals the shared inline input inside
+    // that group block, remembering which group we're adding to.
+    addBtns.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        pendingGroup = btn.dataset.group || 'standalone';
+        pendingNeedHeading = btn.dataset.needHeading === '1';
+        btn.parentNode.insertBefore(newInp, btn);
+        newInp.classList.remove('d-none');
+        newInp.value = '';
+        newInp.focus();
+      });
     });
 
-    // Enter inside new-category input → reveal the parent-group picker
-    // (does NOT create the chip yet — admin must choose where it sits in
-    // the storefront header first).
+    // Enter inside the new-category input → create (Antivirus/Others) or, for
+    // Microsoft, first ask which mega-menu column it belongs to.
     newInp.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') { newInp.value = ''; newInp.classList.add('d-none'); return; }
       if (e.key !== 'Enter') return;
@@ -7266,9 +7340,7 @@ elseif ($tab === 'products'):
       const slug = slugify(newInp.value);
       if (!slug) { newInp.classList.add('d-none'); return; }
 
-      // If the slug already exists in the picker, short-circuit straight
-      // to selection (don't make the admin pick a group for a category
-      // that's already shipped).
+      // Already exists → just select it.
       const existing = picker.querySelector('.cat-chip[data-cat="' + slug + '"]');
       if (existing) {
         selectChip(slug);
@@ -7276,28 +7348,30 @@ elseif ($tab === 'products'):
         newInp.classList.add('d-none');
         return;
       }
-      // Otherwise show the group picker.
-      openGroupPicker(slug, newInp.value.trim());
+      if (pendingNeedHeading) {
+        openGroupPicker(slug, newInp.value.trim());   // Microsoft → pick column
+      } else {
+        createChip(slug, newInp.value.trim(), pendingGroup, pendingGroup === 'antivirus' ? 'ANTIVIRUS' : '');
+        newInp.value = '';
+        newInp.classList.add('d-none');
+      }
     });
 
     /* ----------------------------------------------------------------
-     *  Parent-group picker — admin chooses Microsoft / Antivirus /
-     *  Standalone for the brand-new category before it's added to the
-     *  chip row.  Two hidden inputs (#f_cat_new_group, #f_cat_new_heading)
-     *  travel with the form so the server can persist the new category
-     *  into the categories table with the right category_group +
-     *  nav_heading values.
+     *  Column picker — Microsoft only.  Admin chooses which mega-menu
+     *  column (Office for PC / Mac / Windows / Apps / custom) the new
+     *  category sits under.  Group is fixed to 'microsoft' here, so the
+     *  generic group <select> is hidden.
      * --------------------------------------------------------------- */
     const groupPicker  = document.querySelector('[data-testid="cat-group-picker"]');
     const groupSelect  = groupPicker && groupPicker.querySelector('.cat-group-select');
+    const groupSelWrap = groupPicker && groupPicker.querySelector('.cat-group-select-wrap');
     const headWrap     = groupPicker && groupPicker.querySelector('.cat-group-heading-wrap');
     const headSelect   = groupPicker && groupPicker.querySelector('.cat-group-heading-select');
     const headInput    = groupPicker && groupPicker.querySelector('.cat-group-heading-input');
     const groupName    = groupPicker && groupPicker.querySelector('.cat-group-name');
     const groupConfirm = groupPicker && groupPicker.querySelector('.cat-group-confirm');
     const groupCancel  = groupPicker && groupPicker.querySelector('.cat-group-cancel');
-    const newGroupIn   = document.getElementById('f_cat_new_group');
-    const newHeadIn    = document.getElementById('f_cat_new_heading');
     let pendingSlug = '', pendingLabel = '';
 
     function openGroupPicker(slug, label) {
@@ -7305,8 +7379,9 @@ elseif ($tab === 'products'):
       pendingSlug  = slug;
       pendingLabel = label || slug;
       if (groupName) groupName.textContent = label;
-      groupSelect.value = 'standalone';
-      headWrap.classList.add('d-none');
+      if (groupSelect) groupSelect.value = 'microsoft';
+      if (groupSelWrap) groupSelWrap.classList.add('d-none');  // group is fixed
+      headWrap.classList.remove('d-none');
       headInput.classList.add('d-none');
       headInput.value = '';
       groupPicker.classList.remove('d-none');
@@ -7318,13 +7393,6 @@ elseif ($tab === 'products'):
       pendingSlug = ''; pendingLabel = '';
     }
 
-    if (groupSelect) {
-      groupSelect.addEventListener('change', function () {
-        const v = groupSelect.value;
-        headWrap.classList.toggle('d-none', v !== 'microsoft');
-        if (v !== 'microsoft') headInput.classList.add('d-none');
-      });
-    }
     if (headSelect) {
       headSelect.addEventListener('change', function () {
         headInput.classList.toggle('d-none', headSelect.value !== '__new');
@@ -7335,32 +7403,10 @@ elseif ($tab === 'products'):
     if (groupConfirm) {
       groupConfirm.addEventListener('click', function () {
         if (!pendingSlug) { closeGroupPicker(); return; }
-        const group = groupSelect.value || 'standalone';
-        let heading = '';
-        if (group === 'microsoft') {
-          heading = headSelect.value === '__new'
-            ? (headInput.value.trim() || pendingLabel).toUpperCase()
-            : (headSelect.value || 'APPS');
-        } else if (group === 'antivirus') {
-          heading = 'ANTIVIRUS';
-        }
-        // Persist for the form submit.
-        newGroupIn.value = group;
-        newHeadIn.value  = heading;
-        // Create the chip + select it.
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'cat-chip';
-        btn.dataset.cat = pendingSlug;
-        btn.dataset.testid = 'cat-chip-' + pendingSlug;
-        btn.textContent = pendingLabel + (group === 'standalone' ? '  •  back-office' : '  •  ' + (heading || group));
-        btn.setAttribute('style',
-          'font-size:11.5px;font-weight:600;padding:4px 12px;border-radius:999px;'
-          + 'border:1px solid var(--border,#cbd5e1);background:transparent;'
-          + 'color:var(--text,#cbd5e1);cursor:pointer;transition:all .12s ease;'
-        );
-        picker.insertBefore(btn, addBtn);
-        selectChip(pendingSlug);
+        const heading = headSelect.value === '__new'
+          ? (headInput.value.trim() || pendingLabel).toUpperCase()
+          : (headSelect.value || 'APPS');
+        createChip(pendingSlug, pendingLabel, 'microsoft', heading);
         newInp.value = '';
         closeGroupPicker();
       });

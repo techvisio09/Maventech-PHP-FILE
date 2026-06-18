@@ -607,6 +607,20 @@ if ($_vibePromo && !empty($_vibePromo['coupon_code']) && (int)$_vibePromo['coupo
             <?= render_menu_promo(true) ?>
           </div>
         </li>
+        <?php $_others = nav_others(); if (!empty($_others['brands'])): ?>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle fw-semibold" href="#" data-bs-toggle="dropdown" data-testid="nav-others">Others</a>
+          <div class="dropdown-menu p-3 shadow others-menu" style="min-width: 240px;">
+            <div class="mega-heading mb-1">OTHERS</div>
+            <?php foreach ($_others['brands'] as $_oLabel => $_oSlug): ?>
+              <a class="mega-year" href="category.php?slug=<?= esc($_oSlug) ?>" data-testid="menu-<?= esc($_oSlug) ?>"><?= esc($_oLabel) ?></a>
+            <?php endforeach; ?>
+            <?php if (!empty($_others['all'])): ?>
+              <a class="mega-link fw-bold text-primary mt-2" href="category.php?slug=<?= esc($_others['all'][0]) ?>" data-testid="menu-all-<?= esc($_others['all'][0]) ?>"><?= esc($_others['all'][1]) ?> <i class="bi bi-arrow-right"></i></a>
+            <?php endif; ?>
+          </div>
+        </li>
+        <?php endif; ?>
         <li class="nav-item"><a class="nav-link fw-semibold" href="contact.php">Request a Quote</a></li>
         <li class="nav-item"><a class="nav-link fw-semibold" href="shop.php" data-testid="nav-shop">Shop</a></li>
         <li class="nav-item"><a class="nav-link fw-semibold" href="blog.php">Blog</a></li>
