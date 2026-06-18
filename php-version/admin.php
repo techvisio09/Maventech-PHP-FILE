@@ -5338,7 +5338,7 @@ elseif ($tab === 'ai-blogger'):
         //   - "Global" shows only data-is-global="1" rows.
         //   - A country code (US/UK/AU/CA) shows that country's rows AND
         //     global rows (so the operator sees the universal pieces too).
-        var rows = document.querySelectorAll('.trends-row');
+        var rows = document.querySelectorAll('#trends-list-box .trends-row');
         var num  = 0;
         rows.forEach(function(r){
           var rRegion  = r.getAttribute('data-region');
@@ -5346,7 +5346,7 @@ elseif ($tab === 'ai-blogger'):
           var visible;
           if (region === 'all')        visible = true;
           else if (region === 'ALL')   visible = isGlobal;
-          else                         visible = (rRegion === region) || isGlobal;
+          else                         visible = (rRegion === region);
           if (visible) {
             r.style.display = '';
             num++;
@@ -5411,12 +5411,11 @@ elseif ($tab === 'ai-blogger'):
           qaSelect.value = '';
           refreshQaLinks();
         }
-        var rows = document.querySelectorAll('.post-row');
+        var rows = document.querySelectorAll('#post-list-box .post-row');
         var num = 0;
         rows.forEach(function(r){
           var rRegion   = r.getAttribute('data-region');
-          var isGlobal  = r.getAttribute('data-is-global') === '1';
-          var visible   = (region === 'all') || (rRegion === region) || isGlobal;
+          var visible   = (region === 'all') || (rRegion === region);
           if (visible) {
             r.style.display = '';
             num++;
