@@ -43,9 +43,9 @@ if ($tab === 'subscription' && isset($_GET['doc'])) {
         } elseif ($kind === 'invoice') {
             $bin = generate_invoice_pdf($order, $items);
             $fn  = 'Invoice-' . $sub['order_number'] . '.pdf';
-        } elseif ($kind === 'certificate') {
+        } elseif ($kind === 'certificate' || $kind === 'subscription') {
             $bin = sub_generate_certificate_pdf($order, $sub, $plan);
-            $fn  = 'Subscription-' . $sub['customer_id'] . '.pdf';
+            $fn  = 'Subscription-Details-' . $sub['customer_id'] . '.pdf';
         } else { http_response_code(400); exit('Unknown document.'); }
         header('Content-Type: application/pdf');
         header('Content-Disposition: ' . (isset($_GET['dl']) ? 'attachment' : 'inline') . '; filename="' . $fn . '"');
@@ -3642,7 +3642,7 @@ elseif ($tab === 'subscription'):
               <div class="d-flex flex-wrap gap-2" data-testid="sub-docs">
                 <a href="admin.php?tab=subscription&doc=receipt&id=<?= (int)$viewSub['id'] ?>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary" data-testid="sub-doc-receipt"><i class="bi bi-receipt me-1"></i>View Receipt</a>
                 <a href="admin.php?tab=subscription&doc=invoice&id=<?= (int)$viewSub['id'] ?>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary" data-testid="sub-doc-invoice"><i class="bi bi-file-earmark-text me-1"></i>View Invoice</a>
-                <a href="admin.php?tab=subscription&doc=certificate&id=<?= (int)$viewSub['id'] ?>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-success" data-testid="sub-doc-certificate"><i class="bi bi-patch-check me-1"></i>View Subscription Certificate</a>
+                <a href="admin.php?tab=subscription&doc=certificate&id=<?= (int)$viewSub['id'] ?>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-success" data-testid="sub-doc-certificate"><i class="bi bi-patch-check me-1"></i>View Subscription Details</a>
                 <?php if ($viewEmailId): ?>
                   <a href="email-view.php?id=<?= (int)$viewEmailId ?>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary" data-testid="sub-doc-email"><i class="bi bi-envelope-open me-1"></i>View Email Sent</a>
                 <?php else: ?>

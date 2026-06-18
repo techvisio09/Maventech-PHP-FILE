@@ -143,6 +143,15 @@ if (in_array($action, ['download', 'resend'], true)) {
             } elseif ($kind === 'invoice') {
                 $bin = generate_invoice_pdf($order, $pdfItems);
                 $fname = 'Invoice-' . $order['order_number'] . '.pdf';
+            } elseif ($kind === 'subscription') {
+                require_once __DIR__ . '/includes/subscriptions.php';
+                $cs = db()->prepare("SELECT * FROM customer_subscriptions WHERE order_id=? LIMIT 1");
+                $cs->execute([(int)$order['id']]);
+                $subRow = $cs->fetch(PDO::FETCH_ASSOC);
+                if (!$subRow) { http_response_code(404); exit('No subscription on this order.'); }
+                $plan = sub_plan_get((string)$subRow['plan_slug']) ?: ['name'=>$subRow['plan_name'],'tenure_label'=>'','features'=>[],'devices'=>'','tagline'=>'','duration_months'=>0];
+                $bin = sub_generate_certificate_pdf($order, $subRow, $plan);
+                $fname = 'Subscription-Details-' . $subRow['customer_id'] . '.pdf';
             } else {
                 http_response_code(400); exit('Unknown PDF type.');
             }
@@ -363,6 +372,11 @@ include __DIR__ . '/includes/header.php';
           <a href="?action=download&kind=invoice" class="btn btn-outline-primary rounded-pill px-4" data-testid="oh-download-invoice">
             <i class="bi bi-file-earmark-text me-1"></i> Download Invoice (PDF)
           </a>
+          <?php if (!empty($order['subscription_plan'])): ?>
+            <a href="?action=download&kind=subscription" class="btn btn-success rounded-pill px-4" data-testid="oh-download-subscription">
+              <i class="bi bi-patch-check me-1"></i> Download Subscription Details (PDF)
+            </a>
+          <?php endif; ?>
         </div>
 
         <!-- Resend link with editable recipient email -->

@@ -41,6 +41,28 @@ if ($isDemo) {
     $order = $stmt->fetch();
 }
 
+// Direct download of the Subscription Details PDF straight from the order
+// confirmation page (?order=…&dl=subscription) — convenience link next to
+// the receipt/invoice for subscription purchases.
+if ($order && !$isDemo && ($_GET['dl'] ?? '') === 'subscription' && !empty($order['subscription_plan'])) {
+    require_once __DIR__ . '/includes/subscriptions.php';
+    require_once __DIR__ . '/includes/pdf.php';
+    $cs = db()->prepare("SELECT * FROM customer_subscriptions WHERE order_id=? LIMIT 1");
+    $cs->execute([(int)$order['id']]);
+    $subRow = $cs->fetch(PDO::FETCH_ASSOC);
+    if ($subRow) {
+        $plan = sub_plan_get((string)$subRow['plan_slug']) ?: ['name'=>$subRow['plan_name'],'tenure_label'=>'','features'=>[],'devices'=>'','tagline'=>'','duration_months'=>0];
+        try {
+            $bin = sub_generate_certificate_pdf($order, $subRow, $plan);
+            header('Content-Type: application/pdf');
+            header('Content-Disposition: attachment; filename="Subscription-Details-' . $subRow['customer_id'] . '.pdf"');
+            header('Content-Length: ' . strlen($bin));
+            header('Cache-Control: private, no-store');
+            echo $bin; exit;
+        } catch (Throwable $e) { error_log('[order-success sub pdf] ' . $e->getMessage()); }
+    }
+}
+
 // ProAssist auto-chat: if this order has a ProAssist line item, the
 // checkout flow already created a chat_lead + seeded an admin "welcome"
 // message.  Bind that lead's chat_token to this browser so the chat
@@ -304,10 +326,13 @@ if ($order && $order['status'] === 'paid') {
           <i class="bi bi-file-earmark-pdf" style="font-size:20px;"></i>
         </div>
         <div class="flex-grow-1">
-          <div class="fw-bold" style="color:#065f46;">Need to re-download your Receipt or Invoice?</div>
+          <div class="fw-bold" style="color:#065f46;"><?= !empty($order['subscription_plan']) ? 'Download your Receipt, Invoice &amp; Subscription Details' : 'Need to re-download your Receipt or Invoice?' ?></div>
           <div class="small" style="color:#047857;">Anytime, with just your email + this order number &mdash; no support ticket needed.</div>
         </div>
-        <a href="order-history.php" class="btn btn-success btn-sm rounded-pill px-3 ms-auto" data-testid="oh-cta-button"><i class="bi bi-receipt me-1"></i>Get my PDFs</a>
+        <?php if (!empty($order['subscription_plan'])): ?>
+          <a href="?order=<?= urlencode((string)$order['order_number']) ?>&dl=subscription" class="btn btn-success btn-sm rounded-pill px-3 ms-auto" data-testid="os-download-subscription"><i class="bi bi-patch-check me-1"></i>Download Subscription Details</a>
+        <?php endif; ?>
+        <a href="order-history.php" class="btn <?= !empty($order['subscription_plan']) ? 'btn-outline-success' : 'btn-success' ?> btn-sm rounded-pill px-3 <?= !empty($order['subscription_plan']) ? '' : 'ms-auto' ?>" data-testid="oh-cta-button"><i class="bi bi-receipt me-1"></i>Get my PDFs</a>
       </div>
     </div>
 

@@ -291,9 +291,9 @@ function sub_pdf_paths(array $order, array $sub, array $plan): array
         if (is_file($iPath)) $paths[] = $iPath;
     } catch (Throwable $e) { @error_log('[sub invoice pdf] ' . $e->getMessage()); }
 
-    // 3) Subscription certificate.
+    // 3) Subscription details certificate.
     try {
-        $cPath = $dir . '/Subscription-' . (string)($sub['customer_id'] ?? 'MVN') . '.pdf';
+        $cPath = $dir . '/Subscription-Details-' . (string)($sub['customer_id'] ?? 'MVN') . '.pdf';
         @file_put_contents($cPath, sub_generate_certificate_pdf($order, $sub, $plan));
         if (is_file($cPath)) $paths[] = $cPath;
     } catch (Throwable $e) { @error_log('[sub certificate pdf] ' . $e->getMessage()); }
@@ -332,16 +332,32 @@ function sub_generate_certificate_pdf(array $order, array $sub, array $plan): st
 
     $bodyHtml = '<div class="amount-banner">
             <div class="amt">' . htmlspecialchars($plan['name'], ENT_QUOTES, 'UTF-8') . ' — Active Subscription</div>
-            <div class="sub">Customer ID <strong>' . htmlspecialchars((string)$sub['customer_id'], ENT_QUOTES, 'UTF-8') . '</strong> · keep this certificate for your records.</div>
+            <div class="sub">Customer ID <strong>' . htmlspecialchars((string)$sub['customer_id'], ENT_QUOTES, 'UTF-8') . '</strong> · keep this document for your records.</div>
         </div>
         <table style="width:100%;border-collapse:collapse;font-size:10.5pt;margin:6px 0 14px;">' . $detailRows . '</table>
-        <div style="font-weight:700;color:#0f172a;margin:6px 0 6px;font-size:11pt;">What\'s included</div>
+        <div style="font-weight:700;color:#0f172a;margin:6px 0 6px;font-size:11pt;">What\'s included in your ' . htmlspecialchars($plan['name'], ENT_QUOTES, 'UTF-8') . ' plan</div>
         <table style="width:100%;border-collapse:collapse;font-size:9.5pt;">' . $featRows . '</table>';
+
+    // Company information block (with toll-free) so the customer always has
+    // our contact details on the downloaded subscription document.
+    $cName = htmlspecialchars((string)($co['name']    ?? 'Maventech Software'), ENT_QUOTES, 'UTF-8');
+    $cAddr = htmlspecialchars((string)($co['address'] ?? ''), ENT_QUOTES, 'UTF-8');
+    $cPh   = htmlspecialchars((string)($co['phone']   ?? (defined('SITE_PHONE') ? SITE_PHONE : '')), ENT_QUOTES, 'UTF-8');
+    $cEm   = htmlspecialchars((string)($co['email']   ?? ''), ENT_QUOTES, 'UTF-8');
+    $cWeb  = htmlspecialchars((string)($co['website'] ?? (function_exists('site_url') ? site_url() : '')), ENT_QUOTES, 'UTF-8');
+    $bodyHtml .= '<div style="margin-top:16px;padding:12px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;font-size:9.5pt;color:#334155;">'
+        . '<div style="font-weight:700;color:#0f172a;margin-bottom:4px;font-size:10.5pt;">' . $cName . ' — Support &amp; Company Information</div>'
+        . ($cPh   ? '<div><strong>Toll-free / Support:</strong> ' . $cPh . '</div>' : '')
+        . ($cEm   ? '<div><strong>Email:</strong> ' . $cEm . '</div>' : '')
+        . ($cWeb  ? '<div><strong>Website:</strong> ' . $cWeb . '</div>' : '')
+        . ($cAddr ? '<div><strong>Address:</strong> ' . $cAddr . '</div>' : '')
+        . '<div style="margin-top:6px;color:#64748b;">Quote your Customer ID <strong>' . htmlspecialchars((string)$sub['customer_id'], ENT_QUOTES, 'UTF-8') . '</strong> whenever you contact support.</div>'
+        . '</div>';
 
     $html = _pdf_shell([
         'co'             => $co,
         'logo'           => _pdf_company_logo_path(),
-        'title'          => 'Subscription Certificate',
+        'title'          => 'Subscription Details',
         'invoice_number' => (string)($order['order_number'] ?? ''),
         'receipt_number' => (string)$sub['customer_id'],
         'date_paid'      => date('F j, Y', strtotime((string)($sub['start_date'] ?? 'now'))),
