@@ -83,6 +83,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Customer-service auto-acknowledgement (5-minute delayed delivery)
             require_once __DIR__ . '/includes/email.php';
             send_customer_service_ack(strtolower($email), $name, $subject, $message, 'contact');
+
+            // Email the COMPANY the actual enquiry, to the address set in
+            // Admin → Company Info (falls back to the contact/site email).
+            try {
+                $co        = function_exists('company_info') ? company_info() : [];
+                $companyTo = trim((string)($co['email'] ?? ''));
+                if ($companyTo === '') $companyTo = trim((string)setting_get('contact_email', ''));
+                if ($companyTo === '' && defined('SITE_EMAIL')) $companyTo = SITE_EMAIL;
+                if ($companyTo !== '' && filter_var($companyTo, FILTER_VALIDATE_EMAIL)) {
+                    $brand  = $co['name'] ?? (defined('SITE_BRAND') ? SITE_BRAND : 'Maventech Software');
+                    $phoneC = trim((string)($_POST['phone'] ?? ''));
+                    $ordC   = trim((string)($_POST['order_number'] ?? ''));
+                    $nameE  = htmlspecialchars($name, ENT_QUOTES, 'UTF-8');
+                    $emailE = htmlspecialchars(strtolower($email), ENT_QUOTES, 'UTF-8');
+                    $subjE  = htmlspecialchars($subject, ENT_QUOTES, 'UTF-8');
+                    $msgE   = nl2br(htmlspecialchars($message, ENT_QUOTES, 'UTF-8'));
+                    $phoneE = htmlspecialchars($phoneC, ENT_QUOTES, 'UTF-8');
+                    $ordE   = htmlspecialchars($ordC, ENT_QUOTES, 'UTF-8');
+                    $brandE = htmlspecialchars((string)$brand, ENT_QUOTES, 'UTF-8');
+                    $html = '<div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;max-width:620px;margin:0 auto;color:#0f172a">'
+                        . '<div style="background:#0f172a;padding:18px 22px;border-radius:10px 10px 0 0;color:#fff;">'
+                        . '<div style="font-size:11px;letter-spacing:.12em;font-weight:800;text-transform:uppercase;color:#60a5fa;">' . $brandE . ' — Contact Form</div>'
+                        . '<div style="font-size:19px;font-weight:800;margin-top:4px;">New message from ' . $nameE . '</div></div>'
+                        . '<div style="background:#fff;border:1px solid #e2e8f0;border-top:0;border-radius:0 0 10px 10px;padding:22px;line-height:1.55;">'
+                        . '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:14px;">'
+                        . '<tr><td style="padding:6px 0;color:#64748b;width:120px;">From</td><td style="padding:6px 0;font-weight:600;">' . $nameE . '</td></tr>'
+                        . '<tr><td style="padding:6px 0;color:#64748b;">Email</td><td style="padding:6px 0;"><a href="mailto:' . $emailE . '" style="color:#2563eb;text-decoration:none;">' . $emailE . '</a></td></tr>'
+                        . ($phoneC !== '' ? '<tr><td style="padding:6px 0;color:#64748b;">Phone</td><td style="padding:6px 0;">' . $phoneE . '</td></tr>' : '')
+                        . ($ordC !== '' ? '<tr><td style="padding:6px 0;color:#64748b;">Order #</td><td style="padding:6px 0;">' . $ordE . '</td></tr>' : '')
+                        . '<tr><td style="padding:6px 0;color:#64748b;">Subject</td><td style="padding:6px 0;font-weight:600;">' . $subjE . '</td></tr>'
+                        . '</table>'
+                        . '<div style="font-weight:700;margin-bottom:4px;">Message</div>'
+                        . '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;font-size:13px;color:#334155;">' . $msgE . '</div>'
+                        . '<p style="margin:16px 0 0;font-size:12px;color:#94a3b8;">Reply directly to this email to respond to ' . $nameE . '.</p>'
+                        . '</div></div>';
+                    send_email($companyTo, '[Contact] ' . $subject . ' — ' . $name, $html, null, 'contact_form', 0);
+                }
+            } catch (Throwable $e) { @error_log('[contact company email] ' . $e->getMessage()); }
+
+            // Admin bell notification too.
+            try {
+                if (function_exists('admin_notify')) {
+                    admin_notify('lead', 'New contact message — ' . $name, $subject, '/admin.php?tab=leads');
+                }
+            } catch (Throwable $e) { /* best-effort */ }
+
             $sent = true;
         }
     }
