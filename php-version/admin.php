@@ -9054,9 +9054,12 @@ elseif ($tab === 'leads'):
       clearInterval(pollTimer);
       pollTimer = setInterval(poll, 3000);
       setTimeout(()=>$input.focus(), 250);
-      // Also clear unread badge on the button + refresh listing badge next time
+      // Clear unread badge on the button, and force the sidebar "Lead
+      // Management" count to recount now (the thread poll above marks this
+      // lead read/seen, so the number should drop immediately).
       const btn = document.querySelector('.chat-open-btn[data-lead-id="'+currentLeadId+'"]');
       if (btn) { const badge = btn.querySelector('.badge.bg-danger'); if (badge) badge.remove(); }
+      setTimeout(function(){ if (typeof window.admRefreshLeadBadge === 'function') window.admRefreshLeadBadge(); }, 900);
     };
 
     window.admChatClose = function(){

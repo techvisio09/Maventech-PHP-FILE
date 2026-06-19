@@ -1154,81 +1154,100 @@ document.addEventListener('click', function (e) {
 
 /* ---- Voice typing (Web Speech API → text in the input, sent as a normal
    text message, NOT an audio recording) ---- */
-let _chatRecognition = null, _chatRecognizing = false, _chatVoiceWatchdog = null;
-function chatToggleVoice() {
+/* ---- Voice typing (record → Whisper transcription → text in the input).
+   Uses MediaRecorder (universal: Chrome/Edge/Firefox/Safari) + server-side
+   Whisper, which is far more reliable than the browser Web Speech API. ---- */
+let _chatRec = null, _chatRecChunks = [], _chatRecStream = null, _chatRecTimer = null, _chatRecStart = 0, _chatRecBusy = false;
+function _chatStopTracks() {
+  if (_chatRecStream) { try { _chatRecStream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} _chatRecStream = null; }
+}
+function _chatVoiceTimer(on) {
+  const t = document.getElementById('chat-voice-timer'), tm = document.getElementById('chat-voice-time');
+  if (!t) return;
+  if (on) {
+    t.style.display = 'inline-flex'; _chatRecStart = Date.now();
+    _chatRecTimer = setInterval(function () {
+      const s = Math.floor((Date.now() - _chatRecStart) / 1000);
+      if (tm) tm.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+      if (s >= 90 && _chatRec && _chatRec.state === 'recording') _chatRec.stop(); // 90s cap
+    }, 250);
+  } else {
+    if (_chatRecTimer) { clearInterval(_chatRecTimer); _chatRecTimer = null; }
+    t.style.display = 'none';
+  }
+}
+async function chatToggleVoice() {
   const micBtn = document.getElementById('chat-mic-btn');
-  const inp = document.getElementById('chat-input');
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) {
-    _chatAttachStatus("Voice typing isn't supported on this browser — try Chrome, Edge or Safari.", true);
+  // Tap again → stop + transcribe.
+  if (_chatRec && _chatRec.state === 'recording') { try { _chatRec.stop(); } catch (e) {} return; }
+  if (_chatRecBusy) return;
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
+    _chatAttachStatus('Voice typing is not supported on this browser — please type your message.', true);
     return;
   }
-  // Tap again to stop listening.
-  if (_chatRecognizing && _chatRecognition) { try { _chatRecognition.stop(); } catch (e) {} return; }
-
-  const rec = new SR();
-  _chatRecognition = rec;
-  rec.lang = navigator.language || 'en-US';
-  rec.interimResults = true;
-  rec.continuous = false;
-  // Text already typed stays; transcription is appended to it.
-  let baseText = inp ? inp.value.trim() : '';
-
-  rec.onstart = function () {
-    _chatRecognizing = true;
-    if (_chatVoiceWatchdog) { clearTimeout(_chatVoiceWatchdog); _chatVoiceWatchdog = null; }
-    if (micBtn) micBtn.classList.add('is-recording');
-    _chatAttachStatus('Listening… speak now', false);
-  };
-  rec.onerror = function (e) {
-    let msg = 'Voice typing error — please try again.';
-    const err = (e && e.error) || '';
-    if (err === 'not-allowed' || err === 'service-not-allowed') {
-      msg = 'Microphone is blocked. Allow mic access in your browser, then try again.';
-      if (window.self !== window.top) msg += ' If it stays blocked, open the site in its own tab.';
-    } else if (err === 'no-speech') {
-      msg = "Didn't catch that — tap the mic and try again.";
-    } else if (err === 'audio-capture') {
-      msg = 'No microphone was found on this device.';
-    }
-    _chatAttachStatus(msg, true);
-  };
-  rec.onresult = function (e) {
-    let finalT = '', interim = '';
-    for (let i = e.resultIndex; i < e.results.length; i++) {
-      const t = e.results[i][0].transcript;
-      if (e.results[i].isFinal) finalT += t; else interim += t;
-    }
-    if (inp) {
-      inp.value = (baseText + ' ' + finalT + ' ' + interim).replace(/\s+/g, ' ').trim();
-      if (finalT) baseText = inp.value;  // lock in finalized words
-    }
-  };
-  rec.onend = function () {
-    _chatRecognizing = false;
-    if (_chatVoiceWatchdog) { clearTimeout(_chatVoiceWatchdog); _chatVoiceWatchdog = null; }
-    if (micBtn) micBtn.classList.remove('is-recording');
-    _chatAttachStatus('', false);
-    if (inp) { inp.value = inp.value.trim(); inp.focus(); pingCustomerTyping(inp.value.length > 0); }
-  };
-  // Immediate feedback so the button never looks "dead", plus a watchdog: if
-  // the engine hasn't actually started listening shortly after start(), tell
-  // the user (covers browsers without the speech service, or a blocked mic —
-  // e.g. inside an embedded preview pane).
   _chatAttachStatus('Starting microphone…', false);
+  let stream;
   try {
-    rec.start();
-    if (_chatVoiceWatchdog) clearTimeout(_chatVoiceWatchdog);
-    _chatVoiceWatchdog = setTimeout(function () {
-      if (!_chatRecognizing) {
-        _chatAttachStatus("Couldn't start voice typing. Allow mic access (or open the site in its own browser tab), or just type your message.", true);
-        if (micBtn) micBtn.classList.remove('is-recording');
-        try { rec.stop(); } catch (e) {}
-      }
-    }, 2500);
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   } catch (e) {
-    _chatAttachStatus('Could not start voice typing — please type your message instead.', true);
+    let msg = 'Microphone is blocked. Allow mic access in your browser and try again.';
+    const n = (e && e.name) || '';
+    if (n === 'NotFoundError' || n === 'DevicesNotFoundError') msg = 'No microphone was found on this device.';
+    else if (n === 'NotReadableError') msg = 'Your microphone is in use by another app.';
+    else if (window.self !== window.top) msg += ' If it stays blocked, open the site in its own browser tab.';
+    _chatAttachStatus(msg, true);
+    return;
   }
+  _chatRecStream = stream;
+  _chatRecChunks = [];
+  let mime = '';
+  ['audio/webm', 'audio/mp4', 'audio/ogg'].some(function (m) { if (MediaRecorder.isTypeSupported(m)) { mime = m; return true; } return false; });
+  try { _chatRec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream); }
+  catch (e) { _chatRec = new MediaRecorder(stream); }
+
+  _chatRec.ondataavailable = function (e) { if (e.data && e.data.size) _chatRecChunks.push(e.data); };
+  _chatRec.onstart = function () {
+    if (micBtn) micBtn.classList.add('is-recording');
+    _chatAttachStatus('Listening… tap the mic again when you\u2019re done', false);
+    _chatVoiceTimer(true);
+  };
+  _chatRec.onstop = async function () {
+    if (micBtn) micBtn.classList.remove('is-recording');
+    _chatVoiceTimer(false);
+    _chatStopTracks();
+    const blob = new Blob(_chatRecChunks, { type: (_chatRec && _chatRec.mimeType) || 'audio/webm' });
+    if (!blob.size) { _chatAttachStatus('Didn\u2019t catch any audio — try again.', true); return; }
+    _chatRecBusy = true;
+    _chatAttachStatus('Transcribing…', false);
+    const token = localStorage.getItem('uc_chat_token');
+    const fd = new FormData();
+    fd.append('audio', blob, 'voice.webm');
+    if (token) fd.append('token', token);
+    try {
+      const r = await fetch('ajax/transcribe.php', { method: 'POST', body: fd, credentials: 'same-origin' });
+      const j = await r.json().catch(function () { return null; });
+      if (j && j.ok && (j.text || '').trim()) {
+        const inp = document.getElementById('chat-input');
+        if (inp) {
+          inp.value = (inp.value ? inp.value.trim() + ' ' : '') + j.text.trim();
+          inp.focus();
+          pingCustomerTyping(true);
+        }
+        _chatAttachStatus('', false);
+      } else if (j && j.ok) {
+        _chatAttachStatus('Didn\u2019t catch that — please try again.', true);
+      } else {
+        _chatAttachStatus((j && j.error) || 'Could not transcribe — please type your message.', true);
+      }
+    } catch (e) {
+      _chatAttachStatus('Network error — please try again or type your message.', true);
+    } finally {
+      _chatRecBusy = false;
+    }
+  };
+  try { _chatRec.start(); }
+  catch (e) { _chatStopTracks(); _chatAttachStatus('Could not start recording — please type your message.', true); }
 }
 
 /* ---------- Scroll reveal (staggered entrance animations) ---------- */

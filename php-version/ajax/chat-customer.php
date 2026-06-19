@@ -10,14 +10,19 @@ $in = json_decode(file_get_contents('php://input'), true) ?: $_POST;
 $action = $in['action'] ?? 'poll';
 $pdo = db();
 
-// Resolve the current customer's lead row via the session-bound id or chat_token.
-$leadId = (int)($_SESSION['lead_id'] ?? 0);
+// Resolve the current customer's lead row.  The per-browser localStorage
+// chat_token is AUTHORITATIVE (so each visitor/IP has a strictly isolated
+// chat) — we only fall back to the PHP session when no token is supplied.
+// This prevents any session/cache-sharing edge case from leaking one
+// customer's conversation to another visitor.
 $token  = trim($in['token'] ?? '');
-if (!$leadId && $token !== '') {
+$leadId = 0;
+if ($token !== '') {
     $st = $pdo->prepare('SELECT id FROM chat_leads WHERE chat_token=? LIMIT 1');
     $st->execute([$token]); $leadId = (int)$st->fetchColumn();
     if ($leadId) $_SESSION['lead_id'] = $leadId;
 }
+if (!$leadId) $leadId = (int)($_SESSION['lead_id'] ?? 0);
 if (!$leadId) { echo json_encode(['ok'=>false,'error'=>'No lead']); exit; }
 
 // Heartbeat: update last_seen on every call

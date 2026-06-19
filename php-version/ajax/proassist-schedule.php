@@ -14,14 +14,15 @@ $pdo    = db();
 
 // Resolve the current lead from session_id or chat_token (matches
 // chat-customer.php's resolution rules).
-$leadId = (int)($_SESSION['lead_id'] ?? 0);
 $token  = trim((string)($in['token'] ?? ''));
-if (!$leadId && $token !== '') {
+$leadId = 0;
+if ($token !== '') {
     $st = $pdo->prepare('SELECT id FROM chat_leads WHERE chat_token=? LIMIT 1');
     $st->execute([$token]);
     $leadId = (int)$st->fetchColumn();
     if ($leadId) $_SESSION['lead_id'] = $leadId;
 }
+if (!$leadId) $leadId = (int)($_SESSION['lead_id'] ?? 0);
 if (!$leadId) {
     echo json_encode(['ok' => false, 'error' => 'No lead']);
     exit;

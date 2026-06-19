@@ -1811,7 +1811,7 @@ document.addEventListener('click', function(e){
   async function tick(){
     try {
       const r = await fetch((window.MAVEN_BASE||'/') + 'ajax/chat-admin.php', {
-        method:'POST', headers:{'Content-Type':'application/json'},
+        method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
         body: JSON.stringify({action:'unread'})
       });
       if (!r.ok) return;
@@ -1823,6 +1823,10 @@ document.addEventListener('click', function(e){
       prev = n;
     } catch(e){ /* offline; try later */ }
   }
+  // Let other parts of the admin force an immediate badge recount — e.g. the
+  // moment an agent opens a lead's chat (which marks it read/seen), so the
+  // "Lead Management" number drops right away instead of waiting for the poll.
+  window.admRefreshLeadBadge = tick;
 
   // Secondary poller — drives the Install Schedule sidebar badge so the
   // amber counter goes up the moment a customer books a ProAssist call

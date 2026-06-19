@@ -428,6 +428,14 @@ email: document.getElementById('lead-email').value.trim(),
 phone: document.getElementById('lead-phone').value.trim(),
 };
 }
+function chatDefaultGreeting(firstName) {
+var phone = (window.SITE_PHONE || '').trim();
+return 'Thanks for contacting us' + (firstName ? ', ' + firstName : '') + '! '
++ (phone ? '\ud83d\udcde Please call our support line at ' + phone + ', or one of our representatives'
+: 'One of our representatives')
++ ' will give you a call on your registered phone number \u2014 so please stay near your phone. '
++ 'For any further message, just type below and we\u2019ll get right back to you.';
+}
 async function submitLead(callback) {
 const v = leadValues();
 const errBox = document.getElementById('chat-lead-error');
@@ -471,11 +479,7 @@ localStorage.setItem('uc_chat_human_only', '1');
 document.getElementById('chat-lead-form').style.display = 'none';
 revealChatInputRow();
 const firstName = (v.name.split(' ')[0] || '').trim();
-const greeting = 'Thanks for contacting the support team'
-+ (firstName ? ', ' + firstName : '')
-+ '! One of our agents will be connected with you shortly. '
-+ 'Please type your message below — let us know exactly what you\'re looking for.';
-const bubble = chatAppend('bot', greeting);
+const bubble = chatAppend('bot', chatDefaultGreeting(firstName));
 if (bubble) bubble.classList.add('agent-greeting');
 _paSchedInitDone = false;
 setTimeout(paSchedInit, 200);
@@ -635,6 +639,14 @@ _paSchedTzList = j.timezones || {};
 const lf = document.getElementById('chat-lead-form');
 if (lf) lf.style.display = 'none';
 revealChatInputRow();
+try {
+if (!localStorage.getItem('uc_pa_greeted')) {
+const nm = (j.customer && j.customer.name ? String(j.customer.name).split(' ')[0] : '').trim();
+const gb = chatAppend('bot', chatDefaultGreeting(nm));
+if (gb) gb.classList.add('agent-greeting');
+localStorage.setItem('uc_pa_greeted', '1');
+}
+} catch (e) {}
 if (j.schedule && j.schedule.status && j.schedule.status !== 'cancelled') {
 paSchedShowConfirmed(j.schedule);
 } else {
