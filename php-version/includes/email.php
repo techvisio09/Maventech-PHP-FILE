@@ -1281,6 +1281,13 @@ function fulfill_order(int $orderId, bool $forceAdminOverride = false): void {
 
     // ---- Schedule review-request email + create token ----
     foreach ($items as $item) {
+        // De-dupe: never create a second review request for the same order +
+        // product (prevents the duplicate "How was your purchase" entries even
+        // if fulfilment is triggered more than once).
+        $dupChk = $pdo->prepare('SELECT COUNT(*) FROM customer_reviews WHERE order_id=? AND product_slug=?');
+        $dupChk->execute([$orderId, (string)$item['product_slug']]);
+        if ((int)$dupChk->fetchColumn() > 0) continue;
+
         $tok = bin2hex(random_bytes(16));
         $pdo->prepare('INSERT INTO customer_reviews (order_id, product_slug, customer_email, customer_name, request_token, region) VALUES (?,?,?,?,?,?)')
             ->execute([$orderId, $item['product_slug'], $order['email'], trim($order['first_name'].' '.$order['last_name']), $tok, $order['region'] ?? 'US']);

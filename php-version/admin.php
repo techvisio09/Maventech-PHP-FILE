@@ -257,44 +257,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ];
         }
 
-        $cmd = sprintf(
-            '/root/.venv/bin/python3 /app/scripts/generate_product_images.py --slug=%s --name=%s --brand=%s --category=%s --platform=%s --apps=%s 2>&1',
-            escapeshellarg($prod['slug']),
-            escapeshellarg((string)$prod['name']),
-            escapeshellarg((string)$prod['brand']),
-            escapeshellarg((string)$prod['category']),
-            escapeshellarg((string)$prod['platform']),
-            escapeshellarg((string)($prod['apps'] ?? ''))
-        );
-        // 90-second hard ceiling so the admin UI doesn't spin forever if
-        // the Universal Key is rate-limited or out of budget.
+        // Generate the image in PURE PHP (cURL → Emergent images endpoint).
+        // No Python / emergentintegrations needed, so this works on any host
+        // (cPanel/Plesk shared hosting included).
+        require_once __DIR__ . '/includes/product-image.php';
         set_time_limit(120);
-        $output = [];
-        $code = 0;
-        exec($cmd, $output, $code);
-        $last = trim((string)end($output));
-        if ($code === 0 && strpos($last, '/uploads/products/') === 0) {
-            // Persist the new path on the product row (only when the product
-            // exists — for brand-new products the admin will save the form
-            // and the path in #f_image will get persisted then).
-            $pdo->prepare('UPDATE products SET image=? WHERE slug=?')->execute([$last, $slug]);
-            echo json_encode(['ok' => true, 'image' => $last]);
-        } else {
-            $combined = implode("\n", $output);
-            $err = $last !== '' ? $last : ('exit ' . $code);
-            // Translate the most common low-level errors into actionable
-            // English so the admin knows whether to top up the Universal Key
-            // OR ask the operator to install a missing dependency.
-            if (stripos($combined, 'budget') !== false || stripos($combined, 'insufficient_quota') !== false) {
-                $err = 'Universal Key budget exceeded — top up in Profile → Universal Key → Add Balance.';
-            } elseif (stripos($combined, "No such file or directory: 'convert'") !== false
-                   || stripos($combined, "No such file or directory: 'cwebp'") !== false
-                   || stripos($combined, "Pillow not installed") !== false) {
-                $err = 'Image-conversion tool missing on this server — ask the operator to install Pillow (the script now uses pure-Python image resize).';
-            } elseif (stripos($combined, 'ModuleNotFoundError') !== false) {
-                $err = 'Python image-generation module missing — ask the operator to run `pip install emergentintegrations Pillow` on the server.';
+        $res = mv_generate_product_image($prod);
+        if (!empty($res['ok'])) {
+            // Persist on the product row when it exists (new products persist
+            // the path on form save instead).
+            $exists = $pdo->prepare('SELECT 1 FROM products WHERE slug=?');
+            $exists->execute([$slug]);
+            if ($exists->fetchColumn()) {
+                $pdo->prepare('UPDATE products SET image=? WHERE slug=?')->execute([$res['image'], $slug]);
             }
-            echo json_encode(['ok' => false, 'error' => $err]);
+            echo json_encode(['ok' => true, 'image' => $res['image']]);
+        } else {
+            echo json_encode(['ok' => false, 'error' => $res['error'] ?? 'Image generation failed.']);
         }
         exit;
 
@@ -1380,11 +1359,13 @@ if ($tab === 'ai-blogger') {
         $aiActedOn = ($aiEdit !== null) || ($aiNew !== '');
         if ($aiActedOn) {
             if ($aiTarget === '') {
-                // Deliberate clear via the Edit panel
+                // Deliberate clear via the Edit panel. The DB setting is the
+                // source of truth; the .env write is best-effort (it can fail
+                // on read-only shared hosting, which must NOT break the save).
                 $envPath = __DIR__ . '/.env';
-                if (is_file($envPath)) {
-                    $envContent = preg_replace('/^EMERGENT_LLM_KEY=.*$/m', '', (string)file_get_contents($envPath));
-                    file_put_contents($envPath, trim((string)$envContent) . "\n");
+                if (is_file($envPath) && is_writable($envPath)) {
+                    $envContent = preg_replace('/^EMERGENT_LLM_KEY=.*$/m', '', (string)@file_get_contents($envPath));
+                    @file_put_contents($envPath, trim((string)$envContent) . "\n");
                 }
                 putenv('EMERGENT_LLM_KEY=');
                 setting_set('ai_blogger_llm_key', '');
@@ -1392,17 +1373,20 @@ if ($tab === 'ai-blogger') {
             } elseif (!$validateAi($aiTarget)) {
                 $errors[] = 'AI Key looks invalid — keys are typically 20+ alphanumeric characters with no spaces. Paste your provider key without surrounding quotes.';
             } else {
-                $envPath = __DIR__ . '/.env';
-                $envContent = '';
-                if (is_file($envPath)) {
-                    $envContent = (string)file_get_contents($envPath);
-                    $envContent = preg_replace('/^EMERGENT_LLM_KEY=.*$/m', '', $envContent);
-                    $envContent = trim((string)$envContent);
-                }
-                $envContent .= "\nEMERGENT_LLM_KEY=" . $aiTarget . "\n";
-                file_put_contents($envPath, $envContent);
-                putenv('EMERGENT_LLM_KEY=' . $aiTarget);
+                // Persist to DB first (authoritative), then best-effort .env.
                 setting_set('ai_blogger_llm_key', $aiTarget);
+                putenv('EMERGENT_LLM_KEY=' . $aiTarget);
+                $envPath = __DIR__ . '/.env';
+                if (is_file($envPath) ? is_writable($envPath) : is_writable(__DIR__)) {
+                    $envContent = '';
+                    if (is_file($envPath)) {
+                        $envContent = (string)@file_get_contents($envPath);
+                        $envContent = preg_replace('/^EMERGENT_LLM_KEY=.*$/m', '', $envContent);
+                        $envContent = trim((string)$envContent);
+                    }
+                    $envContent .= "\nEMERGENT_LLM_KEY=" . $aiTarget . "\n";
+                    @file_put_contents($envPath, $envContent);
+                }
                 $updated[] = 'AI Key';
             }
         }
