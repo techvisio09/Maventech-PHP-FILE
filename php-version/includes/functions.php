@@ -50,6 +50,39 @@ require_once __DIR__ . '/regions.php';
 require_once __DIR__ . '/subscriptions.php';
 
 /**
+ * Self-healing chat schema.
+ *
+ * Adds the live-chat columns the code relies on (chat attachments, the
+ * "agent joined" name, the admin-seen flag) when they're missing.  These were
+ * previously only created by start.sh (Emergent pod) — so on a cPanel/shared
+ * deployment they were absent, which broke the admin chat ("Loading
+ * conversation…" forever), the Lead-Management red badge, presence/online dot
+ * and the ProAssist/install feed.  Runs ONCE (flag-guarded), cheap thereafter.
+ */
+function chat_schema_migrate(): void
+{
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    try {
+        if (setting_get('chat_schema_v2', '') === '1') return;
+        $pdo = db();
+        foreach ([
+            "ALTER TABLE chat_messages ADD COLUMN attachment_url  VARCHAR(500) DEFAULT NULL",
+            "ALTER TABLE chat_messages ADD COLUMN attachment_type VARCHAR(20)  DEFAULT NULL",
+            "ALTER TABLE chat_messages ADD COLUMN attachment_name VARCHAR(255) DEFAULT NULL",
+            "ALTER TABLE chat_leads ADD COLUMN admin_seen_at DATETIME DEFAULT NULL",
+            "ALTER TABLE chat_leads ADD COLUMN agent_name VARCHAR(120) DEFAULT NULL",
+        ] as $sql) {
+            try { $pdo->exec($sql); } catch (Throwable $e) { /* column already exists */ }
+        }
+        setting_set('chat_schema_v2', '1');
+    } catch (Throwable $e) { /* retry next request */ }
+}
+chat_schema_migrate();
+
+
+/**
  * Global company-branding filter (output-buffer callback).
  *
  * Replaces the built-in DEFAULT company values (name / phone / email) with the
