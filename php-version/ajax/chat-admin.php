@@ -4,7 +4,7 @@
 // - send:    post a message from admin to the customer
 // - unread:  return total unread customer messages (for sidebar badge + toast)
 require_once __DIR__ . '/../includes/functions.php';
-$admin = require_admin();
+$admin = require_admin_json();
 header('Content-Type: application/json');
 
 $in = json_decode(file_get_contents('php://input'), true) ?: ($_POST ?: $_GET);

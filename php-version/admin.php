@@ -8982,21 +8982,28 @@ elseif ($tab === 'leads'):
       }
     }
 
+    let _threadEverLoaded = false;
     async function poll(){
       if (!currentLeadId) return;
       try {
         const r = await fetch((window.MAVEN_BASE||'/') + 'ajax/chat-admin.php', {
-          method:'POST', headers:{'Content-Type':'application/json'},
+          method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
           body: JSON.stringify({action:'thread', lead_id: currentLeadId})
         });
-        const j = await r.json();
-        if (!j.ok) return;
+        let j = null;
+        try { j = await r.json(); }
+        catch(parseErr){
+          if (!_threadEverLoaded) showThreadError('Server error ('+r.status+') — could not load this conversation. Please refresh.');
+          return;
+        }
+        if (!j || !j.ok) {
+          if (!_threadEverLoaded) showThreadError((j && j.error) ? j.error : 'Could not load this conversation. Please refresh and try again.');
+          return;
+        }
+        _threadEverLoaded = true;
         renderMessages(j.messages || []);
         if (j.lead) {
           updateStatus(!!j.lead.online, j.lead.last_seen);
-          // Show "Customer is typing…" within one tick when the beacon
-          // is fresh (chat-customer.php pings every 2s with a 5s
-          // freshness window — so the indicator dies quickly too).
           const $typing = document.getElementById('adm-chat-typing');
           if ($typing) {
             const show = !!j.lead.customer_typing;
@@ -9004,7 +9011,11 @@ elseif ($tab === 'leads'):
             if (show) $body.scrollTop = $body.scrollHeight;
           }
         }
-      } catch(e){ /* network hiccup, retry next tick */ }
+      } catch(e){ if (!_threadEverLoaded) showThreadError('Network error — could not reach the server.'); }
+    }
+    function showThreadError(msg){
+      if ($body) $body.innerHTML = '<div class="adm-chat-empty"><div class="text-danger small fw-semibold"><i class="bi bi-exclamation-triangle me-1"></i>'+(msg||'Could not load.')+'</div></div>';
+      if ($status){ $status.className = 'adm-chat-status-pill offline'; const l=$status.querySelector('.lbl'); if(l) l.textContent='Error'; }
     }
 
     // Throttled admin "I'm typing" beacon — fires at most every 2 sec
@@ -9021,7 +9032,7 @@ elseif ($tab === 'leads'):
       _typingBeaconAt = on ? now : 0;
       try {
         fetch((window.MAVEN_BASE||'/') + 'ajax/chat-admin.php', {
-          method:'POST', headers:{'Content-Type':'application/json'},
+          method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
           body: JSON.stringify({action:'typing', lead_id: currentLeadId, typing: on ? 1 : 0})
         });
       } catch(_){}
@@ -9036,7 +9047,7 @@ elseif ($tab === 'leads'):
       $banner.style.display = 'none';
       $status.className = 'adm-chat-status-pill offline';
       $status.querySelector('.lbl').textContent = 'Checking…';
-      $input.value = ''; lastIds = new Set();
+      $input.value = ''; lastIds = new Set(); _threadEverLoaded = false;
       overlay.style.display = 'flex';
       document.body.style.overflow = 'hidden';
       poll();
@@ -9065,12 +9076,12 @@ elseif ($tab === 'leads'):
       btn.disabled = true; $input.disabled = true;
       try {
         const r = await fetch((window.MAVEN_BASE||'/') + 'ajax/chat-admin.php', {
-          method:'POST', headers:{'Content-Type':'application/json'},
+          method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
           body: JSON.stringify({action:'send', lead_id: currentLeadId, message: msg})
         });
-        const j = await r.json();
+        let j = null; try { j = await r.json(); } catch(pe){ j = null; }
         if (j && j.ok) { $input.value = ''; pingAdminTyping(false); await poll(); }
-        else { alert((j && j.error) || 'Failed to send message.'); }
+        else { alert((j && j.error) || ('Failed to send (server '+r.status+'). Please refresh the admin page and try again.')); }
       } catch(e){ alert('Network error — please try again.'); }
       finally { btn.disabled = false; $input.disabled = false; $input.focus(); }
       return false;

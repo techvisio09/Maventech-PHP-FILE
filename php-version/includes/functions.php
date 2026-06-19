@@ -65,18 +65,43 @@ function chat_schema_migrate(): void
     if ($done) return;
     $done = true;
     try {
-        if (setting_get('chat_schema_v2', '') === '1') return;
         $pdo = db();
-        foreach ([
-            "ALTER TABLE chat_messages ADD COLUMN attachment_url  VARCHAR(500) DEFAULT NULL",
-            "ALTER TABLE chat_messages ADD COLUMN attachment_type VARCHAR(20)  DEFAULT NULL",
-            "ALTER TABLE chat_messages ADD COLUMN attachment_name VARCHAR(255) DEFAULT NULL",
-            "ALTER TABLE chat_leads ADD COLUMN admin_seen_at DATETIME DEFAULT NULL",
-            "ALTER TABLE chat_leads ADD COLUMN agent_name VARCHAR(120) DEFAULT NULL",
-        ] as $sql) {
-            try { $pdo->exec($sql); } catch (Throwable $e) { /* column already exists */ }
+        // Required columns keyed by table — checked against INFORMATION_SCHEMA
+        // so we self-correct even if a previous run set the flag but the ALTER
+        // hadn't actually applied (e.g. it ran mid-deploy).  No persistent flag
+        // is trusted blindly anymore.
+        $required = [
+            'chat_messages' => [
+                'attachment_url'  => "ALTER TABLE chat_messages ADD COLUMN attachment_url  VARCHAR(500) DEFAULT NULL",
+                'attachment_type' => "ALTER TABLE chat_messages ADD COLUMN attachment_type VARCHAR(20)  DEFAULT NULL",
+                'attachment_name' => "ALTER TABLE chat_messages ADD COLUMN attachment_name VARCHAR(255) DEFAULT NULL",
+            ],
+            'chat_leads' => [
+                'admin_seen_at' => "ALTER TABLE chat_leads ADD COLUMN admin_seen_at DATETIME DEFAULT NULL",
+                'agent_name'    => "ALTER TABLE chat_leads ADD COLUMN agent_name VARCHAR(120) DEFAULT NULL",
+            ],
+        ];
+        // Fast path: if a prior run confirmed everything, trust the flag.
+        if (setting_get('chat_schema_v3', '') === '1') return;
+
+        $allOk = true;
+        foreach ($required as $table => $cols) {
+            // Existing columns for this table.
+            $have = [];
+            try {
+                $st = $pdo->prepare("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?");
+                $st->execute([$table]);
+                $have = array_map('strval', $st->fetchAll(PDO::FETCH_COLUMN) ?: []);
+            } catch (Throwable $e) { $have = []; }
+            foreach ($cols as $colName => $alterSql) {
+                if (!in_array($colName, $have, true)) {
+                    try { $pdo->exec($alterSql); }
+                    catch (Throwable $e) { $allOk = false; /* no privilege / race */ }
+                }
+            }
         }
-        setting_set('chat_schema_v2', '1');
+        // Only cache success once every column is truly present.
+        if ($allOk) setting_set('chat_schema_v3', '1');
     } catch (Throwable $e) { /* retry next request */ }
 }
 chat_schema_migrate();
