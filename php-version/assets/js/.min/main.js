@@ -940,7 +940,7 @@ panel.style.display = 'none';
 });
 /* ---- Voice typing (Web Speech API → text in the input, sent as a normal
 text message, NOT an audio recording) ---- */
-let _chatRecognition = null, _chatRecognizing = false;
+let _chatRecognition = null, _chatRecognizing = false, _chatVoiceWatchdog = null;
 function chatToggleVoice() {
 const micBtn = document.getElementById('chat-mic-btn');
 const inp = document.getElementById('chat-input');
@@ -958,6 +958,7 @@ rec.continuous = false;
 let baseText = inp ? inp.value.trim() : '';
 rec.onstart = function () {
 _chatRecognizing = true;
+if (_chatVoiceWatchdog) { clearTimeout(_chatVoiceWatchdog); _chatVoiceWatchdog = null; }
 if (micBtn) micBtn.classList.add('is-recording');
 _chatAttachStatus('Listening… speak now', false);
 };
@@ -987,11 +988,25 @@ if (finalT) baseText = inp.value;
 };
 rec.onend = function () {
 _chatRecognizing = false;
+if (_chatVoiceWatchdog) { clearTimeout(_chatVoiceWatchdog); _chatVoiceWatchdog = null; }
 if (micBtn) micBtn.classList.remove('is-recording');
 _chatAttachStatus('', false);
 if (inp) { inp.value = inp.value.trim(); inp.focus(); pingCustomerTyping(inp.value.length > 0); }
 };
-try { rec.start(); } catch (e) { _chatAttachStatus('Could not start voice typing — try again.', true); }
+_chatAttachStatus('Starting microphone…', false);
+try {
+rec.start();
+if (_chatVoiceWatchdog) clearTimeout(_chatVoiceWatchdog);
+_chatVoiceWatchdog = setTimeout(function () {
+if (!_chatRecognizing) {
+_chatAttachStatus("Couldn't start voice typing. Allow mic access (or open the site in its own browser tab), or just type your message.", true);
+if (micBtn) micBtn.classList.remove('is-recording');
+try { rec.stop(); } catch (e) {}
+}
+}, 2500);
+} catch (e) {
+_chatAttachStatus('Could not start voice typing — please type your message instead.', true);
+}
 }
 (() => {
 if (!('IntersectionObserver' in window) ||

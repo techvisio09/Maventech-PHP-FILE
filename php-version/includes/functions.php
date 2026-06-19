@@ -49,6 +49,50 @@ require_once __DIR__ . '/regions.php';
 // its schema on include; safe + cheap (statically guarded).
 require_once __DIR__ . '/subscriptions.php';
 
+/**
+ * Global company-branding filter (output-buffer callback).
+ *
+ * Replaces the built-in DEFAULT company values (name / phone / email) with the
+ * CURRENT values set in Admin → Company Info, across the ENTIRE rendered page —
+ * including hard-coded text in CMS pages, static templates, JSON-LD, mailto:
+ * and tel: links.  This is why changing the company name/phone/email once
+ * updates every page site-wide.
+ */
+function apply_company_branding(string $html): string
+{
+    static $map = null;
+    if ($map === null) {
+        $map = [];
+        try {
+            $co    = company_info();
+            $name  = trim((string)($co['name']  ?? ''));
+            $phone = trim((string)($co['phone'] ?? ''));
+            $email = trim((string)($co['email'] ?? ''));
+            $defName  = defined('SITE_BRAND') ? SITE_BRAND : 'Maventech Software';
+            $defPhone = defined('SITE_PHONE') ? SITE_PHONE : '1-888-632-9902';
+            $defEmail = defined('SITE_EMAIL') ? SITE_EMAIL : 'services@maventechsoftware.com';
+
+            if ($name !== '' && $name !== $defName) {
+                $map[$defName] = $name;
+            }
+            if ($phone !== '' && $phone !== $defPhone) {
+                $map[$defPhone] = $phone;
+                // tel: link forms (+digits)
+                $defTel = '+' . preg_replace('/\D/', '', $defPhone);
+                $newTel = '+' . preg_replace('/\D/', '', $phone);
+                if ($defTel !== $newTel && strlen($defTel) > 1) $map[$defTel] = $newTel;
+            }
+            if ($email !== '') {
+                foreach (['services@maventechsoftware.com', 'support@maventechsoftware.com',
+                          'sales@maventechsoftware.com', 'info@maventechsoftware.com', $defEmail] as $de) {
+                    if ($de !== '' && $de !== $email) $map[$de] = $email;
+                }
+            }
+        } catch (Throwable $e) { $map = []; }
+    }
+    return $map ? strtr($html, $map) : $html;
+}
+
 // --------------------------------------------------------------------
 // Self-healing schema bootstrap (MUST run before any vibe/auto-cron
 // logic so the tables/columns those routines depend on exist).

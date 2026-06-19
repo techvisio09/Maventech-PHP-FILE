@@ -1,5 +1,8 @@
 <?php
 require_once __DIR__ . '/functions.php';
+// Capture the whole page so the company-branding filter can swap default
+// name/phone/email for the current Company Info values site-wide.
+if (function_exists('apply_company_branding')) { ob_start('apply_company_branding'); }
 require_once __DIR__ . '/regions.php';
 require_once __DIR__ . '/visitor_track.php';
 // Track this public page-view (silently skipped for bots / admin / CLI).
