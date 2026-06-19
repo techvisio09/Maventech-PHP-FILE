@@ -511,6 +511,18 @@ function leadValues() {
   };
 }
 
+// Fixed default greeting shown after a customer shares their details (or
+// opts into a ProAssist plan): we'll call them, and they can type anything
+// further. Includes the support phone from Company Info when available.
+function chatDefaultGreeting(firstName) {
+  var phone = (window.SITE_PHONE || '').trim();
+  return 'Thanks for contacting us' + (firstName ? ', ' + firstName : '') + '! '
+    + (phone ? '\ud83d\udcde Please call our support line at ' + phone + ', or one of our representatives'
+             : 'One of our representatives')
+    + ' will give you a call on your registered phone number \u2014 so please stay near your phone. '
+    + 'For any further message, just type below and we\u2019ll get right back to you.';
+}
+
 async function submitLead(callback) {
   const v = leadValues();
   const errBox = document.getElementById('chat-lead-error');
@@ -557,16 +569,10 @@ async function submitLead(callback) {
   // Reveal the message composer now that we have the customer's contact info.
   revealChatInputRow();
   const firstName = (v.name.split(' ')[0] || '').trim();
-  // Per product requirement: NO AI auto-replies.  The post-submit greeting
-  // is a single fixed agent message telling the customer to type their
-  // real question — which goes straight to admin lead-mgmt.  Any subsequent
-  // reply the customer sees is from a real admin agent (polled via
-  // adminPollOnce → /ajax/chat-customer.php).
-  const greeting = 'Thanks for contacting the support team'
-                 + (firstName ? ', ' + firstName : '')
-                 + '! One of our agents will be connected with you shortly. '
-                 + 'Please type your message below — let us know exactly what you\'re looking for.';
-  const bubble = chatAppend('bot', greeting);
+  // Per product requirement: NO AI auto-replies.  After the form, the
+  // customer gets a single fixed message telling them we'll call them and
+  // to type anything further — which routes straight to admin lead-mgmt.
+  const bubble = chatAppend('bot', chatDefaultGreeting(firstName));
   if (bubble) bubble.classList.add('agent-greeting');
   // If this lead turns out to be a ProAssist purchaser, surface the
   // install-call scheduler right away.
@@ -788,6 +794,16 @@ function paSchedInit() {
       const lf = document.getElementById('chat-lead-form');
       if (lf) lf.style.display = 'none';
       revealChatInputRow();
+      // Default "thanks for contacting us / we'll call you" greeting — shown
+      // once for ProAssist (process-plan) customers too.
+      try {
+        if (!localStorage.getItem('uc_pa_greeted')) {
+          const nm = (j.customer && j.customer.name ? String(j.customer.name).split(' ')[0] : '').trim();
+          const gb = chatAppend('bot', chatDefaultGreeting(nm));
+          if (gb) gb.classList.add('agent-greeting');
+          localStorage.setItem('uc_pa_greeted', '1');
+        }
+      } catch (e) {}
       if (j.schedule && j.schedule.status && j.schedule.status !== 'cancelled') {
         paSchedShowConfirmed(j.schedule);
       } else {

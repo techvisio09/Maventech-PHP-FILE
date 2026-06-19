@@ -5,11 +5,31 @@
 // - unread:  return total unread customer messages (for sidebar badge + toast)
 require_once __DIR__ . '/../includes/functions.php';
 $admin = require_admin_json();
-header('Content-Type: application/json');
+header('Content-Type: application/json; charset=utf-8');
+
+// A DB hiccup (e.g. a column that hasn't migrated yet on a fresh deploy) must
+// NEVER return a 500 HTML page — the chat UI can only parse JSON, otherwise it
+// hangs on "Loading conversation…".  These handlers turn any uncaught error
+// into a clean JSON response.
+set_exception_handler(function ($e) {
+    if (!headers_sent()) { http_response_code(200); header('Content-Type: application/json; charset=utf-8'); }
+    echo json_encode(['ok' => false, 'error' => 'Server error — please refresh and try again.']);
+});
+register_shutdown_function(function () {
+    $err = error_get_last();
+    if ($err && in_array($err['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_RECOVERABLE_ERROR], true)) {
+        echo json_encode(['ok' => false, 'error' => 'Server error — please refresh and try again.']);
+    }
+});
 
 $in = json_decode(file_get_contents('php://input'), true) ?: ($_POST ?: $_GET);
 $action = $in['action'] ?? 'thread';
 $pdo = db();
+// Make queries throw so our per-query fallbacks (below) can catch a missing
+// column and degrade gracefully instead of fataling.
+try { $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION); } catch (Throwable $e) {}
+// Belt-and-suspenders: make sure the chat columns exist on this DB right now.
+if (function_exists('chat_schema_migrate')) { try { chat_schema_migrate(); } catch (Throwable $e) {} }
 
 function _is_online(?string $lastSeen): bool {
     if (!$lastSeen) return false;
@@ -25,27 +45,29 @@ if ($action === 'send') {
     $agentName = trim((string)($admin['name'] ?? '')) ?: (string)($admin['username'] ?? 'Support');
     $agentDept = trim((string)($admin['department'] ?? ''));
 
-    // First time ANY agent replies to this lead → announce that a real person
-    // has joined and lock the thread to this agent (assigned_to). From here on
-    // it's a one-to-one human conversation (the customer widget switches to
-    // human-only mode, so no AI auto-replies).
-    $cur = $pdo->prepare('SELECT agent_name FROM chat_leads WHERE id=?');
-    $cur->execute([$leadId]);
-    $assigned = trim((string)($cur->fetchColumn() ?: ''));
-    if ($assigned === '') {
-        $joinMsg = '👋 ' . $agentName . ($agentDept !== '' ? ' (' . $agentDept . ')' : '')
-                 . ' has joined the chat. You\'re now connected with our team — how can we help?';
-        $pdo->prepare('INSERT INTO chat_messages (lead_id, sender, message) VALUES (?,?,?)')
-            ->execute([$leadId, 'admin', $joinMsg]);
-        $pdo->prepare('UPDATE chat_leads SET agent_name=?, assigned_to=? WHERE id=?')
-            ->execute([$agentName, (int)($admin['id'] ?? 0) ?: null, $leadId]);
-    }
+    // "Agent joined" notice — best-effort. The agent_name column may not exist
+    // yet on a freshly-deployed DB; never let that block the real message.
+    try {
+        $cur = $pdo->prepare('SELECT agent_name FROM chat_leads WHERE id=?');
+        $cur->execute([$leadId]);
+        $assigned = trim((string)($cur->fetchColumn() ?: ''));
+        if ($assigned === '') {
+            $joinMsg = '👋 ' . $agentName . ($agentDept !== '' ? ' (' . $agentDept . ')' : '')
+                     . ' has joined the chat. You\'re now connected with our team — how can we help?';
+            $pdo->prepare('INSERT INTO chat_messages (lead_id, sender, message) VALUES (?,?,?)')
+                ->execute([$leadId, 'admin', $joinMsg]);
+            $pdo->prepare('UPDATE chat_leads SET agent_name=?, assigned_to=? WHERE id=?')
+                ->execute([$agentName, (int)($admin['id'] ?? 0) ?: null, $leadId]);
+        }
+    } catch (Throwable $e) { /* agent_name column missing — skip the join notice */ }
 
+    // The actual message — ALWAYS runs (this is what was failing on deploy).
     $pdo->prepare('INSERT INTO chat_messages (lead_id, sender, message) VALUES (?,?,?)')
         ->execute([$leadId, 'admin', mb_substr($msg, 0, 2000, 'UTF-8')]);
+    $msgId = (int)$pdo->lastInsertId();
     // Sending implies done typing — clear the beacon immediately.
-    $pdo->prepare('UPDATE chat_leads SET typing_admin_at = NULL WHERE id=?')->execute([$leadId]);
-    echo json_encode(['ok'=>true,'id'=>(int)$pdo->lastInsertId()]);
+    try { $pdo->prepare('UPDATE chat_leads SET typing_admin_at = NULL WHERE id=?')->execute([$leadId]); } catch (Throwable $e) {}
+    echo json_encode(['ok'=>true,'id'=>$msgId]);
     exit;
 }
 
@@ -82,13 +104,17 @@ if ($action === 'presence') {
 
 if ($action === 'unread') {
     // Leads needing attention — mirrors the sidebar badge: unread customer
-    // messages OR brand-new callback/ProAssist leads not yet opened.
-    $r = $pdo->query("
-        SELECT COUNT(*) FROM chat_leads l
-        WHERE EXISTS (SELECT 1 FROM chat_messages m WHERE m.lead_id=l.id AND m.sender='customer' AND m.read_at IS NULL)
-           OR (l.callback_requested=1 AND l.admin_seen_at IS NULL)
-    ")->fetchColumn();
-    // Get last unread message's lead+name for toast
+    // messages OR brand-new callback/ProAssist leads not yet opened.  Falls
+    // back to a plain unread-message count if admin_seen_at is missing.
+    try {
+        $r = $pdo->query("
+            SELECT COUNT(*) FROM chat_leads l
+            WHERE EXISTS (SELECT 1 FROM chat_messages m WHERE m.lead_id=l.id AND m.sender='customer' AND m.read_at IS NULL)
+               OR (l.callback_requested=1 AND l.admin_seen_at IS NULL)
+        ")->fetchColumn();
+    } catch (Throwable $e) {
+        $r = $pdo->query("SELECT COUNT(DISTINCT lead_id) FROM chat_messages WHERE sender='customer' AND read_at IS NULL")->fetchColumn();
+    }
     $latest = $pdo->query("SELECT cm.lead_id, cm.message, cl.name
                             FROM chat_messages cm LEFT JOIN chat_leads cl ON cl.id=cm.lead_id
                             WHERE cm.sender='customer' AND cm.read_at IS NULL
@@ -155,13 +181,22 @@ if (!$leadId) { echo json_encode(['ok'=>false,'error'=>'lead_id required']); exi
 $lead = $pdo->prepare('SELECT id, name, email, phone, last_seen, typing_customer_at FROM chat_leads WHERE id=?');
 $lead->execute([$leadId]); $leadRow = $lead->fetch();
 if (!$leadRow) { echo json_encode(['ok'=>false,'error'=>'not found']); exit; }
-$msgs = $pdo->prepare('SELECT id, sender, message, attachment_url, attachment_type, attachment_name, sent_at FROM chat_messages WHERE lead_id=? ORDER BY id ASC LIMIT 200');
-$msgs->execute([$leadId]);
+// Messages — try with attachment columns; if they don't exist yet on this DB
+// (fresh deploy that hasn't migrated), fall back to the base columns so the
+// conversation still loads instead of erroring.
+try {
+    $msgs = $pdo->prepare('SELECT id, sender, message, attachment_url, attachment_type, attachment_name, sent_at FROM chat_messages WHERE lead_id=? ORDER BY id ASC LIMIT 200');
+    $msgs->execute([$leadId]);
+    $messageRows = $msgs->fetchAll();
+} catch (Throwable $e) {
+    $msgs = $pdo->prepare('SELECT id, sender, message, sent_at FROM chat_messages WHERE lead_id=? ORDER BY id ASC LIMIT 200');
+    $msgs->execute([$leadId]);
+    $messageRows = $msgs->fetchAll();
+}
 // Mark customer messages as read
-$pdo->prepare("UPDATE chat_messages SET read_at=NOW() WHERE lead_id=? AND sender='customer' AND read_at IS NULL")->execute([$leadId]);
-// Mark the lead as seen by an admin so it drops off the "needs attention"
-// sidebar badge (covers new callback/ProAssist leads with no message yet).
-$pdo->prepare("UPDATE chat_leads SET admin_seen_at=NOW() WHERE id=? AND admin_seen_at IS NULL")->execute([$leadId]);
+try { $pdo->prepare("UPDATE chat_messages SET read_at=NOW() WHERE lead_id=? AND sender='customer' AND read_at IS NULL")->execute([$leadId]); } catch (Throwable $e) {}
+// Mark the lead as seen by an admin (best-effort — column may be missing).
+try { $pdo->prepare("UPDATE chat_leads SET admin_seen_at=NOW() WHERE id=? AND admin_seen_at IS NULL")->execute([$leadId]); } catch (Throwable $e) {}
 // Surface the customer's typing state so the admin chat panel can show
 // "● Customer is typing…" within one polling tick.
 $customerIsTyping = $leadRow['typing_customer_at']
@@ -177,5 +212,5 @@ echo json_encode([
         'online'         => _is_online($leadRow['last_seen']),
         'customer_typing'=> $customerIsTyping,
     ],
-    'messages' => $msgs->fetchAll(),
+    'messages' => $messageRows,
 ]);

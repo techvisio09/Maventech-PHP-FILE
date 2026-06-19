@@ -139,10 +139,19 @@ HTML;
 }
 
 $since = (int)($in['since'] ?? 0);
-$st = $pdo->prepare('SELECT id, sender, message, attachment_url, attachment_type, attachment_name, sent_at FROM chat_messages
-                     WHERE lead_id=? AND sender=\'admin\' AND id > ? ORDER BY id ASC LIMIT 50');
-$st->execute([$leadId, $since]);
-$rows = $st->fetchAll();
+// Try with attachment columns; fall back to base columns if a fresh deploy
+// hasn't migrated them yet (so the customer still receives admin replies).
+try {
+    $st = $pdo->prepare('SELECT id, sender, message, attachment_url, attachment_type, attachment_name, sent_at FROM chat_messages
+                         WHERE lead_id=? AND sender=\'admin\' AND id > ? ORDER BY id ASC LIMIT 50');
+    $st->execute([$leadId, $since]);
+    $rows = $st->fetchAll();
+} catch (Throwable $e) {
+    $st = $pdo->prepare('SELECT id, sender, message, sent_at FROM chat_messages
+                         WHERE lead_id=? AND sender=\'admin\' AND id > ? ORDER BY id ASC LIMIT 50');
+    $st->execute([$leadId, $since]);
+    $rows = $st->fetchAll();
+}
 // Mark fetched admin messages as read by the customer
 if ($rows) {
     $ids = array_column($rows, 'id');
@@ -151,16 +160,23 @@ if ($rows) {
     $upd->execute($ids);
 }
 
-// Surface the admin's typing state to the customer poller so the public
-// chat widget can render "● Admin is typing…" within 1 polling tick.
-$tStmt = $pdo->prepare('SELECT typing_admin_at, agent_name FROM chat_leads WHERE id=?');
-$tStmt->execute([$leadId]);
-$leadMeta = $tStmt->fetch() ?: [];
-$adminTyping = (string)($leadMeta['typing_admin_at'] ?? '');
+// Surface the admin's typing state + "agent joined" name (best-effort — the
+// agent_name column may be missing on a not-yet-migrated DB).
+$adminTyping = ''; $agentName = '';
+try {
+    $tStmt = $pdo->prepare('SELECT typing_admin_at, agent_name FROM chat_leads WHERE id=?');
+    $tStmt->execute([$leadId]);
+    $leadMeta = $tStmt->fetch() ?: [];
+    $adminTyping = (string)($leadMeta['typing_admin_at'] ?? '');
+    $agentName   = trim((string)($leadMeta['agent_name'] ?? ''));
+} catch (Throwable $e) {
+    try {
+        $tStmt = $pdo->prepare('SELECT typing_admin_at FROM chat_leads WHERE id=?');
+        $tStmt->execute([$leadId]);
+        $adminTyping = (string)($tStmt->fetchColumn() ?: '');
+    } catch (Throwable $e2) {}
+}
 $adminIsTyping = $adminTyping && (time() - strtotime($adminTyping)) <= 5;
-// Once an agent has joined (agent_name set), tell the widget so it switches
-// to a one-to-one human conversation (no AI) and shows the agent's name.
-$agentName = trim((string)($leadMeta['agent_name'] ?? ''));
 
 echo json_encode([
     'ok'           => true,
