@@ -328,8 +328,15 @@ function selectPayMethod(method) {
 }
 
 /* ---------- Ask AI chat widget ---------- */
+let _lastChatToggle = 0;
 function toggleChat() {
+  // Debounce: if both the inline onclick AND the JS listener fire (non-CSP
+  // hosts), only toggle once.
+  const _now = Date.now();
+  if (_now - _lastChatToggle < 150) return;
+  _lastChatToggle = _now;
   const panel = document.getElementById('chat-panel');
+  if (!panel) return;
   panel.classList.toggle('open');
   if (panel.classList.contains('open')) {
     // Customer opened the chat → clear the unread bell + dismiss any preview.
@@ -1372,3 +1379,42 @@ async function chatToggleVoice() {
   document.querySelectorAll('.product-card.tilt-3d').forEach((el) => bindTilt(el, 16, 12));
 })();
 
+
+
+/* =====================================================================
+ * CSP-safe chat wiring.
+ * Some live hosts (cPanel / Cloudflare / security plugins) add a
+ * Content-Security-Policy that BLOCKS inline onclick/onsubmit handlers — which
+ * stops the chat from opening on the deployed site even though it works in
+ * preview.  We re-wire every chat control here via JavaScript (allowed by
+ * script-src 'self'), so the chat works regardless of CSP.  The original inline
+ * handlers stay for non-CSP hosts; toggleChat() is debounced so a double-fire
+ * is harmless.
+ * ===================================================================== */
+(function () {
+  function callFn(name, arg) { try { if (typeof window[name] === 'function') window[name](arg); } catch (e) {} }
+  document.addEventListener('click', function (e) {
+    var el = e.target && e.target.closest ? e.target.closest('[data-testid]') : null;
+    if (!el) return;
+    switch (el.getAttribute('data-testid')) {
+      case 'chat-bubble':
+      case 'chat-back':
+      case 'chat-menu':
+      case 'chat-close':            e.preventDefault(); callFn('toggleChat'); break;
+      case 'chat-msg-preview':      e.preventDefault(); callFn('openChatFromPreview'); break;
+      case 'chat-msg-preview-close':e.preventDefault(); e.stopPropagation(); callFn('hideChatMsgPreview'); break;
+      case 'lead-send-btn':
+      case 'lead-chat-btn':         e.preventDefault(); if (typeof submitLead === 'function') submitLead('chat'); break;
+      case 'chat-attach-btn':       e.preventDefault(); callFn('chatAttachClick'); break;
+      case 'chat-mic-btn':          e.preventDefault(); callFn('chatToggleVoice'); break;
+      case 'chat-emoji-btn':        e.preventDefault(); if (typeof chatToggleEmoji === 'function') chatToggleEmoji(e); break;
+      case 'pa-sched-back':         e.preventDefault(); callFn('paSchedBackToDates'); break;
+    }
+  }, false);
+  // Message composer + newsletter form submits (inline onsubmit may be blocked).
+  document.addEventListener('submit', function (e) {
+    var f = e.target;
+    if (!f || !f.id) return;
+    if (f.id === 'chat-input-row') { e.preventDefault(); if (typeof sendChat === 'function') sendChat(e); }
+  }, false);
+})();

@@ -51,7 +51,11 @@ if ($key === '') { echo json_encode(['ok' => false, 'error' => 'Voice typing is 
 $name = (string)($f['name'] ?: 'voice.webm');
 $mime = (string)($f['type'] ?: 'audio/webm');
 $cf   = new CURLFile($f['tmp_name'], $mime, $name);
-$ch = curl_init(rtrim($base, '/') . '/audio/transcriptions');
+// Use the /audio/translations endpoint so the response is ALWAYS in English,
+// regardless of which language the user spoke into the mic. This is a
+// Whisper feature — it auto-detects the source language and translates the
+// transcription into English in one round-trip.
+$ch = curl_init(rtrim($base, '/') . '/audio/translations');
 curl_setopt_array($ch, [
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_POST           => true,

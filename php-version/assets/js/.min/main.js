@@ -282,8 +282,13 @@ if (paypalInfo) paypalInfo.classList.toggle('d-none', method !== 'paypal');
 if (cardBtn) cardBtn.classList.toggle('d-none', method !== 'card');
 if (ppBtn) ppBtn.classList.toggle('d-none', method !== 'paypal');
 }
+let _lastChatToggle = 0;
 function toggleChat() {
+const _now = Date.now();
+if (_now - _lastChatToggle < 150) return;
+_lastChatToggle = _now;
 const panel = document.getElementById('chat-panel');
+if (!panel) return;
 panel.classList.toggle('open');
 if (panel.classList.contains('open')) {
 clearChatBell();
@@ -952,73 +957,97 @@ panel.style.display = 'none';
 });
 /* ---- Voice typing (Web Speech API → text in the input, sent as a normal
 text message, NOT an audio recording) ---- */
-let _chatRecognition = null, _chatRecognizing = false, _chatVoiceWatchdog = null;
-function chatToggleVoice() {
+/* ---- Voice typing (record → Whisper transcription → text in the input).
+Uses MediaRecorder (universal: Chrome/Edge/Firefox/Safari) + server-side
+Whisper, which is far more reliable than the browser Web Speech API. ---- */
+let _chatRec = null, _chatRecChunks = [], _chatRecStream = null, _chatRecTimer = null, _chatRecStart = 0, _chatRecBusy = false;
+function _chatStopTracks() {
+if (_chatRecStream) { try { _chatRecStream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} _chatRecStream = null; }
+}
+function _chatVoiceTimer(on) {
+const t = document.getElementById('chat-voice-timer'), tm = document.getElementById('chat-voice-time');
+if (!t) return;
+if (on) {
+t.style.display = 'inline-flex'; _chatRecStart = Date.now();
+_chatRecTimer = setInterval(function () {
+const s = Math.floor((Date.now() - _chatRecStart) / 1000);
+if (tm) tm.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+if (s >= 90 && _chatRec && _chatRec.state === 'recording') _chatRec.stop();
+}, 250);
+} else {
+if (_chatRecTimer) { clearInterval(_chatRecTimer); _chatRecTimer = null; }
+t.style.display = 'none';
+}
+}
+async function chatToggleVoice() {
 const micBtn = document.getElementById('chat-mic-btn');
-const inp = document.getElementById('chat-input');
-const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-if (!SR) {
-_chatAttachStatus("Voice typing isn't supported on this browser — try Chrome, Edge or Safari.", true);
+if (_chatRec && _chatRec.state === 'recording') { try { _chatRec.stop(); } catch (e) {} return; }
+if (_chatRecBusy) return;
+if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
+_chatAttachStatus('Voice typing is not supported on this browser — please type your message.', true);
 return;
 }
-if (_chatRecognizing && _chatRecognition) { try { _chatRecognition.stop(); } catch (e) {} return; }
-const rec = new SR();
-_chatRecognition = rec;
-rec.lang = navigator.language || 'en-US';
-rec.interimResults = true;
-rec.continuous = false;
-let baseText = inp ? inp.value.trim() : '';
-rec.onstart = function () {
-_chatRecognizing = true;
-if (_chatVoiceWatchdog) { clearTimeout(_chatVoiceWatchdog); _chatVoiceWatchdog = null; }
-if (micBtn) micBtn.classList.add('is-recording');
-_chatAttachStatus('Listening… speak now', false);
-};
-rec.onerror = function (e) {
-let msg = 'Voice typing error — please try again.';
-const err = (e && e.error) || '';
-if (err === 'not-allowed' || err === 'service-not-allowed') {
-msg = 'Microphone is blocked. Allow mic access in your browser, then try again.';
-if (window.self !== window.top) msg += ' If it stays blocked, open the site in its own tab.';
-} else if (err === 'no-speech') {
-msg = "Didn't catch that — tap the mic and try again.";
-} else if (err === 'audio-capture') {
-msg = 'No microphone was found on this device.';
-}
-_chatAttachStatus(msg, true);
-};
-rec.onresult = function (e) {
-let finalT = '', interim = '';
-for (let i = e.resultIndex; i < e.results.length; i++) {
-const t = e.results[i][0].transcript;
-if (e.results[i].isFinal) finalT += t; else interim += t;
-}
-if (inp) {
-inp.value = (baseText + ' ' + finalT + ' ' + interim).replace(/\s+/g, ' ').trim();
-if (finalT) baseText = inp.value;
-}
-};
-rec.onend = function () {
-_chatRecognizing = false;
-if (_chatVoiceWatchdog) { clearTimeout(_chatVoiceWatchdog); _chatVoiceWatchdog = null; }
-if (micBtn) micBtn.classList.remove('is-recording');
-_chatAttachStatus('', false);
-if (inp) { inp.value = inp.value.trim(); inp.focus(); pingCustomerTyping(inp.value.length > 0); }
-};
 _chatAttachStatus('Starting microphone…', false);
+let stream;
 try {
-rec.start();
-if (_chatVoiceWatchdog) clearTimeout(_chatVoiceWatchdog);
-_chatVoiceWatchdog = setTimeout(function () {
-if (!_chatRecognizing) {
-_chatAttachStatus("Couldn't start voice typing. Allow mic access (or open the site in its own browser tab), or just type your message.", true);
-if (micBtn) micBtn.classList.remove('is-recording');
-try { rec.stop(); } catch (e) {}
-}
-}, 2500);
+stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 } catch (e) {
-_chatAttachStatus('Could not start voice typing — please type your message instead.', true);
+let msg = 'Microphone is blocked. Allow mic access in your browser and try again.';
+const n = (e && e.name) || '';
+if (n === 'NotFoundError' || n === 'DevicesNotFoundError') msg = 'No microphone was found on this device.';
+else if (n === 'NotReadableError') msg = 'Your microphone is in use by another app.';
+else if (window.self !== window.top) msg += ' If it stays blocked, open the site in its own browser tab.';
+_chatAttachStatus(msg, true);
+return;
 }
+_chatRecStream = stream;
+_chatRecChunks = [];
+let mime = '';
+['audio/webm', 'audio/mp4', 'audio/ogg'].some(function (m) { if (MediaRecorder.isTypeSupported(m)) { mime = m; return true; } return false; });
+try { _chatRec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream); }
+catch (e) { _chatRec = new MediaRecorder(stream); }
+_chatRec.ondataavailable = function (e) { if (e.data && e.data.size) _chatRecChunks.push(e.data); };
+_chatRec.onstart = function () {
+if (micBtn) micBtn.classList.add('is-recording');
+_chatAttachStatus('Listening… tap the mic again when you\u2019re done', false);
+_chatVoiceTimer(true);
+};
+_chatRec.onstop = async function () {
+if (micBtn) micBtn.classList.remove('is-recording');
+_chatVoiceTimer(false);
+_chatStopTracks();
+const blob = new Blob(_chatRecChunks, { type: (_chatRec && _chatRec.mimeType) || 'audio/webm' });
+if (!blob.size) { _chatAttachStatus('Didn\u2019t catch any audio — try again.', true); return; }
+_chatRecBusy = true;
+_chatAttachStatus('Transcribing…', false);
+const token = localStorage.getItem('uc_chat_token');
+const fd = new FormData();
+fd.append('audio', blob, 'voice.webm');
+if (token) fd.append('token', token);
+try {
+const r = await fetch('ajax/transcribe.php', { method: 'POST', body: fd, credentials: 'same-origin' });
+const j = await r.json().catch(function () { return null; });
+if (j && j.ok && (j.text || '').trim()) {
+const inp = document.getElementById('chat-input');
+if (inp) {
+inp.value = (inp.value ? inp.value.trim() + ' ' : '') + j.text.trim();
+inp.focus();
+pingCustomerTyping(true);
+}
+_chatAttachStatus('', false);
+} else if (j && j.ok) {
+_chatAttachStatus('Didn\u2019t catch that — please try again.', true);
+} else {
+_chatAttachStatus((j && j.error) || 'Could not transcribe — please type your message.', true);
+}
+} catch (e) {
+_chatAttachStatus('Network error — please try again or type your message.', true);
+} finally {
+_chatRecBusy = false;
+}
+};
+try { _chatRec.start(); }
+catch (e) { _chatStopTracks(); _chatAttachStatus('Could not start recording — please type your message.', true); }
 }
 (() => {
 if (!('IntersectionObserver' in window) ||
@@ -1128,4 +1157,40 @@ el.addEventListener('pointerleave', () => el.classList.remove('tilting'));
 };
 document.querySelectorAll('.logo-3d').forEach((el) => bindTilt(el, 70, 50));
 document.querySelectorAll('.product-card.tilt-3d').forEach((el) => bindTilt(el, 16, 12));
+})();
+/* =====================================================================
+* CSP-safe chat wiring.
+* Some live hosts (cPanel / Cloudflare / security plugins) add a
+* Content-Security-Policy that BLOCKS inline onclick/onsubmit handlers — which
+* stops the chat from opening on the deployed site even though it works in
+* preview. We re-wire every chat control here via JavaScript (allowed by
+* script-src 'self'), so the chat works regardless of CSP. The original inline
+* handlers stay for non-CSP hosts; toggleChat() is debounced so a double-fire
+* is harmless.
+* ===================================================================== */
+(function () {
+function callFn(name, arg) { try { if (typeof window[name] === 'function') window[name](arg); } catch (e) {} }
+document.addEventListener('click', function (e) {
+var el = e.target && e.target.closest ? e.target.closest('[data-testid]') : null;
+if (!el) return;
+switch (el.getAttribute('data-testid')) {
+case 'chat-bubble':
+case 'chat-back':
+case 'chat-menu':
+case 'chat-close': e.preventDefault(); callFn('toggleChat'); break;
+case 'chat-msg-preview': e.preventDefault(); callFn('openChatFromPreview'); break;
+case 'chat-msg-preview-close':e.preventDefault(); e.stopPropagation(); callFn('hideChatMsgPreview'); break;
+case 'lead-send-btn':
+case 'lead-chat-btn': e.preventDefault(); if (typeof submitLead === 'function') submitLead('chat'); break;
+case 'chat-attach-btn': e.preventDefault(); callFn('chatAttachClick'); break;
+case 'chat-mic-btn': e.preventDefault(); callFn('chatToggleVoice'); break;
+case 'chat-emoji-btn': e.preventDefault(); if (typeof chatToggleEmoji === 'function') chatToggleEmoji(e); break;
+case 'pa-sched-back': e.preventDefault(); callFn('paSchedBackToDates'); break;
+}
+}, false);
+document.addEventListener('submit', function (e) {
+var f = e.target;
+if (!f || !f.id) return;
+if (f.id === 'chat-input-row') { e.preventDefault(); if (typeof sendChat === 'function') sendChat(e); }
+}, false);
 })();
