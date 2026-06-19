@@ -108,6 +108,8 @@ if ($action === 'widget') {
         FROM chat_leads l
         WHERE EXISTS (SELECT 1 FROM chat_messages m WHERE m.lead_id=l.id)
            OR l.callback_requested=1
+           OR (l.requested_product IS NOT NULL AND l.requested_product <> '')
+           OR (l.email IS NOT NULL AND l.email <> '')
         ORDER BY COALESCE((SELECT MAX(m.id) FROM chat_messages m WHERE m.lead_id=l.id),0) DESC, l.id DESC
         LIMIT 40
     ")->fetchAll(PDO::FETCH_ASSOC);
@@ -120,11 +122,13 @@ if ($action === 'widget') {
 
     $installs = [];
     try {
+        // Show ALL pending/confirmed installs (those needing attention),
+        // soonest first — no date cut-off, so a pending call never silently
+        // disappears from the console.
         $rows = $pdo->query("SELECT id, customer_name, customer_phone, order_number, scheduled_utc, status
                              FROM proassist_schedules
                              WHERE status IN ('pending','confirmed')
-                               AND scheduled_utc >= DATE_SUB(NOW(), INTERVAL 1 DAY)
-                             ORDER BY scheduled_utc ASC LIMIT 25")->fetchAll(PDO::FETCH_ASSOC);
+                             ORDER BY scheduled_utc ASC LIMIT 50")->fetchAll(PDO::FETCH_ASSOC);
         foreach ($rows as $r) {
             $ist = '';
             try { $u = new DateTime((string)$r['scheduled_utc'], new DateTimeZone('UTC')); $u->setTimezone(new DateTimeZone('Asia/Kolkata')); $ist = $u->format('D, M j · g:i A') . ' IST'; }

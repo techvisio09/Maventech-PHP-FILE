@@ -319,6 +319,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         header('Location: admin.php?tab=subscription&sub=plans&msg=Plan+saved'); exit;
 
+    } elseif ($action === 'save_sub_plan_full') {
+        // Full plan content edit (name, tagline, tenure, devices, features) —
+        // reflects immediately on the public Subscription Plans page.
+        $slug = trim((string)($_POST['slug'] ?? ''));
+        if ($slug !== '') {
+            $name    = trim((string)($_POST['name'] ?? ''));
+            $tagline = trim((string)($_POST['tagline'] ?? ''));
+            $tenure  = trim((string)($_POST['tenure_label'] ?? ''));
+            $devices = trim((string)($_POST['devices'] ?? ''));
+            $months  = max(0, (int)($_POST['duration_months'] ?? 0));
+            // Features: one per line → clean array → JSON.
+            $featLines = preg_split('/\r\n|\r|\n/', (string)($_POST['features'] ?? ''));
+            $features  = array_values(array_filter(array_map('trim', $featLines), fn($l) => $l !== ''));
+            $pdo->prepare('UPDATE subscription_plans SET name=?, tagline=?, tenure_label=?, devices=?, duration_months=?, features_json=? WHERE slug=?')
+                ->execute([
+                    $name ?: $slug, $tagline, $tenure, $devices, $months,
+                    json_encode($features, JSON_UNESCAPED_UNICODE), $slug,
+                ]);
+        }
+        header('Location: admin.php?tab=subscription&sub=plans&msg=Plan+content+saved'); exit;
+
     } elseif ($action === 'sub_update') {
         // Edit a subscriber's contact details / status, and optionally re-send
         // the subscription confirmation email (with Receipt + Invoice +
@@ -3865,8 +3886,9 @@ elseif ($tab === 'subscription'):
               <input type="checkbox" class="form-check-input" name="active" id="act-<?= esc($p['slug']) ?>" <?= $p['active']?'checked':'' ?> data-testid="sub-active-<?= esc($p['slug']) ?>">
               <label class="form-check-label small" for="act-<?= esc($p['slug']) ?>">Available for purchase</label>
             </div>
-            <button class="btn btn-primary btn-sm w-100" data-testid="sub-save-<?= esc($p['slug']) ?>"><i class="bi bi-check2 me-1"></i>Save</button>
+            <button class="btn btn-primary btn-sm w-100" data-testid="sub-save-<?= esc($p['slug']) ?>"><i class="bi bi-check2 me-1"></i>Save price</button>
           </form>
+          <a href="?tab=subscription&sub=plans&edit_plan=<?= esc($p['slug']) ?>" class="btn btn-outline-secondary btn-sm w-100 mt-2" data-testid="sub-edit-content-<?= esc($p['slug']) ?>"><i class="bi bi-pencil-square me-1"></i>Edit content</a>
           <div class="mt-2 pt-2 border-top">
             <label class="form-label small mb-1"><i class="bi bi-link-45deg me-1"></i>Shareable payment link</label>
             <div class="input-group input-group-sm">
@@ -3880,6 +3902,46 @@ elseif ($tab === 'subscription'):
     <?php endforeach; ?>
   </div>
   <p class="small text-secondary mt-3"><i class="bi bi-info-circle me-1"></i>Set a price above $0 and keep the plan Active so customers can purchase via the shareable link. Prices are stored in USD and shown in each region's currency at checkout.</p>
+
+  <?php $editPlanRow = !empty($_GET['edit_plan']) ? sub_plan_get((string)$_GET['edit_plan']) : null; ?>
+  <?php if ($editPlanRow): ?>
+    <div class="modal d-block" style="background:rgba(0,0,0,.55);" tabindex="-1" data-testid="plan-edit-modal">
+      <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content card-e" style="background:var(--card-bg);">
+          <form method="post">
+            <input type="hidden" name="action" value="save_sub_plan_full">
+            <input type="hidden" name="slug" value="<?= esc($editPlanRow['slug']) ?>">
+            <div class="modal-header" style="border-color:var(--border);">
+              <h5 class="modal-title"><i class="bi bi-pencil-square text-primary me-2"></i>Edit plan content — <?= esc($editPlanRow['name']) ?></h5>
+              <a href="?tab=subscription&sub=plans" class="btn-close" data-testid="plan-edit-close"></a>
+            </div>
+            <div class="modal-body">
+              <div class="small text-secondary mb-3"><i class="bi bi-globe me-1"></i>Everything here shows on the public Subscription Plans page exactly as you type it.</div>
+              <div class="row g-2">
+                <div class="col-md-6"><label class="form-label small mb-1">Plan name</label>
+                  <input type="text" name="name" value="<?= esc($editPlanRow['name']) ?>" class="form-control form-control-sm" required data-testid="pe-name"></div>
+                <div class="col-md-6"><label class="form-label small mb-1">Tagline / short description</label>
+                  <input type="text" name="tagline" value="<?= esc($editPlanRow['tagline']) ?>" class="form-control form-control-sm" data-testid="pe-tagline"></div>
+                <div class="col-md-4"><label class="form-label small mb-1">Tenure label</label>
+                  <input type="text" name="tenure_label" value="<?= esc($editPlanRow['tenure_label']) ?>" class="form-control form-control-sm" placeholder="e.g. 3 Years" data-testid="pe-tenure"></div>
+                <div class="col-md-4"><label class="form-label small mb-1">Devices / coverage</label>
+                  <input type="text" name="devices" value="<?= esc($editPlanRow['devices']) ?>" class="form-control form-control-sm" placeholder="e.g. Up to 3 Devices" data-testid="pe-devices"></div>
+                <div class="col-md-4"><label class="form-label small mb-1">Duration (months)</label>
+                  <input type="number" name="duration_months" min="0" value="<?= (int)$editPlanRow['duration_months'] ?>" class="form-control form-control-sm" data-testid="pe-duration">
+                  <div class="form-text small">0 = one-time / single session</div></div>
+                <div class="col-12"><label class="form-label small mb-1">Features <span class="text-secondary">(one per line — these are the bullet points shown on the website)</span></label>
+                  <textarea name="features" rows="9" class="form-control form-control-sm" data-testid="pe-features"><?= esc(implode("\n", (array)($editPlanRow['features'] ?? []))) ?></textarea></div>
+              </div>
+            </div>
+            <div class="modal-footer" style="border-color:var(--border);">
+              <button type="submit" class="btn btn-sm btn-primary" data-testid="pe-save"><i class="bi bi-check2 me-1"></i>Save &amp; publish</button>
+              <a href="?tab=subscription&sub=plans" class="btn btn-sm btn-secondary">Cancel</a>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  <?php endif; ?>
 
 <?php else: /* subscribers view */ ?>
   <form method="get" class="row g-2 align-items-end mb-3" data-testid="sub-filters">
