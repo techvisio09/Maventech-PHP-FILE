@@ -332,8 +332,9 @@ function toggleChat() {
   const panel = document.getElementById('chat-panel');
   panel.classList.toggle('open');
   if (panel.classList.contains('open')) {
-    // Customer opened the chat → clear the unread bell.
+    // Customer opened the chat → clear the unread bell + dismiss any preview.
     clearChatBell();
+    if (typeof hideChatMsgPreview === 'function') hideChatMsgPreview();
     // Iteration 20 — chat opens straight to the 3-field contact form by
     // default.  The AI welcome bubble + quick chips are kept in the DOM
     // for the legacy ProAssist auto-chat flow (where uc_lead_done is
@@ -452,10 +453,10 @@ function showChatMsgPreview(text) {
   body.textContent = preview;
   card.style.display = 'block';
   card.classList.remove('is-hiding');
-  // Auto-hide after 12s if the customer doesn't interact (the chat panel
-  // would have auto-opened by then anyway).
-  if (_msgPreviewTimer) clearTimeout(_msgPreviewTimer);
-  _msgPreviewTimer = setTimeout(hideChatMsgPreview, 12000);
+  // Persist until the customer dismisses it (X) or taps to reply — we no
+  // longer auto-open the chat, so the preview shouldn't vanish on its own.
+  // The unread bell on the bubble stays regardless.
+  if (_msgPreviewTimer) { clearTimeout(_msgPreviewTimer); _msgPreviewTimer = null; }
 }
 function hideChatMsgPreview() {
   const card = document.getElementById('chat-msg-preview');
@@ -627,33 +628,16 @@ async function adminPollOnce() {
         if (m.attachment_url) { chatAppendAttachment('bot', m); } else { chatAppend('bot', m.message); }
         if (m.id > _adminLastMsgId) _adminLastMsgId = m.id;
       }
-      // New admin reply arrived while the customer's chat panel is closed:
-      // (a) auto-open the panel so they can read + reply immediately,
-      // (b) light up the bell with the unread count + soft chime,
-      // (c) show a Messenger-style preview bubble with the latest message
-      //     so the customer sees WHAT the agent said before the panel slides
-      //     over.
+      // New admin reply arrived while the customer's chat panel is closed.
+      // DON'T auto-open the panel (that's intrusive). Instead: badge the
+      // chat bubble with the unread count, play a soft chime, and show a
+      // dismissible Messenger-style preview with the latest message — the
+      // customer taps "Tap to reply" (or the bubble) when THEY are ready.
       if (!panelOpen) {
         showChatBell(j.messages.length);
         _chatChime();
-        // Preview shows the most recent admin message (last in the batch).
         const latest = j.messages[j.messages.length - 1];
         showChatMsgPreview(latest && latest.message ? latest.message : '');
-        // Auto-open the panel after ~3.5s so the customer has time to read
-        // the preview first.  If they click the preview / bubble sooner,
-        // the chat opens immediately and we clear the timer.
-        setTimeout(function(){
-          const p = document.getElementById('chat-panel');
-          if (p && !p.classList.contains('open')) {
-            p.classList.add('open');
-            clearChatBell();
-            // If the lead form is still pending, re-surface it now.
-            if (!localStorage.getItem('uc_lead_done')) {
-              const form = document.getElementById('chat-lead-form');
-              if (form) form.style.display = 'block';
-            }
-          }
-        }, 3500);
       }
     }
     // Show "Live agent is typing…" indicator while the admin's beacon

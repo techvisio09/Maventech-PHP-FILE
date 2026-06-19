@@ -287,6 +287,7 @@ const panel = document.getElementById('chat-panel');
 panel.classList.toggle('open');
 if (panel.classList.contains('open')) {
 clearChatBell();
+if (typeof hideChatMsgPreview === 'function') hideChatMsgPreview();
 if (!localStorage.getItem('uc_lead_done')) {
 const form = document.getElementById('chat-lead-form');
 if (form) form.style.display = 'block';
@@ -378,8 +379,7 @@ if (preview.length > 180) preview = preview.slice(0, 177) + '…';
 body.textContent = preview;
 card.style.display = 'block';
 card.classList.remove('is-hiding');
-if (_msgPreviewTimer) clearTimeout(_msgPreviewTimer);
-_msgPreviewTimer = setTimeout(hideChatMsgPreview, 12000);
+if (_msgPreviewTimer) { clearTimeout(_msgPreviewTimer); _msgPreviewTimer = null; }
 }
 function hideChatMsgPreview() {
 const card = document.getElementById('chat-msg-preview');
@@ -530,17 +530,6 @@ showChatBell(j.messages.length);
 _chatChime();
 const latest = j.messages[j.messages.length - 1];
 showChatMsgPreview(latest && latest.message ? latest.message : '');
-setTimeout(function(){
-const p = document.getElementById('chat-panel');
-if (p && !p.classList.contains('open')) {
-p.classList.add('open');
-clearChatBell();
-if (!localStorage.getItem('uc_lead_done')) {
-const form = document.getElementById('chat-lead-form');
-if (form) form.style.display = 'block';
-}
-}
-}, 3500);
 }
 }
 const t = document.getElementById('chat-typing');
