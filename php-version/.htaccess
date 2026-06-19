@@ -36,6 +36,26 @@ RewriteRule ^agents\.json$        agents-json.php   [L]
 RewriteRule ^robots\.txt$         robots-txt.php    [L]
 RewriteRule ^ai\.txt$             ai-txt.php        [L]
 
+# ---- Pretty CONTENT endpoints — mirror router.php so extensionless URLs
+#      (press-kit, embed, hub, manifest, OG images) work on Apache too.
+#      Without these, /press-kit etc. 404 on the live domain even though
+#      they work behind the dev router. ----
+RewriteRule ^press-kit/?$                        press-kit.php             [L,QSA]
+RewriteRule ^embed/badge(\.js)?$                 embed-badge.php           [L,QSA]
+RewriteRule ^embed/?$                            press-kit.php             [L,QSA]
+RewriteRule ^hub/([a-z0-9\-]+)/?$                hub.php?topic=$1          [L,QSA]
+RewriteRule ^manifest(\.webmanifest|\.json)?$    manifest-webmanifest.php  [L,QSA]
+RewriteRule ^og-default\.(png|jpe?g)$            og-default.php            [L,QSA]
+RewriteRule ^og-product\.(png|jpe?g)$            og-product.php            [L,QSA]
+
+# ---- Generic extensionless → .php fallback.  Any /foo that has a matching
+#      foo.php file (and isn't a real file/dir) is served from it.  This
+#      keeps every clean URL working on the live server. ----
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{DOCUMENT_ROOT}/$1.php -f
+RewriteRule ^([a-zA-Z0-9_\-/]+?)/?$ $1.php [L,QSA]
+
 # ---- Canonical-host 301 redirect (www ↔ naked).  SEO audit tools flag a
 #      site when both http(s)://example.com and http(s)://www.example.com
 #      serve the same content without redirecting, because inbound links

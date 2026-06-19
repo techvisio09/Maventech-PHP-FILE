@@ -84,7 +84,7 @@ $groups = [
         ['Customer Reviews', 'reviews.php'],
         ['Blog', 'blog.php'],
         ['Affiliate Program', 'affiliate.php'],
-        ['Press Kit & Embeds', 'press-kit'],
+        ['Press Kit & Embeds', 'press-kit.php'],
         ['Request a Quote', 'contact.php'],
     ]],
     ['icon' => 'bi-file-text-fill', 'title' => 'Legal & Policies', 'links' => [
