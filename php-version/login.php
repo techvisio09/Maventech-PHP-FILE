@@ -3,7 +3,10 @@ require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/regions.php';
 ensure_admin();
 $pageTitle = 'Admin Login | ' . SITE_BRAND;
-$next = preg_replace('/[^a-z0-9.\-]/i', '', $_GET['next'] ?? ($_POST['next'] ?? 'account.php'));
+// Default to EMPTY so a normal login uses the role-aware landing
+// (admin → dashboard, staff → first allowed panel, customer → account).
+// A real ?next= (e.g. from require_admin) still takes precedence.
+$next = preg_replace('/[^a-z0-9.\-]/i', '', $_GET['next'] ?? ($_POST['next'] ?? ''));
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

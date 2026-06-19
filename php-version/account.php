@@ -2,9 +2,16 @@
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/email.php';
 $user = current_user();
-// Admins skip the customer account page entirely — drop them straight into the admin panel.
-if ($user && ($user['role'] ?? '') === 'admin') {
-    header('Location: admin.php?tab=dashboard');
+// Admins + staff skip the customer account page entirely — drop them straight
+// into the admin panel (staff land on their first permitted section).
+if ($user && in_array(($user['role'] ?? ''), ['admin', 'staff'], true)) {
+    $dest = (($user['role'] ?? '') === 'admin') ? 'admin.php?tab=dashboard'
+          : (function_exists('admin_first_allowed') ? admin_first_allowed($user) : 'admin.php?tab=dashboard');
+    if ($dest === 'login.php') {
+        // Staff with NO permissions yet — show a clear message instead of a loop.
+        $dest = 'admin.php';
+    }
+    header('Location: ' . $dest);
     exit;
 }
 $pageTitle = 'My Account | ' . SITE_BRAND;
