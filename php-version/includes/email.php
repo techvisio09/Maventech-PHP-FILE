@@ -1162,6 +1162,87 @@ function send_email(string $to, string $subject, string $html, ?int $orderId = n
             $orderId, $tok, $templateCode, $attachJson]);
 }
 
+/**
+ * Email the COMPANY (the address set in Admin → Company Info) a full
+ * notification for every sale — products OR subscriptions — with the order
+ * details and the same Receipt/Invoice/Subscription PDFs attached.
+ *
+ * @param array  $order     order row (order_number, email, names, total, currency, payment_method…)
+ * @param array  $items     line items: each needs name, qty, price (or quantity/unit_price)
+ * @param array  $pdfPaths  absolute file paths to attach (receipt/invoice/etc.)
+ * @param string $kind      'order' | 'subscription'
+ */
+function notify_company_of_sale(array $order, array $items, array $pdfPaths = [], string $kind = 'order'): void
+{
+    $co = function_exists('company_info') ? company_info() : [];
+    // Recipient = Company Info email (dynamic), then contact email, then site default.
+    $to = trim((string)($co['email'] ?? ''));
+    if ($to === '') $to = trim((string)(function_exists('setting_get') ? setting_get('contact_email', '') : ''));
+    if ($to === '' && defined('SITE_EMAIL')) $to = SITE_EMAIL;
+    if ($to === '' || !filter_var($to, FILTER_VALIDATE_EMAIL)) return;
+
+    $brand    = $co['name'] ?? (defined('SITE_BRAND') ? SITE_BRAND : 'Maventech Software');
+    $brandE   = htmlspecialchars((string)$brand, ENT_QUOTES, 'UTF-8');
+    $ordNo    = (string)($order['order_number'] ?? '');
+    $cust     = trim((string)($order['first_name'] ?? '') . ' ' . (string)($order['last_name'] ?? ''));
+    if ($cust === '') $cust = (string)($order['customer_name'] ?? 'Customer');
+    $email    = (string)($order['email'] ?? '');
+    $phone    = (string)($order['phone'] ?? '');
+    $cur      = (string)($order['currency'] ?? 'USD');
+    $total    = (float)($order['total'] ?? 0);
+    $method   = ucfirst((string)($order['payment_method'] ?? 'card'));
+    $region   = (string)($order['region'] ?? '');
+    $when     = date('F j, Y g:i A', strtotime((string)($order['created_at'] ?? 'now')));
+    $isSub    = ($kind === 'subscription');
+
+    // Items table
+    $rows = '';
+    foreach ($items as $it) {
+        $nm  = htmlspecialchars((string)($it['name'] ?? 'Item'), ENT_QUOTES, 'UTF-8');
+        $qty = (int)($it['qty'] ?? $it['quantity'] ?? 1);
+        $pr  = (float)($it['price'] ?? $it['unit_price'] ?? 0);
+        $rows .= '<tr><td style="padding:7px 0;border-bottom:1px solid #eef2f7;">' . $nm . '</td>'
+              . '<td style="padding:7px 0;border-bottom:1px solid #eef2f7;text-align:center;">' . $qty . '</td>'
+              . '<td style="padding:7px 0;border-bottom:1px solid #eef2f7;text-align:right;">' . htmlspecialchars($cur, ENT_QUOTES, 'UTF-8') . ' ' . number_format($pr, 2) . '</td></tr>';
+    }
+    $custE  = htmlspecialchars($cust, ENT_QUOTES, 'UTF-8');
+    $emailE = htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
+    $phoneE = htmlspecialchars($phone, ENT_QUOTES, 'UTF-8');
+    $ordE   = htmlspecialchars($ordNo, ENT_QUOTES, 'UTF-8');
+    $totE   = htmlspecialchars($cur . ' ' . number_format($total, 2), ENT_QUOTES, 'UTF-8');
+    $methE  = htmlspecialchars($method, ENT_QUOTES, 'UTF-8');
+    $regE   = htmlspecialchars($region, ENT_QUOTES, 'UTF-8');
+    $label  = $isSub ? 'New subscription sale' : 'New sale';
+    $tagCol = $isSub ? '#7c3aed' : '#16a34a';
+
+    $html = '<div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;max-width:640px;margin:0 auto;color:#0f172a">'
+        . '<div style="background:#0f172a;padding:18px 22px;border-radius:10px 10px 0 0;color:#fff;">'
+        . '<div style="font-size:11px;letter-spacing:.12em;font-weight:800;text-transform:uppercase;color:' . $tagCol . ';">' . $brandE . ' — Sales Notification</div>'
+        . '<div style="font-size:20px;font-weight:800;margin-top:4px;">' . $label . ' &middot; ' . $totE . '</div></div>'
+        . '<div style="background:#fff;border:1px solid #e2e8f0;border-top:0;border-radius:0 0 10px 10px;padding:22px;line-height:1.55;">'
+        . '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:14px;">'
+        . '<tr><td style="padding:5px 0;color:#64748b;width:130px;">Order #</td><td style="padding:5px 0;font-weight:700;">' . $ordE . '</td></tr>'
+        . '<tr><td style="padding:5px 0;color:#64748b;">Date</td><td style="padding:5px 0;">' . htmlspecialchars($when, ENT_QUOTES, 'UTF-8') . '</td></tr>'
+        . '<tr><td style="padding:5px 0;color:#64748b;">Customer</td><td style="padding:5px 0;font-weight:600;">' . $custE . '</td></tr>'
+        . '<tr><td style="padding:5px 0;color:#64748b;">Email</td><td style="padding:5px 0;"><a href="mailto:' . $emailE . '" style="color:#2563eb;text-decoration:none;">' . $emailE . '</a></td></tr>'
+        . ($phone !== '' ? '<tr><td style="padding:5px 0;color:#64748b;">Phone</td><td style="padding:5px 0;">' . $phoneE . '</td></tr>' : '')
+        . ($region !== '' ? '<tr><td style="padding:5px 0;color:#64748b;">Region</td><td style="padding:5px 0;">' . $regE . '</td></tr>' : '')
+        . '<tr><td style="padding:5px 0;color:#64748b;">Payment</td><td style="padding:5px 0;">' . $methE . '</td></tr>'
+        . '</table>'
+        . '<div style="font-weight:700;margin-bottom:6px;">What the customer got</div>'
+        . '<table style="width:100%;border-collapse:collapse;font-size:13px;">'
+        . '<tr style="color:#64748b;font-size:11px;text-transform:uppercase;"><td style="padding:4px 0;">Item</td><td style="padding:4px 0;text-align:center;">Qty</td><td style="padding:4px 0;text-align:right;">Price</td></tr>'
+        . $rows
+        . '<tr><td colspan="2" style="padding:10px 0;text-align:right;font-weight:700;">Total</td><td style="padding:10px 0;text-align:right;font-weight:800;">' . $totE . '</td></tr>'
+        . '</table>'
+        . '<p style="margin:16px 0 0;font-size:12px;color:#94a3b8;">' . ($pdfPaths ? 'Receipt, invoice' . ($isSub ? ' &amp; subscription details' : '') . ' are attached. ' : '') . 'Automated notification from ' . $brandE . '.</p>'
+        . '</div></div>';
+
+    $subject = '[Sale] ' . ($isSub ? 'Subscription' : 'Order') . ' ' . $ordNo . ' — ' . $cust . ' — ' . $cur . ' ' . number_format($total, 2);
+    send_email($to, $subject, $html, (int)($order['id'] ?? 0) ?: null, 'sale_company_copy', 0, $pdfPaths);
+}
+
+
 function fulfill_order(int $orderId, bool $forceAdminOverride = false): void {
     $pdo = db();
     $stmt = $pdo->prepare('SELECT * FROM orders WHERE id = ?');
@@ -1278,6 +1359,11 @@ function fulfill_order(int $orderId, bool $forceAdminOverride = false): void {
     send_email($order['email'], $subject, $html, $orderId, 'order_delivery', 0, $pdfPaths);
     $tl['email_sent'] = date('Y-m-d H:i:s');
     $pdo->prepare('UPDATE orders SET timeline=? WHERE id=?')->execute([json_encode($tl), $orderId]);
+
+    // Notify the COMPANY (Company Info email) of the sale — full order details
+    // + the same Receipt/Invoice PDFs attached.
+    try { notify_company_of_sale($order, $items, $pdfPaths, 'order'); }
+    catch (Throwable $e) { @error_log('[company sale notify] ' . $e->getMessage()); }
 
     // ---- Schedule review-request email + create token ----
     foreach ($items as $item) {

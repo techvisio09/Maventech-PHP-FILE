@@ -459,6 +459,29 @@ function sub_fulfill_order(array $order): void
     try { sub_send_confirmation($order, $sub, $plan); }
     catch (Throwable $e) { @error_log('[sub confirmation email] ' . $e->getMessage()); }
 
+    // Notify the COMPANY (Company Info email) of the subscription sale, with the
+    // Receipt + Invoice + Subscription Details PDFs attached.
+    try {
+        if (function_exists('notify_company_of_sale')) {
+            $pdfPaths = sub_pdf_paths($order, $sub, $plan);
+            $items = [[
+                'name'  => $plan['name'] . ' Subscription (' . $plan['tenure_label'] . ')',
+                'qty'   => 1,
+                'price' => (float)($sub['amount'] ?? $plan['price']),
+            ]];
+            $co = array_merge($order, [
+                'order_number'   => (string)($sub['order_number'] ?? $order['order_number'] ?? ''),
+                'currency'       => (string)($sub['currency'] ?? 'USD'),
+                'total'          => (float)($sub['amount'] ?? 0),
+                'payment_method' => (string)($sub['gateway'] ?? $order['payment_method'] ?? 'card'),
+                'customer_name'  => (string)$sub['customer_name'],
+                'email'          => (string)$sub['email'],
+                'phone'          => (string)$sub['phone'],
+            ]);
+            notify_company_of_sale($co, $items, $pdfPaths, 'subscription');
+        }
+    } catch (Throwable $e) { @error_log('[sub company notify] ' . $e->getMessage()); }
+
     // Admin bell — new subscription sale.
     try {
         admin_notify(
