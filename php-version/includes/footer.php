@@ -302,7 +302,7 @@
       <input id="chat-input" class="chat-input" placeholder="Ask a question…" autocomplete="off" data-testid="chat-input">
       <div class="chat-composer-tools">
         <button type="button" class="chat-tool-btn" id="chat-attach-btn" onclick="chatAttachClick()" aria-label="Attach a file" title="Attach a file" data-testid="chat-attach-btn"><i class="bi bi-paperclip"></i></button>
-        <button type="button" class="chat-tool-btn" id="chat-mic-btn" onclick="chatToggleVoice()" aria-label="Voice to text" title="Voice to text (speak your message)" data-testid="chat-mic-btn"><i class="bi bi-mic-fill"></i></button>
+        <button type="button" class="chat-tool-btn chat-mic-tip" id="chat-mic-btn" onclick="chatToggleVoice()" aria-label="Voice to text (speak in any language, replies appear in English)" title="🎙️ Speak in any language — replies appear in English" data-tip="Speak in any language — replies appear in English" data-testid="chat-mic-btn"><i class="bi bi-mic-fill"></i></button>
         <button type="button" class="chat-tool-btn" id="chat-emoji-btn" onclick="chatToggleEmoji(event)" aria-label="Insert emoji" title="Insert emoji" data-testid="chat-emoji-btn"><i class="bi bi-emoji-smile"></i></button>
         <span class="chat-voice-timer" id="chat-voice-timer" style="display:none;" data-testid="chat-voice-timer"><span class="chat-voice-rec-dot"></span><span id="chat-voice-time">0:00</span></span>
         <button class="chat-send-btn ms-auto" type="submit" aria-label="Send" data-testid="chat-send"><i class="bi bi-arrow-up"></i></button>

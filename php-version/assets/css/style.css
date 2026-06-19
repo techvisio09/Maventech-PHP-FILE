@@ -1355,6 +1355,24 @@ body.has-deal-bar #chat-panel { bottom: 72px; }
 }
 .chat-tool-btn:hover { background: var(--chat-surface-soft); color: var(--chat-accent); }
 .chat-tool-btn.is-recording { color: #fff; background: #ef4444; animation: chat-rec-pulse 1.2s ease-in-out infinite; }
+/* Multilingual mic tooltip — appears above the mic on hover/focus */
+.chat-mic-tip { position: relative; }
+.chat-mic-tip::after {
+  content: attr(data-tip);
+  position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translate(-50%, 4px);
+  background: var(--chat-navy-3, #0f172a); color: #fff;
+  padding: 6px 10px; border-radius: 8px; font-size: .7rem; font-weight: 600;
+  white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity .18s ease, transform .18s ease;
+  box-shadow: 0 6px 18px rgba(15,23,42,.18); z-index: 20;
+}
+.chat-mic-tip::before {
+  content: ""; position: absolute; bottom: calc(100% + 2px); left: 50%; transform: translateX(-50%);
+  border: 5px solid transparent; border-top-color: var(--chat-navy-3, #0f172a);
+  pointer-events: none; opacity: 0; transition: opacity .18s ease; z-index: 20;
+}
+.chat-mic-tip:hover::after, .chat-mic-tip:focus-visible::after { opacity: 1; transform: translate(-50%, 0); }
+.chat-mic-tip:hover::before, .chat-mic-tip:focus-visible::before { opacity: 1; }
+.chat-mic-tip.is-recording::after, .chat-mic-tip.is-recording::before { opacity: 0 !important; }
 @keyframes chat-rec-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,.5); } 50% { box-shadow: 0 0 0 6px rgba(239,68,68,0); } }
 .chat-voice-timer { display: inline-flex; align-items: center; gap: .3rem; font-size: .72rem; font-weight: 700; color: #ef4444; margin-left: .25rem; }
 .chat-voice-rec-dot { width: 8px; height: 8px; border-radius: 50%; background: #ef4444; animation: online-pulse 1.2s ease-in-out infinite; }
