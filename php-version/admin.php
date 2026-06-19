@@ -3991,23 +3991,28 @@ elseif ($tab === 'subscription'):
                 <input type="hidden" name="keep" value="<?= esc($keep) ?>">
                 <div class="row g-2 mb-2">
                   <div class="col-md-6"><label class="form-label small mb-1">Handling department</label>
+                    <?php $noteDeptDefault = (string)($viewSub['assigned_department'] ?? '') ?: (string)($admin['department'] ?? ''); ?>
                     <select name="department" class="form-select form-select-sm" data-testid="sub-note-dept">
                       <option value="">— Unassigned —</option>
                       <?php foreach (['Tech','Sales','Support','Management'] as $d): ?>
-                        <option value="<?= $d ?>" <?= ($viewSub['assigned_department'] ?? '')===$d?'selected':'' ?>><?= $d ?></option>
+                        <option value="<?= $d ?>" <?= $noteDeptDefault===$d?'selected':'' ?>><?= $d ?></option>
                       <?php endforeach; ?>
                     </select></div>
                   <div class="col-md-6"><label class="form-label small mb-1">Assigned user</label>
+                    <?php $noteUserDefault = (int)($viewSub['assigned_user_id'] ?? 0) ?: (int)((($admin['role'] ?? '')==='staff') ? ($admin['id'] ?? 0) : 0); ?>
                     <select name="assigned_user_id" class="form-select form-select-sm" data-testid="sub-note-user">
                       <option value="">— None —</option>
                       <?php foreach ($staffList as $stf): ?>
-                        <option value="<?= (int)$stf['id'] ?>" <?= (int)($viewSub['assigned_user_id'] ?? 0)===(int)$stf['id']?'selected':'' ?>><?= esc($stf['name']) ?> (<?= esc($stf['department'] ?: 'Staff') ?>)</option>
+                        <option value="<?= (int)$stf['id'] ?>" <?= $noteUserDefault===(int)$stf['id']?'selected':'' ?>><?= esc($stf['name']) ?> (<?= esc($stf['department'] ?: 'Staff') ?>)</option>
                       <?php endforeach; ?>
                     </select></div>
                 </div>
                 <label class="form-label small mb-1">Add a note <span class="text-secondary">(track record for this customer)</span></label>
                 <textarea name="note" rows="2" class="form-control form-control-sm mb-2" placeholder="e.g. Called customer, scheduled remote install for Tuesday…" data-testid="sub-note-text"></textarea>
-                <button class="btn btn-sm btn-primary" data-testid="sub-note-save"><i class="bi bi-save me-1"></i>Save assignment &amp; note</button>
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                  <button class="btn btn-sm btn-primary" data-testid="sub-note-save"><i class="bi bi-save me-1"></i>Save assignment &amp; note</button>
+                  <span class="small text-secondary" data-testid="sub-note-author"><i class="bi bi-person-check me-1"></i>Adding as <strong><?= esc(trim((string)($admin['name'] ?? '')) ?: (string)($admin['username'] ?? 'Admin')) ?></strong><?= !empty($admin['department']) ? ' · '.esc($admin['department']) : '' ?></span>
+                </div>
               </form>
               <?php if ($viewNotes): ?>
                 <div class="border rounded p-2" style="max-height:220px;overflow:auto;border-color:var(--border)!important;" data-testid="sub-note-log">

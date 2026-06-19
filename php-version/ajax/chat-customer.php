@@ -153,9 +153,19 @@ if ($rows) {
 
 // Surface the admin's typing state to the customer poller so the public
 // chat widget can render "● Admin is typing…" within 1 polling tick.
-$tStmt = $pdo->prepare('SELECT typing_admin_at FROM chat_leads WHERE id=?');
+$tStmt = $pdo->prepare('SELECT typing_admin_at, agent_name FROM chat_leads WHERE id=?');
 $tStmt->execute([$leadId]);
-$adminTyping = (string)$tStmt->fetchColumn();
+$leadMeta = $tStmt->fetch() ?: [];
+$adminTyping = (string)($leadMeta['typing_admin_at'] ?? '');
 $adminIsTyping = $adminTyping && (time() - strtotime($adminTyping)) <= 5;
+// Once an agent has joined (agent_name set), tell the widget so it switches
+// to a one-to-one human conversation (no AI) and shows the agent's name.
+$agentName = trim((string)($leadMeta['agent_name'] ?? ''));
 
-echo json_encode(['ok'=>true, 'messages'=>$rows, 'admin_typing'=>$adminIsTyping]);
+echo json_encode([
+    'ok'           => true,
+    'messages'     => $rows,
+    'admin_typing' => $adminIsTyping,
+    'agent_joined' => $agentName !== '',
+    'agent_name'   => $agentName,
+]);

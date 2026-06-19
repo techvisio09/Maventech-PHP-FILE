@@ -4,7 +4,7 @@
 // - send:    post a message from admin to the customer
 // - unread:  return total unread customer messages (for sidebar badge + toast)
 require_once __DIR__ . '/../includes/functions.php';
-require_admin();
+$admin = require_admin();
 header('Content-Type: application/json');
 
 $in = json_decode(file_get_contents('php://input'), true) ?: ($_POST ?: $_GET);
@@ -20,6 +20,27 @@ if ($action === 'send') {
     $leadId = (int)($in['lead_id'] ?? 0);
     $msg    = trim($in['message'] ?? '');
     if (!$leadId || $msg === '') { echo json_encode(['ok'=>false,'error'=>'invalid']); exit; }
+
+    // The agent's display identity (name + department) for the "joined" notice.
+    $agentName = trim((string)($admin['name'] ?? '')) ?: (string)($admin['username'] ?? 'Support');
+    $agentDept = trim((string)($admin['department'] ?? ''));
+
+    // First time ANY agent replies to this lead → announce that a real person
+    // has joined and lock the thread to this agent (assigned_to). From here on
+    // it's a one-to-one human conversation (the customer widget switches to
+    // human-only mode, so no AI auto-replies).
+    $cur = $pdo->prepare('SELECT agent_name FROM chat_leads WHERE id=?');
+    $cur->execute([$leadId]);
+    $assigned = trim((string)($cur->fetchColumn() ?: ''));
+    if ($assigned === '') {
+        $joinMsg = '👋 ' . $agentName . ($agentDept !== '' ? ' (' . $agentDept . ')' : '')
+                 . ' has joined the chat. You\'re now connected with our team — how can we help?';
+        $pdo->prepare('INSERT INTO chat_messages (lead_id, sender, message) VALUES (?,?,?)')
+            ->execute([$leadId, 'admin', $joinMsg]);
+        $pdo->prepare('UPDATE chat_leads SET agent_name=?, assigned_to=? WHERE id=?')
+            ->execute([$agentName, (int)($admin['id'] ?? 0) ?: null, $leadId]);
+    }
+
     $pdo->prepare('INSERT INTO chat_messages (lead_id, sender, message) VALUES (?,?,?)')
         ->execute([$leadId, 'admin', mb_substr($msg, 0, 2000, 'UTF-8')]);
     // Sending implies done typing — clear the beacon immediately.

@@ -40,6 +40,8 @@ mysql -uroot ucode_store -e "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS 
 mysql -uroot ucode_store -e "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255) DEFAULT NULL" 2>/dev/null || true
 # chat_leads admin_seen_at — drives the "needs attention" red badge for new callback/ProAssist leads
 mysql -uroot ucode_store -e "ALTER TABLE chat_leads ADD COLUMN IF NOT EXISTS admin_seen_at DATETIME DEFAULT NULL" 2>/dev/null || true
+# chat_leads agent_name — name of the agent who joined a live chat (for the "X has joined" notice)
+mysql -uroot ucode_store -e "ALTER TABLE chat_leads ADD COLUMN IF NOT EXISTS agent_name VARCHAR(120) DEFAULT NULL" 2>/dev/null || true
 # Staff accounts (RBAC) — username login, department, per-panel permissions, active flag
 mysql -uroot ucode_store -e "ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(60) DEFAULT NULL" 2>/dev/null || true
 mysql -uroot ucode_store -e "ALTER TABLE users ADD COLUMN IF NOT EXISTS department VARCHAR(40) NOT NULL DEFAULT ''" 2>/dev/null || true

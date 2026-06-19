@@ -64,14 +64,63 @@ function audit_collect_urls(): array
 }
 
 /* -------------------------------------------------------------------------
- *  Parallel cURL fetch.  Crawls all URLs against the local PHP server on
- *  127.0.0.1:3000 so we don't hit the public proxy.  Returns an array
- *  keyed by URL path → ['status' => 200, 'html' => '...'].
+ *  Resolve a base URL the audit can actually reach from inside the server.
+ *  Tries the loopback on the real server port first, then the public host,
+ *  then the dev port — returns the first that answers.  This makes the audit
+ *  work on ANY domain (the old hardcoded 127.0.0.1:3000 only worked in dev,
+ *  which is why every URL scored 0 once deployed).
+ * ----------------------------------------------------------------------- */
+function audit_base_url(): array
+{
+    static $cached = null;
+    if ($cached !== null) return $cached;
+    $host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    $port   = (string)($_SERVER['SERVER_PORT'] ?? '');
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+
+    $candidates = [];
+    if ($port !== '' && !in_array($port, ['80', '443'], true)) $candidates[] = 'http://127.0.0.1:' . $port;
+    $candidates[] = $scheme . '://' . $host;                 // public host (works on most domains)
+    if ($port !== '') $candidates[] = 'http://127.0.0.1:' . $port;
+    $candidates[] = 'http://127.0.0.1:3000';                 // dev fallback
+    $candidates = array_values(array_unique($candidates));
+
+    foreach ($candidates as $cand) {
+        $ch = curl_init($cand . '/');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS      => 3,
+            CURLOPT_TIMEOUT        => 8,
+            CURLOPT_CONNECTTIMEOUT => 4,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => false,
+            CURLOPT_NOBODY         => false,
+            CURLOPT_HTTPHEADER     => ['Host: ' . $host],
+            CURLOPT_USERAGENT      => 'Maventech-SEO-Audit/1.0',
+        ]);
+        curl_exec($ch);
+        $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $err  = curl_error($ch);
+        curl_close($ch);
+        if ($err === '' && $code >= 200 && $code < 500) {
+            return $cached = ['base' => $cand, 'host' => $host];
+        }
+    }
+    return $cached = ['base' => $scheme . '://' . $host, 'host' => $host];
+}
+
+/* -------------------------------------------------------------------------
+ *  Parallel cURL fetch.  Crawls all URLs against a reachable local base
+ *  (resolved by audit_base_url) with the public Host header so pages render
+ *  exactly as visitors see them.  Returns path → ['status', 'html'].
  * ----------------------------------------------------------------------- */
 function audit_fetch_parallel(array $urls, int $concurrency = 8): array
 {
     $results = [];
-    $base    = 'http://127.0.0.1:3000';
+    $resolved = audit_base_url();
+    $base = $resolved['base'];
+    $host = $resolved['host'];
     $mh      = curl_multi_init();
     $batches = array_chunk($urls, max(1, $concurrency));
     foreach ($batches as $batch) {
@@ -84,6 +133,9 @@ function audit_fetch_parallel(array $urls, int $concurrency = 8): array
                 CURLOPT_MAXREDIRS      => 3,
                 CURLOPT_TIMEOUT        => 12,
                 CURLOPT_CONNECTTIMEOUT => 4,
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_SSL_VERIFYHOST => false,
+                CURLOPT_HTTPHEADER     => ['Host: ' . $host],
                 CURLOPT_USERAGENT      => 'Maventech-SEO-Audit/1.0',
             ]);
             curl_multi_add_handle($mh, $ch);

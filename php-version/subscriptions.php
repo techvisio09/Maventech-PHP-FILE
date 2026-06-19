@@ -69,7 +69,7 @@ include __DIR__ . '/includes/header.php';
                 <?php if (count($p['features']) > 7): ?><li class="text-secondary">+ <?= count($p['features']) - 7 ?> more benefits</li><?php endif; ?>
               </ul>
               <?php if ($priced): ?>
-                <a href="subscribe.php?plan=<?= esc($p['slug']) ?>" class="btn <?= $featured ? 'btn-primary' : 'btn-outline-primary' ?> w-100 rounded-pill fw-semibold" data-testid="sub-buy-<?= esc($p['slug']) ?>">Subscribe <i class="bi bi-arrow-right ms-1"></i></a>
+                <a href="subscribe.php?plan=<?= esc($p['slug']) ?>" class="btn <?= $featured ? 'btn-primary' : 'btn-outline-primary' ?> w-100 rounded-pill fw-semibold" data-testid="sub-buy-<?= esc($p['slug']) ?>"><i class="bi bi-cart-check me-1"></i>Buy Now</a>
               <?php else: ?>
                 <a href="contact.php" class="btn btn-outline-secondary w-100 rounded-pill" data-testid="sub-contact-<?= esc($p['slug']) ?>">Contact us</a>
               <?php endif; ?>
@@ -105,7 +105,7 @@ include __DIR__ . '/includes/header.php';
           <tr>
             <td></td>
             <?php foreach ($plans as $p): ?>
-              <td><?php if ((float)$p['price']>0): ?><a href="subscribe.php?plan=<?= esc($p['slug']) ?>" class="btn btn-sm btn-primary rounded-pill px-3" data-testid="sub-compare-buy-<?= esc($p['slug']) ?>">Subscribe</a><?php else: ?><a href="contact.php" class="btn btn-sm btn-outline-secondary rounded-pill px-3">Contact</a><?php endif; ?></td>
+              <td><?php if ((float)$p['price']>0): ?><a href="subscribe.php?plan=<?= esc($p['slug']) ?>" class="btn btn-sm btn-primary rounded-pill px-3" data-testid="sub-compare-buy-<?= esc($p['slug']) ?>">Buy Now</a><?php else: ?><a href="contact.php" class="btn btn-sm btn-outline-secondary rounded-pill px-3">Contact</a><?php endif; ?></td>
             <?php endforeach; ?>
           </tr>
         </tbody>

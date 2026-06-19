@@ -473,6 +473,14 @@ function openChatFromPreview() {
     if (typeof toggleChat === 'function') toggleChat();
   }
 }
+// Swap the chat header identity to the live agent once they join the thread.
+function updateChatAgentName(name) {
+  if (!name) return;
+  const el = document.querySelector('[data-testid="chat-head-name"]');
+  if (el && el.textContent.trim() !== name) el.textContent = name;
+  const sub = document.querySelector('.chat-head-sub');
+  if (sub) sub.textContent = 'Support agent · online';
+}
 // Tiny WebAudio chime — same approach as the admin shell so we don't ship
 // an asset.  Plays a soft 2-note bell when an admin message arrives.
 function _chatChime() {
@@ -621,6 +629,12 @@ async function adminPollOnce() {
       body: JSON.stringify({ action: 'poll', token: token, since: _adminLastMsgId }),
     });
     const j = await r.json();
+    // An agent joined → switch to a one-to-one human conversation (no AI) and
+    // show the agent's name in the chat header.
+    if (j && j.ok && j.agent_joined) {
+      localStorage.setItem('uc_chat_human_only', '1');
+      if (j.agent_name) updateChatAgentName(j.agent_name);
+    }
     if (j && j.ok && Array.isArray(j.messages) && j.messages.length) {
       const panel = document.getElementById('chat-panel');
       const panelOpen = panel && panel.classList.contains('open');
