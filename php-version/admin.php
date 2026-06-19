@@ -796,6 +796,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         setting_set('company_email',   trim($_POST['company_email']   ?? ''));
         setting_set('company_phone',   trim($_POST['company_phone']   ?? ''));
         setting_set('company_address', trim($_POST['company_address'] ?? ''));
+        // Subscription customer-ID prefix (default MVN) — feeds new customer IDs.
+        $idPrefix = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string)($_POST['company_id_prefix'] ?? '')));
+        setting_set('company_id_prefix', $idPrefix !== '' ? substr($idPrefix, 0, 6) : 'MVN');
         // "Authorized Reseller" trust badge — toggleable so brands that haven't
         // yet finalised an OEM agreement can hide the claim site-wide.
         setting_set('show_authorized_reseller_badge', !empty($_POST['show_authorized_reseller_badge']) ? '1' : '0');
@@ -6231,6 +6234,11 @@ elseif ($tab === 'company'):
         <div class="col-md-6">
           <label class="form-label small fw-semibold"><i class="bi bi-geo-alt me-1"></i>Company Address</label>
           <textarea class="form-control" name="company_address" rows="2" placeholder="Street, City, State ZIP, Country" data-testid="ci-address-input"><?= esc($co['address']) ?></textarea>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label small fw-semibold"><i class="bi bi-person-badge me-1"></i>Subscription Customer ID Prefix</label>
+          <input class="form-control text-uppercase" name="company_id_prefix" value="<?= esc($co['id_prefix'] ?? 'MVN') ?>" maxlength="6" placeholder="MVN" data-testid="ci-id-prefix-input">
+          <div class="form-text small">New subscriber IDs use this + country code + number (e.g. <code><?= esc($co['id_prefix'] ?? 'MVN') ?>US00001</code>). Existing IDs are unchanged.</div>
         </div>
         <div class="col-12">
           <?php $showAR = (setting_get('show_authorized_reseller_badge', '1') === '1'); ?>

@@ -63,10 +63,12 @@ function statement_name_for(string $payment_method): string {
  */
 function company_info(): array {
     return [
-        'name'    => setting_get('company_name',    defined('SITE_BRAND') ? SITE_BRAND : ''),
-        'email'   => setting_get('company_email',   defined('SITE_EMAIL') ? SITE_EMAIL : ''),
-        'phone'   => setting_get('company_phone',   defined('SITE_PHONE') ? SITE_PHONE : ''),
-        'address' => setting_get('company_address', ''),
-        'logo'    => setting_get('company_logo',    ''),
+        'name'      => setting_get('company_name',    defined('SITE_BRAND') ? SITE_BRAND : ''),
+        'email'     => setting_get('company_email',   defined('SITE_EMAIL') ? SITE_EMAIL : ''),
+        'phone'     => setting_get('company_phone',   defined('SITE_PHONE') ? SITE_PHONE : ''),
+        'address'   => setting_get('company_address', ''),
+        'logo'      => setting_get('company_logo',    ''),
+        // Prefix for generated subscription customer IDs (e.g. MVN → MVNUS00001).
+        'id_prefix' => strtoupper(preg_replace('/[^A-Za-z0-9]/', '', setting_get('company_id_prefix', 'MVN')) ?: 'MVN'),
     ];
 }

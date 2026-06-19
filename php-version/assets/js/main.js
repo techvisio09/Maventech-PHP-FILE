@@ -1122,61 +1122,64 @@ document.addEventListener('click', function (e) {
   panel.style.display = 'none';
 });
 
-/* ---- Voice recording (MediaRecorder → upload) ---- */
-let _chatRec = null, _chatRecChunks = [], _chatRecTimer = null, _chatRecStart = 0;
-async function chatToggleVoice() {
+/* ---- Voice typing (Web Speech API → text in the input, sent as a normal
+   text message, NOT an audio recording) ---- */
+let _chatRecognition = null, _chatRecognizing = false;
+function chatToggleVoice() {
   const micBtn = document.getElementById('chat-mic-btn');
-  if (_chatRec && _chatRec.state === 'recording') { _chatRec.stop(); return; }
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
-    _chatAttachStatus('Voice recording is not supported on this browser.', true);
+  const inp = document.getElementById('chat-input');
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    _chatAttachStatus("Voice typing isn't supported on this browser — try Chrome, Edge or Safari.", true);
     return;
   }
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    _chatRecChunks = [];
-    let mime = 'audio/webm';
-    if (!MediaRecorder.isTypeSupported(mime)) mime = '';
-    _chatRec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
-    _chatRec.ondataavailable = function (e) { if (e.data && e.data.size) _chatRecChunks.push(e.data); };
-    _chatRec.onstop = function () {
-      stream.getTracks().forEach(t => t.stop());
-      if (micBtn) micBtn.classList.remove('is-recording');
-      _chatStopVoiceTimer();
-      const blob = new Blob(_chatRecChunks, { type: (_chatRec && _chatRec.mimeType) || 'audio/webm' });
-      if (blob.size > 0) chatUploadFile(new File([blob], 'voice-' + Date.now() + '.webm', { type: blob.type }), 'voice');
-    };
-    _chatRec.start();
+  // Tap again to stop listening.
+  if (_chatRecognizing && _chatRecognition) { try { _chatRecognition.stop(); } catch (e) {} return; }
+
+  const rec = new SR();
+  _chatRecognition = rec;
+  rec.lang = navigator.language || 'en-US';
+  rec.interimResults = true;
+  rec.continuous = false;
+  // Text already typed stays; transcription is appended to it.
+  let baseText = inp ? inp.value.trim() : '';
+
+  rec.onstart = function () {
+    _chatRecognizing = true;
     if (micBtn) micBtn.classList.add('is-recording');
-    _chatStartVoiceTimer();
-  } catch (e) {
-    let msg = 'Could not start recording.';
-    const n = (e && e.name) || '';
-    if (n === 'NotAllowedError' || n === 'SecurityError' || n === 'PermissionDeniedError') {
-      msg = 'Microphone is blocked. Click the lock/mic icon in your browser address bar → allow Microphone, then try again.';
-      if (window.self !== window.top) msg += ' If it stays blocked, open the site in its own browser tab.';
-    } else if (n === 'NotFoundError' || n === 'DevicesNotFoundError') {
+    _chatAttachStatus('Listening… speak now', false);
+  };
+  rec.onerror = function (e) {
+    let msg = 'Voice typing error — please try again.';
+    const err = (e && e.error) || '';
+    if (err === 'not-allowed' || err === 'service-not-allowed') {
+      msg = 'Microphone is blocked. Allow mic access in your browser, then try again.';
+      if (window.self !== window.top) msg += ' If it stays blocked, open the site in its own tab.';
+    } else if (err === 'no-speech') {
+      msg = "Didn't catch that — tap the mic and try again.";
+    } else if (err === 'audio-capture') {
       msg = 'No microphone was found on this device.';
-    } else if (n === 'NotReadableError') {
-      msg = 'Your microphone is being used by another app. Close it and try again.';
     }
     _chatAttachStatus(msg, true);
-  }
-}
-function _chatStartVoiceTimer() {
-  const t = document.getElementById('chat-voice-timer');
-  const tm = document.getElementById('chat-voice-time');
-  if (t) t.style.display = 'inline-flex';
-  _chatRecStart = Date.now();
-  _chatRecTimer = setInterval(function () {
-    const s = Math.floor((Date.now() - _chatRecStart) / 1000);
-    if (tm) tm.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
-    if (s >= 120 && _chatRec && _chatRec.state === 'recording') _chatRec.stop(); // 2-min cap
-  }, 250);
-}
-function _chatStopVoiceTimer() {
-  if (_chatRecTimer) { clearInterval(_chatRecTimer); _chatRecTimer = null; }
-  const t = document.getElementById('chat-voice-timer');
-  if (t) t.style.display = 'none';
+  };
+  rec.onresult = function (e) {
+    let finalT = '', interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) finalT += t; else interim += t;
+    }
+    if (inp) {
+      inp.value = (baseText + ' ' + finalT + ' ' + interim).replace(/\s+/g, ' ').trim();
+      if (finalT) baseText = inp.value;  // lock in finalized words
+    }
+  };
+  rec.onend = function () {
+    _chatRecognizing = false;
+    if (micBtn) micBtn.classList.remove('is-recording');
+    _chatAttachStatus('', false);
+    if (inp) { inp.value = inp.value.trim(); inp.focus(); pingCustomerTyping(inp.value.length > 0); }
+  };
+  try { rec.start(); } catch (e) { _chatAttachStatus('Could not start voice typing — try again.', true); }
 }
 
 /* ---------- Scroll reveal (staggered entrance animations) ---------- */

@@ -225,7 +225,8 @@ function sub_record_for_order(array $order): ?array
         $gateway, $start, $end,
     ]);
     $id = (int)$pdo->lastInsertId();
-    $customerId = 'MVN' . $cc . str_pad((string)$id, 5, '0', STR_PAD_LEFT);
+    $prefix = strtoupper((string)(company_info()['id_prefix'] ?? 'MVN')) ?: 'MVN';
+    $customerId = $prefix . $cc . str_pad((string)$id, 5, '0', STR_PAD_LEFT);
     $pdo->prepare("UPDATE customer_subscriptions SET customer_id=? WHERE id=?")->execute([$customerId, $id]);
 
     $st = $pdo->prepare("SELECT * FROM customer_subscriptions WHERE id=?");
